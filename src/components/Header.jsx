@@ -295,11 +295,14 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
         try {
             if (type === 'quotation') {
                 // Quotation: Send HTML Content (Legacy/User Schema)
-                const tableRows = safeCart.map(item => `
+                const tableRows = safeCart.map(item => {
+                    const product = item.productId || item.product || {};
+                    return `
                     <tr>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${item.product.name}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${product.name || 'Unknown Product'}</td>
                         <td style="border: 1px solid #ddd; padding: 8px;">${item.quantity || 1}</td>
-                    </tr>`).join('');
+                    </tr>`;
+                }).join('');
 
                 const htmlContent = `
                     <h2>Quotation Request from ${user?.name}</h2>
@@ -328,10 +331,13 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                     Name: user?.name || 'Guest',
                     phone: user?.phone || user?.contact || 'N/A',
                     email: user?.email,
-                    products: safeCart.map(item => ({
-                        productId: item.product._id || item.product.id,
-                        quantity: item.quantity || 1
-                    })),
+                    products: safeCart.map(item => {
+                        const product = item.productId || item.product || {};
+                        return {
+                            productId: product._id || product.id,
+                            quantity: item.quantity || 1
+                        };
+                    }),
                     status: 'Pending',
                     type: 'enquiry'
                 };

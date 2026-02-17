@@ -46,7 +46,17 @@ export const CartProvider = ({ children }) => {
         try {
             if (!sid) return;
             const response = await api.get(`/cart/${sid}`);
-            const cartItems = response.data.items ? response.data.items : (Array.isArray(response.data) ? response.data : []);
+            const data = response.data;
+            let cartItems = [];
+
+            if (Array.isArray(data)) {
+                cartItems = data;
+            } else if (data.items) {
+                cartItems = data.items;
+            } else if (data.products) {
+                cartItems = data.products;
+            }
+
             setCart(cartItems);
         } catch (error) {
             console.error("Failed to fetch cart", error);

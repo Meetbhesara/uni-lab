@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Configuration
-const BASE_URL = 'http://localhost:5001/api';
+const BASE_URL = 'https://uni-lab-bc.onrender.com/api';
 
 async function runTest() {
     console.log("Starting Verification Script...");
@@ -58,6 +58,32 @@ async function runTest() {
         console.log("   - Product fetch failed/empty (non-critical for specific tests):", error.message);
     }
     console.log(`   - Using Product ID: ${productId}`);
+
+    // 3.5 Test Cart
+    console.log("\n3.5 Testing Cart...");
+    const sessionId = "test-session-" + Date.now();
+    try {
+        // Add to Cart (Guest)
+        await axios.post(`${BASE_URL}/cart`, {
+            productId,
+            quantity: 5,
+            sessionId
+        });
+        console.log("   - Added to Guest Cart.");
+
+        // Fetch Cart (Guest)
+        const cartRes = await axios.get(`${BASE_URL}/cart/${sessionId}`);
+        const cartItems = cartRes.data.products || [];
+        console.log(`   - Fetched Guest Cart. Items: ${cartItems.length}`);
+
+        if (cartItems.length > 0 && cartItems[0].quantity === 5) {
+            console.log("   - Cart Verification Passed.");
+        } else {
+            console.error("   ❌ Cart Verification Failed: Item missing or wrong qty.");
+        }
+    } catch (error) {
+        console.error("   ❌ Cart Test Failed:", error.response?.data || error.message);
+    }
 
     // 4. Send General Enquiry
     console.log("\n4. Sending General Enquiry...");
