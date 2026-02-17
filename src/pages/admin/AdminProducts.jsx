@@ -156,14 +156,14 @@ const AdminProducts = () => {
         data.append('name', formData.name);
         data.append('description', formData.description || '');
         data.append('pdf', formData.pdf || '');
-        data.append('sellingPriceStart', formData.sellingPriceStart);
-        data.append('sellingPriceEnd', formData.sellingPriceEnd);
+        if (formData.sellingPriceStart && String(formData.sellingPriceStart).trim() !== '') data.append('sellingPriceStart', formData.sellingPriceStart);
+        if (formData.sellingPriceEnd && String(formData.sellingPriceEnd).trim() !== '') data.append('sellingPriceEnd', formData.sellingPriceEnd);
         // Append purchasePrice if it has a value (for update or create).
         // Since getProducts hides it for normal admin, formData.purchasePrice will be '' on edit.
         // We only append if user entered something (or it was populated for Super Admin).
-        if (formData.purchasePrice) data.append('purchasePrice', formData.purchasePrice);
-        data.append('dealerPrice', formData.dealerPrice);
-        data.append('vendor', formData.vendor);
+        if (formData.purchasePrice && String(formData.purchasePrice).trim() !== '') data.append('purchasePrice', formData.purchasePrice);
+        if (formData.dealerPrice && String(formData.dealerPrice).trim() !== '') data.append('dealerPrice', formData.dealerPrice);
+        if (formData.vendor) data.append('vendor', formData.vendor);
         data.append('alternativeNames', JSON.stringify(formData.alternativeNames));
 
         // Convert details array back to Object and stringify for transport
