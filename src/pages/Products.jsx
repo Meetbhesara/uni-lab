@@ -11,7 +11,8 @@ import api from '../api/axios';
 const getImageUrl = (path) => {
     if (!path) return 'https://via.placeholder.com/150';
     if (path.startsWith('http')) return path;
-    return `http://localhost:5001${path.startsWith('/') ? '' : '/'}${path}`;
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 
 const ImageCarousel = ({ images }) => {
