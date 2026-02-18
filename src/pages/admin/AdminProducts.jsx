@@ -96,12 +96,35 @@ const AdminProducts = () => {
 
         let detailsArray = [];
         try {
-            const rawDetails = product.details;
-            const detailsObj = typeof rawDetails === 'string' ? JSON.parse(rawDetails) : (rawDetails || {});
+            let detailsObj = product.details;
 
-            if (detailsObj && typeof detailsObj === 'object') {
+            // Handle JSON string case
+            if (typeof detailsObj === 'string') {
+                try {
+                    detailsObj = JSON.parse(detailsObj);
+                } catch (e) {
+                    console.error("Failed to parse details string", e);
+                    detailsObj = {};
+                }
+            }
+
+            // Handle Array vs Object
+            if (Array.isArray(detailsObj)) {
+                // If it's already an array of {key, value}
+                detailsArray = detailsObj.map(item => ({
+                    key: item.key || '',
+                    value: item.value || ''
+                }));
+            } else if (detailsObj && typeof detailsObj === 'object') {
+                // Map or Object: { "RPM": "100", "Power": "5HP" }
                 Object.entries(detailsObj).forEach(([key, value]) => {
-                    if (key) detailsArray.push({ key, value });
+                    // Ensure we don't pick up prototype props or weirdness
+                    if (key) {
+                        detailsArray.push({
+                            key: key,
+                            value: typeof value === 'string' ? value : JSON.stringify(value)
+                        });
+                    }
                 });
             }
         } catch (e) {
@@ -540,7 +563,7 @@ const AdminProducts = () => {
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
-                                        <SimpleGrid columns={2} spacing={4}>
+                                        <SimpleGrid columns={isSuperAdmin ? 2 : 1} spacing={4}>
                                             <FormControl isRequired isInvalid={!!formErrors.dealerPrice}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
                                                 <InputGroup size="md">
@@ -552,28 +575,30 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
                                             </FormControl>
-                                            <FormControl isRequired isInvalid={!!formErrors.purchasePrice}>
-                                                <FormLabel fontSize="xs" fontWeight="700" color="red.500">
-                                                    PURCHASE PRICE
-                                                </FormLabel>
-                                                <InputGroup size="md">
-                                                    <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input
-                                                        type="number"
-                                                        onWheel={(e) => e.target.blur()}
-                                                        min={0}
-                                                        bg="red.50"
-                                                        variant="filled"
-                                                        value={formData.purchasePrice}
-                                                        onChange={(e) => {
-                                                            setFormData({ ...formData, purchasePrice: e.target.value });
-                                                            if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
-                                                        }}
-                                                        placeholder="Enter Purchase Cost"
-                                                    />
-                                                </InputGroup>
-                                                <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
-                                            </FormControl>
+                                            {isSuperAdmin && (
+                                                <FormControl isRequired isInvalid={!!formErrors.purchasePrice}>
+                                                    <FormLabel fontSize="xs" fontWeight="700" color="red.500">
+                                                        PURCHASE PRICE
+                                                    </FormLabel>
+                                                    <InputGroup size="md">
+                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                        <Input
+                                                            type="number"
+                                                            onWheel={(e) => e.target.blur()}
+                                                            min={0}
+                                                            bg="red.50"
+                                                            variant="filled"
+                                                            value={formData.purchasePrice}
+                                                            onChange={(e) => {
+                                                                setFormData({ ...formData, purchasePrice: e.target.value });
+                                                                if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
+                                                            }}
+                                                            placeholder="Enter Purchase Cost"
+                                                        />
+                                                    </InputGroup>
+                                                    <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
+                                                </FormControl>
+                                            )}
                                         </SimpleGrid>
                                         <FormControl isRequired isInvalid={!!formErrors.vendor}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PRIMARY VENDOR</FormLabel>

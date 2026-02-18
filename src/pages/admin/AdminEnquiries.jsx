@@ -391,6 +391,9 @@ const AdminEnquiries = () => {
             // Fetch fresh data to update UI
             fetchData();
 
+            // Mark enquiry as seen in local state to remove red dot immediately
+            setEnquiries(prev => prev.map(e => e._id === selectedEnquiry._id ? { ...e, isSeen: true } : e));
+
             toast({ title: "Quotation Created & Saved", status: "success" });
             setSelectedEnquiry(null);
             setIsCreatingQuote(false);
@@ -615,7 +618,7 @@ const AdminEnquiries = () => {
                                             <Tr key={i}>
                                                 <Td>
                                                     <Image
-                                                        src={getImageUrl(p.productId?.images?.[0] || p.productId?.photos?.[0] || p.productId?.image)}
+                                                        src={getImageUrl(p.productId?.images?.[0] || p.productId?.photos?.[0] || p.productId?.image || p.product?.images?.[0] || p.product?.photos?.[0] || p.product?.image)}
                                                         boxSize="40px"
                                                         objectFit="cover"
                                                         borderRadius="md"
@@ -652,7 +655,7 @@ const AdminEnquiries = () => {
                                         <HStack mb={2} spacing={3} justify="space-between">
                                             <HStack>
                                                 <Image
-                                                    src={getImageUrl(item.productId?.images?.[0] || item.productId?.photos?.[0] || item.productId?.image)}
+                                                    src={getImageUrl(item.productId?.images?.[0] || item.productId?.photos?.[0] || item.productId?.image || item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image)}
                                                     boxSize="40px"
                                                     objectFit="cover"
                                                     borderRadius="md"
@@ -802,8 +805,26 @@ const AdminEnquiries = () => {
                                                 }}
                                                 onChange={(e) => {
                                                     const valStr = e.target.value;
-                                                    if (valStr && parseFloat(valStr) < 0) return; // Prevent negative
-                                                    const val = valStr === '' ? 0 : parseFloat(valStr);
+
+                                                    // Handle empty string to allow clearing the input
+                                                    if (valStr === '') {
+                                                        setQuoteTotals(prev => ({
+                                                            ...prev,
+                                                            packaging: '',
+                                                            packagingGst: 0,
+                                                            gst: prev.productGst,
+                                                            total: prev.subtotal + prev.productGst
+                                                        }));
+                                                        return;
+                                                    }
+
+                                                    // Validate non-negative
+                                                    if (parseFloat(valStr) < 0) return;
+
+                                                    // Use parseFloat to remove leading zeros for the calculation state, 
+                                                    // but we might want to keep the input string clean if needed. 
+                                                    // However, standard behavior for number input:
+                                                    const val = parseFloat(valStr);
 
                                                     setQuoteTotals(prev => {
                                                         const sub = prev.subtotal || 0;
@@ -887,7 +908,7 @@ const AdminEnquiries = () => {
                                                 <Tr key={i}>
                                                     <Td>
                                                         <Image
-                                                            src={item.product?.image || item.productId?.image || 'https://via.placeholder.com/50'}
+                                                            src={getImageUrl(item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image || item.productId?.images?.[0] || item.productId?.image)}
                                                             boxSize="30px"
                                                             objectFit="cover"
                                                             borderRadius="md"

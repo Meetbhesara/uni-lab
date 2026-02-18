@@ -219,16 +219,7 @@ const Products = () => {
                                             </Box>
                                         )}
 
-                                        {/* Pricing Hint (Updated) */}
-                                        {(product.sellingPriceStart || product.sellingPriceEnd) && (
-                                            <Flex align="center" gap={2}>
-                                                <Text fontSize="sm" color="gray.500" fontWeight="bold">Estimated Price:</Text>
-                                                <Text fontSize="xl" fontWeight="800" color="brand.600">
-                                                    ₹{product.sellingPriceStart?.toLocaleString()} - {product.sellingPriceEnd?.toLocaleString()}
-                                                </Text>
-                                                <Text fontSize="xs" color="gray.400">(Taxes may apply)</Text>
-                                            </Flex>
-                                        )}
+
 
                                         {/* Action Bar */}
                                         <Flex justify="space-between" align="center" pt={4} borderTop="1px" borderColor="gray.50">
