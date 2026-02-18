@@ -193,31 +193,43 @@ const Products = () => {
                                         </Text>
 
                                         {/* Technical Specifications - Modern Grid */}
-                                        {product.details && Object.keys(product.details).length > 0 && (
-                                            <Box
-                                                bg="gray.50"
-                                                p={5}
-                                                borderRadius="2xl"
-                                                border="1px solid"
-                                                borderColor="gray.100"
-                                            >
-                                                <Flex align="center" gap={2} mb={4} color="brand.600">
-                                                    <FiSettings size={14} />
-                                                    <Text fontWeight="800" fontSize="xs" letterSpacing="widest">TECHNICAL SPECIFICATIONS</Text>
-                                                </Flex>
-                                                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
-                                                    {Object.entries(product.details).map(([key, value]) => (
-                                                        <Flex key={key} align="center" gap={3} p={2} bg="white" borderRadius="xl" boxShadow="xs">
-                                                            <Box boxSize="2px" bg="brand.500" borderRadius="full" />
-                                                            <Box>
-                                                                <Text fontSize="10px" fontWeight="800" color="gray.400" textTransform="uppercase">{key}</Text>
-                                                                <Text fontSize="sm" fontWeight="700" color="slate.800">{value}</Text>
-                                                            </Box>
+                                        {(() => {
+                                            let details = product.details;
+                                            // Robust parse if it's a string
+                                            if (typeof details === 'string') {
+                                                try { details = JSON.parse(details); } catch (e) { }
+                                                if (typeof details === 'string') { try { details = JSON.parse(details); } catch (e) { } }
+                                            }
+
+                                            if (details && typeof details === 'object' && Object.keys(details).length > 0) {
+                                                return (
+                                                    <Box
+                                                        bg="gray.50"
+                                                        p={5}
+                                                        borderRadius="2xl"
+                                                        border="1px solid"
+                                                        borderColor="gray.100"
+                                                    >
+                                                        <Flex align="center" gap={2} mb={4} color="brand.600">
+                                                            <FiSettings size={14} />
+                                                            <Text fontWeight="800" fontSize="xs" letterSpacing="widest">TECHNICAL SPECIFICATIONS</Text>
                                                         </Flex>
-                                                    ))}
-                                                </SimpleGrid>
-                                            </Box>
-                                        )}
+                                                        <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
+                                                            {Object.entries(details).map(([key, value]) => (
+                                                                <Flex key={key} align="center" gap={3} p={2} bg="white" borderRadius="xl" boxShadow="xs">
+                                                                    <Box boxSize="2px" bg="brand.500" borderRadius="full" />
+                                                                    <Box>
+                                                                        <Text fontSize="10px" fontWeight="800" color="gray.400" textTransform="uppercase">{key}</Text>
+                                                                        <Text fontSize="sm" fontWeight="700" color="slate.800">{value}</Text>
+                                                                    </Box>
+                                                                </Flex>
+                                                            ))}
+                                                        </SimpleGrid>
+                                                    </Box>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
 
 
 

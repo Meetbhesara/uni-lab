@@ -178,11 +178,14 @@ const AdminProducts = () => {
         const errors = {};
         if (!formData.name?.trim()) errors.name = "Product Name is required";
         if (!formData.description?.trim()) errors.description = "Description is required";
-        if (!formData.sellingPriceStart) errors.sellingPriceStart = "Starting price is required";
-        if (!formData.sellingPriceEnd) errors.sellingPriceEnd = "Ending price is required";
-        if (!formData.dealerPrice) errors.dealerPrice = "Dealer price is required";
-        if (!formData.purchasePrice) errors.purchasePrice = "Purchase price is required";
-        if (!formData.vendor?.trim()) errors.vendor = "Vendor name is required";
+        if (formData.sellingPriceStart === '' || formData.sellingPriceStart === null) errors.sellingPriceStart = "Starting price is required";
+        if (formData.sellingPriceEnd === '' || formData.sellingPriceEnd === null) errors.sellingPriceEnd = "Ending price is required";
+        if (formData.dealerPrice === '' || formData.dealerPrice === null) errors.dealerPrice = "Dealer price is required";
+
+        if (isSuperAdmin) {
+            if (formData.purchasePrice === '' || formData.purchasePrice === null) errors.purchasePrice = "Purchase price is required";
+            if (Number(formData.purchasePrice) < 0) errors.purchasePrice = "Price cannot be negative";
+        }
 
         if (existingPhotos.length === 0 && newPhotos.length === 0) {
             errors.images = "At least one product image is required";
@@ -191,7 +194,6 @@ const AdminProducts = () => {
         if (Number(formData.sellingPriceStart) < 0) errors.sellingPriceStart = "Price cannot be negative";
         if (Number(formData.sellingPriceEnd) < 0) errors.sellingPriceEnd = "Price cannot be negative";
         if (Number(formData.dealerPrice) < 0) errors.dealerPrice = "Price cannot be negative";
-        if (Number(formData.purchasePrice) < 0) errors.purchasePrice = "Price cannot be negative";
 
         if (Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)) {
             errors.sellingPriceStart = "Start price cannot exceed end price";
@@ -225,12 +227,12 @@ const AdminProducts = () => {
         data.append('name', formData.name);
         data.append('description', formData.description || '');
         data.append('pdf', formData.pdf || '');
-        if (formData.sellingPriceStart) data.append('sellingPriceStart', formData.sellingPriceStart);
-        if (formData.sellingPriceEnd) data.append('sellingPriceEnd', formData.sellingPriceEnd);
+        if (formData.sellingPriceStart !== '' && formData.sellingPriceStart !== null) data.append('sellingPriceStart', formData.sellingPriceStart);
+        if (formData.sellingPriceEnd !== '' && formData.sellingPriceEnd !== null) data.append('sellingPriceEnd', formData.sellingPriceEnd);
 
         // Append purchasePrice if it has a value (for update or create).
-        if (formData.purchasePrice) data.append('purchasePrice', formData.purchasePrice);
-        if (formData.dealerPrice) data.append('dealerPrice', formData.dealerPrice);
+        if (formData.purchasePrice !== '' && formData.purchasePrice !== null) data.append('purchasePrice', formData.purchasePrice);
+        if (formData.dealerPrice !== '' && formData.dealerPrice !== null) data.append('dealerPrice', formData.dealerPrice);
         if (formData.vendor) data.append('vendor', formData.vendor);
         data.append('alternativeNames', JSON.stringify(formData.alternativeNames));
 
