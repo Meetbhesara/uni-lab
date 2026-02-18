@@ -98,32 +98,34 @@ const AdminProducts = () => {
         try {
             let detailsObj = product.details;
 
-            // Handle JSON string case
+            // 1. Handle double-stringified JSON or standard string
             if (typeof detailsObj === 'string') {
                 try {
                     detailsObj = JSON.parse(detailsObj);
+                    // Check if it's STILL a string (double encoded)
+                    if (typeof detailsObj === 'string') {
+                        detailsObj = JSON.parse(detailsObj);
+                    }
                 } catch (e) {
                     console.error("Failed to parse details string", e);
-                    detailsObj = {};
+                    // Fallback: If parsing fails, maybe it's just a string we can't use
                 }
             }
 
-            // Handle Array vs Object
+            // 2. Convert to Array for Form
             if (Array.isArray(detailsObj)) {
-                // If it's already an array of {key, value}
+                // Already array format
                 detailsArray = detailsObj.map(item => ({
                     key: item.key || '',
                     value: item.value || ''
                 }));
             } else if (detailsObj && typeof detailsObj === 'object') {
-                // Map or Object: { "RPM": "100", "Power": "5HP" }
+                // Map format { "RPM": "100" }
                 Object.entries(detailsObj).forEach(([key, value]) => {
-                    // Ensure we don't pick up prototype props or weirdness
-                    if (key) {
-                        detailsArray.push({
-                            key: key,
-                            value: typeof value === 'string' ? value : JSON.stringify(value)
-                        });
+                    if (key && key !== '_id') { // Exclude internal keys
+                        // Handle value if it's an object/array (unlikely but possible)
+                        const safeValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                        detailsArray.push({ key, value: safeValue });
                     }
                 });
             }
@@ -135,13 +137,13 @@ const AdminProducts = () => {
             name: product.name || '',
             description: product.description || '',
             pdf: product.pdf || '',
-            sellingPriceStart: product.sellingPriceStart || '',
-            sellingPriceEnd: product.sellingPriceEnd || '',
-            purchasePrice: product.purchasePrice || '',
-            dealerPrice: product.dealerPrice || '',
+            sellingPriceStart: product.sellingPriceStart ?? '',
+            sellingPriceEnd: product.sellingPriceEnd ?? '',
+            purchasePrice: product.purchasePrice ?? '', // Use ?? to allow '0' to persist
+            dealerPrice: product.dealerPrice ?? '',
             vendor: product.vendor || '',
             details: detailsArray,
-            alternativeNames: product.alternativeNames || []
+            alternativeNames: (Array.isArray(product.alternativeNames) ? product.alternativeNames : [])
         });
         setExistingPhotos(product.images || product.photos || []);
         setNewPhotos([]);
