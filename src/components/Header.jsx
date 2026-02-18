@@ -55,7 +55,7 @@ const Header = () => {
                 <Flex justify="space-between" align="center" direction={{ base: 'column', md: 'row' }}>
                     <Flex gap={6}>
                         <Flex align="center" gap={2}>
-                            <FaEnvelope /> <Text>contact@uniqueengineering.co</Text>
+                            <FaEnvelope /> <Text>contact@uniqueengineering.</Text>
                         </Flex>
                         <Flex align="center" gap={2}>
                             <FaPhone /> <Text>+91 98765 43210</Text>
@@ -116,7 +116,7 @@ const Header = () => {
                     )}
                     {user && (
                         <Button as={RouterLink} to="/products" variant="ghost" leftIcon={<FaShoppingCart />}>
-                            Cart ({cart.length})
+                            Cart ({cart.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)})
                         </Button>
                     )}
                     <Button colorScheme="orange" variant="accent" onClick={handleEnquiryClick}>
@@ -372,7 +372,14 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                     ) : (
                         <Stack spacing={4}>
                             {safeCart.map((item, idx) => {
-                                const product = item.product || item;
+                                // Resolved product logic: Prioritize populated objects, fallback to item itself
+                                let product = item;
+                                if (item.productId && typeof item.productId === 'object') {
+                                    product = item.productId;
+                                } else if (item.product && typeof item.product === 'object') {
+                                    product = item.product;
+                                }
+
                                 const mainImage = product.images?.[0] || product.photos?.[0] || null;
 
                                 return (
@@ -400,7 +407,8 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                         </Flex>
                                     </Box>
                                 )
-                            })}
+                            })
+                            }
                         </Stack>
                     )}
                 </DrawerBody>

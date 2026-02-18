@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
     Box, Button, Table, Thead, Tbody, Tr, Th, Td, IconButton, useDisclosure,
-    Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton,
-    FormControl, FormLabel, Input, Textarea, Checkbox, Stack, useToast, Flex,
+    Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, ModalFooter,
+    FormControl, FormLabel, FormErrorMessage, Input, Textarea, Checkbox, Stack, useToast, Flex,
     Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch } from 'react-icons/fi';
@@ -38,6 +38,11 @@ const AdminProducts = () => {
 
     const [editingProduct, setEditingProduct] = useState(null);
 
+    // Delete Modal State
+    const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
+    const [productToDelete, setProductToDelete] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     // Super Admin Check
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const isSuperAdmin = user.email === 'super@admin.com' || user.email === 'iatulkanak@gmail.com';
@@ -63,6 +68,8 @@ const AdminProducts = () => {
         alternativeNames: [] // Array of strings
     });
 
+    const [formErrors, setFormErrors] = useState({});
+
     // Separate state for file handling
     const [existingPhotos, setExistingPhotos] = useState([]); // URLs
     const [newPhotos, setNewPhotos] = useState([]); // File Objects
@@ -85,16 +92,24 @@ const AdminProducts = () => {
 
     const handleEdit = (product) => {
         setEditingProduct(product);
-        // Transform details Map/Object to Array for form
+        setFormErrors({});
+
         let detailsArray = [];
-        if (product.details) {
-            Object.entries(product.details).forEach(([key, value]) => {
-                detailsArray.push({ key, value });
-            });
+        try {
+            const rawDetails = product.details;
+            const detailsObj = typeof rawDetails === 'string' ? JSON.parse(rawDetails) : (rawDetails || {});
+
+            if (detailsObj && typeof detailsObj === 'object') {
+                Object.entries(detailsObj).forEach(([key, value]) => {
+                    if (key) detailsArray.push({ key, value });
+                });
+            }
+        } catch (e) {
+            console.error("Error parsing details", e);
         }
 
         setFormData({
-            name: product.name,
+            name: product.name || '',
             description: product.description || '',
             pdf: product.pdf || '',
             sellingPriceStart: product.sellingPriceStart || '',
@@ -110,64 +125,93 @@ const AdminProducts = () => {
         onOpen();
     };
 
-    const handleDelete = async (id) => {
-        if (window.confirm("Are you sure you want to delete this product?")) {
-            try {
-                await api.delete(`/products/${id}`);
-                toast({ title: "Product Deleted", status: "success" });
-                fetchProducts();
-            } catch (error) {
-                console.error(error);
-                toast({ title: "Delete Failed", status: "error" });
-            }
+    const handleDeleteClick = (product) => {
+        setProductToDelete(product);
+        onDeleteOpen();
+    };
+
+    const confirmDelete = async () => {
+        if (!productToDelete) return;
+        setIsDeleting(true);
+        try {
+            await api.delete(`/products/${productToDelete._id || productToDelete.id}`);
+            toast({ title: "Product Deleted", status: "success" });
+            fetchProducts();
+            onDeleteClose();
+        } catch (error) {
+            console.error(error);
+            toast({ title: "Delete Failed", status: "error" });
+        } finally {
+            setIsDeleting(false);
+            setProductToDelete(null);
         }
+    };
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const validateForm = () => {
+        const errors = {};
+        if (!formData.name?.trim()) errors.name = "Product Name is required";
+        if (!formData.description?.trim()) errors.description = "Description is required";
+        if (!formData.sellingPriceStart) errors.sellingPriceStart = "Starting price is required";
+        if (!formData.sellingPriceEnd) errors.sellingPriceEnd = "Ending price is required";
+        if (!formData.dealerPrice) errors.dealerPrice = "Dealer price is required";
+        if (!formData.purchasePrice) errors.purchasePrice = "Purchase price is required";
+        if (!formData.vendor?.trim()) errors.vendor = "Vendor name is required";
+
+        if (existingPhotos.length === 0 && newPhotos.length === 0) {
+            errors.images = "At least one product image is required";
+        }
+
+        if (Number(formData.sellingPriceStart) < 0) errors.sellingPriceStart = "Price cannot be negative";
+        if (Number(formData.sellingPriceEnd) < 0) errors.sellingPriceEnd = "Price cannot be negative";
+        if (Number(formData.dealerPrice) < 0) errors.dealerPrice = "Price cannot be negative";
+        if (Number(formData.purchasePrice) < 0) errors.purchasePrice = "Price cannot be negative";
+
+        if (Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)) {
+            errors.sellingPriceStart = "Start price cannot exceed end price";
+            errors.sellingPriceEnd = "End price must be ≥ start price";
+        }
+
+        return errors;
     };
 
     const handleSubmit = async (e) => {
         if (e) e.preventDefault();
-        // Validation: At least 1 image
-        if (existingPhotos.length === 0 && newPhotos.length === 0) {
-            toast({ title: "Validation Error", description: "At least 1 product image is required.", status: "error" });
+
+        const errors = validateForm();
+        setFormErrors(errors);
+
+        if (Object.keys(errors).length > 0) {
+            toast({
+                title: "Validation Failed",
+                description: "Please check the highlighted fields",
+                status: "error",
+                duration: 3000,
+                isClosable: true
+            });
             return;
         }
 
-        const validDetails = formData.details.filter(d => d.key && d.key.trim() !== '');
-        // Validation: At least 1 specification (REMOVED: Optional now)
-        // if (validDetails.length === 0) {
-        //     toast({ title: "Validation Error", description: "At least 1 technical specification is required.", status: "error" });
-        //     return;
-        // }
-
-        // Validation: No negative prices
-        if (Number(formData.sellingPriceStart) < 0 || Number(formData.sellingPriceEnd) < 0 || Number(formData.dealerPrice) < 0 || (Number(formData.purchasePrice) < 0 && formData.purchasePrice)) {
-            toast({ title: "Validation Error", description: "Prices cannot be negative.", status: "error" });
-            return;
-        }
-
-        if (Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)) {
-            toast({ title: "Validation Error", description: "Start Selling Price cannot be greater than End Selling Price.", status: "error" });
-            return;
-        }
-
-        // Validation: price check logic removed as simplified
+        setIsSubmitting(true);
 
         // Construct FormData
         const data = new FormData();
         data.append('name', formData.name);
         data.append('description', formData.description || '');
         data.append('pdf', formData.pdf || '');
-        if (formData.sellingPriceStart && String(formData.sellingPriceStart).trim() !== '') data.append('sellingPriceStart', formData.sellingPriceStart);
-        if (formData.sellingPriceEnd && String(formData.sellingPriceEnd).trim() !== '') data.append('sellingPriceEnd', formData.sellingPriceEnd);
+        if (formData.sellingPriceStart) data.append('sellingPriceStart', formData.sellingPriceStart);
+        if (formData.sellingPriceEnd) data.append('sellingPriceEnd', formData.sellingPriceEnd);
+
         // Append purchasePrice if it has a value (for update or create).
-        // Since getProducts hides it for normal admin, formData.purchasePrice will be '' on edit.
-        // We only append if user entered something (or it was populated for Super Admin).
-        if (formData.purchasePrice && String(formData.purchasePrice).trim() !== '') data.append('purchasePrice', formData.purchasePrice);
-        if (formData.dealerPrice && String(formData.dealerPrice).trim() !== '') data.append('dealerPrice', formData.dealerPrice);
+        if (formData.purchasePrice) data.append('purchasePrice', formData.purchasePrice);
+        if (formData.dealerPrice) data.append('dealerPrice', formData.dealerPrice);
         if (formData.vendor) data.append('vendor', formData.vendor);
         data.append('alternativeNames', JSON.stringify(formData.alternativeNames));
 
         // Convert details array back to Object and stringify for transport
         const detailsMap = {};
+        const validDetails = formData.details.filter(d => d.key && d.key.trim() !== '');
         validDetails.forEach(d => {
             detailsMap[d.key] = d.value;
         });
@@ -199,12 +243,15 @@ const AdminProducts = () => {
             // Reset
             setEditingProduct(null);
             setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', purchasePrice: '', dealerPrice: '', vendor: '', details: [], alternativeNames: [] });
+            setFormErrors({});
             setExistingPhotos([]);
             setNewPhotos([]);
             fetchProducts();
         } catch (error) {
             console.error(error);
             toast({ title: "Operation Failed", description: error.response?.data?.message || "Unknown error", status: "error" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -271,6 +318,7 @@ const AdminProducts = () => {
                         onClick={() => {
                             setEditingProduct(null);
                             setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', purchasePrice: '', dealerPrice: '', vendor: '', details: [], alternativeNames: [] });
+                            setFormErrors({});
                             setExistingPhotos([]);
                             setNewPhotos([]);
                             onOpen();
@@ -343,7 +391,7 @@ const AdminProducts = () => {
                                             colorScheme="red"
                                             aria-label="Delete"
                                             _hover={{ color: 'red.500', bg: 'red.50' }}
-                                            onClick={() => handleDelete(product._id || product.id)}
+                                            onClick={() => handleDeleteClick(product)}
                                         />
                                     </Stack>
                                 </Td>
@@ -393,14 +441,18 @@ const AdminProducts = () => {
                                         <FiInfo /> <Text fontWeight="700" fontSize="sm">BASIC INFORMATION</Text>
                                     </Flex>
                                     <Stack spacing={4}>
-                                        <FormControl isRequired>
+                                        <FormControl isRequired isInvalid={!!formErrors.name}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PRODUCT NAME</FormLabel>
                                             <Input
                                                 variant="filled"
                                                 placeholder="e.g. Centrifugal Pump X1"
                                                 value={formData.name}
-                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                onChange={(e) => {
+                                                    setFormData({ ...formData, name: e.target.value });
+                                                    if (formErrors.name) setFormErrors({ ...formErrors, name: '' });
+                                                }}
                                             />
+                                            <FormErrorMessage size="xs">{formErrors.name}</FormErrorMessage>
                                         </FormControl>
 
 
@@ -440,15 +492,19 @@ const AdminProducts = () => {
                                             </Stack>
                                         </FormControl>
 
-                                        <FormControl isRequired>
+                                        <FormControl isRequired isInvalid={!!formErrors.description}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DESCRIPTION</FormLabel>
                                             <Textarea
                                                 variant="filled"
                                                 rows={4}
                                                 placeholder="Key features and applications..."
                                                 value={formData.description}
-                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                                onChange={(e) => {
+                                                    setFormData({ ...formData, description: e.target.value });
+                                                    if (formErrors.description) setFormErrors({ ...formErrors, description: '' });
+                                                }}
                                             />
+                                            <FormErrorMessage size="xs">{formErrors.description}</FormErrorMessage>
                                         </FormControl>
 
                                         {/* ISI Removed */}
@@ -461,32 +517,44 @@ const AdminProducts = () => {
                                     </Flex>
                                     <Stack spacing={4}>
                                         <SimpleGrid columns={2} spacing={4}>
-                                            <FormControl isRequired>
+                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceStart}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (START)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceStart} onChange={(e) => setFormData({ ...formData, sellingPriceStart: e.target.value })} />
+                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceStart} onChange={(e) => {
+                                                        setFormData({ ...formData, sellingPriceStart: e.target.value });
+                                                        if (formErrors.sellingPriceStart) setFormErrors({ ...formErrors, sellingPriceStart: '' });
+                                                    }} />
                                                 </InputGroup>
+                                                <FormErrorMessage fontSize="10px">{formErrors.sellingPriceStart}</FormErrorMessage>
                                             </FormControl>
-                                            <FormControl isRequired>
+                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceEnd}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (END)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceEnd} onChange={(e) => setFormData({ ...formData, sellingPriceEnd: e.target.value })} />
+                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceEnd} onChange={(e) => {
+                                                        setFormData({ ...formData, sellingPriceEnd: e.target.value });
+                                                        if (formErrors.sellingPriceEnd) setFormErrors({ ...formErrors, sellingPriceEnd: '' });
+                                                    }} />
                                                 </InputGroup>
+                                                <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
                                         <SimpleGrid columns={2} spacing={4}>
-                                            <FormControl isRequired>
+                                            <FormControl isRequired isInvalid={!!formErrors.dealerPrice}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.dealerPrice} onChange={(e) => setFormData({ ...formData, dealerPrice: e.target.value })} />
+                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.dealerPrice} onChange={(e) => {
+                                                        setFormData({ ...formData, dealerPrice: e.target.value });
+                                                        if (formErrors.dealerPrice) setFormErrors({ ...formErrors, dealerPrice: '' });
+                                                    }} />
                                                 </InputGroup>
+                                                <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
                                             </FormControl>
-                                            <FormControl>
-                                                <FormLabel fontSize="xs" fontWeight="700" color={isSuperAdmin ? "red.500" : "gray.500"}>
-                                                    PURCHASE PRICE {isSuperAdmin ? "(Super Admin)" : "(Hidden on View)"}
+                                            <FormControl isRequired isInvalid={!!formErrors.purchasePrice}>
+                                                <FormLabel fontSize="xs" fontWeight="700" color="red.500">
+                                                    PURCHASE PRICE
                                                 </FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -494,18 +562,26 @@ const AdminProducts = () => {
                                                         type="number"
                                                         onWheel={(e) => e.target.blur()}
                                                         min={0}
-                                                        bg={isSuperAdmin ? "red.50" : "white"}
+                                                        bg="red.50"
                                                         variant="filled"
                                                         value={formData.purchasePrice}
-                                                        onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value })}
-                                                        placeholder={!isSuperAdmin && editingProduct ? "Hidden (Enter to Update)" : "Enter Purchase Cost"}
+                                                        onChange={(e) => {
+                                                            setFormData({ ...formData, purchasePrice: e.target.value });
+                                                            if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
+                                                        }}
+                                                        placeholder="Enter Purchase Cost"
                                                     />
                                                 </InputGroup>
+                                                <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
-                                        <FormControl isRequired>
+                                        <FormControl isRequired isInvalid={!!formErrors.vendor}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PRIMARY VENDOR</FormLabel>
-                                            <Input variant="filled" placeholder="Vendor Name" value={formData.vendor} onChange={(e) => setFormData({ ...formData, vendor: e.target.value })} />
+                                            <Input variant="filled" placeholder="Vendor Name" value={formData.vendor} onChange={(e) => {
+                                                setFormData({ ...formData, vendor: e.target.value });
+                                                if (formErrors.vendor) setFormErrors({ ...formErrors, vendor: '' });
+                                            }} />
+                                            <FormErrorMessage size="xs">{formErrors.vendor}</FormErrorMessage>
                                         </FormControl>
                                     </Stack>
                                 </Box>
@@ -515,13 +591,14 @@ const AdminProducts = () => {
                             <Stack spacing={6}>
                                 <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
                                     <Flex align="center" justify="space-between" mb={4}>
-                                        <Flex align="center" gap={2} color="brand.600">
+                                        <Flex align="center" gap={2} color={formErrors.images ? "red.500" : "brand.600"}>
                                             <FiImage /> <Text fontWeight="700" fontSize="sm">IMAGE GALLERY</Text>
                                         </Flex>
-                                        <Badge colorScheme="blue" variant="subtle" borderRadius="md">
+                                        <Badge colorScheme={formErrors.images ? "red" : "blue"} variant="subtle" borderRadius="md">
                                             {existingPhotos.length + newPhotos.length} IMAGES
                                         </Badge>
                                     </Flex>
+                                    {formErrors.images && <Text color="red.500" fontSize="xs" mb={2} fontWeight="bold">{formErrors.images}</Text>}
 
                                     <SimpleGrid columns={3} spacing={3} mb={4}>
                                         {/* File Upload Box */}
@@ -675,13 +752,47 @@ const AdminProducts = () => {
                             <Button variant="outline" size="lg" borderRadius="xl" onClick={onClose}>
                                 Cancel
                             </Button>
-                            <Button type="submit" size="lg" borderRadius="xl" bgGradient="linear(to-r, brand.600, brand.700)" onClick={handleSubmit}>
+                            <Button
+                                type="submit"
+                                size="lg"
+                                borderRadius="xl"
+                                bgGradient="linear(to-r, brand.600, brand.700)"
+                                onClick={handleSubmit}
+                                isLoading={isSubmitting}
+                                loadingText={editingProduct ? 'Updating...' : 'Initializing...'}
+                                isDisabled={isSubmitting}
+                            >
                                 {editingProduct ? 'Commit Changes' : 'Initialize Product'}
                             </Button>
                         </SimpleGrid>
                     </Box>
                 </ModalContent>
             </Modal >
+
+            {/* Delete Confirmation Modal */}
+            <Modal isOpen={isDeleteOpen} onClose={onDeleteClose} isCentered>
+                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.500" />
+                <ModalContent borderRadius="xl" boxShadow="2xl">
+                    <ModalHeader color="red.600">Confirm Deletion</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody>
+                        <Text mb={4}>
+                            Are you sure you want to delete <b>{productToDelete?.name}</b>?
+                        </Text>
+                        <Text fontSize="sm" color="gray.500">
+                            This action cannot be undone. The product and all its associated data will be permanently removed.
+                        </Text>
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button variant="ghost" mr={3} onClick={onDeleteClose} isDisabled={isDeleting}>
+                            Cancel
+                        </Button>
+                        <Button colorScheme="red" onClick={confirmDelete} isLoading={isDeleting}>
+                            Delete Product
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </Box >
     );
 };

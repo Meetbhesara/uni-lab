@@ -67,11 +67,46 @@ export const CartProvider = ({ children }) => {
     const addToCart = async (product) => {
         try {
             const productId = product._id || product.id;
+
+            // Optimistic Update: Check if item exists and increment quantity
+            setCart(prev => {
+                const existingIndex = prev.findIndex(item => {
+                    // Resolve the ID of the product inside the cart item
+                    const itemProdId = item.productId?._id || item.product?._id || item.productId?.id || item.product?.id || item._id || item.id;
+                    return itemProdId === productId;
+                });
+
+                if (existingIndex > -1) {
+                    // Item exists, increment quantity
+                    const newCart = [...prev];
+                    const existingItem = newCart[existingIndex];
+                    newCart[existingIndex] = {
+                        ...existingItem,
+                        quantity: (Number(existingItem.quantity) || 1) + 1
+                    };
+                    return newCart;
+                } else {
+                    // Item doesn't exist, add new
+                    const tempItem = {
+                        _id: 'temp-' + Date.now(),
+                        product: product,
+                        productId: product,
+                        name: product.name,
+                        images: product.images,
+                        photos: product.photos,
+                        quantity: 1
+                    };
+                    return [...prev, tempItem];
+                }
+            });
+
             // Add or update
             await api.post('/cart', { sessionId, productId, quantity: 1 });
             await fetchCart(sessionId);
         } catch (error) {
             console.error("Add to cart failed", error);
+            // Revert handled by fetchCart usually, but better to force sync
+            fetchCart(sessionId);
         }
     };
 
