@@ -409,7 +409,7 @@ const AdminProducts = () => {
                                         <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd}</Text>
                                         <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice}</Text>
                                         {isSuperAdmin && (
-                                            <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice}</Text>
+                                            <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? 'N/A'}</Text>
                                         )}
                                     </Stack>
                                 </Td>
@@ -579,7 +579,7 @@ const AdminProducts = () => {
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
-                                        <SimpleGrid columns={isSuperAdmin ? 2 : 1} spacing={4}>
+                                        <SimpleGrid columns={1} spacing={4}>
                                             <FormControl isRequired isInvalid={!!formErrors.dealerPrice}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
                                                 <InputGroup size="md">
@@ -591,30 +591,6 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
                                             </FormControl>
-                                            {isSuperAdmin && (
-                                                <FormControl isRequired isInvalid={!!formErrors.purchasePrice}>
-                                                    <FormLabel fontSize="xs" fontWeight="700" color="red.500">
-                                                        PURCHASE PRICE
-                                                    </FormLabel>
-                                                    <InputGroup size="md">
-                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                        <Input
-                                                            type="number"
-                                                            onWheel={(e) => e.target.blur()}
-                                                            min={0}
-                                                            bg="red.50"
-                                                            variant="filled"
-                                                            value={formData.purchasePrice}
-                                                            onChange={(e) => {
-                                                                setFormData({ ...formData, purchasePrice: e.target.value });
-                                                                if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
-                                                            }}
-                                                            placeholder="Enter Purchase Cost"
-                                                        />
-                                                    </InputGroup>
-                                                    <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
-                                                </FormControl>
-                                            )}
                                         </SimpleGrid>
                                         <FormControl isRequired isInvalid={!!formErrors.vendor}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PRIMARY VENDOR</FormLabel>
