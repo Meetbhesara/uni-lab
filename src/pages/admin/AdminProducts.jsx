@@ -90,48 +90,36 @@ const AdminProducts = () => {
         }
     };
 
-    const handleEdit = (product) => {
+    const handleEdit = async (product) => {
         setEditingProduct(product);
         setFormErrors({});
 
+        // 1. Initial Fill (Synchronous) - Render what we have immediately
         let detailsArray = [];
-        try {
-            let detailsObj = product.details;
-
-            // 1. Handle double-stringified JSON or standard string
-            if (typeof detailsObj === 'string') {
-                try {
-                    detailsObj = JSON.parse(detailsObj);
-                    // Check if it's STILL a string (double encoded)
-                    if (typeof detailsObj === 'string') {
-                        detailsObj = JSON.parse(detailsObj);
-                    }
-                } catch (e) {
-                    console.error("Failed to parse details string", e);
-                    // Fallback: If parsing fails, maybe it's just a string we can't use
+        const parseDetails = (rawDetails) => {
+            let dArray = [];
+            try {
+                let dObj = rawDetails;
+                if (typeof dObj === 'string') {
+                    try { dObj = JSON.parse(dObj); if (typeof dObj === 'string') dObj = JSON.parse(dObj); } catch (e) { }
                 }
+                if (Array.isArray(dObj)) {
+                    dArray = dObj.map(item => ({ key: item.key || '', value: item.value || '' }));
+                } else if (dObj && typeof dObj === 'object') {
+                    Object.entries(dObj).forEach(([key, value]) => {
+                        if (key && key !== '_id') {
+                            const safeValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                            dArray.push({ key, value: safeValue });
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Parse error", e);
             }
+            return dArray;
+        };
 
-            // 2. Convert to Array for Form
-            if (Array.isArray(detailsObj)) {
-                // Already array format
-                detailsArray = detailsObj.map(item => ({
-                    key: item.key || '',
-                    value: item.value || ''
-                }));
-            } else if (detailsObj && typeof detailsObj === 'object') {
-                // Map format { "RPM": "100" }
-                Object.entries(detailsObj).forEach(([key, value]) => {
-                    if (key && key !== '_id') { // Exclude internal keys
-                        // Handle value if it's an object/array (unlikely but possible)
-                        const safeValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-                        detailsArray.push({ key, value: safeValue });
-                    }
-                });
-            }
-        } catch (e) {
-            console.error("Error parsing details", e);
-        }
+        detailsArray = parseDetails(product.details);
 
         setFormData({
             name: product.name || '',
@@ -139,7 +127,7 @@ const AdminProducts = () => {
             pdf: product.pdf || '',
             sellingPriceStart: product.sellingPriceStart ?? '',
             sellingPriceEnd: product.sellingPriceEnd ?? '',
-            purchasePrice: product.purchasePrice ?? '', // Use ?? to allow '0' to persist
+            purchasePrice: product.purchasePrice ?? '',
             dealerPrice: product.dealerPrice ?? '',
             vendor: product.vendor || '',
             details: detailsArray,
@@ -148,6 +136,25 @@ const AdminProducts = () => {
         setExistingPhotos(product.images || product.photos || []);
         setNewPhotos([]);
         onOpen();
+
+        // 2. Fetch Full Details (Async) - Ensure we have purchasePrice and unseen details
+        // This solves the issue where list view might not return hidden/heavy fields
+        try {
+            const res = await api.get(`/products/${product._id || product.id}`);
+            if (res.data) {
+                const fullProd = res.data;
+                const freshDetails = parseDetails(fullProd.details);
+
+                setFormData(prev => ({
+                    ...prev,
+                    purchasePrice: fullProd.purchasePrice ?? prev.purchasePrice, // Update if found
+                    details: freshDetails.length > 0 ? freshDetails : prev.details, // Update if found
+                    // Can update other fields if needed, but these are the critical ones
+                }));
+            }
+        } catch (error) {
+            console.error("Background fetch of full product failed", error);
+        }
     };
 
     const handleDeleteClick = (product) => {
@@ -198,6 +205,11 @@ const AdminProducts = () => {
         if (Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)) {
             errors.sellingPriceStart = "Start price cannot exceed end price";
             errors.sellingPriceEnd = "End price must be ≥ start price";
+        }
+
+        const validDetails = formData.details.filter(d => d.key && d.key.trim() !== '');
+        if (validDetails.length === 0) {
+            errors.details = "Technical specifications are required (at least one)";
         }
 
         return errors;
@@ -714,13 +726,14 @@ const AdminProducts = () => {
 
                                 <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
                                     <Flex align="center" justify="space-between" mb={4}>
-                                        <Flex align="center" gap={2} color="brand.600">
+                                        <Flex align="center" gap={2} color={formErrors.details ? "red.500" : "brand.600"}>
                                             <FiSettings /> <Text fontWeight="700" fontSize="sm">TECHNICAL DEEP-DIVE</Text>
                                         </Flex>
                                         <Button size="sm" colorScheme="brand" variant="solid" onClick={addDetailRow}>
                                             + ADD SPECIFICATION
                                         </Button>
                                     </Flex>
+                                    {formErrors.details && <Text color="red.500" fontSize="xs" mb={3} fontWeight="bold">{formErrors.details}</Text>}
 
                                     <Stack spacing={3} maxH="300px" overflowY="auto" pr={2}>
                                         <AnimatePresence>
