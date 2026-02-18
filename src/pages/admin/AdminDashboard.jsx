@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Icon } from '@chakra-ui/react';
+import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Icon, Spinner } from '@chakra-ui/react';
 import { FiBox, FiUsers, FiMessageSquare, FiClock } from 'react-icons/fi';
 import api from '../../api/axios';
 import { DEMO_PRODUCTS, DEMO_ENQUIRIES } from '../../data/mockData';
@@ -13,18 +13,17 @@ const AdminDashboard = () => {
         rejectedQuotations: 0
     });
 
+    const [loading, setLoading] = useState(true);
+
     useEffect(() => {
         const fetchData = async () => {
             let pCount = 0;
-            let eCount = 0;
-
             // Fetch Products
             try {
                 const prodRes = await api.get('/products');
                 // Support multiple API structures: Array, { data: [] }, { products: [] }
                 const pData = prodRes.data.products || prodRes.data.data || prodRes.data;
                 pCount = Array.isArray(pData) ? pData.length : 0;
-                console.log("Dashboard Products:", pCount, pData);
             } catch (err) {
                 console.error("Dashboard Product Fetch Error:", err);
                 pCount = DEMO_PRODUCTS.length;
@@ -61,10 +60,20 @@ const AdminDashboard = () => {
                     doneQuotations: 0,
                     rejectedQuotations: 0
                 });
+            } finally {
+                setLoading(false);
             }
         };
         fetchData();
     }, []);
+
+    if (loading) {
+        return (
+            <Box h="100vh" display="flex" justifyContent="center" alignItems="center">
+                <Spinner size="xl" color="brand.500" thickness="4px" />
+            </Box>
+        );
+    }
 
     return (
         <Box>
@@ -73,7 +82,7 @@ const AdminDashboard = () => {
                 <Stat bg="white" p={6} borderRadius="lg" boxShadow="sm">
                     <Box display="flex" alignItems="center" mb={2} color="brand.500">
                         <Icon as={FiBox} w={6} h={6} mr={2} />
-                        <StatLabel fontSize="sm" fontWeight="bold">Total Products</StatLabel>
+                        <StatLabel fontSize="sm" fontWeight="bold">Products</StatLabel>
                     </Box>
                     <StatNumber fontSize="3xl">{stats.products}</StatNumber>
                     <StatHelpText>Active products</StatHelpText>

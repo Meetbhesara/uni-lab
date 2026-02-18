@@ -440,7 +440,7 @@ const AdminProducts = () => {
                                             </Stack>
                                         </FormControl>
 
-                                        <FormControl>
+                                        <FormControl isRequired>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DESCRIPTION</FormLabel>
                                             <Textarea
                                                 variant="filled"

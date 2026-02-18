@@ -55,7 +55,7 @@ const Header = () => {
                 <Flex justify="space-between" align="center" direction={{ base: 'column', md: 'row' }}>
                     <Flex gap={6}>
                         <Flex align="center" gap={2}>
-                            <FaEnvelope /> <Text>contact@uniqueengineering.com</Text>
+                            <FaEnvelope /> <Text>contact@uniqueengineering.co</Text>
                         </Flex>
                         <Flex align="center" gap={2}>
                             <FaPhone /> <Text>+91 98765 43210</Text>
@@ -373,7 +373,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                         <Stack spacing={4}>
                             {safeCart.map((item, idx) => {
                                 const product = item.product || item;
-                                const mainImage = (product.photos && product.photos.length > 0) ? product.photos[0] : null;
+                                const mainImage = product.images?.[0] || product.photos?.[0] || null;
 
                                 return (
                                     <Box key={idx} p={4} borderWidth="1px" borderRadius="lg" bg="gray.50">
