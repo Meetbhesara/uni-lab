@@ -37,10 +37,26 @@ const theme = extendTheme({
             body: {
                 bg: 'gray.50',
                 color: 'slate.900',
+                overflowX: 'hidden',
+                webkitTapHighlightColor: 'transparent',
             },
             '::selection': {
                 bg: 'brand.500',
                 color: 'white',
+            },
+            '*': {
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#0066cc #f1f1f1',
+            },
+            '*::-webkit-scrollbar': {
+                width: '8px',
+            },
+            '*::-webkit-scrollbar-track': {
+                background: '#f1f1f1',
+            },
+            '*::-webkit-scrollbar-thumb': {
+                background: '#0066cc',
+                borderRadius: '10px',
             },
         },
     },

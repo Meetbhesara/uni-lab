@@ -507,8 +507,15 @@ const AdminEnquiries = () => {
     };
 
     return (
-        <Box bg="white" p={6} borderRadius="lg" boxShadow="sm">
-            <Text fontSize="xl" fontWeight="bold" mb={6}>Enquiries & Quotations Management</Text>
+        <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100">
+            <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={8} direction={{ base: 'column', md: 'row' }} gap={4}>
+                <Stack spacing={1}>
+                    <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
+                        Enquiries & Quotations
+                    </Text>
+                    <Text fontSize="sm" color="gray.500">Respond to client requests and manage sales cycles.</Text>
+                </Stack>
+            </Flex>
 
             <Tabs colorScheme="brand" isLazy>
                 <TabList>

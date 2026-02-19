@@ -332,15 +332,15 @@ const AdminProducts = () => {
             borderRadius="2xl"
             boxShadow="0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
         >
-            <Flex justify="space-between" align="center" mb={10}>
+            <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={10} direction={{ base: 'column', md: 'row' }} gap={6}>
                 <Stack spacing={1}>
-                    <Text fontSize="2xl" fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
+                    <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
                         Product Inventory
                     </Text>
                     <Text fontSize="sm" color="gray.500">Manage your industrial product catalog with ease.</Text>
                 </Stack>
-                <Flex gap={4}>
-                    <InputGroup>
+                <Flex gap={4} direction={{ base: 'column', sm: 'row' }}>
+                    <InputGroup maxW={{ md: '300px' }}>
                         <InputLeftElement pointerEvents='none' children={<FiSearch color='gray.300' />} />
                         <Input
                             placeholder='Search products...'
@@ -579,7 +579,7 @@ const AdminProducts = () => {
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
-                                        <SimpleGrid columns={1} spacing={4}>
+                                        <SimpleGrid columns={{ base: 1, md: isSuperAdmin ? 2 : 1 }} spacing={4}>
                                             <FormControl isRequired isInvalid={!!formErrors.dealerPrice}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
                                                 <InputGroup size="md">
@@ -591,6 +591,19 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
                                             </FormControl>
+                                            {isSuperAdmin && (
+                                                <FormControl isRequired isInvalid={!!formErrors.purchasePrice}>
+                                                    <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PURCHASE PRICE</FormLabel>
+                                                    <InputGroup size="md">
+                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                        <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.purchasePrice} onChange={(e) => {
+                                                            setFormData({ ...formData, purchasePrice: e.target.value });
+                                                            if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
+                                                        }} />
+                                                    </InputGroup>
+                                                    <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
+                                                </FormControl>
+                                            )}
                                         </SimpleGrid>
                                         <FormControl isRequired isInvalid={!!formErrors.vendor}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PRIMARY VENDOR</FormLabel>

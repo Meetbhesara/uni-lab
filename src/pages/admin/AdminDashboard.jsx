@@ -77,7 +77,12 @@ const AdminDashboard = () => {
 
     return (
         <Box>
-            <Heading mb={6}>Dashboard Overview</Heading>
+            <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100" mb={8}>
+                <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text" mb={2}>
+                    Dashboard Overview
+                </Heading>
+                <Text fontSize="sm" color="gray.500">Real-time performance metrics and business health.</Text>
+            </Box>
             <SimpleGrid columns={{ base: 1, md: 3, lg: 5 }} spacing={6}>
                 <Stat bg="white" p={6} borderRadius="lg" boxShadow="sm">
                     <Box display="flex" alignItems="center" mb={2} color="brand.500">
@@ -124,7 +129,7 @@ const AdminDashboard = () => {
                     <StatHelpText>Lost deals</StatHelpText>
                 </Stat>
             </SimpleGrid>
-        </Box>
+        </Box >
     );
 };
 

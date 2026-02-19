@@ -1,11 +1,11 @@
 import React from 'react';
-import { Box, Container, Heading, Text, SimpleGrid, FormControl, FormLabel, Input, Textarea, Button, VStack, Flex } from '@chakra-ui/react';
+import { Box, Container, Heading, Text, SimpleGrid, FormControl, FormLabel, Input, Textarea, Button, VStack, Flex, Stack } from '@chakra-ui/react';
 import { FaPhone, FaEnvelope, FaMapMarkerAlt } from 'react-icons/fa';
 
 const Contact = () => {
     return (
-        <Container maxW="6xl" py={20}>
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={16}>
+        <Container maxW="6xl" py={{ base: 10, md: 20 }}>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 10, md: 16 }}>
                 <VStack align="start" spacing={8}>
                     <Heading color="brand.700">Get in Touch</Heading>
                     <Text color="gray.600">
@@ -64,6 +64,5 @@ const Contact = () => {
         </Container>
     );
 };
-import { Stack } from '@chakra-ui/react';
 
 export default Contact;

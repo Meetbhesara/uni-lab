@@ -11,6 +11,25 @@ import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { FaPhone, FaEnvelope, FaShoppingCart, FaTrash, FaBars, FaSearch } from 'react-icons/fa';
 import api from '../api/axios';
 
+const MotionBox = motion.create(Box);
+
+const MobileNavLink = ({ to, children, onClick }) => (
+    <Box
+        as={RouterLink}
+        to={to}
+        onClick={onClick}
+        px={4}
+        py={3}
+        fontWeight="bold"
+        _hover={{ bg: 'brand.50', color: 'brand.500' }}
+        borderBottom="1px"
+        borderColor="gray.50"
+        display="block"
+    >
+        {children}
+    </Box>
+);
+
 const Header = () => {
     const { user, logout } = useAuth();
     const { cart } = useCart();
@@ -68,15 +87,15 @@ const Header = () => {
             {/* Main Navbar */}
             <Flex py={4} px={8} justify="space-between" align="center">
                 {/* Logo Section */}
-                <Flex align="center" gap={4} as={RouterLink} to="/">
-                    <Box w="50px" h="50px" bg="brand.500" borderRadius="md" display="flex" alignItems="center" justifyContent="center" color="white" fontWeight="bold">
+                <Flex align="center" gap={{ base: 2, md: 4 }} as={RouterLink} to="/">
+                    <Box w={{ base: "40px", md: "50px" }} h={{ base: "40px", md: "50px" }} bg="brand.500" borderRadius="md" display="flex" alignItems="center" justifyContent="center" color="white" fontWeight="bold" flexShrink={0}>
                         UE
                     </Box>
                     <Box>
-                        <Text fontSize="2xl" fontWeight="bold" color="brand.700" lineHeight="1">
+                        <Text fontSize={{ base: 'md', sm: 'xl', md: '2xl' }} fontWeight="bold" color="brand.700" lineHeight="1" noOfLines={1}>
                             Unique Engineering
                         </Text>
-                        <Text fontSize="xs" color="gray.500" letterSpacing="widest">
+                        <Text fontSize={{ base: '9px', md: 'xs' }} color="gray.500" letterSpacing="widest">
                             CIVIL & INSTRUMENTAL
                         </Text>
                     </Box>
@@ -90,13 +109,13 @@ const Header = () => {
                     <RouterLink to="/contact">Contact</RouterLink>
                 </Flex>
 
-                {/* Actions */}
-                <Flex gap={4} align="center">
+                {/* Actions - Desktop */}
+                <Flex display={{ base: 'none', lg: 'flex' }} gap={4} align="center">
                     {/* Search Bar */}
-                    <Box display={{ base: 'none', md: 'block' }}>
+                    <Box>
                         <FormControl>
                             <Input
-                                placeholder="Search..."
+                                placeholder="Search products..."
                                 size="sm"
                                 borderRadius="full"
                                 bg="gray.100"
@@ -104,58 +123,116 @@ const Header = () => {
                                 _focus={{ bg: "white", boxShadow: "outline" }}
                                 value={searchTerm}
                                 onChange={handleSearch}
-                                width="200px"
+                                width="180px"
                             />
                         </FormControl>
                     </Box>
 
                     {user && user.isAdmin && (
                         <Button as={RouterLink} to="/admin/dashboard" colorScheme="purple" size="sm">
-                            Admin Panel
+                            Admin
                         </Button>
                     )}
                     {user && (
-                        <Button as={RouterLink} to="/products" variant="ghost" leftIcon={<FaShoppingCart />}>
+                        <Button as={RouterLink} to="/products" variant="ghost" size="sm" leftIcon={<FaShoppingCart />}>
                             Cart ({cart.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)})
                         </Button>
                     )}
-                    <Button colorScheme="orange" variant="accent" onClick={handleEnquiryClick}>
-                        Make Enquiry
+                    <Button colorScheme="orange" variant="accent" size="sm" onClick={handleEnquiryClick}>
+                        Enquiry
                     </Button>
                     {!user ? (
-                        <Button variant="outline" onClick={onRegisterOpen}>Login</Button>
+                        <Button variant="outline" size="sm" onClick={onRegisterOpen}>Login</Button>
                     ) : (
-                        <Flex align="center" gap={4}>
-                            <Text fontWeight="bold" color="brand.600">Hi, {user.name}</Text>
-                            <Button size="sm" variant="ghost" colorScheme="red" onClick={() => {
+                        <Flex align="center" gap={3}>
+                            <Text fontWeight="bold" fontSize="sm" color="brand.600" noOfLines={1}>Hi, {user.name.split(' ')[0]}</Text>
+                            <Button size="xs" variant="ghost" colorScheme="red" onClick={() => {
                                 logout();
                                 navigate('/');
                             }}>Logout</Button>
                         </Flex>
                     )}
                 </Flex>
-                {/* Mobile Menu Button */}
-                <IconButton
-                    display={{ base: 'flex', md: 'none' }}
-                    icon={<FaBars />}
-                    onClick={toggleNav}
-                    variant="ghost"
-                    aria-label="Open Navigation"
-                    ml={2}
-                />
+
+                {/* Mobile Icons Header */}
+                <Flex display={{ base: 'flex', lg: 'none' }} align="center" gap={2}>
+                    {user && (
+                        <IconButton
+                            icon={<FaShoppingCart />}
+                            aria-label="Cart"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate('/products')}
+                        />
+                    )}
+                    <IconButton
+                        icon={<FaBars />}
+                        onClick={toggleNav}
+                        variant="ghost"
+                        aria-label="Open Navigation"
+                        size="sm"
+                    />
+                </Flex>
             </Flex>
 
             {/* Mobile Navigation Dropdown */}
-            {isNavOpen && (
-                <Box bg="white" shadow="md" display={{ base: 'block', md: 'none' }} p={4}>
-                    <Stack spacing={4}>
-                        <RouterLink to="/" onClick={toggleNav}>Home</RouterLink>
-                        <RouterLink to="/about" onClick={toggleNav}>About Us</RouterLink>
-                        <RouterLink to="/products" onClick={toggleNav}>Products</RouterLink>
-                        <RouterLink to="/contact" onClick={toggleNav}>Contact</RouterLink>
-                    </Stack>
-                </Box>
-            )}
+            <AnimatePresence>
+                {isNavOpen && (
+                    <MotionBox
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        overflow="hidden"
+                        bg="white"
+                        shadow="xl"
+                        display={{ base: 'block', lg: 'none' }}
+                        borderTop="1px"
+                        borderColor="gray.50"
+                    >
+                        <Stack spacing={0} p={4}>
+                            <MobileNavLink to="/" onClick={toggleNav}>Home</MobileNavLink>
+                            <MobileNavLink to="/about" onClick={toggleNav}>About Us</MobileNavLink>
+                            <MobileNavLink to="/products" onClick={toggleNav}>Products</MobileNavLink>
+                            <MobileNavLink to="/contact" onClick={toggleNav}>Contact</MobileNavLink>
+
+                            <Box py={4} px={4}>
+                                <FormControl mb={4}>
+                                    <Input
+                                        placeholder="Search products..."
+                                        size="md"
+                                        borderRadius="lg"
+                                        bg="gray.50"
+                                        value={searchTerm}
+                                        onChange={handleSearch}
+                                    />
+                                </FormControl>
+
+                                <Stack spacing={3}>
+                                    <Button colorScheme="orange" w="full" onClick={() => { handleEnquiryClick(); toggleNav(); }}>
+                                        Make Enquiry
+                                    </Button>
+
+                                    {user && user.isAdmin && (
+                                        <Button as={RouterLink} to="/admin/dashboard" colorScheme="purple" w="full" onClick={toggleNav}>
+                                            Admin Dashboard
+                                        </Button>
+                                    )}
+
+                                    {!user ? (
+                                        <Button variant="outline" w="full" onClick={() => { onRegisterOpen(); toggleNav(); }}>
+                                            Login / Register
+                                        </Button>
+                                    ) : (
+                                        <Button variant="ghost" colorScheme="red" w="full" onClick={() => { logout(); toggleNav(); navigate('/'); }}>
+                                            Logout
+                                        </Button>
+                                    )}
+                                </Stack>
+                            </Box>
+                        </Stack>
+                    </MotionBox>
+                )}
+            </AnimatePresence>
 
             {/* Register/Login Modal */}
             <AuthModal isOpen={isRegisterOpen} onClose={onRegisterClose} />
