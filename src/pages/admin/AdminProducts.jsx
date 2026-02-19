@@ -45,7 +45,7 @@ const AdminProducts = () => {
 
     // Super Admin Check
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const isSuperAdmin = user.email === 'super@admin.com' || user.email === 'iatulkanak@gmail.com';
+    const isSuperAdmin = user.email === 'iatulkanak@gmail.com';
 
     const getImageUrl = (path) => {
         if (!path) return 'https://via.placeholder.com/150';
@@ -185,31 +185,29 @@ const AdminProducts = () => {
         const errors = {};
         if (!formData.name?.trim()) errors.name = "Product Name is required";
         if (!formData.description?.trim()) errors.description = "Description is required";
-        if (formData.sellingPriceStart === '' || formData.sellingPriceStart === null) errors.sellingPriceStart = "Starting price is required";
-        if (formData.sellingPriceEnd === '' || formData.sellingPriceEnd === null) errors.sellingPriceEnd = "Ending price is required";
-        if (formData.dealerPrice === '' || formData.dealerPrice === null) errors.dealerPrice = "Dealer price is required";
 
-        if (isSuperAdmin) {
-            if (formData.purchasePrice === '' || formData.purchasePrice === null) errors.purchasePrice = "Purchase price is required";
-            if (Number(formData.purchasePrice) < 0) errors.purchasePrice = "Price cannot be negative";
+        // Prices check - optional but must be non-negative if entered
+        if (formData.sellingPriceStart !== '' && Number(formData.sellingPriceStart) < 0) errors.sellingPriceStart = "Price cannot be negative";
+        if (formData.sellingPriceEnd !== '' && Number(formData.sellingPriceEnd) < 0) errors.sellingPriceEnd = "Price cannot be negative";
+        if (formData.dealerPrice !== '' && Number(formData.dealerPrice) < 0) errors.dealerPrice = "Price cannot be negative";
+        if (formData.purchasePrice !== '' && Number(formData.purchasePrice) < 0) errors.purchasePrice = "Price cannot be negative";
+
+        if (formData.sellingPriceStart !== '' && formData.sellingPriceEnd !== '') {
+            if (Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)) {
+                errors.sellingPriceStart = "Start price cannot exceed end price";
+                errors.sellingPriceEnd = "End price must be ≥ start price";
+            }
         }
+
+        if (!formData.vendor?.trim()) errors.vendor = "Vendor name is required";
 
         if (existingPhotos.length === 0 && newPhotos.length === 0) {
             errors.images = "At least one product image is required";
         }
 
-        if (Number(formData.sellingPriceStart) < 0) errors.sellingPriceStart = "Price cannot be negative";
-        if (Number(formData.sellingPriceEnd) < 0) errors.sellingPriceEnd = "Price cannot be negative";
-        if (Number(formData.dealerPrice) < 0) errors.dealerPrice = "Price cannot be negative";
-
-        if (Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)) {
-            errors.sellingPriceStart = "Start price cannot exceed end price";
-            errors.sellingPriceEnd = "End price must be ≥ start price";
-        }
-
         const validDetails = formData.details.filter(d => d.key && d.key.trim() !== '');
         if (validDetails.length === 0) {
-            errors.details = "Technical specifications are required (at least one)";
+            errors.details = "At least one technical specification is required";
         }
 
         return errors;
@@ -409,7 +407,7 @@ const AdminProducts = () => {
                                         <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd}</Text>
                                         <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice}</Text>
                                         {isSuperAdmin && (
-                                            <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? 'N/A'}</Text>
+                                            <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
                                         )}
                                     </Stack>
                                 </Td>
@@ -556,7 +554,7 @@ const AdminProducts = () => {
                                     </Flex>
                                     <Stack spacing={4}>
                                         <SimpleGrid columns={2} spacing={4}>
-                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceStart}>
+                                            <FormControl isInvalid={!!formErrors.sellingPriceStart}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (START)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -567,7 +565,7 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceStart}</FormErrorMessage>
                                             </FormControl>
-                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceEnd}>
+                                            <FormControl isInvalid={!!formErrors.sellingPriceEnd}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (END)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -579,8 +577,8 @@ const AdminProducts = () => {
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
-                                        <SimpleGrid columns={{ base: 1, md: isSuperAdmin ? 2 : 1 }} spacing={4}>
-                                            <FormControl isRequired isInvalid={!!formErrors.dealerPrice}>
+                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                            <FormControl isInvalid={!!formErrors.dealerPrice}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -591,19 +589,17 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
                                             </FormControl>
-                                            {isSuperAdmin && (
-                                                <FormControl isRequired isInvalid={!!formErrors.purchasePrice}>
-                                                    <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PURCHASE PRICE</FormLabel>
-                                                    <InputGroup size="md">
-                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                        <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.purchasePrice} onChange={(e) => {
-                                                            setFormData({ ...formData, purchasePrice: e.target.value });
-                                                            if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
-                                                        }} />
-                                                    </InputGroup>
-                                                    <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
-                                                </FormControl>
-                                            )}
+                                            <FormControl isInvalid={!!formErrors.purchasePrice}>
+                                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PURCHASE PRICE</FormLabel>
+                                                <InputGroup size="md">
+                                                    <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.purchasePrice} onChange={(e) => {
+                                                        setFormData({ ...formData, purchasePrice: e.target.value });
+                                                        if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
+                                                    }} />
+                                                </InputGroup>
+                                                <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
+                                            </FormControl>
                                         </SimpleGrid>
                                         <FormControl isRequired isInvalid={!!formErrors.vendor}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PRIMARY VENDOR</FormLabel>
