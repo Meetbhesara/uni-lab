@@ -33,7 +33,7 @@ const Home = () => {
                         <Heading as="h1" size={{ base: 'xl', md: '3xl' }} mb={4} fontWeight="extrabold" letterSpacing="tight">
                             Engineering <Text as="span" color="brand.300">Excellence</Text>
                         </Heading>
-                        <Text fontSize="xl" color="gray.300" mb={8} maxW="2xl" mx="auto">
+                        <Text fontSize={{ base: 'md', md: 'xl' }} color="gray.300" mb={8} maxW="2xl" mx="auto" px={{ base: 4, md: 0 }}>
                             Premier solutions for Civil and Instrumental Engineering. We build the future with precision and quality.
                         </Text>
                         <Stack direction={{ base: 'column', md: 'row' }} spacing={4} justify="center">

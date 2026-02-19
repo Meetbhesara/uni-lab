@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { FaPhone, FaEnvelope, FaShoppingCart, FaTrash, FaBars, FaSearch } from 'react-icons/fa';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 
 const MotionBox = motion.create(Box);
@@ -69,12 +70,12 @@ const Header = () => {
 
     return (
         <Box bg="white" boxShadow="md" position="sticky" top="0" zIndex="1000">
-            {/* Top Bar for Contact Info */}
-            <Box bg="brand.900" color="gray.300" py={2} px={8} fontSize="sm">
-                <Flex justify="space-between" align="center" direction={{ base: 'column', md: 'row' }}>
+            {/* Top Bar for Contact Info - hidden on mobile */}
+            <Box bg="brand.900" color="gray.300" py={2} px={{ base: 4, md: 8 }} fontSize="sm" display={{ base: 'none', md: 'block' }}>
+                <Flex justify="space-between" align="center">
                     <Flex gap={6}>
                         <Flex align="center" gap={2}>
-                            <FaEnvelope /> <Text>contact@uniqueengineering.</Text>
+                            <FaEnvelope /> <Text>contact@uniqueengineering.com</Text>
                         </Flex>
                         <Flex align="center" gap={2}>
                             <FaPhone /> <Text>+91 98765 43210</Text>
@@ -85,7 +86,7 @@ const Header = () => {
             </Box>
 
             {/* Main Navbar */}
-            <Flex py={4} px={8} justify="space-between" align="center">
+            <Flex py={{ base: 3, md: 4 }} px={{ base: 4, md: 8 }} justify="space-between" align="center">
                 {/* Logo Section */}
                 <Flex align="center" gap={{ base: 2, md: 4 }} as={RouterLink} to="/">
                     <Box w={{ base: "40px", md: "50px" }} h={{ base: "40px", md: "50px" }} bg="brand.500" borderRadius="md" display="flex" alignItems="center" justifyContent="center" color="white" fontWeight="bold" flexShrink={0}>

@@ -527,7 +527,7 @@ const AdminEnquiries = () => {
                 <TabPanels>
                     <TabPanel p={0} pt={4}>
                         <Box overflowX="auto">
-                            <Table variant="simple">
+                            <Table variant="simple" minW="500px">
                                 <Thead><Tr><Th>Date</Th><Th>Sender</Th><Th>Action</Th></Tr></Thead>
                                 <Tbody>
                                     {enquiries.map(e => (
@@ -552,7 +552,7 @@ const AdminEnquiries = () => {
 
                     <TabPanel p={0} pt={4}>
                         <Box overflowX="auto">
-                            <Table variant="simple">
+                            <Table variant="simple" minW="560px">
                                 <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
                                 <Tbody>
                                     {quotations.map(q => (
@@ -576,7 +576,7 @@ const AdminEnquiries = () => {
 
                     <TabPanel p={0} pt={4}>
                         <Box overflowX="auto">
-                            <Table variant="simple">
+                            <Table variant="simple" minW="560px">
                                 <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
                                 <Tbody>
                                     {processedQuotations.map(q => (

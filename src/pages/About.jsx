@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Container, Heading, Text, VStack } from '@chakra-ui/react';
+import { Box, Container, Heading, Text, VStack, SimpleGrid, Image } from '@chakra-ui/react';
 
 const About = () => {
     return (

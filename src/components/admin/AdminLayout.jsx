@@ -186,7 +186,7 @@ const AdminLayout = () => {
                 onClose={onClose}
                 returnFocusOnClose={false}
                 onOverlayClick={onClose}
-                size="full">
+                size="xs">
                 <DrawerContent>
                     <SidebarContent
                         user={user}
@@ -198,7 +198,7 @@ const AdminLayout = () => {
             </Drawer>
             {/* mobilenav */}
             <MobileNav onOpen={onOpen} />
-            <Box ml={{ base: 0, md: 60 }} p="4">
+            <Box ml={{ base: 0, md: 60 }} p={{ base: 3, md: 4 }}>
                 <Outlet />
             </Box>
         </Box>

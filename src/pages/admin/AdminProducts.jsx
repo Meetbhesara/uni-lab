@@ -325,7 +325,7 @@ const AdminProducts = () => {
 
     return (
         <Box
-            p={6}
+            p={{ base: 4, md: 6 }}
             bg="white"
             borderRadius="2xl"
             boxShadow="0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
@@ -367,7 +367,7 @@ const AdminProducts = () => {
             </Flex>
 
             <Box overflowX="auto" borderRadius="xl" border="1px" borderColor="gray.100">
-                <Table variant="simple">
+                <Table variant="simple" minW="600px">
                     <Thead bg="gray.50">
                         <Tr>
                             <Th py={4}>Product Info</Th>

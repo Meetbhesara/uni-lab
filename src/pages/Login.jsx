@@ -47,8 +47,8 @@ const Login = () => {
     };
 
     return (
-        <Container maxW="container.sm" py={10}>
-            <Box bg="white" p={8} borderRadius="lg" boxShadow="lg">
+        <Container maxW={{ base: 'full', sm: 'container.sm' }} py={{ base: 6, md: 10 }} px={{ base: 4, md: 6 }}>
+            <Box bg="white" p={{ base: 6, md: 8 }} borderRadius="lg" boxShadow="lg">
                 <VStack spacing={4} align="stretch">
                     <Heading textAlign="center" size="lg">Admin Login</Heading>
                     <Text textAlign="center" color="gray.500">Sign in to manage enquiries and products</Text>
