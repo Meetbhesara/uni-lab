@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Icon, Spinner } from '@chakra-ui/react';
+import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Icon, Spinner, Text } from '@chakra-ui/react';
 import { FiBox, FiUsers, FiMessageSquare, FiClock } from 'react-icons/fi';
 import api from '../../api/axios';
 import { DEMO_PRODUCTS, DEMO_ENQUIRIES } from '../../data/mockData';

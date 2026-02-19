@@ -94,8 +94,6 @@ const AdminProducts = () => {
         setEditingProduct(product);
         setFormErrors({});
 
-        // 1. Initial Fill (Synchronous) - Render what we have immediately
-        let detailsArray = [];
         const parseDetails = (rawDetails) => {
             let dArray = [];
             try {
@@ -114,46 +112,40 @@ const AdminProducts = () => {
                     });
                 }
             } catch (e) {
-                console.error("Parse error", e);
+                console.error('Parse error', e);
             }
             return dArray;
         };
 
-        detailsArray = parseDetails(product.details);
+        const applyProduct = (p) => {
+            setFormData({
+                name: p.name || '',
+                description: p.description || '',
+                pdf: p.pdf || '',
+                sellingPriceStart: p.sellingPriceStart ?? '',
+                sellingPriceEnd: p.sellingPriceEnd ?? '',
+                purchasePrice: p.purchasePrice ?? '',
+                dealerPrice: p.dealerPrice ?? '',
+                vendor: p.vendor || '',
+                details: parseDetails(p.details),
+                alternativeNames: Array.isArray(p.alternativeNames) ? p.alternativeNames : [],
+            });
+            setExistingPhotos(p.images || p.photos || []);
+            setNewPhotos([]);
+        };
 
-        setFormData({
-            name: product.name || '',
-            description: product.description || '',
-            pdf: product.pdf || '',
-            sellingPriceStart: product.sellingPriceStart ?? '',
-            sellingPriceEnd: product.sellingPriceEnd ?? '',
-            purchasePrice: product.purchasePrice ?? '',
-            dealerPrice: product.dealerPrice ?? '',
-            vendor: product.vendor || '',
-            details: detailsArray,
-            alternativeNames: (Array.isArray(product.alternativeNames) ? product.alternativeNames : [])
-        });
-        setExistingPhotos(product.images || product.photos || []);
-        setNewPhotos([]);
+        // 1. Immediate fill from list data so form opens fast
+        applyProduct(product);
         onOpen();
 
-        // 2. Fetch Full Details (Async) - Ensure we have purchasePrice and unseen details
-        // This solves the issue where list view might not return hidden/heavy fields
+        // 2. Background fetch of full product to ensure all fields (especially nested ones) are fresh from DB
         try {
             const res = await api.get(`/products/${product._id || product.id}`);
             if (res.data) {
-                const fullProd = res.data;
-                const freshDetails = parseDetails(fullProd.details);
-
-                setFormData(prev => ({
-                    ...prev,
-                    purchasePrice: fullProd.purchasePrice ?? prev.purchasePrice, // Update if found
-                    details: freshDetails.length > 0 ? freshDetails : prev.details, // Update if found
-                    // Can update other fields if needed, but these are the critical ones
-                }));
+                applyProduct(res.data);
             }
         } catch (error) {
-            console.error("Background fetch of full product failed", error);
+            console.error('Background full product fetch failed', error);
         }
     };
 
@@ -183,31 +175,56 @@ const AdminProducts = () => {
 
     const validateForm = () => {
         const errors = {};
-        if (!formData.name?.trim()) errors.name = "Product Name is required";
-        if (!formData.description?.trim()) errors.description = "Description is required";
 
-        // Prices check - optional but must be non-negative if entered
-        if (formData.sellingPriceStart !== '' && Number(formData.sellingPriceStart) < 0) errors.sellingPriceStart = "Price cannot be negative";
-        if (formData.sellingPriceEnd !== '' && Number(formData.sellingPriceEnd) < 0) errors.sellingPriceEnd = "Price cannot be negative";
-        if (formData.dealerPrice !== '' && Number(formData.dealerPrice) < 0) errors.dealerPrice = "Price cannot be negative";
-        if (formData.purchasePrice !== '' && Number(formData.purchasePrice) < 0) errors.purchasePrice = "Price cannot be negative";
+        // ── Required text fields ──────────────────────────────────
+        if (!formData.name?.trim()) errors.name = 'Product Name is required';
+        if (!formData.description?.trim()) errors.description = 'Description is required';
+        if (!formData.vendor?.trim()) errors.vendor = 'Vendor name is required';
 
-        if (formData.sellingPriceStart !== '' && formData.sellingPriceEnd !== '') {
-            if (Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)) {
-                errors.sellingPriceStart = "Start price cannot exceed end price";
-                errors.sellingPriceEnd = "End price must be ≥ start price";
-            }
+        // ── Selling Price Start ───────────────────────────────────
+        if (formData.sellingPriceStart === '' || formData.sellingPriceStart === null) {
+            errors.sellingPriceStart = 'Selling Price (Start) is required';
+        } else if (Number(formData.sellingPriceStart) < 0) {
+            errors.sellingPriceStart = 'Price cannot be negative';
         }
 
-        if (!formData.vendor?.trim()) errors.vendor = "Vendor name is required";
+        // ── Selling Price End ─────────────────────────────────────
+        if (formData.sellingPriceEnd === '' || formData.sellingPriceEnd === null) {
+            errors.sellingPriceEnd = 'Selling Price (End) is required';
+        } else if (Number(formData.sellingPriceEnd) < 0) {
+            errors.sellingPriceEnd = 'Price cannot be negative';
+        }
 
+        // ── Selling range consistency ─────────────────────────────
+        if (
+            !errors.sellingPriceStart && !errors.sellingPriceEnd &&
+            Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)
+        ) {
+            errors.sellingPriceStart = 'Start price cannot exceed end price';
+            errors.sellingPriceEnd = 'End price must be ≥ start price';
+        }
+
+        // ── Dealer Price ──────────────────────────────────────────
+        if (formData.dealerPrice === '' || formData.dealerPrice === null) {
+            errors.dealerPrice = 'Dealer Price is required';
+        } else if (Number(formData.dealerPrice) < 0) {
+            errors.dealerPrice = 'Price cannot be negative';
+        }
+
+        // ── Purchase Price (optional but must be non-negative) ────
+        if (formData.purchasePrice !== '' && formData.purchasePrice !== null && Number(formData.purchasePrice) < 0) {
+            errors.purchasePrice = 'Price cannot be negative';
+        }
+
+        // ── At least one image ────────────────────────────────────
         if (existingPhotos.length === 0 && newPhotos.length === 0) {
-            errors.images = "At least one product image is required";
+            errors.images = 'At least one product image is required';
         }
 
+        // ── At least one technical specification ──────────────────
         const validDetails = formData.details.filter(d => d.key && d.key.trim() !== '');
         if (validDetails.length === 0) {
-            errors.details = "At least one technical specification is required";
+            errors.details = 'At least one technical specification is required';
         }
 
         return errors;
@@ -554,7 +571,7 @@ const AdminProducts = () => {
                                     </Flex>
                                     <Stack spacing={4}>
                                         <SimpleGrid columns={2} spacing={4}>
-                                            <FormControl isInvalid={!!formErrors.sellingPriceStart}>
+                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceStart}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (START)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -565,7 +582,7 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceStart}</FormErrorMessage>
                                             </FormControl>
-                                            <FormControl isInvalid={!!formErrors.sellingPriceEnd}>
+                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceEnd}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (END)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -578,7 +595,7 @@ const AdminProducts = () => {
                                             </FormControl>
                                         </SimpleGrid>
                                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                                            <FormControl isInvalid={!!formErrors.dealerPrice}>
+                                            <FormControl isRequired isInvalid={!!formErrors.dealerPrice}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />

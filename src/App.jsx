@@ -17,17 +17,16 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Helper to redirect basic /admin to dashboard */}
-        <Route path="/admin" element={<Navigate to="/admin/dashboard" />} />
-
-        <Route path="/login" element={<Layout><Login /></Layout>} />
-
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<Navigate to="dashboard" />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="enquiries" element={<AdminEnquiries />} />
         </Route>
+
+        {/* Login */}
+        <Route path="/login" element={<Layout><Login /></Layout>} />
 
         {/* User Routes */}
         <Route path="/" element={<Layout><Home /></Layout>} />
