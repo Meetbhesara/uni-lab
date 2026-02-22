@@ -23,6 +23,7 @@ const AdminEnquiries = () => {
     const [quoteItems, setQuoteItems] = useState([]);
     const [quoteDiscount, setQuoteDiscount] = useState(0);
     const [quoteTotals, setQuoteTotals] = useState({ subtotal: 0, productGst: 0, gst: 0, total: 0, packaging: 0, packagingGst: 0 });
+    const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
 
 
     // Policies State
@@ -129,6 +130,7 @@ const AdminEnquiries = () => {
     const initCreateQuote = () => {
         if (!selectedEnquiry) return;
         setIsCreatingQuote(true);
+        setIsSubmittingQuote(false);
         // Initialize items from enquiry products
         const initialItems = (selectedEnquiry.products || []).map(p => ({
             productId: p.productId, // Keep object or ID
@@ -245,12 +247,8 @@ const AdminEnquiries = () => {
                 <!-- Header -->
                 <div style="border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 10px;">
                     <div style="text-align: center; font-size: 15px; font-weight: bold; letter-spacing: 1px; margin-bottom: 6px;">II Shree Ganesh II</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="color: #0076a3;">
-                            <h1 style="margin: 0; font-size: 32px; letter-spacing: 2px;">UNIQUE</h1>
-                            <div style="background: #0076a3; color: white; text-align: center; font-size: 12px; padding: 2px; letter-spacing: 3px;">LAB INSTRUMENT</div>
-                        </div>
-                        <div></div>
+                    <div style="text-align: center; color: #0076a3;">
+                        <h1 style="margin: 0; font-size: 32px; font-weight: bold; white-space: nowrap; letter-spacing: 1px;">UNIQUE LAB INSTRUMENT</h1>
                     </div>
                 </div>
 
@@ -334,23 +332,22 @@ const AdminEnquiries = () => {
                         ${policyRows}
                     </table>
 
-                    <!-- Bank Details & QR side by side -->
-                    <div style="display: flex; gap: 30px; margin-top: 10px; align-items: flex-start;">
-                        <div style="flex: 1;">
+                    <!-- Footer Section: Bank Details, QR, Signature -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                        <div style="line-height: 1.4;">
                             Bank Name :- Induslnd Bank<br/>
                             Branch Name :- GHATLODIA<br/>
                             Name :- UNIQUE LAB INSTRUMENT<br/>
                             A/C No.:- 259099160391<br/>
                             IFSC CODE :- INDB0001310
                         </div>
-                        <div style="text-align: center; flex-shrink: 0;">
+                        <div style="text-align: center;">
                             <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=upi://pay?pa=pos.5345756@indus&pn=UNIQUE%20LAB%20INSTRUMENT" alt="Scan to Pay" style="width: 100px; height: 100px; border: 1px solid #ccc; padding: 5px;" />
-                            <div style="font-size: 10px; font-weight: bold;">Scan &amp; Pay</div>
+                            <div style="font-size: 10px; font-weight: bold; margin-top: 4px;">Scan &amp; Pay</div>
                         </div>
-                    </div>
-
-                    <div style="text-align: right; font-weight: bold; margin-top: 10px;">
-                        For. UNIQUE LAB INSTRUMENT
+                        <div style="text-align: right; font-weight: bold; align-self: flex-end;">
+                            For. UNIQUE LAB INSTRUMENT
+                        </div>
                     </div>
                 </div>
             </div>
@@ -359,6 +356,8 @@ const AdminEnquiries = () => {
 
 
     const submitQuote = async () => {
+        if (isSubmittingQuote) return;
+
         // Validation: Check for missing prices
         const missingPrice = quoteItems.some(item => !item.price || parseFloat(item.price) <= 0);
         if (missingPrice) {
@@ -371,6 +370,8 @@ const AdminEnquiries = () => {
             });
             return;
         }
+
+        setIsSubmittingQuote(true);
 
         // Generate a temporary ref no for display (real one is created on backend)
         const year = new Date().getFullYear();
@@ -417,6 +418,8 @@ const AdminEnquiries = () => {
         } catch (error) {
             console.error("Submit error", error);
             toast({ title: "Error creating quote", status: "error" });
+        } finally {
+            setIsSubmittingQuote(false);
         }
     };
 
@@ -518,188 +521,304 @@ const AdminEnquiries = () => {
     };
 
 
-return (
-    <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100">
-        <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={8} direction={{ base: 'column', md: 'row' }} gap={4}>
-            <Stack spacing={1}>
-                <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
-                    Enquiries & Quotations
-                </Text>
-                <Text fontSize="sm" color="gray.500">Respond to client requests and manage sales cycles.</Text>
-            </Stack>
-        </Flex>
+    return (
+        <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100">
+            <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={8} direction={{ base: 'column', md: 'row' }} gap={4}>
+                <Stack spacing={1}>
+                    <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
+                        Enquiries & Quotations
+                    </Text>
+                    <Text fontSize="sm" color="gray.500">Respond to client requests and manage sales cycles.</Text>
+                </Stack>
+            </Flex>
 
-        <Tabs colorScheme="brand" isLazy>
-            <TabList>
-                <Tab fontWeight="bold">Incoming Enquiries</Tab>
-                <Tab fontWeight="bold">Outbound Quotations</Tab>
-                <Tab fontWeight="bold">Processed (History)</Tab>
-            </TabList>
+            <Tabs colorScheme="brand" isLazy>
+                <TabList>
+                    <Tab fontWeight="bold">Incoming Enquiries</Tab>
+                    <Tab fontWeight="bold">Outbound Quotations</Tab>
+                    <Tab fontWeight="bold">Processed (History)</Tab>
+                </TabList>
 
-            <TabPanels>
-                <TabPanel p={0} pt={4}>
-                    <Box overflowX="auto">
-                        <Table variant="simple" minW="500px">
-                            <Thead><Tr><Th>Date</Th><Th>Sender</Th><Th>Action</Th></Tr></Thead>
-                            <Tbody>
-                                {enquiries.map(e => (
-                                    <Tr key={e._id}>
-                                        <Td fontSize="sm">
-                                            <HStack>
-                                                {!e.isSeen && <Box w="8px" h="8px" bg="red.500" borderRadius="full" />}
-                                                <Text>{new Date(e.createdAt).toLocaleDateString('en-GB')}</Text>
-                                            </HStack>
-                                        </Td>
-                                        <Td fontWeight="medium">{e.Name}</Td>
-                                        <Td>
-                                            <Button size="sm" onClick={() => handleViewEnquiry(e)}>View Details</Button>
-                                        </Td>
-                                    </Tr>
-                                ))}
-                                {enquiries.length === 0 && <Tr><Td colSpan={4}>No enquiries found.</Td></Tr>}
-                            </Tbody>
-                        </Table>
-                    </Box>
-                </TabPanel>
-
-                <TabPanel p={0} pt={4}>
-                    <Box overflowX="auto">
-                        <Table variant="simple" minW="560px">
-                            <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
-                            <Tbody>
-                                {quotations.map(q => (
-                                    <Tr key={q._id}>
-                                        <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
-                                        <Td fontWeight="medium">{q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'}</Td>
-                                        <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
-                                        <Td>
-                                            <HStack spacing={2}>
-                                                <Button size="xs" variant="outline" onClick={() => handleViewQuotation(q)}>View</Button>
-                                                <Button size="xs" colorScheme="green" onClick={() => handleStatusUpdate(q._id, 'Done')}>Done</Button>
-                                                <Button size="xs" colorScheme="red" onClick={() => handleStatusUpdate(q._id, 'Reject')}>Reject</Button>
-                                            </HStack>
-                                        </Td>
-                                    </Tr>
-                                ))}
-                            </Tbody>
-                        </Table>
-                    </Box>
-                </TabPanel>
-
-                <TabPanel p={0} pt={4}>
-                    <Box overflowX="auto">
-                        <Table variant="simple" minW="560px">
-                            <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
-                            <Tbody>
-                                {processedQuotations.map(q => (
-                                    <Tr key={q._id}>
-                                        <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
-                                        <Td fontWeight="medium">{q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'}</Td>
-                                        <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status}</Badge></Td>
-                                        <Td>
-                                            <Button size="sm" variant="outline" mr={2} onClick={() => handleViewQuotation(q)}>View Quote</Button>
-                                            {q.status === 'Done' && (
-                                                <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
-                                            )}
-                                        </Td>
-                                    </Tr>
-                                ))}
-                                {processedQuotations.length === 0 && <Tr><Td colSpan={4}>No processed quotations.</Td></Tr>}
-                            </Tbody>
-                        </Table>
-                    </Box>
-                </TabPanel>
-            </TabPanels>
-        </Tabs>
-
-        {/* ENQUIRY DETAILS / CREATE QUOTE MODAL */}
-        <Modal isOpen={!!selectedEnquiry} onClose={() => setSelectedEnquiry(null)} size={{ base: 'full', md: 'xl' }}>
-            <ModalOverlay />
-            <ModalContent>
-                <ModalHeader>
-                    {isCreatingQuote ? 'Generate New Quotation' : 'Enquiry Details'}
-                </ModalHeader>
-                <ModalCloseButton />
-                <ModalBody pb={6}>
-                    {selectedEnquiry && !isCreatingQuote && (
-                        <VStack align="stretch" spacing={4}>
-                            <Box bg="gray.50" p={4} borderRadius="md">
-                                <Text><strong>From:</strong> {selectedEnquiry.Name} ({selectedEnquiry.email})</Text>
-                                <Text><strong>Contact:</strong> {selectedEnquiry.phone}</Text>
-                                <Text mt={2}>{selectedEnquiry.message}</Text>
-                            </Box>
-
-                            <Text fontWeight="bold">Requested Products:</Text>
-                            <Table size="sm" variant="simple">
-                                <Thead><Tr><Th>Image</Th><Th>Product</Th><Th isNumeric>Qty</Th></Tr></Thead>
+                <TabPanels>
+                    <TabPanel p={0} pt={4}>
+                        <Box overflowX="auto">
+                            <Table variant="simple" minW="500px">
+                                <Thead><Tr><Th>Date</Th><Th>Sender</Th><Th>Action</Th></Tr></Thead>
                                 <Tbody>
-                                    {(selectedEnquiry.products || []).map((p, i) => (
-                                        <Tr key={i}>
+                                    {enquiries.map(e => (
+                                        <Tr key={e._id}>
+                                            <Td fontSize="sm">
+                                                <HStack>
+                                                    {!e.isSeen && <Box w="8px" h="8px" bg="red.500" borderRadius="full" />}
+                                                    <Text>{new Date(e.createdAt).toLocaleDateString('en-GB')}</Text>
+                                                </HStack>
+                                            </Td>
+                                            <Td fontWeight="medium">{e.Name}</Td>
                                             <Td>
+                                                <Button size="sm" onClick={() => handleViewEnquiry(e)}>View Details</Button>
+                                            </Td>
+                                        </Tr>
+                                    ))}
+                                    {enquiries.length === 0 && <Tr><Td colSpan={4}>No enquiries found.</Td></Tr>}
+                                </Tbody>
+                            </Table>
+                        </Box>
+                    </TabPanel>
+
+                    <TabPanel p={0} pt={4}>
+                        <Box overflowX="auto">
+                            <Table variant="simple" minW="560px">
+                                <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
+                                <Tbody>
+                                    {quotations.map(q => (
+                                        <Tr key={q._id}>
+                                            <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
+                                            <Td fontWeight="medium">{q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'}</Td>
+                                            <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
+                                            <Td>
+                                                <HStack spacing={2}>
+                                                    <Button size="xs" variant="outline" onClick={() => handleViewQuotation(q)}>View</Button>
+                                                    <Button size="xs" colorScheme="green" onClick={() => handleStatusUpdate(q._id, 'Done')}>Done</Button>
+                                                    <Button size="xs" colorScheme="red" onClick={() => handleStatusUpdate(q._id, 'Reject')}>Reject</Button>
+                                                </HStack>
+                                            </Td>
+                                        </Tr>
+                                    ))}
+                                </Tbody>
+                            </Table>
+                        </Box>
+                    </TabPanel>
+
+                    <TabPanel p={0} pt={4}>
+                        <Box overflowX="auto">
+                            <Table variant="simple" minW="560px">
+                                <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
+                                <Tbody>
+                                    {processedQuotations.map(q => (
+                                        <Tr key={q._id}>
+                                            <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
+                                            <Td fontWeight="medium">{q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'}</Td>
+                                            <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status}</Badge></Td>
+                                            <Td>
+                                                <Button size="sm" variant="outline" mr={2} onClick={() => handleViewQuotation(q)}>View Quote</Button>
+                                                {q.status === 'Done' && (
+                                                    <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
+                                                )}
+                                            </Td>
+                                        </Tr>
+                                    ))}
+                                    {processedQuotations.length === 0 && <Tr><Td colSpan={4}>No processed quotations.</Td></Tr>}
+                                </Tbody>
+                            </Table>
+                        </Box>
+                    </TabPanel>
+                </TabPanels>
+            </Tabs>
+
+            {/* ENQUIRY DETAILS / CREATE QUOTE MODAL */}
+            <Modal isOpen={!!selectedEnquiry} onClose={() => setSelectedEnquiry(null)} size={{ base: 'full', md: 'xl' }}>
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>
+                        {isCreatingQuote ? 'Generate New Quotation' : 'Enquiry Details'}
+                    </ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6}>
+                        {selectedEnquiry && !isCreatingQuote && (
+                            <VStack align="stretch" spacing={4}>
+                                <Box bg="gray.50" p={4} borderRadius="md">
+                                    <Text><strong>From:</strong> {selectedEnquiry.Name} ({selectedEnquiry.email})</Text>
+                                    <Text><strong>Contact:</strong> {selectedEnquiry.phone}</Text>
+                                    <Text mt={2}>{selectedEnquiry.message}</Text>
+                                </Box>
+
+                                <Text fontWeight="bold">Requested Products:</Text>
+                                <Table size="sm" variant="simple">
+                                    <Thead><Tr><Th>Image</Th><Th>Product</Th><Th isNumeric>Qty</Th></Tr></Thead>
+                                    <Tbody>
+                                        {(selectedEnquiry.products || []).map((p, i) => (
+                                            <Tr key={i}>
+                                                <Td>
+                                                    <Image
+                                                        src={getImageUrl(p.productId?.images?.[0] || p.productId?.photos?.[0] || p.productId?.image || p.product?.images?.[0] || p.product?.photos?.[0] || p.product?.image)}
+                                                        boxSize="40px"
+                                                        objectFit="cover"
+                                                        borderRadius="md"
+                                                        fallbackSrc="https://via.placeholder.com/50?text=No+Img"
+                                                    />
+                                                </Td>
+                                                <Td>{p.productId?.name || p.productId?._id || 'Unknown'}</Td>
+                                                <Td isNumeric>{p.quantity}</Td>
+                                            </Tr>
+                                        ))}
+                                    </Tbody>
+                                </Table>
+
+                                <Flex justify="flex-end" pt={4}>
+                                    {selectedEnquiry.status !== 'Processed' ? (
+                                        <Button colorScheme="brand" onClick={initCreateQuote}>Create Quotation</Button>
+                                    ) : (
+                                        <Box textAlign="right">
+                                            <Text color="green.500" fontStyle="italic" mb={2}>Quotation already sent.</Text>
+                                            <Button size="sm" colorScheme="blue" variant="outline" onClick={initCreateQuote}>
+                                                Create New / Update Quote
+                                            </Button>
+                                        </Box>
+                                    )}
+                                </Flex>
+                            </VStack>
+                        )}
+
+                        {selectedEnquiry && isCreatingQuote && (
+                            <VStack align="stretch" spacing={4}>
+                                <Text fontSize="sm" color="gray.600">Enter pricing for {selectedEnquiry.Name}</Text>
+                                {quoteItems.map((item, idx) => (
+                                    <Box key={idx} border="1px" borderColor="gray.200" p={3} borderRadius="md">
+                                        <HStack mb={2} spacing={3} justify="space-between">
+                                            <HStack>
                                                 <Image
-                                                    src={getImageUrl(p.productId?.images?.[0] || p.productId?.photos?.[0] || p.productId?.image || p.product?.images?.[0] || p.product?.photos?.[0] || p.product?.image)}
+                                                    src={getImageUrl(item.productId?.images?.[0] || item.productId?.photos?.[0] || item.productId?.image || item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image)}
                                                     boxSize="40px"
                                                     objectFit="cover"
                                                     borderRadius="md"
                                                     fallbackSrc="https://via.placeholder.com/50?text=No+Img"
                                                 />
-                                            </Td>
-                                            <Td>{p.productId?.name || p.productId?._id || 'Unknown'}</Td>
-                                            <Td isNumeric>{p.quantity}</Td>
-                                        </Tr>
-                                    ))}
-                                </Tbody>
-                            </Table>
-
-                            <Flex justify="flex-end" pt={4}>
-                                {selectedEnquiry.status !== 'Processed' ? (
-                                    <Button colorScheme="brand" onClick={initCreateQuote}>Create Quotation</Button>
-                                ) : (
-                                    <Box textAlign="right">
-                                        <Text color="green.500" fontStyle="italic" mb={2}>Quotation already sent.</Text>
-                                        <Button size="sm" colorScheme="blue" variant="outline" onClick={initCreateQuote}>
-                                            Create New / Update Quote
-                                        </Button>
-                                    </Box>
-                                )}
-                            </Flex>
-                        </VStack>
-                    )}
-
-                    {selectedEnquiry && isCreatingQuote && (
-                        <VStack align="stretch" spacing={4}>
-                            <Text fontSize="sm" color="gray.600">Enter pricing for {selectedEnquiry.Name}</Text>
-                            {quoteItems.map((item, idx) => (
-                                <Box key={idx} border="1px" borderColor="gray.200" p={3} borderRadius="md">
-                                    <HStack mb={2} spacing={3} justify="space-between">
-                                        <HStack>
-                                            <Image
-                                                src={getImageUrl(item.productId?.images?.[0] || item.productId?.photos?.[0] || item.productId?.image || item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image)}
-                                                boxSize="40px"
-                                                objectFit="cover"
-                                                borderRadius="md"
-                                                fallbackSrc="https://via.placeholder.com/50?text=No+Img"
-                                            />
-                                            <Text fontWeight="bold" fontSize="sm">
-                                                {item.productId?.name || 'Product'} (Qty: {item.quantity})
-                                            </Text>
+                                                <Text fontWeight="bold" fontSize="sm">
+                                                    {item.productId?.name || 'Product'} (Qty: {item.quantity})
+                                                </Text>
+                                            </HStack>
+                                            <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>
+                                                <FiTrash />
+                                            </Button>
                                         </HStack>
-                                        <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>
-                                            <FiTrash />
-                                        </Button>
-                                    </HStack>
-                                    <Stack direction={{ base: 'column', md: 'row' }} spacing={3}>
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="xs">Unit Price (â‚¹)</FormLabel>
+                                        <Stack direction={{ base: 'column', md: 'row' }} spacing={3}>
+                                            <FormControl isRequired>
+                                                <FormLabel fontSize="xs">Unit Price (₹)</FormLabel>
+                                                <Input
+                                                    type="number"
+                                                    value={item.price}
+                                                    onChange={(e) => {
+                                                        const val = parseFloat(e.target.value);
+                                                        if (val < 0) return; // Prevent negative
+                                                        handleItemChange(idx, 'price', e.target.value);
+                                                    }}
+                                                    onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                    sx={{
+                                                        '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
+                                                            '-webkit-appearance': 'none',
+                                                            margin: 0,
+                                                        },
+                                                        '&': {
+                                                            '-moz-appearance': 'textfield',
+                                                        },
+                                                    }}
+                                                />
+                                            </FormControl>
+                                            <FormControl>
+                                                <FormLabel fontSize="xs">GST (%)</FormLabel>
+                                                <Input
+                                                    type="number"
+                                                    value={item.gst}
+                                                    onChange={(e) => {
+                                                        const val = parseFloat(e.target.value);
+                                                        if (val < 0) return; // Prevent negative
+                                                        handleItemChange(idx, 'gst', e.target.value);
+                                                    }}
+                                                    onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                    sx={{
+                                                        '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
+                                                            '-webkit-appearance': 'none',
+                                                            margin: 0,
+                                                        },
+                                                        '&': {
+                                                            '-moz-appearance': 'textfield',
+                                                        },
+                                                    }}
+                                                />
+                                            </FormControl>
+                                            <Box alignSelf={{ base: 'flex-start', md: 'flex-end' }} pb={2}>
+                                                <Text fontSize="sm" fontWeight="bold">
+                                                    ₹{((parseFloat(item.price) || 0) * item.quantity).toLocaleString()}
+                                                </Text>
+                                            </Box>
+                                        </Stack>
+                                    </Box>
+                                ))}
+
+                                <Divider />
+                                <VStack align="flex-end">
+                                    <Text>Subtotal: <strong>₹{quoteTotals.subtotal.toLocaleString()}</strong></Text>
+                                    <Text>Total Tax: <strong>₹{quoteTotals.gst.toLocaleString()}</strong></Text>
+                                    {parseFloat(quoteDiscount) > 0 && (
+                                        <Text color="green.600">Discount: <strong>- ₹{parseFloat(quoteDiscount).toLocaleString()}</strong></Text>
+                                    )}
+                                    <Text fontSize="lg" color="brand.600">Grand Total: <strong>₹{quoteTotals.total.toLocaleString()}</strong></Text>
+                                </VStack>
+
+                                <Divider />
+                                <Box>
+                                    <Text fontWeight="bold" mb={2}>Quotation Notes (Yellow Bar):</Text>
+                                    <Textarea
+                                        fontSize="sm"
+                                        placeholder="Enter notes (one per line)..."
+                                        value={customNotes}
+                                        onChange={(e) => setCustomNotes(e.target.value)}
+                                    />
+                                </Box>
+
+                                <Box mt={4}>
+                                    <Text fontWeight="bold" mb={3}>Terms & Conditions:</Text>
+                                    <Stack spacing={2}>
+                                        {policies.map(p => (
+                                            <Flex key={p.id} align="center" gap={3} p={2} bg="gray.50" borderRadius="md">
+                                                <Checkbox isChecked={p.isChecked} onChange={() => togglePolicy(p.id)} />
+                                                <Box flex="1">
+                                                    <Text fontSize="xs" fontWeight="bold">{p.label}</Text>
+                                                    <Input
+                                                        size="xs"
+                                                        value={p.value}
+                                                        onChange={(e) => {
+                                                            const newPs = policies.map(item => item.id === p.id ? { ...item, value: e.target.value } : item);
+                                                            setPolicies(newPs);
+                                                        }}
+                                                    />
+                                                </Box>
+                                                {p.id.startsWith('custom_') && (
+                                                    <IconButton
+                                                        size="xs"
+                                                        icon={<FiTrash />}
+                                                        colorScheme="red"
+                                                        variant="ghost"
+                                                        onClick={() => {
+                                                            const newPs = policies.filter(item => item.id !== p.id);
+                                                            setPolicies(newPs);
+                                                        }}
+                                                    />
+                                                )}
+                                            </Flex>
+                                        ))}
+                                    </Stack>
+
+                                    <Box mt={4} border="1px dashed" borderColor="gray.300" p={3} borderRadius="md" bg="blue.50">
+                                        <Text fontSize="xs" fontWeight="bold" mb={2}>Add Custom Policy (Will be set as Default):</Text>
+                                        <Stack direction={{ base: 'column', md: 'row' }} spacing={2}>
+                                            <Input size="sm" placeholder="Label (e.g. Warranty)" value={newPolicy.label} onChange={e => setNewPolicy({ ...newPolicy, label: e.target.value })} bg="white" />
+                                            <Input size="sm" placeholder="Description..." value={newPolicy.value} onChange={e => setNewPolicy({ ...newPolicy, value: e.target.value })} bg="white" />
+                                            <Button size="sm" colorScheme="blue" onClick={addCustomPolicy}>Add</Button>
+                                        </Stack>
+                                    </Box>
+                                </Box>
+
+                                <Divider />
+                                <Box>
+                                    <Text fontWeight="bold" mb={2}>Extra Charges & Discount:</Text>
+                                    <SimpleGrid columns={2} spacing={4}>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs">Packaging & Forwarding (₹)</FormLabel>
                                             <Input
                                                 type="number"
-                                                value={item.price}
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value);
-                                                    if (val < 0) return; // Prevent negative
-                                                    handleItemChange(idx, 'price', e.target.value);
-                                                }}
-                                                onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                value={quoteTotals.packaging}
+                                                onWheel={(e) => e.target.blur()}
                                                 sx={{
                                                     '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
                                                         '-webkit-appearance': 'none',
@@ -708,20 +827,46 @@ return (
                                                     '&': {
                                                         '-moz-appearance': 'textfield',
                                                     },
+                                                }}
+                                                onChange={(e) => {
+                                                    const valStr = e.target.value;
+                                                    if (valStr === '') {
+                                                        setQuoteTotals(prev => ({
+                                                            ...prev,
+                                                            packaging: '',
+                                                            packagingGst: 0,
+                                                            gst: prev.productGst,
+                                                            total: prev.subtotal + prev.productGst - (parseFloat(quoteDiscount) || 0)
+                                                        }));
+                                                        return;
+                                                    }
+                                                    if (parseFloat(valStr) < 0) return;
+                                                    const val = parseFloat(valStr);
+                                                    const disc = parseFloat(quoteDiscount) || 0;
+                                                    setQuoteTotals(prev => {
+                                                        const sub = prev.subtotal || 0;
+                                                        const productGst = prev.productGst || 0;
+                                                        const packGst = val * 0.18;
+                                                        const totalGst = productGst + packGst;
+                                                        const grand = sub + val + totalGst - disc;
+                                                        return {
+                                                            ...prev,
+                                                            packaging: val,
+                                                            packagingGst: packGst,
+                                                            gst: totalGst,
+                                                            total: grand
+                                                        };
+                                                    });
                                                 }}
                                             />
                                         </FormControl>
                                         <FormControl>
-                                            <FormLabel fontSize="xs">GST (%)</FormLabel>
+                                            <FormLabel fontSize="xs">Discount (₹)</FormLabel>
                                             <Input
                                                 type="number"
-                                                value={item.gst}
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value);
-                                                    if (val < 0) return; // Prevent negative
-                                                    handleItemChange(idx, 'gst', e.target.value);
-                                                }}
-                                                onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                value={quoteDiscount}
+                                                placeholder="0"
+                                                onWheel={(e) => e.target.blur()}
                                                 sx={{
                                                     '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
                                                         '-webkit-appearance': 'none',
@@ -731,266 +876,124 @@ return (
                                                         '-moz-appearance': 'textfield',
                                                     },
                                                 }}
+                                                onChange={(e) => {
+                                                    const valStr = e.target.value;
+                                                    if (valStr === '') {
+                                                        setQuoteDiscount('');
+                                                        setQuoteTotals(prev => ({
+                                                            ...prev,
+                                                            total: prev.subtotal + (prev.packaging || 0) + prev.gst
+                                                        }));
+                                                        return;
+                                                    }
+                                                    if (parseFloat(valStr) < 0) return;
+                                                    const disc = parseFloat(valStr);
+                                                    setQuoteDiscount(disc);
+                                                    setQuoteTotals(prev => ({
+                                                        ...prev,
+                                                        total: prev.subtotal + (prev.packaging || 0) + prev.gst - disc
+                                                    }));
+                                                }}
                                             />
                                         </FormControl>
-                                        <Box alignSelf={{ base: 'flex-start', md: 'flex-end' }} pb={2}>
-                                            <Text fontSize="sm" fontWeight="bold">
-                                                â‚¹{((parseFloat(item.price) || 0) * item.quantity).toLocaleString()}
-                                            </Text>
-                                        </Box>
-                                    </Stack>
+                                    </SimpleGrid>
                                 </Box>
-                            ))}
-
-                            <Divider />
-                            <VStack align="flex-end">
-                                <Text>Subtotal: <strong>â‚¹{quoteTotals.subtotal.toLocaleString()}</strong></Text>
-                                <Text>Total Tax: <strong>â‚¹{quoteTotals.gst.toLocaleString()}</strong></Text>
-                                {parseFloat(quoteDiscount) > 0 && (
-                                    <Text color="green.600">Discount: <strong>- â‚¹{parseFloat(quoteDiscount).toLocaleString()}</strong></Text>
-                                )}
-                                <Text fontSize="lg" color="brand.600">Grand Total: <strong>â‚¹{quoteTotals.total.toLocaleString()}</strong></Text>
                             </VStack>
+                        )}
+                    </ModalBody>
+                    <ModalFooter>
+                        {isCreatingQuote ? (
+                            <>
+                                <Button variant="ghost" mr={3} onClick={() => setIsCreatingQuote(false)}>Back</Button>
+                                <Button colorScheme="green" onClick={submitQuote} isLoading={isSubmittingQuote} loadingText="Sending...">Send Quotation</Button>
+                            </>
+                        ) : (
+                            <Button onClick={() => setSelectedEnquiry(null)}>Close</Button>
+                        )}
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
 
-                            <Divider />
-                            <Box>
-                                <Text fontWeight="bold" mb={2}>Quotation Notes (Yellow Bar):</Text>
-                                <Textarea
-                                    fontSize="sm"
-                                    placeholder="Enter notes (one per line)..."
-                                    value={customNotes}
-                                    onChange={(e) => setCustomNotes(e.target.value)}
-                                />
+            {/* QUOTE VIEW MODAL */}
+            <Modal isOpen={!!selectedQuotation} onClose={() => setSelectedQuotation(null)} size={{ base: 'full', md: '4xl' }}>
+                <ModalOverlay />
+                <ModalContent bg="gray.100">
+                    <ModalHeader>
+                        <Flex justify="space-between" align="center" pr={8}>
+                            <Text>Quotation Preview</Text>
+                            <Button
+                                size="sm"
+                                leftIcon={<FiPrinter />}
+                                colorScheme="blue"
+                                onClick={() => {
+                                    const win = window.open('', '_blank');
+                                    win.document.write(`<html><head><style>@media print{button{display:none}}</style></head><body>`);
+                                    win.document.write(selectedQuotation.htmlContent);
+                                    win.document.write('</body></html>');
+                                    win.document.close();
+                                    win.print();
+                                }}
+                            >
+                                Print Quotation
+                            </Button>
+                        </Flex>
+                    </ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={8}>
+                        {selectedQuotation && (
+                            <Box
+                                bg="white"
+                                p={4}
+                                boxShadow="xl"
+                                mx="auto"
+                                dangerouslySetInnerHTML={{ __html: selectedQuotation.htmlContent }}
+                            />
+                        )}
+                        {!selectedQuotation?.htmlContent && (
+                            <Box textAlign="center" py={10} bg="white">
+                                <Text>This is an old quotation without high-fidelity HTML content.</Text>
+                                <Divider my={4} />
+                                <VStack align="stretch" spacing={3} p={4}>
+                                    <Text><strong>ID:</strong> {selectedQuotation?._id}</Text>
+                                    <Text><strong>Client:</strong> {selectedQuotation?.enquiryId?.Name || selectedQuotation?.enquiry?.Name}</Text>
+                                    <Divider />
+                                    <Table size="sm">
+                                        <Thead><Tr><Th>Image</Th><Th>Item</Th><Th isNumeric>Price</Th><Th isNumeric>Qty</Th><Th isNumeric>Total</Th></Tr></Thead>
+                                        <Tbody>
+                                            {(selectedQuotation?.items || []).map((item, i) => (
+                                                <Tr key={i}>
+                                                    <Td>
+                                                        <Image
+                                                            src={getImageUrl(item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image || item.productId?.images?.[0] || item.productId?.image)}
+                                                            boxSize="30px"
+                                                            objectFit="cover"
+                                                            borderRadius="md"
+                                                        />
+                                                    </Td>
+                                                    <Td>{item.product?.name || item.productId?.name || 'Item'}</Td>
+                                                    <Td isNumeric>{item.price}</Td>
+                                                    <Td isNumeric>{item.quantity}</Td>
+                                                    <Td isNumeric>{(item.amount || 0).toLocaleString()}</Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                    <Divider />
+                                    <Flex justify="space-between" fontWeight="bold" fontSize="lg">
+                                        <Text>Total Amount</Text>
+                                        <Text>₹{(selectedQuotation?.totalAmount || 0).toLocaleString()}</Text>
+                                    </Flex>
+                                </VStack>
                             </Box>
-
-                            <Box mt={4}>
-                                <Text fontWeight="bold" mb={3}>Terms & Conditions:</Text>
-                                <Stack spacing={2}>
-                                    {policies.map(p => (
-                                        <Flex key={p.id} align="center" gap={3} p={2} bg="gray.50" borderRadius="md">
-                                            <Checkbox isChecked={p.isChecked} onChange={() => togglePolicy(p.id)} />
-                                            <Box flex="1">
-                                                <Text fontSize="xs" fontWeight="bold">{p.label}</Text>
-                                                <Input
-                                                    size="xs"
-                                                    value={p.value}
-                                                    onChange={(e) => {
-                                                        const newPs = policies.map(item => item.id === p.id ? { ...item, value: e.target.value } : item);
-                                                        setPolicies(newPs);
-                                                    }}
-                                                />
-                                            </Box>
-                                            {p.id.startsWith('custom_') && (
-                                                <IconButton
-                                                    size="xs"
-                                                    icon={<FiTrash />}
-                                                    colorScheme="red"
-                                                    variant="ghost"
-                                                    onClick={() => {
-                                                        const newPs = policies.filter(item => item.id !== p.id);
-                                                        setPolicies(newPs);
-                                                    }}
-                                                />
-                                            )}
-                                        </Flex>
-                                    ))}
-                                </Stack>
-
-                                <Box mt={4} border="1px dashed" borderColor="gray.300" p={3} borderRadius="md" bg="blue.50">
-                                    <Text fontSize="xs" fontWeight="bold" mb={2}>Add Custom Policy (Will be set as Default):</Text>
-                                    <Stack direction={{ base: 'column', md: 'row' }} spacing={2}>
-                                        <Input size="sm" placeholder="Label (e.g. Warranty)" value={newPolicy.label} onChange={e => setNewPolicy({ ...newPolicy, label: e.target.value })} bg="white" />
-                                        <Input size="sm" placeholder="Description..." value={newPolicy.value} onChange={e => setNewPolicy({ ...newPolicy, value: e.target.value })} bg="white" />
-                                        <Button size="sm" colorScheme="blue" onClick={addCustomPolicy}>Add</Button>
-                                    </Stack>
-                                </Box>
-                            </Box>
-
-                            <Divider />
-                            <Box>
-                                <Text fontWeight="bold" mb={2}>Extra Charges & Discount:</Text>
-                                <SimpleGrid columns={2} spacing={4}>
-                                    <FormControl>
-                                        <FormLabel fontSize="xs">Packaging & Forwarding (â‚¹)</FormLabel>
-                                        <Input
-                                            type="number"
-                                            value={quoteTotals.packaging}
-                                            onWheel={(e) => e.target.blur()}
-                                            sx={{
-                                                '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
-                                                    '-webkit-appearance': 'none',
-                                                    margin: 0,
-                                                },
-                                                '&': {
-                                                    '-moz-appearance': 'textfield',
-                                                },
-                                            }}
-                                            onChange={(e) => {
-                                                const valStr = e.target.value;
-                                                if (valStr === '') {
-                                                    setQuoteTotals(prev => ({
-                                                        ...prev,
-                                                        packaging: '',
-                                                        packagingGst: 0,
-                                                        gst: prev.productGst,
-                                                        total: prev.subtotal + prev.productGst - (parseFloat(quoteDiscount) || 0)
-                                                    }));
-                                                    return;
-                                                }
-                                                if (parseFloat(valStr) < 0) return;
-                                                const val = parseFloat(valStr);
-                                                const disc = parseFloat(quoteDiscount) || 0;
-                                                setQuoteTotals(prev => {
-                                                    const sub = prev.subtotal || 0;
-                                                    const productGst = prev.productGst || 0;
-                                                    const packGst = val * 0.18;
-                                                    const totalGst = productGst + packGst;
-                                                    const grand = sub + val + totalGst - disc;
-                                                    return {
-                                                        ...prev,
-                                                        packaging: val,
-                                                        packagingGst: packGst,
-                                                        gst: totalGst,
-                                                        total: grand
-                                                    };
-                                                });
-                                            }}
-                                        />
-                                    </FormControl>
-                                    <FormControl>
-                                        <FormLabel fontSize="xs">Discount (â‚¹)</FormLabel>
-                                        <Input
-                                            type="number"
-                                            value={quoteDiscount}
-                                            placeholder="0"
-                                            onWheel={(e) => e.target.blur()}
-                                            sx={{
-                                                '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
-                                                    '-webkit-appearance': 'none',
-                                                    margin: 0,
-                                                },
-                                                '&': {
-                                                    '-moz-appearance': 'textfield',
-                                                },
-                                            }}
-                                            onChange={(e) => {
-                                                const valStr = e.target.value;
-                                                if (valStr === '') {
-                                                    setQuoteDiscount('');
-                                                    setQuoteTotals(prev => ({
-                                                        ...prev,
-                                                        total: prev.subtotal + (prev.packaging || 0) + prev.gst
-                                                    }));
-                                                    return;
-                                                }
-                                                if (parseFloat(valStr) < 0) return;
-                                                const disc = parseFloat(valStr);
-                                                setQuoteDiscount(disc);
-                                                setQuoteTotals(prev => ({
-                                                    ...prev,
-                                                    total: prev.subtotal + (prev.packaging || 0) + prev.gst - disc
-                                                }));
-                                            }}
-                                        />
-                                    </FormControl>
-                                </SimpleGrid>
-                            </Box>
-                        </VStack>
-                    )}
-                </ModalBody>
-                <ModalFooter>
-                    {isCreatingQuote ? (
-                        <>
-                            <Button variant="ghost" mr={3} onClick={() => setIsCreatingQuote(false)}>Back</Button>
-                            <Button colorScheme="green" onClick={submitQuote}>Send Quotation</Button>
-                        </>
-                    ) : (
-                        <Button onClick={() => setSelectedEnquiry(null)}>Close</Button>
-                    )}
-                </ModalFooter>
-            </ModalContent>
-        </Modal>
-
-        {/* QUOTE VIEW MODAL */}
-        <Modal isOpen={!!selectedQuotation} onClose={() => setSelectedQuotation(null)} size={{ base: 'full', md: '4xl' }}>
-            <ModalOverlay />
-            <ModalContent bg="gray.100">
-                <ModalHeader>
-                    <Flex justify="space-between" align="center" pr={8}>
-                        <Text>Quotation Preview</Text>
-                        <Button
-                            size="sm"
-                            leftIcon={<FiPrinter />}
-                            colorScheme="blue"
-                            onClick={() => {
-                                const win = window.open('', '_blank');
-                                win.document.write(`<html><head><style>@media print{button{display:none}}</style></head><body>`);
-                                win.document.write(selectedQuotation.htmlContent);
-                                win.document.write('</body></html>');
-                                win.document.close();
-                                win.print();
-                            }}
-                        >
-                            Print Quotation
-                        </Button>
-                    </Flex>
-                </ModalHeader>
-                <ModalCloseButton />
-                <ModalBody pb={8}>
-                    {selectedQuotation && (
-                        <Box
-                            bg="white"
-                            p={4}
-                            boxShadow="xl"
-                            mx="auto"
-                            dangerouslySetInnerHTML={{ __html: selectedQuotation.htmlContent }}
-                        />
-                    )}
-                    {!selectedQuotation?.htmlContent && (
-                        <Box textAlign="center" py={10} bg="white">
-                            <Text>This is an old quotation without high-fidelity HTML content.</Text>
-                            <Divider my={4} />
-                            <VStack align="stretch" spacing={3} p={4}>
-                                <Text><strong>ID:</strong> {selectedQuotation?._id}</Text>
-                                <Text><strong>Client:</strong> {selectedQuotation?.enquiryId?.Name || selectedQuotation?.enquiry?.Name}</Text>
-                                <Divider />
-                                <Table size="sm">
-                                    <Thead><Tr><Th>Image</Th><Th>Item</Th><Th isNumeric>Price</Th><Th isNumeric>Qty</Th><Th isNumeric>Total</Th></Tr></Thead>
-                                    <Tbody>
-                                        {(selectedQuotation?.items || []).map((item, i) => (
-                                            <Tr key={i}>
-                                                <Td>
-                                                    <Image
-                                                        src={getImageUrl(item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image || item.productId?.images?.[0] || item.productId?.image)}
-                                                        boxSize="30px"
-                                                        objectFit="cover"
-                                                        borderRadius="md"
-                                                    />
-                                                </Td>
-                                                <Td>{item.product?.name || item.productId?.name || 'Item'}</Td>
-                                                <Td isNumeric>{item.price}</Td>
-                                                <Td isNumeric>{item.quantity}</Td>
-                                                <Td isNumeric>{(item.amount || 0).toLocaleString()}</Td>
-                                            </Tr>
-                                        ))}
-                                    </Tbody>
-                                </Table>
-                                <Divider />
-                                <Flex justify="space-between" fontWeight="bold" fontSize="lg">
-                                    <Text>Total Amount</Text>
-                                    <Text>â‚¹{(selectedQuotation?.totalAmount || 0).toLocaleString()}</Text>
-                                </Flex>
-                            </VStack>
-                        </Box>
-                    )}
-                </ModalBody>
-                <ModalFooter>
-                    <Button onClick={() => setSelectedQuotation(null)}>Close</Button>
-                </ModalFooter>
-            </ModalContent>
-        </Modal >
-    </Box >
-);
+                        )}
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button onClick={() => setSelectedQuotation(null)}>Close</Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal >
+        </Box >
+    );
 };
 
 export default AdminEnquiries;

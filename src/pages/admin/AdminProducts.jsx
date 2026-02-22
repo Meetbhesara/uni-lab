@@ -61,9 +61,8 @@ const AdminProducts = () => {
         pdf: '',
         sellingPriceStart: '',
         sellingPriceEnd: '',
-        purchasePrice: '',
         dealerPrice: '',
-        vendor: '',
+        vendors: [], // Array of { name: '', price: '' }
         details: [], // Array of { key: '', value: '' }
         alternativeNames: [] // Array of strings
     });
@@ -118,15 +117,22 @@ const AdminProducts = () => {
         };
 
         const applyProduct = (p) => {
+            let parsedVendors = [];
+            if (Array.isArray(p.vendors) && p.vendors.length > 0) {
+                parsedVendors = p.vendors;
+            } else if (p.vendor || (p.purchasePrice !== null && p.purchasePrice !== undefined)) {
+                // Fallback for legacy single vendor/price
+                parsedVendors = [{ name: p.vendor || '', price: p.purchasePrice ?? '' }];
+            }
+
             setFormData({
                 name: p.name || '',
                 description: p.description || '',
                 pdf: p.pdf || '',
                 sellingPriceStart: p.sellingPriceStart ?? '',
                 sellingPriceEnd: p.sellingPriceEnd ?? '',
-                purchasePrice: p.purchasePrice ?? '',
                 dealerPrice: p.dealerPrice ?? '',
-                vendor: p.vendor || '',
+                vendors: parsedVendors,
                 details: parseDetails(p.details),
                 alternativeNames: Array.isArray(p.alternativeNames) ? p.alternativeNames : [],
             });
@@ -178,53 +184,23 @@ const AdminProducts = () => {
 
         // ── Required text fields ──────────────────────────────────
         if (!formData.name?.trim()) errors.name = 'Product Name is required';
-        if (!formData.description?.trim()) errors.description = 'Description is required';
-        if (!formData.vendor?.trim()) errors.vendor = 'Vendor name is required';
 
         // ── Selling Price Start ───────────────────────────────────
-        if (formData.sellingPriceStart === '' || formData.sellingPriceStart === null) {
-            errors.sellingPriceStart = 'Selling Price (Start) is required';
-        } else if (Number(formData.sellingPriceStart) < 0) {
+        if (formData.sellingPriceStart !== '' && formData.sellingPriceStart !== null && Number(formData.sellingPriceStart) < 0) {
             errors.sellingPriceStart = 'Price cannot be negative';
         }
 
-        // ── Selling Price End ─────────────────────────────────────
-        if (formData.sellingPriceEnd === '' || formData.sellingPriceEnd === null) {
-            errors.sellingPriceEnd = 'Selling Price (End) is required';
-        } else if (Number(formData.sellingPriceEnd) < 0) {
-            errors.sellingPriceEnd = 'Price cannot be negative';
-        }
-
-        // ── Selling range consistency ─────────────────────────────
-        if (
-            !errors.sellingPriceStart && !errors.sellingPriceEnd &&
-            Number(formData.sellingPriceStart) > Number(formData.sellingPriceEnd)
-        ) {
-            errors.sellingPriceStart = 'Start price cannot exceed end price';
-            errors.sellingPriceEnd = 'End price must be ≥ start price';
-        }
-
-        // ── Dealer Price ──────────────────────────────────────────
-        if (formData.dealerPrice === '' || formData.dealerPrice === null) {
-            errors.dealerPrice = 'Dealer Price is required';
-        } else if (Number(formData.dealerPrice) < 0) {
-            errors.dealerPrice = 'Price cannot be negative';
-        }
-
-        // ── Purchase Price (optional but must be non-negative) ────
-        if (formData.purchasePrice !== '' && formData.purchasePrice !== null && Number(formData.purchasePrice) < 0) {
-            errors.purchasePrice = 'Price cannot be negative';
-        }
+        // ── Vendors Array Validation ──────────────────────────────
+        // But we must enforce non-negative for purchase price IF provided.
+        formData.vendors.forEach((v, index) => {
+            if (v.price !== '' && v.price !== null && Number(v.price) < 0) {
+                errors[`vendor_price_${index}`] = 'Price cannot be negative';
+            }
+        });
 
         // ── At least one image ────────────────────────────────────
         if (existingPhotos.length === 0 && newPhotos.length === 0) {
             errors.images = 'At least one product image is required';
-        }
-
-        // ── At least one technical specification ──────────────────
-        const validDetails = formData.details.filter(d => d.key && d.key.trim() !== '');
-        if (validDetails.length === 0) {
-            errors.details = 'At least one technical specification is required';
         }
 
         return errors;
@@ -257,11 +233,12 @@ const AdminProducts = () => {
         if (formData.sellingPriceStart !== '' && formData.sellingPriceStart !== null) data.append('sellingPriceStart', formData.sellingPriceStart);
         if (formData.sellingPriceEnd !== '' && formData.sellingPriceEnd !== null) data.append('sellingPriceEnd', formData.sellingPriceEnd);
 
-        // Append purchasePrice if it has a value (for update or create).
-        if (formData.purchasePrice !== '' && formData.purchasePrice !== null) data.append('purchasePrice', formData.purchasePrice);
         if (formData.dealerPrice !== '' && formData.dealerPrice !== null) data.append('dealerPrice', formData.dealerPrice);
-        if (formData.vendor) data.append('vendor', formData.vendor);
         data.append('alternativeNames', JSON.stringify(formData.alternativeNames));
+
+        // Filter out empty vendors and append as stringified array
+        const validVendors = formData.vendors.filter(v => v.name?.trim() || (v.price !== '' && v.price !== null));
+        data.append('vendors', JSON.stringify(validVendors));
 
         // Convert details array back to Object and stringify for transport
         const detailsMap = {};
@@ -296,7 +273,7 @@ const AdminProducts = () => {
             onClose();
             // Reset
             setEditingProduct(null);
-            setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', purchasePrice: '', dealerPrice: '', vendor: '', details: [], alternativeNames: [] });
+            setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [] });
             setFormErrors({});
             setExistingPhotos([]);
             setNewPhotos([]);
@@ -371,7 +348,7 @@ const AdminProducts = () => {
                         minW="fit-content"
                         onClick={() => {
                             setEditingProduct(null);
-                            setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', purchasePrice: '', dealerPrice: '', vendor: '', details: [], alternativeNames: [] });
+                            setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [] });
                             setFormErrors({});
                             setExistingPhotos([]);
                             setNewPhotos([]);
@@ -415,16 +392,36 @@ const AdminProducts = () => {
                                     </Flex>
                                 </Td>
                                 <Td>
-                                    <Badge variant="subtle" colorScheme="blue" borderRadius="full" px={3}>
-                                        {product.vendor || 'N/A'}
-                                    </Badge>
+                                    <Flex wrap="wrap" gap={1} maxW="150px">
+                                        {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                            product.vendors.map((v, i) => (
+                                                <Badge key={i} variant="subtle" colorScheme="blue" borderRadius="full" px={2} fontSize="10px">
+                                                    {v.name || 'N/A'}
+                                                </Badge>
+                                            ))
+                                        ) : (
+                                            <Badge variant="subtle" colorScheme="blue" borderRadius="full" px={3}>
+                                                {product.vendor || 'N/A'}
+                                            </Badge>
+                                        )}
+                                    </Flex>
                                 </Td>
                                 <Td>
                                     <Stack spacing={0}>
-                                        <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd}</Text>
-                                        <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice}</Text>
+                                        <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd || 'N/A'}</Text>
+                                        <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice || 'N/A'}</Text>
                                         {isSuperAdmin && (
-                                            <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
+                                            <Flex direction="column" gap={1} mt={1}>
+                                                {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                                    product.vendors.map((v, i) => (
+                                                        <Text key={i} fontSize="xs" color="gray.500">
+                                                            {v.name || 'Unknown'}: ₹{v.price ?? '0'}
+                                                        </Text>
+                                                    ))
+                                                ) : (
+                                                    <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
+                                                )}
+                                            </Flex>
                                         )}
                                     </Stack>
                                 </Td>
@@ -546,17 +543,14 @@ const AdminProducts = () => {
                                             </Stack>
                                         </FormControl>
 
-                                        <FormControl isRequired isInvalid={!!formErrors.description}>
+                                        <FormControl isInvalid={!!formErrors.description}>
                                             <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DESCRIPTION</FormLabel>
                                             <Textarea
                                                 variant="filled"
                                                 rows={4}
                                                 placeholder="Key features and applications..."
                                                 value={formData.description}
-                                                onChange={(e) => {
-                                                    setFormData({ ...formData, description: e.target.value });
-                                                    if (formErrors.description) setFormErrors({ ...formErrors, description: '' });
-                                                }}
+                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                             />
                                             <FormErrorMessage size="xs">{formErrors.description}</FormErrorMessage>
                                         </FormControl>
@@ -571,7 +565,7 @@ const AdminProducts = () => {
                                     </Flex>
                                     <Stack spacing={4}>
                                         <SimpleGrid columns={2} spacing={4}>
-                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceStart}>
+                                            <FormControl isInvalid={!!formErrors.sellingPriceStart}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (START)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -582,7 +576,7 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceStart}</FormErrorMessage>
                                             </FormControl>
-                                            <FormControl isRequired isInvalid={!!formErrors.sellingPriceEnd}>
+                                            <FormControl isInvalid={!!formErrors.sellingPriceEnd}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (END)</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -594,8 +588,8 @@ const AdminProducts = () => {
                                                 <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
-                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                                            <FormControl isRequired isInvalid={!!formErrors.dealerPrice}>
+                                        <SimpleGrid columns={{ base: 1, md: 1 }} spacing={4}>
+                                            <FormControl isInvalid={!!formErrors.dealerPrice}>
                                                 <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
                                                 <InputGroup size="md">
                                                     <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
@@ -606,26 +600,73 @@ const AdminProducts = () => {
                                                 </InputGroup>
                                                 <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
                                             </FormControl>
-                                            <FormControl isInvalid={!!formErrors.purchasePrice}>
-                                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PURCHASE PRICE</FormLabel>
-                                                <InputGroup size="md">
-                                                    <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.purchasePrice} onChange={(e) => {
-                                                        setFormData({ ...formData, purchasePrice: e.target.value });
-                                                        if (formErrors.purchasePrice) setFormErrors({ ...formErrors, purchasePrice: '' });
-                                                    }} />
-                                                </InputGroup>
-                                                <FormErrorMessage fontSize="10px">{formErrors.purchasePrice}</FormErrorMessage>
-                                            </FormControl>
                                         </SimpleGrid>
-                                        <FormControl isRequired isInvalid={!!formErrors.vendor}>
-                                            <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PRIMARY VENDOR</FormLabel>
-                                            <Input variant="filled" placeholder="Vendor Name" value={formData.vendor} onChange={(e) => {
-                                                setFormData({ ...formData, vendor: e.target.value });
-                                                if (formErrors.vendor) setFormErrors({ ...formErrors, vendor: '' });
-                                            }} />
-                                            <FormErrorMessage size="xs">{formErrors.vendor}</FormErrorMessage>
-                                        </FormControl>
+
+                                        {isSuperAdmin && (
+                                            <Box border="1px dashed" borderColor="gray.200" p={4} borderRadius="xl" bg="gray.50">
+                                                <Flex justify="space-between" align="center" mb={4}>
+                                                    <Text fontSize="sm" fontWeight="bold" color="brand.600">Vendors & Purchase Prices</Text>
+                                                    <Button size="sm" colorScheme="brand" variant="outline" onClick={() => {
+                                                        setFormData(prev => ({ ...prev, vendors: [...prev.vendors, { name: '', price: '' }] }));
+                                                    }}>
+                                                        + Add Vendor & Purchase Price
+                                                    </Button>
+                                                </Flex>
+
+                                                <Stack spacing={3}>
+                                                    <AnimatePresence>
+                                                        {formData.vendors.map((v, index) => (
+                                                            <motion.div
+                                                                key={index}
+                                                                initial={{ opacity: 0, y: -10 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                exit={{ opacity: 0, height: 0 }}
+                                                            >
+                                                                <Flex gap={3} align="flex-start">
+                                                                    <FormControl flex={1}>
+                                                                        <FormLabel fontSize="10px" color="gray.500">VENDOR NAME</FormLabel>
+                                                                        <Input size="sm" variant="filled" placeholder="Vendor Name" value={v.name} onChange={(e) => {
+                                                                            const newVendors = [...formData.vendors];
+                                                                            newVendors[index].name = e.target.value;
+                                                                            setFormData({ ...formData, vendors: newVendors });
+                                                                        }} />
+                                                                    </FormControl>
+                                                                    <FormControl flex={1} isInvalid={!!formErrors[`vendor_price_${index}`]}>
+                                                                        <FormLabel fontSize="10px" color="gray.500">PURCHASE PRICE</FormLabel>
+                                                                        <InputGroup size="sm">
+                                                                            <InputLeftElement pointerEvents='none' children={<Text fontSize="xs" color="gray.400">₹</Text>} />
+                                                                            <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={v.price} onChange={(e) => {
+                                                                                const newVendors = [...formData.vendors];
+                                                                                newVendors[index].price = e.target.value;
+                                                                                setFormData({ ...formData, vendors: newVendors });
+                                                                                if (formErrors[`vendor_price_${index}`]) {
+                                                                                    setFormErrors(prev => ({ ...prev, [`vendor_price_${index}`]: '' }));
+                                                                                }
+                                                                            }} />
+                                                                        </InputGroup>
+                                                                        <FormErrorMessage fontSize="10px">{formErrors[`vendor_price_${index}`]}</FormErrorMessage>
+                                                                    </FormControl>
+                                                                    <IconButton
+                                                                        mt={6}
+                                                                        size="sm"
+                                                                        icon={<FiTrash2 />}
+                                                                        colorScheme="red"
+                                                                        variant="ghost"
+                                                                        onClick={() => {
+                                                                            const newVendors = formData.vendors.filter((_, i) => i !== index);
+                                                                            setFormData({ ...formData, vendors: newVendors });
+                                                                        }}
+                                                                    />
+                                                                </Flex>
+                                                            </motion.div>
+                                                        ))}
+                                                    </AnimatePresence>
+                                                    {formData.vendors.length === 0 && (
+                                                        <Text fontSize="xs" color="gray.400" textAlign="center">No vendors added yet.</Text>
+                                                    )}
+                                                </Stack>
+                                            </Box>
+                                        )}
                                     </Stack>
                                 </Box>
                             </Stack>
