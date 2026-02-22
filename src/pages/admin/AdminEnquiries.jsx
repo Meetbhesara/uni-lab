@@ -801,7 +801,10 @@ const AdminEnquiries = () => {
                                                         bg="white"
                                                     />
                                                     <Box mt={1} fontSize="10px" color="gray.500">
-                                                        Sell: ₹{item.sellingPriceStart || 0} - {item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'}{isSuperAdmin ? ` | Dealer: ₹${item.dealerPrice || 0}` : ''}
+                                                        {isSuperAdmin && isGlobalDealerPrice
+                                                            ? `Dealer: ₹${item.dealerPrice || 0}`
+                                                            : `Sell: ₹${item.sellingPriceStart || 0} - ${item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'}`
+                                                        }
                                                     </Box>
                                                 </FormControl>
                                                 <FormControl>
