@@ -20,6 +20,7 @@ const AdminEnquiries = () => {
 
     // Quote Creation State
     const [isCreatingQuote, setIsCreatingQuote] = useState(false);
+    const [isGlobalDealerPrice, setIsGlobalDealerPrice] = useState(false);
     const [quoteItems, setQuoteItems] = useState([]);
     const [quoteDiscount, setQuoteDiscount] = useState(0);
     const [quoteTotals, setQuoteTotals] = useState({ subtotal: 0, productGst: 0, gst: 0, total: 0, packaging: 0, packagingGst: 0 });
@@ -140,6 +141,7 @@ const AdminEnquiries = () => {
         if (!selectedEnquiry) return;
         setIsCreatingQuote(true);
         setIsSubmittingQuote(false);
+        setIsGlobalDealerPrice(false);
 
         // Initialize custom party details
         setQuotePartyName(selectedEnquiry.Name || '');
@@ -163,7 +165,6 @@ const AdminEnquiries = () => {
                 quantity: p.quantity,
                 price: defaultPrice,
                 gst: 18, // Default GST
-                useDealerPrice: false,
                 dealerPrice: dealerPrice,
                 sellingPriceStart: startPrice || 0,
                 sellingPriceEnd: endPrice || 0,
@@ -734,7 +735,27 @@ const AdminEnquiries = () => {
                                 </Box>
 
                                 <Box>
-                                    <Text fontWeight="bold" mb={3} color="brand.600">Products & Pricing</Text>
+                                    <Flex justify="space-between" align="center" mb={3}>
+                                        <Text fontWeight="bold" color="brand.600">Products & Pricing</Text>
+                                        {isSuperAdmin && (
+                                            <Checkbox
+                                                colorScheme="brand"
+                                                isChecked={isGlobalDealerPrice}
+                                                onChange={(e) => {
+                                                    const isChecked = e.target.checked;
+                                                    setIsGlobalDealerPrice(isChecked);
+                                                    const newItems = quoteItems.map(item => ({
+                                                        ...item,
+                                                        price: isChecked ? (item.dealerPrice || 0) : item.calculatedSellingPrice
+                                                    }));
+                                                    setQuoteItems(newItems);
+                                                    calculateTotals(newItems, quoteDiscount);
+                                                }}
+                                            >
+                                                Use Dealer Price for All Items
+                                            </Checkbox>
+                                        )}
+                                    </Flex>
                                     {quoteItems.map((item, idx) => (
                                         <Box key={idx} border="1px" borderColor="gray.200" p={3} borderRadius="md">
                                             <HStack mb={2} spacing={3} justify="space-between">
@@ -758,23 +779,6 @@ const AdminEnquiries = () => {
                                                 <FormControl isRequired>
                                                     <Flex justify="space-between" align="center" mb={1}>
                                                         <FormLabel fontSize="xs" mb={0}>Unit Price (₹)</FormLabel>
-                                                        {isSuperAdmin && (
-                                                            <Checkbox
-                                                                size="sm"
-                                                                colorScheme="brand"
-                                                                isChecked={item.useDealerPrice}
-                                                                onChange={(e) => {
-                                                                    const isChecked = e.target.checked;
-                                                                    const newItems = [...quoteItems];
-                                                                    newItems[idx].useDealerPrice = isChecked;
-                                                                    newItems[idx].price = isChecked ? newItems[idx].dealerPrice : newItems[idx].calculatedSellingPrice;
-                                                                    setQuoteItems(newItems);
-                                                                    calculateTotals(newItems, quoteDiscount);
-                                                                }}
-                                                            >
-                                                                Use Dealer Price
-                                                            </Checkbox>
-                                                        )}
                                                     </Flex>
                                                     <Input
                                                         type="number"
