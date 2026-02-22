@@ -59,6 +59,9 @@ const AdminEnquiries = () => {
     const [customNotes, setCustomNotes] = useState("(1) Payment After Performer Invoice\n(2) Transportation And Packing Charge Will be Extra As Per Actual");
     const [newPolicy, setNewPolicy] = useState({ label: '', value: '' });
 
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const isSuperAdmin = user.email === 'iatulkanak@gmail.com';
+
     const toast = useToast();
 
     useEffect(() => {
@@ -755,21 +758,23 @@ const AdminEnquiries = () => {
                                                 <FormControl isRequired>
                                                     <Flex justify="space-between" align="center" mb={1}>
                                                         <FormLabel fontSize="xs" mb={0}>Unit Price (₹)</FormLabel>
-                                                        <Checkbox
-                                                            size="sm"
-                                                            colorScheme="brand"
-                                                            isChecked={item.useDealerPrice}
-                                                            onChange={(e) => {
-                                                                const isChecked = e.target.checked;
-                                                                const newItems = [...quoteItems];
-                                                                newItems[idx].useDealerPrice = isChecked;
-                                                                newItems[idx].price = isChecked ? newItems[idx].dealerPrice : newItems[idx].calculatedSellingPrice;
-                                                                setQuoteItems(newItems);
-                                                                calculateTotals(newItems, quoteDiscount);
-                                                            }}
-                                                        >
-                                                            Use Dealer Price
-                                                        </Checkbox>
+                                                        {isSuperAdmin && (
+                                                            <Checkbox
+                                                                size="sm"
+                                                                colorScheme="brand"
+                                                                isChecked={item.useDealerPrice}
+                                                                onChange={(e) => {
+                                                                    const isChecked = e.target.checked;
+                                                                    const newItems = [...quoteItems];
+                                                                    newItems[idx].useDealerPrice = isChecked;
+                                                                    newItems[idx].price = isChecked ? newItems[idx].dealerPrice : newItems[idx].calculatedSellingPrice;
+                                                                    setQuoteItems(newItems);
+                                                                    calculateTotals(newItems, quoteDiscount);
+                                                                }}
+                                                            >
+                                                                Use Dealer Price
+                                                            </Checkbox>
+                                                        )}
                                                     </Flex>
                                                     <Input
                                                         type="number"
@@ -792,7 +797,7 @@ const AdminEnquiries = () => {
                                                         bg="white"
                                                     />
                                                     <Box mt={1} fontSize="10px" color="gray.500">
-                                                        Sell: ₹{item.sellingPriceStart || 0} - {item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'} | Dealer: ₹{item.dealerPrice || 0}
+                                                        Sell: ₹{item.sellingPriceStart || 0} - {item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'}{isSuperAdmin ? ` | Dealer: ₹${item.dealerPrice || 0}` : ''}
                                                     </Box>
                                                 </FormControl>
                                                 <FormControl>

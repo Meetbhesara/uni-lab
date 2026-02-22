@@ -609,7 +609,7 @@ const AdminProducts = () => {
                                                     <Button size="sm" colorScheme="brand" variant="outline" onClick={() => {
                                                         setFormData(prev => ({ ...prev, vendors: [...prev.vendors, { name: '', price: '' }] }));
                                                     }}>
-                                                        + Add Vendor & Purchase Price
+                                                        + Add
                                                     </Button>
                                                 </Flex>
 

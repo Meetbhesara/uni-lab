@@ -114,8 +114,20 @@ export const CartProvider = ({ children }) => {
         setCart((prev) => prev.filter((item) => item._id !== itemId && item.id !== itemId));
     };
 
-    const clearCart = () => {
+    const clearCart = async () => {
         setCart([]);
+        if (sessionId) {
+            try {
+                // Try backend delete if cart API supports it
+                await api.delete(`/cart/${sessionId}`);
+            } catch (err) {
+                console.log("No backend clear cart route or failed, proceeding with session reset.");
+            }
+        }
+        // Force fresh session ID to decouple from old remote cart
+        const newSession = generateSessionId();
+        localStorage.setItem('sessionId', newSession);
+        setSessionId(newSession);
     };
 
     return (
