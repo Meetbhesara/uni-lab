@@ -25,6 +25,12 @@ const AdminEnquiries = () => {
     const [quoteTotals, setQuoteTotals] = useState({ subtotal: 0, productGst: 0, gst: 0, total: 0, packaging: 0, packagingGst: 0 });
     const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
 
+    // Custom Party Details
+    const [quotePartyName, setQuotePartyName] = useState('');
+    const [quoteAddress, setQuoteAddress] = useState('');
+    const [quoteMobile, setQuoteMobile] = useState('');
+    const [quoteEmail, setQuoteEmail] = useState('');
+
 
     // Policies State
     const DEFAULT_POLICIES = [
@@ -131,13 +137,36 @@ const AdminEnquiries = () => {
         if (!selectedEnquiry) return;
         setIsCreatingQuote(true);
         setIsSubmittingQuote(false);
+
+        // Initialize custom party details
+        setQuotePartyName(selectedEnquiry.Name || '');
+        setQuoteEmail(selectedEnquiry.email || '');
+        setQuoteMobile(selectedEnquiry.phone || '');
+        setQuoteAddress(''); // Start empty
+
         // Initialize items from enquiry products
-        const initialItems = (selectedEnquiry.products || []).map(p => ({
-            productId: p.productId, // Keep object or ID
-            quantity: p.quantity,
-            price: '', // Initialize as empty string to allow placeholder/clean typing
-            gst: 18 // Default GST
-        }));
+        const initialItems = (selectedEnquiry.products || []).map(p => {
+            const product = p.productId || {};
+            const endPrice = parseFloat(product.sellingPriceEnd);
+            const startPrice = parseFloat(product.sellingPriceStart);
+            const dealerPrice = parseFloat(product.dealerPrice) || 0;
+
+            let defaultPrice = 0;
+            if (!isNaN(endPrice) && endPrice > 0) defaultPrice = endPrice;
+            else if (!isNaN(startPrice) && startPrice > 0) defaultPrice = startPrice;
+
+            return {
+                productId: p.productId,
+                quantity: p.quantity,
+                price: defaultPrice,
+                gst: 18, // Default GST
+                useDealerPrice: false,
+                dealerPrice: dealerPrice,
+                sellingPriceStart: startPrice || 0,
+                sellingPriceEnd: endPrice || 0,
+                calculatedSellingPrice: defaultPrice
+            };
+        });
         setQuoteItems(initialItems);
         setQuoteDiscount(0);
         setQuoteTotals({ subtotal: 0, productGst: 0, gst: 0, total: 0, packaging: 0, packagingGst: 0 });
@@ -196,7 +225,7 @@ const AdminEnquiries = () => {
         setNewPolicy({ label: '', value: '' });
     };
 
-    const generateHTML = (enquiry, items, totals, selectedPolicies, notes, refNo, discount) => {
+    const generateHTML = (enquiry, items, totals, selectedPolicies, notes, refNo, discount, partyName, address, mobile, email) => {
         const date = new Date().toLocaleDateString('en-GB');
 
         const productRows = items.map((item, index) => {
@@ -261,8 +290,10 @@ const AdminEnquiries = () => {
                 <div style="display: flex; border: 1px solid black; font-size: 13px;">
                     <div style="flex: 1; border-right: 1px solid black; padding: 5px;">
                         <strong>PARTY NAME:-</strong><br/>
-                        <strong>M/s. ${enquiry.Name}</strong><br/><br/>
-                        Add : - ${enquiry.email} / ${enquiry.phone}
+                        <strong>M/s. ${partyName || ''}</strong><br/><br/>
+                        Address : - ${address || ''}<br/>
+                        Mobile No : - ${mobile || ''}<br/>
+                        Email : - ${email || ''}
                     </div>
                     <div style="flex: 1; padding: 5px;">
                         Ref No:- ${displayRefNo}<br/>
@@ -336,10 +367,10 @@ const AdminEnquiries = () => {
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
                         <div style="line-height: 1.4;">
                             Bank Name :- Induslnd Bank<br/>
-                            Branch Name :- GHATLODIA<br/>
+                            Branch Name :- PRAHLADNAGAR<br/>
                             Name :- UNIQUE LAB INSTRUMENT<br/>
-                            A/C No.:- 259099160391<br/>
-                            IFSC CODE :- INDB0001310
+                            A/C No.:- 259898835374<br/>
+                            IFSC CODE :- INDB0000330
                         </div>
                         <div style="text-align: center;">
                             <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=upi://pay?pa=pos.5345756@indus&pn=UNIQUE%20LAB%20INSTRUMENT" alt="Scan to Pay" style="width: 100px; height: 100px; border: 1px solid #ccc; padding: 5px;" />
@@ -377,7 +408,10 @@ const AdminEnquiries = () => {
         const year = new Date().getFullYear();
         const tempRefNo = `XXXXXX-${year}`;
         const discount = parseFloat(quoteDiscount) || 0;
-        const htmlContent = generateHTML(selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, tempRefNo, discount);
+        const htmlContent = generateHTML(
+            selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, tempRefNo, discount,
+            quotePartyName, quoteAddress, quoteMobile, quoteEmail
+        );
 
         const payload = {
             enquiryId: selectedEnquiry._id,
@@ -404,7 +438,10 @@ const AdminEnquiries = () => {
             const response = await api.post('/quotations', payload);
             // Now regenerate HTML with the actual ref number from backend
             if (response.data?.refNo) {
-                const finalHtml = generateHTML(selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, response.data.refNo, discount);
+                const finalHtml = generateHTML(
+                    selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, response.data.refNo, discount,
+                    quotePartyName, quoteAddress, quoteMobile, quoteEmail
+                );
                 await api.put(`/quotations/${response.data._id}`, { htmlContent: finalHtml });
             }
 
@@ -670,80 +707,126 @@ const AdminEnquiries = () => {
                         )}
 
                         {selectedEnquiry && isCreatingQuote && (
-                            <VStack align="stretch" spacing={4}>
-                                <Text fontSize="sm" color="gray.600">Enter pricing for {selectedEnquiry.Name}</Text>
-                                {quoteItems.map((item, idx) => (
-                                    <Box key={idx} border="1px" borderColor="gray.200" p={3} borderRadius="md">
-                                        <HStack mb={2} spacing={3} justify="space-between">
-                                            <HStack>
-                                                <Image
-                                                    src={getImageUrl(item.productId?.images?.[0] || item.productId?.photos?.[0] || item.productId?.image || item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image)}
-                                                    boxSize="40px"
-                                                    objectFit="cover"
-                                                    borderRadius="md"
-                                                    fallbackSrc="https://via.placeholder.com/50?text=No+Img"
-                                                />
-                                                <Text fontWeight="bold" fontSize="sm">
-                                                    {item.productId?.name || 'Product'} (Qty: {item.quantity})
-                                                </Text>
+                            <VStack align="stretch" spacing={6}>
+                                <Box border="1px solid" borderColor="gray.200" p={4} borderRadius="md" bg="blue.50">
+                                    <Text fontWeight="bold" mb={3} color="brand.600">Party Details for Quotation</Text>
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" mb={1}>Party Name</FormLabel>
+                                            <Input size="sm" bg="white" value={quotePartyName} onChange={(e) => setQuotePartyName(e.target.value)} />
+                                        </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" mb={1}>Mobile No</FormLabel>
+                                            <Input size="sm" bg="white" value={quoteMobile} onChange={(e) => setQuoteMobile(e.target.value)} />
+                                        </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" mb={1}>Email</FormLabel>
+                                            <Input size="sm" bg="white" value={quoteEmail} onChange={(e) => setQuoteEmail(e.target.value)} />
+                                        </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" mb={1}>Address</FormLabel>
+                                            <Input size="sm" bg="white" value={quoteAddress} onChange={(e) => setQuoteAddress(e.target.value)} />
+                                        </FormControl>
+                                    </SimpleGrid>
+                                </Box>
+
+                                <Box>
+                                    <Text fontWeight="bold" mb={3} color="brand.600">Products & Pricing</Text>
+                                    {quoteItems.map((item, idx) => (
+                                        <Box key={idx} border="1px" borderColor="gray.200" p={3} borderRadius="md">
+                                            <HStack mb={2} spacing={3} justify="space-between">
+                                                <HStack>
+                                                    <Image
+                                                        src={getImageUrl(item.productId?.images?.[0] || item.productId?.photos?.[0] || item.productId?.image || item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image)}
+                                                        boxSize="40px"
+                                                        objectFit="cover"
+                                                        borderRadius="md"
+                                                        fallbackSrc="https://via.placeholder.com/50?text=No+Img"
+                                                    />
+                                                    <Text fontWeight="bold" fontSize="sm">
+                                                        {item.productId?.name || 'Product'} (Qty: {item.quantity})
+                                                    </Text>
+                                                </HStack>
+                                                <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>
+                                                    <FiTrash />
+                                                </Button>
                                             </HStack>
-                                            <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>
-                                                <FiTrash />
-                                            </Button>
-                                        </HStack>
-                                        <Stack direction={{ base: 'column', md: 'row' }} spacing={3}>
-                                            <FormControl isRequired>
-                                                <FormLabel fontSize="xs">Unit Price (₹)</FormLabel>
-                                                <Input
-                                                    type="number"
-                                                    value={item.price}
-                                                    onChange={(e) => {
-                                                        const val = parseFloat(e.target.value);
-                                                        if (val < 0) return; // Prevent negative
-                                                        handleItemChange(idx, 'price', e.target.value);
-                                                    }}
-                                                    onWheel={(e) => e.target.blur()} // Prevent scroll change
-                                                    sx={{
-                                                        '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
-                                                            '-webkit-appearance': 'none',
-                                                            margin: 0,
-                                                        },
-                                                        '&': {
-                                                            '-moz-appearance': 'textfield',
-                                                        },
-                                                    }}
-                                                />
-                                            </FormControl>
-                                            <FormControl>
-                                                <FormLabel fontSize="xs">GST (%)</FormLabel>
-                                                <Input
-                                                    type="number"
-                                                    value={item.gst}
-                                                    onChange={(e) => {
-                                                        const val = parseFloat(e.target.value);
-                                                        if (val < 0) return; // Prevent negative
-                                                        handleItemChange(idx, 'gst', e.target.value);
-                                                    }}
-                                                    onWheel={(e) => e.target.blur()} // Prevent scroll change
-                                                    sx={{
-                                                        '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
-                                                            '-webkit-appearance': 'none',
-                                                            margin: 0,
-                                                        },
-                                                        '&': {
-                                                            '-moz-appearance': 'textfield',
-                                                        },
-                                                    }}
-                                                />
-                                            </FormControl>
-                                            <Box alignSelf={{ base: 'flex-start', md: 'flex-end' }} pb={2}>
-                                                <Text fontSize="sm" fontWeight="bold">
-                                                    ₹{((parseFloat(item.price) || 0) * item.quantity).toLocaleString()}
-                                                </Text>
-                                            </Box>
-                                        </Stack>
-                                    </Box>
-                                ))}
+                                            <Stack direction={{ base: 'column', md: 'row' }} spacing={3}>
+                                                <FormControl isRequired>
+                                                    <Flex justify="space-between" align="center" mb={1}>
+                                                        <FormLabel fontSize="xs" mb={0}>Unit Price (₹)</FormLabel>
+                                                        <Checkbox
+                                                            size="sm"
+                                                            colorScheme="brand"
+                                                            isChecked={item.useDealerPrice}
+                                                            onChange={(e) => {
+                                                                const isChecked = e.target.checked;
+                                                                const newItems = [...quoteItems];
+                                                                newItems[idx].useDealerPrice = isChecked;
+                                                                newItems[idx].price = isChecked ? newItems[idx].dealerPrice : newItems[idx].calculatedSellingPrice;
+                                                                setQuoteItems(newItems);
+                                                                calculateTotals(newItems, quoteDiscount);
+                                                            }}
+                                                        >
+                                                            Use Dealer Price
+                                                        </Checkbox>
+                                                    </Flex>
+                                                    <Input
+                                                        type="number"
+                                                        value={item.price}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            if (val < 0) return; // Prevent negative
+                                                            handleItemChange(idx, 'price', e.target.value);
+                                                        }}
+                                                        onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                        sx={{
+                                                            '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
+                                                                '-webkit-appearance': 'none',
+                                                                margin: 0,
+                                                            },
+                                                            '&': {
+                                                                '-moz-appearance': 'textfield',
+                                                            },
+                                                        }}
+                                                        bg="white"
+                                                    />
+                                                    <Box mt={1} fontSize="10px" color="gray.500">
+                                                        Sell: ₹{item.sellingPriceStart || 0} - {item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'} | Dealer: ₹{item.dealerPrice || 0}
+                                                    </Box>
+                                                </FormControl>
+                                                <FormControl>
+                                                    <FormLabel fontSize="xs">GST (%)</FormLabel>
+                                                    <Input
+                                                        type="number"
+                                                        value={item.gst}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            if (val < 0) return; // Prevent negative
+                                                            handleItemChange(idx, 'gst', e.target.value);
+                                                        }}
+                                                        onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                        sx={{
+                                                            '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
+                                                                '-webkit-appearance': 'none',
+                                                                margin: 0,
+                                                            },
+                                                            '&': {
+                                                                '-moz-appearance': 'textfield',
+                                                            },
+                                                        }}
+                                                        bg="white"
+                                                    />
+                                                </FormControl>
+                                                <Box alignSelf={{ base: 'flex-start', md: 'center' }}>
+                                                    <Text fontSize="sm" fontWeight="bold" whiteSpace="nowrap">
+                                                        Total: ₹{((parseFloat(item.price) || 0) * item.quantity).toLocaleString()}
+                                                    </Text>
+                                                </Box>
+                                            </Stack>
+                                        </Box>
+                                    ))}
+                                </Box>
 
                                 <Divider />
                                 <VStack align="flex-end">
