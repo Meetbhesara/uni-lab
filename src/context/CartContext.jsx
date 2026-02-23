@@ -68,25 +68,20 @@ export const CartProvider = ({ children }) => {
         try {
             const productId = product._id || product.id;
 
-            // Optimistic Update: Check if item exists and increment quantity
+            let newQuantity = 1;
             setCart(prev => {
                 const existingIndex = prev.findIndex(item => {
-                    // Resolve the ID of the product inside the cart item
                     const itemProdId = item.productId?._id || item.product?._id || item.productId?.id || item.product?.id || item._id || item.id;
                     return itemProdId === productId;
                 });
 
                 if (existingIndex > -1) {
-                    // Item exists, increment quantity
                     const newCart = [...prev];
                     const existingItem = newCart[existingIndex];
-                    newCart[existingIndex] = {
-                        ...existingItem,
-                        quantity: (Number(existingItem.quantity) || 1) + 1
-                    };
+                    newQuantity = (Number(existingItem.quantity) || 1) + 1;
+                    newCart[existingIndex] = { ...existingItem, quantity: newQuantity };
                     return newCart;
                 } else {
-                    // Item doesn't exist, add new
                     const tempItem = {
                         _id: 'temp-' + Date.now(),
                         product: product,
@@ -100,8 +95,7 @@ export const CartProvider = ({ children }) => {
                 }
             });
 
-            // Add or update
-            await api.post('/cart', { sessionId, productId, quantity: 1 });
+            await api.post('/cart', { sessionId, productId, quantity: newQuantity });
             await fetchCart(sessionId);
         } catch (error) {
             console.error("Add to cart failed", error);

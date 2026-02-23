@@ -57,14 +57,10 @@ const Header = () => {
     };
 
     const handleEnquiryClick = () => {
-        if (!user) {
-            onRegisterOpen();
+        if (cart.length > 0) {
+            onEnquiryOpen();
         } else {
-            if (cart.length > 0) {
-                onEnquiryOpen();
-            } else {
-                navigate('/products');
-            }
+            navigate('/products');
         }
     };
 
@@ -134,16 +130,14 @@ const Header = () => {
                             Admin
                         </Button>
                     )}
-                    {user && (
-                        <Button as={RouterLink} to="/products" variant="ghost" size="sm" leftIcon={<FaShoppingCart />}>
-                            Cart ({cart.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)})
-                        </Button>
-                    )}
+                    <Button as={RouterLink} to="/products" variant="ghost" size="sm" leftIcon={<FaShoppingCart />}>
+                        Cart ({cart.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)})
+                    </Button>
                     <Button colorScheme="orange" variant="accent" size="sm" onClick={handleEnquiryClick}>
                         Enquiry
                     </Button>
                     {!user ? (
-                        <Button variant="outline" size="sm" onClick={onRegisterOpen}>Login</Button>
+                        <Button variant="outline" size="sm" onClick={onRegisterOpen}>Admin Login</Button>
                     ) : (
                         <Flex align="center" gap={3}>
                             <Text fontWeight="bold" fontSize="sm" color="brand.600" noOfLines={1}>Hi, {user.name.split(' ')[0]}</Text>
@@ -157,15 +151,13 @@ const Header = () => {
 
                 {/* Mobile Icons Header */}
                 <Flex display={{ base: 'flex', lg: 'none' }} align="center" gap={2}>
-                    {user && (
-                        <IconButton
-                            icon={<FaShoppingCart />}
-                            aria-label="Cart"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate('/products')}
-                        />
-                    )}
+                    <IconButton
+                        icon={<FaShoppingCart />}
+                        aria-label="Cart"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate('/products')}
+                    />
                     <IconButton
                         icon={<FaBars />}
                         onClick={toggleNav}
@@ -221,7 +213,7 @@ const Header = () => {
 
                                     {!user ? (
                                         <Button variant="outline" w="full" onClick={() => { onRegisterOpen(); toggleNav(); }}>
-                                            Login / Register
+                                            Admin Login
                                         </Button>
                                     ) : (
                                         <Button variant="ghost" colorScheme="red" w="full" onClick={() => { logout(); toggleNav(); navigate('/'); }}>
@@ -360,71 +352,60 @@ const getImageUrl = (path) => {
 const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
     const toast = useToast();
     const { clearCart, removeFromCart } = useCart();
-    const { user } = useAuth();
+    const navigate = useNavigate();
     const [isSending, setIsSending] = React.useState(false);
+
+    const [formData, setFormData] = React.useState({
+        companyName: '',
+        contactPersonName: '',
+        phone: '',
+        email: '',
+        gstNumber: ''
+    });
+
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
 
     // Ensure cart is an array
     const safeCart = Array.isArray(cart) ? cart : [];
 
-    const handleAction = async (type) => {
+    const handleAction = async (e) => {
+        e.preventDefault();
+
+        // Validation
+        if (!formData.companyName.trim() && !formData.contactPersonName.trim()) {
+            return toast({ title: "Validation Error", description: "Either Company Name or Contact Person Name is required.", status: "error" });
+        }
+        if (!/^\d{10,}$/.test(formData.phone.replace(/\D/g, ''))) {
+            return toast({ title: "Validation Error", description: "Please enter a valid phone number.", status: "error" });
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+            return toast({ title: "Validation Error", description: "Please enter a valid email address.", status: "error" });
+        }
+
         setIsSending(true);
-        const title = type === 'quotation' ? 'Formal Quotation Request' : 'General Enquiry';
 
         try {
-            if (type === 'quotation') {
-                // Quotation: Send HTML Content (Legacy/User Schema)
-                const tableRows = safeCart.map(item => {
+            const enquiryData = {
+                ...formData,
+                products: safeCart.map(item => {
                     const product = item.productId || item.product || {};
-                    return `
-                    <tr>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${product.name || 'Unknown Product'}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${item.quantity || 1}</td>
-                    </tr>`;
-                }).join('');
+                    return {
+                        productId: product._id || product.id,
+                        quantity: Number(item.quantity) || 1
+                    };
+                }),
+                status: 'Pending',
+                type: 'enquiry'
+            };
 
-                const htmlContent = `
-                    <h2>Quotation Request from ${user?.name}</h2>
-                    <p>Email: ${user?.email}</p>
-                    <p>Contact: ${user?.contact}</p>
-                    <h3>Items:</h3>
-                    <table style="width:100%; border-collapse: collapse;">
-                        <thead>
-                            <tr>
-                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Product</th>
-                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Quantity</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableRows}
-                        </tbody>
-                    </table>
-                `;
+            await api.post('/enquiries', enquiryData);
 
-                // Post strictly htmlContent as per user's QuotationSchema
-                await api.post('/quotations', { htmlContent });
-
-            } else {
-                // Enquiry: Send Structured Data (New Schema)
-                const enquiryData = {
-                    Name: user?.name || 'Guest',
-                    phone: user?.phone || user?.contact || 'N/A',
-                    email: user?.email,
-                    products: safeCart.map(item => {
-                        const product = item.productId || item.product || {};
-                        return {
-                            productId: product._id || product.id,
-                            quantity: item.quantity || 1
-                        };
-                    }),
-                    status: 'Pending',
-                    type: 'enquiry'
-                };
-                await api.post('/enquiries', enquiryData);
-            }
-
-            toast({ title: `${title} Sent!`, description: "Request received.", status: "success" });
+            toast({ title: `Enquiry Sent!`, description: "Thank you! We will get back to you shortly.", status: "success" });
             clearCart();
             onClose();
+            navigate('/products');
         } catch (error) {
             console.error(error);
             toast({ title: "Failed", description: "Could not send request.", status: "error" });
@@ -487,6 +468,36 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                 )
                             })
                             }
+                            <Box mt={6} as="form" id="enquiry-form" onSubmit={handleAction}>
+                                <Text fontWeight="bold" fontSize="lg" mb={4} borderBottom="2px" borderColor="brand.500" display="inline-block">
+                                    Your Details
+                                </Text>
+                                <Stack spacing={3}>
+                                    <FormControl isRequired>
+                                        <FormLabel fontSize="sm">Company / Contact Name</FormLabel>
+                                        <Flex gap={2}>
+                                            <Input size="sm" placeholder="Company Name" name="companyName" value={formData.companyName} onChange={handleChange} />
+                                            <Text alignSelf="center" fontSize="xs" color="gray.500">OR</Text>
+                                            <Input size="sm" placeholder="Person Name" name="contactPersonName" value={formData.contactPersonName} onChange={handleChange} />
+                                        </Flex>
+                                    </FormControl>
+
+                                    <FormControl isRequired>
+                                        <FormLabel fontSize="sm">Phone Number</FormLabel>
+                                        <Input size="sm" type="tel" name="phone" placeholder="+91 9876543210" value={formData.phone} onChange={handleChange} />
+                                    </FormControl>
+
+                                    <FormControl isRequired>
+                                        <FormLabel fontSize="sm">Email Address</FormLabel>
+                                        <Input size="sm" type="email" name="email" placeholder="you@company.com" value={formData.email} onChange={handleChange} />
+                                    </FormControl>
+
+                                    <FormControl>
+                                        <FormLabel fontSize="sm">GST Number (Optional)</FormLabel>
+                                        <Input size="sm" name="gstNumber" placeholder="22AAAAA0000A1Z5" value={formData.gstNumber} onChange={handleChange} />
+                                    </FormControl>
+                                </Stack>
+                            </Box>
                         </Stack>
                     )}
                 </DrawerBody>
@@ -498,10 +509,11 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                 colorScheme="blue"
                                 size="lg"
                                 w="full"
-                                onClick={() => handleAction('enquiry')}
+                                type="submit"
+                                form="enquiry-form"
                                 isLoading={isSending}
                             >
-                                Make Enquiry
+                                Submit Enquiry
                             </Button>
                         </Stack>
                     </DrawerFooter>

@@ -173,7 +173,7 @@ const AdminEnquiries = () => {
         });
         setQuoteItems(initialItems);
         setQuoteDiscount(0);
-        setQuoteTotals({ subtotal: 0, productGst: 0, gst: 0, total: 0, packaging: 0, packagingGst: 0 });
+        calculateTotals(initialItems, 0);
     };
 
     const handleItemChange = (index, field, value) => {

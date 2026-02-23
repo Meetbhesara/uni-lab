@@ -95,15 +95,24 @@ const Products = () => {
     const [loading, setLoading] = useState(true);
 
     const fetchProducts = async (search = '') => {
+        const cacheKey = `products_${search}`;
+        const cachedData = sessionStorage.getItem(cacheKey);
+
+        if (cachedData) {
+            try {
+                setProducts(JSON.parse(cachedData));
+                setLoading(false);
+                return;
+            } catch (e) {
+                console.error("Cache parsing error", e);
+            }
+        }
+
         try {
             const res = await api.get(`/products${search ? `?search=${search}` : ''}`);
-            // Ensure res.data is an array
-            if (Array.isArray(res.data)) {
-                setProducts(res.data);
-            } else {
-                // Sometimes API wraps in { data: [...] }
-                setProducts(res.data.data || []);
-            }
+            let finalData = Array.isArray(res.data) ? res.data : (res.data.data || []);
+            setProducts(finalData);
+            sessionStorage.setItem(cacheKey, JSON.stringify(finalData));
         } catch (err) {
             console.error(err);
             toast({ title: "Failed to load products", status: "error" });
@@ -118,10 +127,6 @@ const Products = () => {
     }, [location.pathname, location.search]);
 
     const handleAddToCart = (product) => {
-        if (!user) {
-            toast({ title: "Please login first", status: "warning", duration: 3000 });
-            return;
-        }
         addToCart(product);
         toast({ title: "Added to Enquiry Cart", status: "success", duration: 2000 });
     };
@@ -175,7 +180,7 @@ const Products = () => {
                                         <Flex justify="space-between" align="start">
                                             <Stack spacing={1}>
                                                 <Badge colorScheme="brand" variant="subtle" borderRadius="full" px={3} w="fit-content" fontSize="10px" fontWeight="800">
-                                                    {product.vendor || 'UNI-BC PRODUCT'}
+                                                    UNI-BC PRODUCT
                                                 </Badge>
                                                 <Heading size="lg" color="slate.800" fontWeight="800" letterSpacing="tight">
                                                     {product.name}
@@ -266,17 +271,18 @@ const Products = () => {
                                                 onClick={() => handleAddToCart(product)}
                                                 width={{ base: 'full', md: 'auto' }}
                                             >
-                                                {user ? 'Add to Enquiry' : 'Login to Enquire'}
+                                                Add to Enquiry
                                             </Button>
                                         </Flex>
                                     </Stack>
                                 </Flex>
                             </Box>
                         </motion.div>
-                    ))}
-                </Stack>
+                    ))
+                    }
+                </Stack >
             )}
-        </Container>
+        </Container >
     );
 };
 
