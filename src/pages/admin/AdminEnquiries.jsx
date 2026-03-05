@@ -377,7 +377,7 @@ const AdminEnquiries = () => {
                             IFSC CODE :- INDB0000330
                         </div>
                         <div style="text-align: center;">
-                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=upi://pay?pa=pos.5345756@indus&pn=UNIQUE%20LAB%20INSTRUMENT" alt="Scan to Pay" style="width: 100px; height: 100px; border: 1px solid #ccc; padding: 5px;" />
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&amp;data=upi://pay?pa=pos.5345756@indus&amp;pn=UNIQUE%20LAB%20INSTRUMENT" alt="Scan to Pay" style="width: 100px; height: 100px; border: 1px solid #ccc; padding: 5px;" />
                             <div style="font-size: 10px; font-weight: bold; margin-top: 4px;">Scan &amp; Pay</div>
                         </div>
                         <div style="text-align: right; font-weight: bold; align-self: flex-end;">
@@ -1022,11 +1022,19 @@ const AdminEnquiries = () => {
                                 colorScheme="blue"
                                 onClick={() => {
                                     const win = window.open('', '_blank');
-                                    win.document.write(`<html><head><style>@media print{button{display:none}}</style></head><body>`);
+                                    win.document.write(`<html><head><style>@media print{ * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } button{display:none} img { max-width: 100%; height: auto; } }</style></head><body>`);
                                     win.document.write(selectedQuotation.htmlContent);
-                                    win.document.write('</body></html>');
+                                    win.document.write(`
+                                        <script>
+                                            window.onload = function() {
+                                                setTimeout(function() {
+                                                    window.print();
+                                                }, 500);
+                                            };
+                                        </script>
+                                    </body></html>`);
                                     win.document.close();
-                                    win.print();
+                                    win.focus();
                                 }}
                             >
                                 Print Quotation
