@@ -15,7 +15,8 @@ const PRODUCT_CATEGORIES = [
     "SOIL TESTING EQUIPMENT",
     "BITUMIN TESTING EQUPMENT",
     "Construction Machinery",
-    "SURVEY & MEASURING INSTRUMENT"
+    "SURVEY & MEASURING INSTRUMENT",
+    "SAFETY PRODUCTS"
 ];
 
 const AdminProducts = () => {

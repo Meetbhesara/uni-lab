@@ -40,6 +40,11 @@ const PRODUCT_CATEGORIES = [
         id: "SURVEY & MEASURING INSTRUMENT",
         title: "Survey & Measuring Instruments",
         image: "https://images.unsplash.com/photo-1582208035318-47b2c58da7ff?q=80&w=800&auto=format&fit=crop"
+    },
+    {
+        id: "SAFETY PRODUCTS",
+        title: "Safety Products",
+        image: "https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?q=80&w=800&auto=format&fit=crop"
     }
 ];
 
