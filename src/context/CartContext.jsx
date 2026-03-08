@@ -108,16 +108,50 @@ export const CartProvider = ({ children }) => {
         setCart((prev) => prev.filter((item) => item._id !== itemId && item.id !== itemId));
     };
 
+    const updateQuantity = async (productId, quantity) => {
+        try {
+            // Allow empty string to clear the input field visually
+            if (quantity === '') {
+                setCart(prev => {
+                    const existingIndex = prev.findIndex(item => {
+                        const itemProdId = item.productId?._id || item.product?._id || item.productId?.id || item.product?.id || item._id || item.id;
+                        return itemProdId === productId;
+                    });
+                    if (existingIndex > -1) {
+                        const newCart = [...prev];
+                        newCart[existingIndex] = { ...newCart[existingIndex], quantity: '' };
+                        return newCart;
+                    }
+                    return prev;
+                });
+                return;
+            }
+
+            const parsedQty = parseInt(quantity);
+            if (isNaN(parsedQty) || parsedQty < 1) return;
+
+            setCart(prev => {
+                const existingIndex = prev.findIndex(item => {
+                    const itemProdId = item.productId?._id || item.product?._id || item.productId?.id || item.product?.id || item._id || item.id;
+                    return itemProdId === productId;
+                });
+                if (existingIndex > -1) {
+                    const newCart = [...prev];
+                    newCart[existingIndex] = { ...newCart[existingIndex], quantity: parsedQty };
+                    return newCart;
+                }
+                return prev;
+            });
+            await api.post('/cart', { sessionId, productId, quantity: parsedQty });
+        } catch (error) {
+            console.error("Update quantity failed", error);
+            fetchCart(sessionId);
+        }
+    };
+
     const clearCart = async () => {
         setCart([]);
-        if (sessionId) {
-            try {
-                // Try backend delete if cart API supports it
-                await api.delete(`/cart/${sessionId}`);
-            } catch (err) {
-                console.log("No backend clear cart route or failed, proceeding with session reset.");
-            }
-        }
+
         // Force fresh session ID to decouple from old remote cart
         const newSession = generateSessionId();
         localStorage.setItem('sessionId', newSession);
@@ -125,7 +159,7 @@ export const CartProvider = ({ children }) => {
     };
 
     return (
-        <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart }}>
+        <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, clearCart }}>
             {children}
         </CartContext.Provider>
     );

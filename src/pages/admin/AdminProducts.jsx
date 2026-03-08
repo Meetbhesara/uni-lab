@@ -4,11 +4,19 @@ import {
     Box, Button, Table, Thead, Tbody, Tr, Th, Td, IconButton, useDisclosure,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, ModalFooter,
     FormControl, FormLabel, FormErrorMessage, Input, Textarea, Checkbox, Stack, useToast, Flex,
-    Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement
+    Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, Select
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
+
+const PRODUCT_CATEGORIES = [
+    "CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT",
+    "SOIL TESTING EQUIPMENT",
+    "BITUMIN TESTING EQUPMENT",
+    "Construction Machinery",
+    "SURVEY & MEASURING INSTRUMENT"
+];
 
 const AdminProducts = () => {
     const location = useLocation();
@@ -58,6 +66,7 @@ const AdminProducts = () => {
     const [formData, setFormData] = useState({
         name: '',
         description: '',
+        category: '',
         pdf: '',
         sellingPriceStart: '',
         sellingPriceEnd: '',
@@ -128,6 +137,7 @@ const AdminProducts = () => {
             setFormData({
                 name: p.name || '',
                 description: p.description || '',
+                category: p.category || '',
                 pdf: p.pdf || '',
                 sellingPriceStart: p.sellingPriceStart ?? '',
                 sellingPriceEnd: p.sellingPriceEnd ?? '',
@@ -184,6 +194,7 @@ const AdminProducts = () => {
 
         // ── Required text fields ──────────────────────────────────
         if (!formData.name?.trim()) errors.name = 'Product Name is required';
+        if (!formData.category) errors.category = 'Category is required';
 
         // ── Selling Price Start ───────────────────────────────────
         if (formData.sellingPriceStart !== '' && formData.sellingPriceStart !== null && Number(formData.sellingPriceStart) < 0) {
@@ -229,6 +240,7 @@ const AdminProducts = () => {
         const data = new FormData();
         data.append('name', formData.name);
         data.append('description', formData.description || '');
+        data.append('category', formData.category || '');
         data.append('pdf', formData.pdf || '');
         if (formData.sellingPriceStart !== '' && formData.sellingPriceStart !== null) data.append('sellingPriceStart', formData.sellingPriceStart);
         if (formData.sellingPriceEnd !== '' && formData.sellingPriceEnd !== null) data.append('sellingPriceEnd', formData.sellingPriceEnd);
@@ -348,7 +360,7 @@ const AdminProducts = () => {
                         minW="fit-content"
                         onClick={() => {
                             setEditingProduct(null);
-                            setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [] });
+                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [] });
                             setFormErrors({});
                             setExistingPhotos([]);
                             setNewPhotos([]);
@@ -377,14 +389,16 @@ const AdminProducts = () => {
                                     <Flex align="center" gap={4}>
                                         <Image
                                             src={getImageUrl(product.images?.[0] || product.photos?.[0])}
-                                            boxSize="60px"
-                                            objectFit="cover"
-                                            borderRadius="xl"
+                                            boxSize="40px"
+                                            objectFit="contain"
+                                            borderRadius="md"
+                                            bg="white"
                                             boxShadow="sm"
                                             fallbackSrc="https://via.placeholder.com/60?text=No+Img"
                                         />
                                         <Stack spacing={0}>
                                             <Text fontWeight="700" color="gray.800">{product.name}</Text>
+                                            <Text fontSize="xs" color="blue.500" fontWeight="600" mt={1}>{product.category}</Text>
                                             <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="200px">
                                                 {product.description || 'No description provided'}
                                             </Text>
@@ -506,7 +520,23 @@ const AdminProducts = () => {
                                             <FormErrorMessage size="xs">{formErrors.name}</FormErrorMessage>
                                         </FormControl>
 
-
+                                        <FormControl isInvalid={!!formErrors.category}>
+                                            <FormLabel fontSize="xs" fontWeight="700" color="gray.500">CATEGORY</FormLabel>
+                                            <Select
+                                                variant="filled"
+                                                placeholder="Select Category"
+                                                value={formData.category}
+                                                onChange={(e) => {
+                                                    setFormData({ ...formData, category: e.target.value });
+                                                    if (formErrors.category) setFormErrors({ ...formErrors, category: '' });
+                                                }}
+                                            >
+                                                {PRODUCT_CATEGORIES.map(cat => (
+                                                    <option key={cat} value={cat}>{cat}</option>
+                                                ))}
+                                            </Select>
+                                            <FormErrorMessage size="xs">{formErrors.category}</FormErrorMessage>
+                                        </FormControl>
 
                                         <FormControl>
                                             <Flex justify="space-between" align="center" mb={2}>
@@ -719,7 +749,7 @@ const AdminProducts = () => {
                                                     exit={{ opacity: 0, scale: 0.5 }}
                                                     style={{ position: 'relative' }}
                                                 >
-                                                    <Image src={getImageUrl(photo)} h="80px" w="full" objectFit="cover" borderRadius="xl" />
+                                                    <Image src={getImageUrl(photo)} h="80px" w="full" objectFit="contain" bg="white" borderRadius="xl" />
                                                     <IconButton
                                                         size="xs"
                                                         position="absolute"

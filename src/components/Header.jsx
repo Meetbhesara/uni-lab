@@ -351,14 +351,19 @@ const getImageUrl = (path) => {
 
 const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
     const toast = useToast();
-    const { clearCart, removeFromCart } = useCart();
+    const { clearCart, removeFromCart, updateQuantity } = useCart();
+    const { user, phoneLogin, phoneRegister } = useAuth();
     const navigate = useNavigate();
+
     const [isSending, setIsSending] = React.useState(false);
+    const [isCheckingPhone, setIsCheckingPhone] = React.useState(false);
+
+    const [authStep, setAuthStep] = React.useState('phone'); // 'phone' | 'register'
+    const [phoneInput, setPhoneInput] = React.useState('');
 
     const [formData, setFormData] = React.useState({
         companyName: '',
         contactPersonName: '',
-        phone: '',
         email: '',
         gstNumber: ''
     });
@@ -367,28 +372,17 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    // Ensure cart is an array
     const safeCart = Array.isArray(cart) ? cart : [];
 
-    const handleAction = async (e) => {
-        e.preventDefault();
-
-        // Validation
-        if (!formData.companyName.trim() && !formData.contactPersonName.trim()) {
-            return toast({ title: "Validation Error", description: "Either Company Name or Contact Person Name is required.", status: "error" });
-        }
-        if (!/^\d{10,}$/.test(formData.phone.replace(/\D/g, ''))) {
-            return toast({ title: "Validation Error", description: "Please enter a valid phone number.", status: "error" });
-        }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-            return toast({ title: "Validation Error", description: "Please enter a valid email address.", status: "error" });
-        }
-
+    const submitEnquiry = async (currentUser) => {
         setIsSending(true);
-
         try {
             const enquiryData = {
-                ...formData,
+                companyName: currentUser.companyName || 'Guest',
+                contactPersonName: currentUser.name || currentUser.contactPersonName || 'Guest',
+                phone: currentUser.phone || phoneInput || 'N/A',
+                email: currentUser.email || 'N/A',
+                gstNumber: currentUser.gstNumber || '',
                 products: safeCart.map(item => {
                     const product = item.productId || item.product || {};
                     return {
@@ -397,14 +391,20 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                     };
                 }),
                 status: 'Pending',
-                type: 'enquiry'
+                type: 'enquiry',
+                sessionId: localStorage.getItem('sessionId') || ''
             };
 
             await api.post('/enquiries', enquiryData);
-
             toast({ title: `Enquiry Sent!`, description: "Thank you! We will get back to you shortly.", status: "success" });
-            clearCart();
+
+            await clearCart();
             onClose();
+
+            // Reset localized states
+            setAuthStep('phone');
+            setPhoneInput('');
+
             navigate('/products');
         } catch (error) {
             console.error(error);
@@ -412,7 +412,56 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
         } finally {
             setIsSending(false);
         }
-    }
+    };
+
+    const handlePhoneNext = async () => {
+        if (!/^\d{10,}$/.test(phoneInput.replace(/\D/g, ''))) {
+            return toast({ title: "Validation Error", description: "Please enter a valid phone number.", status: "error" });
+        }
+
+        setIsCheckingPhone(true);
+        const res = await phoneLogin(phoneInput);
+        setIsCheckingPhone(false);
+
+        if (res.success) {
+            toast({ title: "Verified", description: "Welcome back!", status: "success" });
+            // By state rules, user is now truthy, UI flips to submit state
+        } else {
+            if (res.status === 404) {
+                // Not found, so we move to register step
+                setAuthStep('register');
+            } else {
+                toast({ title: "Login Failed", description: res.message, status: "error" });
+            }
+        }
+    };
+
+    const handleAction = async (e) => {
+        e.preventDefault();
+
+        if (user) {
+            // Already logged in
+            await submitEnquiry(user);
+        } else if (authStep === 'phone') {
+            await handlePhoneNext();
+        } else if (authStep === 'register') {
+            if (!formData.companyName.trim() && !formData.contactPersonName.trim()) {
+                return toast({ title: "Validation Error", description: "Either Company Name or Contact Person Name is required.", status: "error" });
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                return toast({ title: "Validation Error", description: "Please enter a valid email address.", status: "error" });
+            }
+
+            setIsSending(true);
+            const res = await phoneRegister({ phone: phoneInput, ...formData });
+            if (res.success) {
+                await submitEnquiry(res.user);
+            } else {
+                setIsSending(false);
+                toast({ title: "Registration Failed", description: res.message, status: "error" });
+            }
+        }
+    };
 
     return (
         <Drawer isOpen={isOpen} placement="right" onClose={onClose} size={{ base: 'full', md: 'md' }}>
@@ -431,14 +480,12 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                     ) : (
                         <Stack spacing={4}>
                             {safeCart.map((item, idx) => {
-                                // Resolved product logic: Prioritize populated objects, fallback to item itself
                                 let product = item;
                                 if (item.productId && typeof item.productId === 'object') {
                                     product = item.productId;
                                 } else if (item.product && typeof item.product === 'object') {
                                     product = item.product;
                                 }
-
                                 const mainImage = product.images?.[0] || product.photos?.[0] || null;
 
                                 return (
@@ -447,13 +494,29 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                             <Image
                                                 src={getImageUrl(mainImage)}
                                                 boxSize="60px"
-                                                objectFit="cover"
+                                                objectFit="contain"
                                                 borderRadius="md"
+                                                bg="white"
                                                 fallbackSrc="https://via.placeholder.com/60"
                                             />
                                             <Box flex="1">
                                                 <Text fontWeight="bold" noOfLines={1}>{product.name}</Text>
-                                                <Text fontSize="sm" color="gray.600">Quantity: {item.quantity || 1}</Text>
+                                                <Flex align="center" gap={2} mt={1}>
+                                                    <Text fontSize="sm" color="gray.600">Qty:</Text>
+                                                    <Input
+                                                        type="number"
+                                                        size="sm"
+                                                        w="70px"
+                                                        min={1}
+                                                        value={item.quantity === '' ? '' : (item.quantity || 1)}
+                                                        onChange={(e) => updateQuantity(product._id || product.id, e.target.value)}
+                                                        onBlur={(e) => {
+                                                            if (!e.target.value || parseInt(e.target.value) < 1) {
+                                                                updateQuantity(product._id || product.id, 1);
+                                                            }
+                                                        }}
+                                                    />
+                                                </Flex>
                                             </Box>
                                             <IconButton
                                                 icon={<FaTrash />}
@@ -461,42 +524,60 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                                 size="sm"
                                                 colorScheme="red"
                                                 variant="ghost"
-                                                onClick={() => removeFromCart(item._id || item.id)} // Prefer _id
+                                                onClick={() => removeFromCart(item._id || item.id)}
                                             />
                                         </Flex>
                                     </Box>
                                 )
-                            })
-                            }
+                            })}
+
                             <Box mt={6} as="form" id="enquiry-form" onSubmit={handleAction}>
                                 <Text fontWeight="bold" fontSize="lg" mb={4} borderBottom="2px" borderColor="brand.500" display="inline-block">
-                                    Your Details
+                                    {user ? "Your Details" : "Verify & Send"}
                                 </Text>
-                                <Stack spacing={3}>
-                                    <FormControl isRequired>
-                                        <FormLabel fontSize="sm">Company / Contact Name</FormLabel>
-                                        <Flex gap={2}>
-                                            <Input size="sm" placeholder="Company Name" name="companyName" value={formData.companyName} onChange={handleChange} />
-                                            <Text alignSelf="center" fontSize="xs" color="gray.500">OR</Text>
-                                            <Input size="sm" placeholder="Person Name" name="contactPersonName" value={formData.contactPersonName} onChange={handleChange} />
-                                        </Flex>
-                                    </FormControl>
 
-                                    <FormControl isRequired>
-                                        <FormLabel fontSize="sm">Phone Number</FormLabel>
-                                        <Input size="sm" type="tel" name="phone" placeholder="+91 9876543210" value={formData.phone} onChange={handleChange} />
-                                    </FormControl>
+                                {user ? (
+                                    <Box p={4} borderWidth="1px" borderRadius="md" bg="green.50">
+                                        <Text fontWeight="bold" color="green.700" mb={1}>Logged in successfully!</Text>
+                                        <Text fontSize="sm"><b>Name:</b> {user.name || user.contactPersonName || user.companyName}</Text>
+                                        <Text fontSize="sm"><b>Phone:</b> {user.phone}</Text>
+                                        <Text fontSize="xs" color="gray.500" mt={2}>You can now submit your enquiry securely.</Text>
+                                    </Box>
+                                ) : authStep === 'phone' ? (
+                                    <Stack spacing={3}>
+                                        <Text fontSize="sm" color="gray.600">Please enter your phone number to login or register and send this enquiry.</Text>
+                                        <FormControl isRequired>
+                                            <FormLabel fontSize="sm" mb={1}>Phone Number</FormLabel>
+                                            <Input size="md" type="tel" placeholder="9876543210" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} />
+                                        </FormControl>
+                                    </Stack>
+                                ) : (
+                                    <Stack spacing={3}>
+                                        <Box p={3} bg="blue.50" borderRadius="md" mb={2}>
+                                            <Text fontSize="sm" fontWeight="bold">New Number Detected</Text>
+                                            <Text fontSize="xs">Please complete a one-time registration for {phoneInput}</Text>
+                                        </Box>
+                                        <FormControl>
+                                            <FormLabel fontSize="sm" mb={1}>Company Name</FormLabel>
+                                            <Input size="sm" placeholder="e.g. Unique Engineering" name="companyName" value={formData.companyName} onChange={handleChange} />
+                                        </FormControl>
 
-                                    <FormControl isRequired>
-                                        <FormLabel fontSize="sm">Email Address</FormLabel>
-                                        <Input size="sm" type="email" name="email" placeholder="you@company.com" value={formData.email} onChange={handleChange} />
-                                    </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontSize="sm" mb={1}>Contact Person Name</FormLabel>
+                                            <Input size="sm" placeholder="e.g. John Doe" name="contactPersonName" value={formData.contactPersonName} onChange={handleChange} />
+                                        </FormControl>
 
-                                    <FormControl>
-                                        <FormLabel fontSize="sm">GST Number (Optional)</FormLabel>
-                                        <Input size="sm" name="gstNumber" placeholder="22AAAAA0000A1Z5" value={formData.gstNumber} onChange={handleChange} />
-                                    </FormControl>
-                                </Stack>
+                                        <FormControl isRequired>
+                                            <FormLabel fontSize="sm" mb={1}>Email Address</FormLabel>
+                                            <Input size="sm" type="email" name="email" placeholder="you@company.com" value={formData.email} onChange={handleChange} />
+                                        </FormControl>
+
+                                        <FormControl>
+                                            <FormLabel fontSize="sm" mb={1}>GST Number (Optional)</FormLabel>
+                                            <Input size="sm" name="gstNumber" placeholder="22AAAAA0000A1Z5" value={formData.gstNumber} onChange={handleChange} />
+                                        </FormControl>
+                                    </Stack>
+                                )}
                             </Box>
                         </Stack>
                     )}
@@ -511,9 +592,10 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                 w="full"
                                 type="submit"
                                 form="enquiry-form"
-                                isLoading={isSending}
+                                isLoading={isCheckingPhone || isSending}
+                                loadingText={isCheckingPhone ? 'Checking...' : 'Sending...'}
                             >
-                                Submit Enquiry
+                                {user ? 'Submit Enquiry' : authStep === 'phone' ? 'Verify & Continue' : 'Register & Submit'}
                             </Button>
                         </Stack>
                     </DrawerFooter>

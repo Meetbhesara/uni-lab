@@ -56,6 +56,32 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const phoneLogin = async (phone) => {
+        try {
+            const response = await api.post('/auth/phone-login', { phone });
+            const { token, user: userData } = response.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(userData));
+            setUser(userData);
+            return { success: true, user: userData };
+        } catch (error) {
+            return { success: false, message: error.response?.data?.msg || 'Phone login failed', status: error.response?.status };
+        }
+    };
+
+    const phoneRegister = async (data) => {
+        try {
+            const response = await api.post('/auth/phone-register', data);
+            const { token, user: userData } = response.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(userData));
+            setUser(userData);
+            return { success: true, user: userData };
+        } catch (error) {
+            return { success: false, message: error.response?.data?.msg || 'Phone registration failed' };
+        }
+    };
+
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -75,7 +101,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, register, loading }}>
+        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, loading }}>
             {children}
         </AuthContext.Provider>
     );

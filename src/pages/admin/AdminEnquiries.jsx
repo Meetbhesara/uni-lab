@@ -28,6 +28,7 @@ const AdminEnquiries = () => {
 
     // Custom Party Details
     const [quotePartyName, setQuotePartyName] = useState('');
+    const [quoteContactPerson, setQuoteContactPerson] = useState('');
     const [quoteAddress, setQuoteAddress] = useState('');
     const [quoteMobile, setQuoteMobile] = useState('');
     const [quoteEmail, setQuoteEmail] = useState('');
@@ -144,7 +145,8 @@ const AdminEnquiries = () => {
         setIsGlobalDealerPrice(false);
 
         // Initialize custom party details
-        setQuotePartyName(selectedEnquiry.Name || '');
+        setQuotePartyName(selectedEnquiry.Name || selectedEnquiry.companyName || '');
+        setQuoteContactPerson(selectedEnquiry.contactPersonName || '');
         setQuoteEmail(selectedEnquiry.email || '');
         setQuoteMobile(selectedEnquiry.phone || '');
         setQuoteAddress(''); // Start empty
@@ -229,7 +231,7 @@ const AdminEnquiries = () => {
         setNewPolicy({ label: '', value: '' });
     };
 
-    const generateHTML = (enquiry, items, totals, selectedPolicies, notes, refNo, discount, partyName, address, mobile, email) => {
+    const generateHTML = (enquiry, items, totals, selectedPolicies, notes, refNo, discount, partyName, address, mobile, email, contactPerson) => {
         const date = new Date().toLocaleDateString('en-GB');
 
         const productRows = items.map((item, index) => {
@@ -294,7 +296,8 @@ const AdminEnquiries = () => {
                 <div style="display: flex; border: 1px solid black; font-size: 13px;">
                     <div style="flex: 1; border-right: 1px solid black; padding: 5px;">
                         <strong>PARTY NAME:-</strong><br/>
-                        <strong>M/s. ${partyName || ''}</strong><br/><br/>
+                        <strong>M/s. ${partyName || ''}</strong><br/>
+                        ${contactPerson ? `Contact Person : ${contactPerson}<br/>` : ''}<br/>
                         Address : - ${address || ''}<br/>
                         Mobile No : - ${mobile || ''}<br/>
                         Email : - ${email || ''}
@@ -414,7 +417,7 @@ const AdminEnquiries = () => {
         const discount = parseFloat(quoteDiscount) || 0;
         const htmlContent = generateHTML(
             selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, tempRefNo, discount,
-            quotePartyName, quoteAddress, quoteMobile, quoteEmail
+            quotePartyName, quoteAddress, quoteMobile, quoteEmail, quoteContactPerson
         );
 
         const payload = {
@@ -444,7 +447,7 @@ const AdminEnquiries = () => {
             if (response.data?.refNo) {
                 const finalHtml = generateHTML(
                     selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, response.data.refNo, discount,
-                    quotePartyName, quoteAddress, quoteMobile, quoteEmail
+                    quotePartyName, quoteAddress, quoteMobile, quoteEmail, quoteContactPerson
                 );
                 await api.put(`/quotations/${response.data._id}`, { htmlContent: finalHtml });
             }
@@ -683,8 +686,9 @@ const AdminEnquiries = () => {
                                                     <Image
                                                         src={getImageUrl(p.productId?.images?.[0] || p.productId?.photos?.[0] || p.productId?.image || p.product?.images?.[0] || p.product?.photos?.[0] || p.product?.image)}
                                                         boxSize="40px"
-                                                        objectFit="cover"
+                                                        objectFit="contain"
                                                         borderRadius="md"
+                                                        bg="white"
                                                         fallbackSrc="https://via.placeholder.com/50?text=No+Img"
                                                     />
                                                 </Td>
@@ -718,6 +722,10 @@ const AdminEnquiries = () => {
                                         <FormControl>
                                             <FormLabel fontSize="xs" mb={1}>Party Name</FormLabel>
                                             <Input size="sm" bg="white" value={quotePartyName} onChange={(e) => setQuotePartyName(e.target.value)} />
+                                        </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" mb={1}>Contact Person (Optional)</FormLabel>
+                                            <Input size="sm" bg="white" value={quoteContactPerson} onChange={(e) => setQuoteContactPerson(e.target.value)} />
                                         </FormControl>
                                         <FormControl>
                                             <FormLabel fontSize="xs" mb={1}>Mobile No</FormLabel>
@@ -763,8 +771,9 @@ const AdminEnquiries = () => {
                                                     <Image
                                                         src={getImageUrl(item.productId?.images?.[0] || item.productId?.photos?.[0] || item.productId?.image || item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image)}
                                                         boxSize="40px"
-                                                        objectFit="cover"
+                                                        objectFit="contain"
                                                         borderRadius="md"
+                                                        bg="white"
                                                         fallbackSrc="https://via.placeholder.com/50?text=No+Img"
                                                     />
                                                     <Text fontWeight="bold" fontSize="sm">
@@ -1069,7 +1078,8 @@ const AdminEnquiries = () => {
                                                         <Image
                                                             src={getImageUrl(item.product?.images?.[0] || item.product?.photos?.[0] || item.product?.image || item.productId?.images?.[0] || item.productId?.image)}
                                                             boxSize="30px"
-                                                            objectFit="cover"
+                                                            objectFit="contain"
+                                                            bg="white"
                                                             borderRadius="md"
                                                         />
                                                     </Td>
