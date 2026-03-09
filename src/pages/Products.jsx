@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -47,6 +47,89 @@ const PRODUCT_CATEGORIES = [
         image: "https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?q=80&w=800&auto=format&fit=crop"
     }
 ];
+
+// Inject marquee keyframe once
+const MARQUEE_STYLE_ID = 'product-marquee-style';
+if (!document.getElementById(MARQUEE_STYLE_ID)) {
+    const style = document.createElement('style');
+    style.id = MARQUEE_STYLE_ID;
+    style.innerHTML = `
+        @keyframes marquee {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .marquee-track {
+            display: flex;
+            width: max-content;
+            animation: marquee 40s linear infinite;
+        }
+        .marquee-track:hover {
+            animation-play-state: paused;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+const ProductSlider = ({ products }) => {
+    const navigate = useNavigate();
+    // Double the list for seamless infinite loop
+    const items = [...products, ...products];
+
+    if (!products.length) return null;
+
+    return (
+        <Box
+            overflow="hidden"
+            w="100%"
+            py={4}
+            mb={4}
+            position="relative"
+        >
+            {/* Fade edges */}
+            <Box position="absolute" left={0} top={0} bottom={0} w="80px" zIndex={1}
+                bgGradient="linear(to-r, white, transparent)" pointerEvents="none" />
+            <Box position="absolute" right={0} top={0} bottom={0} w="80px" zIndex={1}
+                bgGradient="linear(to-l, white, transparent)" pointerEvents="none" />
+
+            <div className="marquee-track">
+                {items.map((product, idx) => {
+                    const imgSrc = getImageUrl(product.images?.[0] || product.photos?.[0]);
+                    return (
+                        <Box
+                            key={`${product._id}-${idx}`}
+                            mx={3}
+                            flexShrink={0}
+                            cursor="pointer"
+                            borderRadius="xl"
+                            overflow="hidden"
+                            w="140px"
+                            h="120px"
+                            boxShadow="md"
+                            border="2px solid"
+                            borderColor="gray.100"
+                            transition="all 0.3s"
+                            _hover={{
+                                transform: 'scale(1.07)',
+                                boxShadow: '2xl',
+                                borderColor: 'brand.400'
+                            }}
+                            onClick={() => navigate(`/products?category=${encodeURIComponent(product.category || '')}&highlight=${product._id}`)}
+                        >
+                            <Image
+                                src={imgSrc}
+                                alt={product.name}
+                                w="100%"
+                                h="100%"
+                                objectFit="cover"
+                                fallbackSrc="https://via.placeholder.com/140x120?text=No+Img"
+                            />
+                        </Box>
+                    );
+                })}
+            </div>
+        </Box>
+    );
+};
 
 const ImageCarousel = ({ images }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -161,14 +244,44 @@ const ImageCarousel = ({ images }) => {
 const Products = () => {
     const location = useLocation();
     const { user } = useAuth();
-    // Parse search query from URL
     const searchParams = new URLSearchParams(location.search);
     const searchQuery = searchParams.get('search') || '';
+    const urlCategory = searchParams.get('category') || '';
+    const highlightId = searchParams.get('highlight') || '';
     const { addToCart } = useCart();
     const toast = useToast();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [activeCategory, setActiveCategory] = useState(null);
+    const [sliderProducts, setSliderProducts] = useState([]);
+    const highlightRef = useRef(null);
+
+    // If URL has a category param (from slider click), auto-select it
+    useEffect(() => {
+        if (urlCategory) {
+            setActiveCategory(urlCategory);
+        }
+    }, [urlCategory]);
+
+    // After products load, scroll to and briefly highlight the product
+    useEffect(() => {
+        if (highlightId && highlightRef.current) {
+            setTimeout(() => {
+                highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 400);
+        }
+    }, [highlightId, products]);
+
+    // Fetch all products for the slider (admin bypass not needed — public call fetches categorized ones)
+    useEffect(() => {
+        api.get('/products')
+            .then(res => {
+                const all = Array.isArray(res.data) ? res.data : (res.data.data || []);
+                // Only include products that have at least one image
+                setSliderProducts(all.filter(p => (p.images?.length || p.photos?.length)));
+            })
+            .catch(() => { });
+    }, []);
 
     const fetchProducts = async (search = '', category = null) => {
         const cacheKey = `products_v2_${search}_${category}`;
@@ -220,7 +333,11 @@ const Products = () => {
     }
 
     return (
-        <Container maxW="6xl" py={12}>
+        <Container maxW="6xl" py={10}>
+
+            {/* ── Infinite Product Image Slider — only on category home screen ── */}
+            {!activeCategory && !searchQuery && <ProductSlider products={sliderProducts} />}
+
             <Heading mb={2} color="brand.700">Our Products</Heading>
             <Text color="gray.500" mb={6}>Browse our extensive catalog of quality equipment.</Text>
 
@@ -320,12 +437,13 @@ const Products = () => {
                                             transition={{ duration: 0.5, delay: index * 0.1 }}
                                         >
                                             <Box
+                                                ref={(product._id === highlightId || product.id === highlightId) ? highlightRef : null}
                                                 p={{ base: 4, md: 8 }}
                                                 bg="white"
-                                                boxShadow="sm"
+                                                boxShadow={(product._id === highlightId || product.id === highlightId) ? '0 0 0 4px var(--chakra-colors-brand-400), 2xl' : 'sm'}
                                                 borderRadius="3xl"
-                                                border="1px"
-                                                borderColor="gray.100"
+                                                border="2px solid"
+                                                borderColor={(product._id === highlightId || product.id === highlightId) ? 'brand.400' : 'gray.100'}
                                                 _hover={{ boxShadow: '2xl', borderColor: 'brand.100' }}
                                                 transition="0.4s cubic-bezier(0.4, 0, 0.2, 1)"
                                                 position="relative"

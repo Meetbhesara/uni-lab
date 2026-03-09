@@ -150,9 +150,19 @@ export const CartProvider = ({ children }) => {
     };
 
     const clearCart = async () => {
+        // Delete from backend first (covers userId-linked and sessionId-linked carts)
+        try {
+            if (sessionId) {
+                await api.delete(`/cart/${sessionId}`);
+            }
+        } catch (e) {
+            // Silently ignore — backend enquiry route already deleted it in most cases
+        }
+
+        // Clear local state immediately
         setCart([]);
 
-        // Force fresh session ID to decouple from old remote cart
+        // Rotate session so any stale cart references no longer match
         const newSession = generateSessionId();
         localStorage.setItem('sessionId', newSession);
         setSessionId(newSession);
