@@ -82,30 +82,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const sendOtp = async (phone) => {
-        try {
-            const response = await api.post('/auth/send-otp', { phone });
-            return { success: true, ...response.data }; // { success: true, msg: '...' }
-        } catch (error) {
-            return { success: false, message: error.response?.data?.msg || 'Failed to send OTP', status: error.response?.status };
-        }
-    };
-
-    const verifyOtp = async (phone, otp) => {
-        try {
-            const response = await api.post('/auth/verify-otp', { phone, otp });
-            const { token, user: userData } = response.data;
-            if (token) {
-                localStorage.setItem('token', token);
-                localStorage.setItem('user', JSON.stringify(userData));
-                setUser(userData);
-            }
-            return { success: true, user: userData };
-        } catch (error) {
-            return { success: false, message: error.response?.data?.msg || 'OTP verification failed' };
-        }
-    };
-
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -115,45 +91,17 @@ export const AuthProvider = ({ children }) => {
     const register = async (name, email, password, contact) => {
         try {
             await api.post('/auth/register', { name, email, password, phone: contact });
+            // After register, usually we ask to login, or auto-login.
+            // Prompt says: "first reegister user and then login thea in the regiter form email,password ,contact no must be then redireted to login"
+            // So we strictly just return success here.
             return { success: true };
         } catch (error) {
             return { success: false, message: error.response?.data?.message || 'Registration failed' };
         }
     };
 
-    const sendAdminOtp = async (email) => {
-        try {
-            const response = await api.post('/auth/send-admin-otp', { email });
-            return { success: true, ...response.data };
-        } catch (error) {
-            return { success: false, message: error.response?.data?.msg || 'Failed to send OTP', status: error.response?.status };
-        }
-    };
-
-    const verifyAdminOtp = async (email, otp) => {
-        try {
-            const response = await api.post('/auth/verify-admin-otp', { email, otp });
-            const { token, user: userData } = response.data;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(userData));
-            setUser(userData);
-            return { success: true, user: userData };
-        } catch (error) {
-            return { success: false, message: error.response?.data?.msg || 'OTP verification failed' };
-        }
-    };
-
-    const createAdmin = async (name, email, phone) => {
-        try {
-            const response = await api.post('/auth/create-admin', { name, email, phone });
-            return { success: true, ...response.data };
-        } catch (error) {
-            return { success: false, message: error.response?.data?.msg || 'Failed to create admin' };
-        }
-    };
-
     return (
-        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, loading }}>
+        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, loading }}>
             {children}
         </AuthContext.Provider>
     );

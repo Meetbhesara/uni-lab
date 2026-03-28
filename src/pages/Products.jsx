@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, Divider } from '@chakra-ui/react';
+import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { FaShoppingCart, FaChevronLeft, FaChevronRight, FaTrash } from 'react-icons/fa';
+import { FaShoppingCart, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { FiSettings, FiSearch } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
@@ -19,32 +19,32 @@ const PRODUCT_CATEGORIES = [
     {
         id: "CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT",
         title: "Cement, Concrete & Aggregate",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181871/cat_cement.jpg"
+        image: "https://images.unsplash.com/photo-1541888086925-920a0bda7e3f?q=80&w=800&auto=format&fit=crop"
     },
     {
         id: "SOIL TESTING EQUIPMENT",
         title: "Soil Testing Equipment",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181874/cat_soil.jpg"
+        image: "https://images.unsplash.com/photo-1464226184884-fa280b87c399?q=80&w=800&auto=format&fit=crop"
     },
     {
         id: "BITUMIN TESTING EQUPMENT",
         title: "Bitumen Testing Equipment",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181875/cat_bitumin.jpg"
+        image: "https://images.unsplash.com/photo-1580216447883-93f8e02d8e4c?q=80&w=800&auto=format&fit=crop"
     },
     {
         id: "Construction Machinery",
         title: "Construction Machinery",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181872/cat_construction.jpg"
+        image: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=800&auto=format&fit=crop"
     },
     {
         id: "SURVEY & MEASURING INSTRUMENT",
         title: "Survey & Measuring Instruments",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774182146/cat_survey.jpg"
+        image: "https://images.unsplash.com/photo-1582208035318-47b2c58da7ff?q=80&w=800&auto=format&fit=crop"
     },
     {
         id: "SAFETY PRODUCTS",
         title: "Safety Products",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181873/cat_safety.jpg"
+        image: "https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?q=80&w=800&auto=format&fit=crop"
     }
 ];
 
@@ -241,89 +241,6 @@ const ImageCarousel = ({ images }) => {
     );
 };
 
-// Sticky Cart Sidebar Component — read-only selected items view
-const CartSidebar = () => {
-    const { cart } = useCart();
-
-    const safeCart = Array.isArray(cart) ? cart : [];
-    if (safeCart.length === 0) return null;
-
-    return (
-        <Box
-            as={motion.div}
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            position="sticky"
-            top="100px"
-            w="240px"
-            flexShrink={0}
-            borderRadius="2xl"
-            border="2px solid"
-            borderColor="orange.200"
-            bg="white"
-            boxShadow="xl"
-            overflow="hidden"
-        >
-            {/* Header */}
-            <Flex
-                bg="linear-gradient(135deg, #f97316 0%, #ea580c 100%)"
-                px={4} py={3}
-                align="center"
-                gap={2}
-            >
-                <FaShoppingCart color="white" size={14} />
-                <Text fontWeight="800" color="white" fontSize="sm">Selected Items</Text>
-                <Badge ml="auto" bg="white" color="orange.600" borderRadius="full" px={2} fontSize="xs">
-                    {safeCart.length}
-                </Badge>
-            </Flex>
-
-            {/* Items — read-only list */}
-            <Stack spacing={0} maxH="420px" overflowY="auto">
-                {safeCart.map((item, idx) => {
-                    const product = item.productId || item.product || {};
-                    const name = product.name || item.name || 'Product';
-                    const qty = item.quantity || 1;
-                    const img = product.images?.[0] || product.photos?.[0] || item.images?.[0] || '';
-                    const imgSrc = img
-                        ? (img.startsWith('http') ? img : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'}${img.startsWith('/') ? '' : '/'}${img}`)
-                        : 'https://via.placeholder.com/36';
-
-                    return (
-                        <Flex
-                            key={item._id || item.id || idx}
-                            px={3} py={2}
-                            align="center"
-                            gap={3}
-                            borderBottom="1px solid"
-                            borderColor="gray.100"
-                            _hover={{ bg: 'orange.50' }}
-                            transition="background 0.2s"
-                        >
-                            <Image
-                                src={imgSrc}
-                                boxSize="36px"
-                                borderRadius="md"
-                                objectFit="cover"
-                                fallbackSrc="https://via.placeholder.com/36"
-                                flexShrink={0}
-                            />
-                            <Box flex={1} minW={0}>
-                                <Text fontSize="xs" fontWeight="700" color="gray.800" noOfLines={2} lineHeight="1.3">
-                                    {name}
-                                </Text>
-                                <Text fontSize="10px" color="orange.500" fontWeight="600" mt="1px">
-                                    Qty: {qty}
-                                </Text>
-                            </Box>
-                        </Flex>
-                    );
-                })}
-            </Stack>
-        </Box>
-    );
-};
-
 const Products = () => {
     const location = useLocation();
     const { user } = useAuth();
@@ -331,7 +248,7 @@ const Products = () => {
     const searchQuery = searchParams.get('search') || '';
     const urlCategory = searchParams.get('category') || '';
     const highlightId = searchParams.get('highlight') || '';
-    const { addToCart, cart } = useCart();
+    const { addToCart } = useCart();
     const toast = useToast();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -415,21 +332,8 @@ const Products = () => {
         return <Flex justify="center" align="center" minH="50vh"><Spinner size="xl" color="brand.500" /></Flex>
     }
 
-    const safeCart = Array.isArray(cart) ? cart : [];
-    const hasCartItems = safeCart.length > 0;
-
-    // Open the cart drawer — trigger click on the Enquiry button in Header
-    const handleOpenCart = () => {
-        const enquiryBtn = document.getElementById('enquiry-cart-btn');
-        if (enquiryBtn) enquiryBtn.click();
-    };
-
     return (
-        <Container maxW={hasCartItems ? '7xl' : '6xl'} py={10}>
-
-        <Flex gap={6} align="flex-start">
-            {/* Main Content */}
-            <Box flex={1} minW={0}>
+        <Container maxW="6xl" py={10}>
 
             {/* ── Infinite Product Image Slider — only on category home screen ── */}
             {!activeCategory && !searchQuery && <ProductSlider products={sliderProducts} />}
@@ -662,10 +566,6 @@ const Products = () => {
                     )}
                 </Box>
             )}
-            </Box>
-            {/* Right Sticky Cart Sidebar */}
-            <CartSidebar />
-        </Flex>
         </Container>
     );
 };

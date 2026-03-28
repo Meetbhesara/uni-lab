@@ -133,7 +133,7 @@ const Header = () => {
                     <Button as={RouterLink} to="/products" variant="ghost" size="sm" leftIcon={<FaShoppingCart />}>
                         Cart ({cart.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)})
                     </Button>
-                    <Button id="enquiry-cart-btn" colorScheme="orange" variant="accent" size="sm" onClick={handleEnquiryClick}>
+                    <Button colorScheme="orange" variant="accent" size="sm" onClick={handleEnquiryClick}>
                         Enquiry
                     </Button>
                     {!user ? (
@@ -238,135 +238,107 @@ const Header = () => {
 };
 
 const AuthModal = ({ isOpen, onClose }) => {
-    const { sendAdminOtp, verifyAdminOtp } = useAuth();
+    const { login, register } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
-    const [step, setStep] = React.useState('email'); // 'email' | 'otp'
+    const [mode, setMode] = React.useState('login');
     const [isLoading, setIsLoading] = React.useState(false);
-    const [email, setEmail] = React.useState('');
-    const [otp, setOtp] = React.useState('');
 
-    const resetAndClose = () => {
-        setStep('email'); setEmail(''); setOtp('');
-        onClose();
+    const [formData, setFormData] = React.useState({
+        name: '', email: '', password: '', contact: ''
+    });
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSendOtp = async () => {
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            return toast({ title: 'Enter a valid email', status: 'error', duration: 2500 });
+    const handleRegister = async () => {
+        if (!formData.name || !formData.email || !formData.password || !formData.contact) {
+            toast({ title: "Please fill all fields", status: "error" });
+            return;
         }
         setIsLoading(true);
-        const res = await sendAdminOtp(email);
+        const res = await register(formData.name, formData.email, formData.password, formData.contact);
         setIsLoading(false);
 
         if (res.success) {
-            toast({ 
-                title: '✅ OTP Sent!', 
-                description: res.msg || 'Check your WhatsApp for the 4-digit code.', 
-                status: 'success',
-                duration: res.msg?.includes('Dev Mode') ? 6000 : 3000
-            });
-            setStep('otp');
+            toast({ title: "Registration Successful!", description: "Please login with your credentials.", status: "success" });
+            setMode('login');
+            setFormData(prev => ({ ...prev, password: '' }));
         } else {
-            toast({ title: 'Failed', description: res.message, status: 'error' });
+            toast({ title: "Registration Failed", description: res.message, status: "error" });
         }
     };
 
-    const handleVerifyOtp = async () => {
-        if (!/^\d{4}$/.test(otp)) {
-            return toast({ title: 'Enter the 4-digit OTP', status: 'error', duration: 2500 });
+    const handleLogin = async () => {
+        if (!formData.email || !formData.password) {
+            toast({ title: "Please enter email and password", status: "error" });
+            return;
         }
         setIsLoading(true);
-        const res = await verifyAdminOtp(email, otp);
+        const res = await login(formData.email, formData.password);
         setIsLoading(false);
 
-        if (res.success && res.user?.isAdmin) {
-            toast({ title: `Welcome, ${res.user.name || 'Admin'}!`, status: 'success' });
-            resetAndClose();
-            navigate('/admin/dashboard');
+        if (res.success) {
+            toast({ title: "Logged in successfully", status: "success" });
+            onClose();
+            setFormData({ name: '', email: '', password: '', contact: '' });
+
+            // Check if user is admin and redirect
+            const storedUser = JSON.parse(localStorage.getItem('user'));
+            if (storedUser && storedUser.isAdmin) {
+                navigate('/admin/dashboard');
+            }
         } else {
-            toast({ title: 'Incorrect OTP', description: res.message || 'Try again.', status: 'error' });
-            setOtp('');
+            toast({ title: "Login Failed", description: res.message, status: "error" });
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={resetAndClose} isCentered size="sm">
-            <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.400" />
-            <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
-                {/* Header bar */}
-                <Box bg="blue.700" px={6} py={4}>
-                    <Text fontWeight="800" color="white" fontSize="lg">🔐 Admin Login</Text>
-                    <Text fontSize="xs" color="blue.200" mt={1}>
-                        {step === 'email' ? 'Enter your admin email to receive an OTP on WhatsApp.' : `Enter the OTP sent to your phone for ${email}`}
-                    </Text>
-                </Box>
-                <ModalCloseButton color="white" top={3} right={3} />
-
-                <Box p={6}>
-                    {step === 'email' && (
+        <Modal isOpen={isOpen} onClose={onClose} isCentered>
+            <ModalOverlay />
+            <ModalContent>
+                <ModalHeader>{mode === 'login' ? 'Login' : 'Create Account'}</ModalHeader>
+                <ModalCloseButton />
+                <form onSubmit={(e) => { e.preventDefault(); mode === 'login' ? handleLogin() : handleRegister(); }}>
+                    <ModalBody pb={6}>
                         <Stack spacing={4}>
+                            {mode === 'register' && (
+                                <>
+                                    <FormControl isRequired>
+                                        <FormLabel>Full Name</FormLabel>
+                                        <Input name="name" placeholder="Enter your name" value={formData.name} onChange={handleInputChange} />
+                                    </FormControl>
+                                    <FormControl isRequired>
+                                        <FormLabel>Contact Number</FormLabel>
+                                        <Input name="contact" placeholder="Enter contact number" value={formData.contact} onChange={handleInputChange} />
+                                    </FormControl>
+                                </>
+                            )}
                             <FormControl isRequired>
-                                <FormLabel fontSize="sm" fontWeight="700" color="gray.700">Admin Email</FormLabel>
-                                <Input
-                                    type="email"
-                                    placeholder="admin@uniqueengineering.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
-                                    size="lg"
-                                    borderRadius="xl"
-                                    focusBorderColor="blue.500"
-                                />
+                                <FormLabel>Email Address</FormLabel>
+                                <Input name="email" type="email" placeholder="Enter your email" value={formData.email} onChange={handleInputChange} />
                             </FormControl>
-                            <Button
-                                colorScheme="blue" w="full" size="lg" borderRadius="xl"
-                                isLoading={isLoading} loadingText="Checking..."
-                                onClick={handleSendOtp}
-                            >
-                                Send OTP
-                            </Button>
-                        </Stack>
-                    )}
-
-                    {step === 'otp' && (
-                        <Stack spacing={4}>
-                            <Box p={3} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.100">
-                                <Text fontSize="xs" color="blue.700" fontWeight="700">OTP sent to WhatsApp</Text>
-                                <Text fontSize="xs" color="gray.600" mt={0.5}>Check the WhatsApp linked to your admin account. (OTP also in backend console if WhatsApp offline)</Text>
-                            </Box>
                             <FormControl isRequired>
-                                <FormLabel fontSize="sm" fontWeight="700" color="gray.700">4-Digit OTP</FormLabel>
-                                <Input
-                                    placeholder="• • • •"
-                                    maxLength={4}
-                                    value={otp}
-                                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
-                                    letterSpacing="0.5em"
-                                    fontSize="2xl"
-                                    textAlign="center"
-                                    size="lg"
-                                    borderRadius="xl"
-                                    focusBorderColor="green.500"
-                                />
+                                <FormLabel>Password</FormLabel>
+                                <Input name="password" type="password" placeholder="Enter password" value={formData.password} onChange={handleInputChange} />
                             </FormControl>
-                            <Button
-                                colorScheme="green" w="full" size="lg" borderRadius="xl"
-                                isLoading={isLoading} loadingText="Verifying..."
-                                onClick={handleVerifyOtp}
-                            >
-                                Verify & Enter Panel
+                            <Button type="submit" colorScheme="blue" width="full" mt={4} isLoading={isLoading}>
+                                {mode === 'login' ? 'Login' : 'Register'}
                             </Button>
-                            <Button variant="ghost" size="sm" colorScheme="blue" onClick={() => { setStep('email'); setOtp(''); }}>
-                                ← Use different email
-                            </Button>
+                            <Text fontSize="sm" textAlign="center" color="gray.600">
+                                {mode === 'login' ? "Don't have an account? " : "Already have an account? "}
+                                <Button variant="link" colorScheme="orange" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+                                    {mode === 'login' ? 'Register' : 'Login'}
+                                </Button>
+                            </Text>
                         </Stack>
-                    )}
-                </Box>
+                    </ModalBody>
+                </form>
             </ModalContent>
         </Modal>
-    );
+    )
 }
 
 // Helper for images
@@ -380,18 +352,14 @@ const getImageUrl = (path) => {
 const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
     const toast = useToast();
     const { clearCart, removeFromCart, updateQuantity } = useCart();
-    const { user, phoneLogin, phoneRegister, sendOtp, verifyOtp } = useAuth();
+    const { user, phoneLogin, phoneRegister } = useAuth();
     const navigate = useNavigate();
 
     const [isSending, setIsSending] = React.useState(false);
     const [isCheckingPhone, setIsCheckingPhone] = React.useState(false);
 
-    const [authStep, setAuthStep] = React.useState('phone'); // 'phone' | 'otp' | 'register'
+    const [authStep, setAuthStep] = React.useState('phone'); // 'phone' | 'register'
     const [phoneInput, setPhoneInput] = React.useState('');
-    const [otpInput, setOtpInput] = React.useState('');
-
-    const [adminClientStatus, setAdminClientStatus] = React.useState('none'); // 'none' | 'found' | 'notfound'
-    const [showFullAdminForm, setShowFullAdminForm] = React.useState(false);
 
     const [formData, setFormData] = React.useState({
         companyName: '',
@@ -406,82 +374,15 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
 
     const safeCart = Array.isArray(cart) ? cart : [];
 
-    // Auto-fill for admin mode when phone number is entered
-    React.useEffect(() => {
-        const fetchUserData = async () => {
-            const cleanPhone = phoneInput.replace(/\D/g, '');
-            // Only auto-fill if Admin is logged in and phone is exactly 10 digits
-            if (user?.isAdmin && cleanPhone.length === 10) {
-                setIsCheckingPhone(true);
-                try {
-                    const res = await api.get(`/auth/phone/${cleanPhone}`);
-                    if (res.data) {
-                        const userData = res.data;
-                        const hasEmail = !!userData.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email);
-                        setFormData({
-                            companyName: userData.companyName || '',
-                            contactPersonName: userData.contactPersonName || userData.name || '',
-                            email: userData.email || '',
-                            gstNumber: userData.gstNumber || ''
-                        });
-                        setAdminClientStatus('found');
-                        // Force show form if critical details like email are missing
-                        if (!hasEmail) {
-                            setShowFullAdminForm(true);
-                            toast({
-                                title: "Incomplete Details",
-                                description: "This client is missing an email address. Please provide it before submitting.",
-                                status: "warning",
-                                duration: 4000,
-                                isClosable: true
-                            });
-                        } else {
-                            setShowFullAdminForm(false);
-                            toast({
-                                title: "Client Details Loaded",
-                                description: `Ready to submit for ${userData.contactPersonName || userData.companyName}`,
-                                status: "success",
-                                duration: 2000,
-                                position: "top"
-                            });
-                        }
-                    }
-                } catch (err) {
-                    if (err.response?.status === 404) {
-                        setAdminClientStatus('notfound');
-                        setShowFullAdminForm(true);
-                        setFormData({ companyName: '', contactPersonName: '', email: '', gstNumber: '' });
-                    }
-                } finally {
-                    setIsCheckingPhone(false);
-                }
-            } else if (user?.isAdmin && cleanPhone.length < 10) {
-                setAdminClientStatus('none');
-                setShowFullAdminForm(false);
-            }
-        };
-        fetchUserData();
-    }, [phoneInput, user?.isAdmin]);
-
-    const submitEnquiry = async (caller) => {
+    const submitEnquiry = async (currentUser) => {
         setIsSending(true);
         try {
-            // Priority Check: If admin is logged in, use formData + phoneInput instead of admin profile details.
-            // If normal user, use their profile.
-            const isAdm = caller && caller.isAdmin;
-
-            const finalCompanyName = isAdm ? formData.companyName : (caller.companyName || 'Guest');
-            const finalContactPerson = isAdm ? formData.contactPersonName : (caller.name || caller.contactPersonName || 'Guest');
-            const finalPhone = isAdm ? phoneInput : (caller.phone || phoneInput || 'N/A');
-            const finalEmail = isAdm ? formData.email : (caller.email || 'N/A');
-            const finalGst = isAdm ? formData.gstNumber : (caller.gstNumber || '');
-
             const enquiryData = {
-                companyName: finalCompanyName,
-                contactPersonName: finalContactPerson,
-                phone: finalPhone,
-                email: finalEmail,
-                gstNumber: finalGst,
+                companyName: currentUser.companyName || 'Guest',
+                contactPersonName: currentUser.name || currentUser.contactPersonName || 'Guest',
+                phone: currentUser.phone || phoneInput || 'N/A',
+                email: currentUser.email || 'N/A',
+                gstNumber: currentUser.gstNumber || '',
                 products: safeCart.map(item => {
                     const product = item.productId || item.product || {};
                     return {
@@ -503,7 +404,6 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             // Reset localized states
             setAuthStep('phone');
             setPhoneInput('');
-            setFormData({ companyName: '', contactPersonName: '', email: '', gstNumber: '' });
 
             navigate('/products');
         } catch (error) {
@@ -516,70 +416,34 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
 
     const handlePhoneNext = async () => {
         if (!/^\d{10,}$/.test(phoneInput.replace(/\D/g, ''))) {
-            return toast({ title: "Validation Error", description: "Please enter a valid 10-digit phone number.", status: "error" });
+            return toast({ title: "Validation Error", description: "Please enter a valid phone number.", status: "error" });
         }
 
         setIsCheckingPhone(true);
-        const res = await sendOtp(phoneInput);
+        const res = await phoneLogin(phoneInput);
         setIsCheckingPhone(false);
 
         if (res.success) {
-            toast({ title: "OTP Sent", description: "Verification code sent to your WhatsApp!", status: "success" });
-            setAuthStep('otp');
+            toast({ title: "Verified", description: "Welcome back!", status: "success" });
+            // By state rules, user is now truthy, UI flips to submit state
         } else {
             if (res.status === 404) {
-                toast({ title: "Registration", description: "Welcome! Please enter your details below.", status: "success" });
+                // Not found, so we move to register step
                 setAuthStep('register');
             } else {
-                toast({ title: "Failed", description: res.message || "Could not send OTP", status: "error" });
+                toast({ title: "Login Failed", description: res.message, status: "error" });
             }
-        }
-    };
-
-    const handleVerifyOtp = async () => {
-        if (!/^\d{4,6}$/.test(otpInput.replace(/\D/g, ''))) {
-            return toast({ title: "Validation Error", description: "Please enter a valid OTP code.", status: "error" });
-        }
-
-        setIsCheckingPhone(true);
-        const res = await verifyOtp(phoneInput, otpInput);
-        setIsCheckingPhone(false);
-
-        if (res.success) {
-            toast({ title: "Verified", description: "Login successful!", status: "success" });
-            if (!res.user || (!res.user.companyName && !res.user.contactPersonName)) {
-                setAuthStep('register');
-            }
-        } else {
-            toast({ title: "Verification Failed", description: res.message, status: "error" });
         }
     };
 
     const handleAction = async (e) => {
         e.preventDefault();
 
-        if (user && !user.isAdmin) {
-            // Already logged in as a normal user, submit using profile
-            await submitEnquiry(user);
-        } else if (user && user.isAdmin) {
-            // Admin is logged in, they must provide client details
-            const cleanPhone = phoneInput.replace(/\D/g, '');
-            if (cleanPhone.length < 10) {
-                return toast({ title: "Validation Error", description: "Please enter a valid 10-digit phone number.", status: "error" });
-            }
-            if (!formData.companyName.trim() && !formData.contactPersonName.trim()) {
-                setShowFullAdminForm(true);
-                return toast({ title: "Validation Error", description: "Either Company Name or Contact Person Name is required.", status: "error" });
-            }
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-                setShowFullAdminForm(true);
-                return toast({ title: "Validation Error", description: "A valid email address is required for enquiry submission.", status: "error" });
-            }
+        if (user) {
+            // Already logged in
             await submitEnquiry(user);
         } else if (authStep === 'phone') {
             await handlePhoneNext();
-        } else if (authStep === 'otp') {
-            await handleVerifyOtp();
         } else if (authStep === 'register') {
             if (!formData.companyName.trim() && !formData.contactPersonName.trim()) {
                 return toast({ title: "Validation Error", description: "Either Company Name or Contact Person Name is required.", status: "error" });
@@ -672,76 +536,20 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                     {user ? "Your Details" : "Verify & Send"}
                                 </Text>
 
-                                {user && !user.isAdmin ? (
+                                {user ? (
                                     <Box p={4} borderWidth="1px" borderRadius="md" bg="green.50">
                                         <Text fontWeight="bold" color="green.700" mb={1}>Logged in successfully!</Text>
                                         <Text fontSize="sm"><b>Name:</b> {user.name || user.contactPersonName || user.companyName}</Text>
                                         <Text fontSize="sm"><b>Phone:</b> {user.phone}</Text>
                                         <Text fontSize="xs" color="gray.500" mt={2}>You can now submit your enquiry securely.</Text>
                                     </Box>
-                                ) : (user && user.isAdmin) ? (
-                                    <Stack spacing={3}>
-                                        <Box p={3} bg="purple.50" borderRadius="md" border="1px" borderColor="purple.200">
-                                            <Text fontSize="sm" fontWeight="bold" color="purple.700">Admin Mode</Text>
-                                            <Text fontSize="xs" color="purple.600">Enter client mobile to find or add them.</Text>
-                                        </Box>
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="sm" mb={1}>Client Phone Number</FormLabel>
-                                            <Input size="sm" type="tel" placeholder="9876543210" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} />
-                                        </FormControl>
-
-                                        {adminClientStatus === 'found' && !showFullAdminForm && (
-                                            <Box p={4} bg="green.50" borderRadius="xl" border="2px dashed" borderColor="green.300" textAlign="center">
-                                                <Text fontWeight="bold" color="green.800" fontSize="md">Ready to Submit</Text>
-                                                <Text fontSize="sm" mt={1}>Client: <b>{formData.companyName || formData.contactPersonName}</b></Text>
-                                                <Text fontSize="xs" color="gray.600">{formData.email}</Text>
-                                                <Button size="xs" variant="link" colorScheme="blue" mt={2} onClick={() => setShowFullAdminForm(true)}>Update Details</Button>
-                                            </Box>
-                                        )}
-
-                                        {adminClientStatus === 'notfound' && (
-                                            <Box p={2} bg="orange.50" borderRadius="md" border="1px" borderColor="orange.200">
-                                                <Text fontSize="xs" fontWeight="bold" color="orange.800">New Client - Please register below</Text>
-                                            </Box>
-                                        )}
-
-                                        {(showFullAdminForm || (adminClientStatus === 'notfound' && phoneInput.length >= 10)) && (
-                                            <Stack spacing={3} p={2} borderLeft="2px" borderColor="purple.100" ml={1}>
-                                                <FormControl>
-                                                    <FormLabel fontSize="sm" mb={1}>Client Company Name</FormLabel>
-                                                    <Input size="sm" placeholder="e.g. Unique Engineering" name="companyName" value={formData.companyName} onChange={handleChange} />
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel fontSize="sm" mb={1}>Client Contact Person</FormLabel>
-                                                    <Input size="sm" placeholder="e.g. John Doe" name="contactPersonName" value={formData.contactPersonName} onChange={handleChange} />
-                                                </FormControl>
-                                                <FormControl isRequired>
-                                                    <FormLabel fontSize="sm" mb={1}>Client Email Address</FormLabel>
-                                                    <Input size="sm" type="email" name="email" placeholder="client@company.com" value={formData.email} onChange={handleChange} />
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel fontSize="sm" mb={1}>Client GST Number (Optional)</FormLabel>
-                                                    <Input size="sm" name="gstNumber" placeholder="22AAAAA0000A1Z5" value={formData.gstNumber} onChange={handleChange} />
-                                                </FormControl>
-                                            </Stack>
-                                        )}
-                                    </Stack>
                                 ) : authStep === 'phone' ? (
                                     <Stack spacing={3}>
-                                        <Text fontSize="sm" color="gray.600">Please enter your phone number to receive a verification OTP on WhatsApp.</Text>
+                                        <Text fontSize="sm" color="gray.600">Please enter your phone number to login or register and send this enquiry.</Text>
                                         <FormControl isRequired>
                                             <FormLabel fontSize="sm" mb={1}>Phone Number</FormLabel>
                                             <Input size="md" type="tel" placeholder="9876543210" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} />
                                         </FormControl>
-                                    </Stack>
-                                ) : authStep === 'otp' ? (
-                                    <Stack spacing={3}>
-                                        <Text fontSize="sm" color="gray.600">We have sent a verification code to WhatsApp number **{phoneInput}**.</Text>
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="sm" mb={1}>Enter 4-Digit OTP</FormLabel>
-                                            <Input size="md" placeholder="1234" maxLength={4} value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} />
-                                        </FormControl>
-                                        <Button size="xs" variant="link" colorScheme="blue" alignSelf="flex-start" onClick={handlePhoneNext}>Resend OTP</Button>
                                     </Stack>
                                 ) : (
                                     <Stack spacing={3}>
@@ -749,10 +557,6 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                             <Text fontSize="sm" fontWeight="bold">New Number Detected</Text>
                                             <Text fontSize="xs">Please complete a one-time registration for {phoneInput}</Text>
                                         </Box>
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="sm" mb={1}>Phone Number</FormLabel>
-                                            <Input size="sm" bg="gray.50" value={phoneInput} isReadOnly />
-                                        </FormControl>
                                         <FormControl>
                                             <FormLabel fontSize="sm" mb={1}>Company Name</FormLabel>
                                             <Input size="sm" placeholder="e.g. Unique Engineering" name="companyName" value={formData.companyName} onChange={handleChange} />
@@ -791,7 +595,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                 isLoading={isCheckingPhone || isSending}
                                 loadingText={isCheckingPhone ? 'Checking...' : 'Sending...'}
                             >
-                                {user ? 'Submit Enquiry' : authStep === 'phone' ? 'Verify & Continue' : authStep === 'otp' ? 'Validate OTP' : 'Register & Submit'}
+                                {user ? 'Submit Enquiry' : authStep === 'phone' ? 'Verify & Continue' : 'Register & Submit'}
                             </Button>
                         </Stack>
                     </DrawerFooter>

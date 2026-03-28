@@ -7,7 +7,6 @@ import {
     Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, Select
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch } from 'react-icons/fi';
-import { FaWhatsapp } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
 
@@ -45,24 +44,13 @@ const AdminProducts = () => {
         };
     }, []);
     const { isOpen, onOpen, onClose } = useDisclosure();
+
     const [editingProduct, setEditingProduct] = useState(null);
 
     // Delete Modal State
     const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
     const [productToDelete, setProductToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
-
-    // WhatsApp Modal State
-    const { isOpen: isWhatsappOpen, onOpen: onWhatsappOpen, onClose: onWhatsappClose } = useDisclosure();
-    const [whatsappProduct, setWhatsappProduct] = useState(null);
-    const [whatsappPhone, setWhatsappPhone] = useState('');
-    const [isWhatsappSending, setIsWhatsappSending] = useState(false);
-
-    const handleWhatsappOpen = (product) => {
-        setWhatsappProduct(product);
-        setWhatsappPhone('');
-        onWhatsappOpen();
-    };
 
     // Super Admin Check
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -342,38 +330,6 @@ const AdminProducts = () => {
         setExistingPhotos(prev => prev.filter((_, i) => i !== index));
     };
 
-    // WhatsApp Helper
-    const handleSendProductWhatsapp = async () => {
-        if (!whatsappPhone || whatsappPhone.replace(/\D/g, '').length < 10) {
-            return toast({ title: "Valid 10 digit phone number required", status: "warning" });
-        }
-        setIsWhatsappSending(true);
-        try {
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
-            const imgPath = whatsappProduct?.images?.[0] || whatsappProduct?.photos?.[0];
-            const imgUrl = imgPath ? (imgPath.startsWith('http') ? imgPath : `${baseUrl}${imgPath.startsWith('/') ? '' : '/'}${imgPath}`) : null;
-
-            const caption = `🚀 *${whatsappProduct?.name?.toUpperCase()}*\n\n` +
-                            `📦 *Category:* ${whatsappProduct?.category || 'General'}\n\n` +
-                            `📝 *Description:*\n${whatsappProduct?.description || 'No description provided'}\n\n` +
-                            `✅ *Quality Assured by Unique Lab Instrument*`;
-            
-            await api.post('/whatsapp/send-product', {
-                phone: whatsappPhone,
-                imageUrl: imgUrl,
-                caption: caption
-            });
-            
-            toast({ title: "Product sent on WhatsApp!", status: "success" });
-            onWhatsappClose();
-        } catch (e) {
-            console.error(e);
-            toast({ title: "Failed to send", description: e.response?.data?.error || e.message, status: "error" });
-        } finally {
-            setIsWhatsappSending(false);
-        }
-    };
-
     return (
         <Box
             p={{ base: 4, md: 6 }}
@@ -486,15 +442,6 @@ const AdminProducts = () => {
                                 </Td>
                                 <Td textAlign="right">
                                     <Stack direction="row" spacing={2} justify="flex-end">
-                                        <IconButton
-                                            size="sm"
-                                            bg="#25D366"
-                                            color="white"
-                                            _hover={{ bg: "#128C7E" }}
-                                            icon={<FaWhatsapp />}
-                                            aria-label="WhatsApp"
-                                            onClick={() => handleWhatsappOpen(product)}
-                                        />
                                         <IconButton
                                             size="sm"
                                             variant="ghost"
@@ -937,38 +884,6 @@ const AdminProducts = () => {
                     </Box>
                 </ModalContent>
             </Modal >
-
-            {/* WhatsApp Modal */}
-            <Modal isOpen={isWhatsappOpen} onClose={onWhatsappClose} isCentered>
-                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.500" />
-                <ModalContent borderRadius="xl" boxShadow="2xl">
-                    <ModalHeader>Send Product To WhatsApp</ModalHeader>
-                    <ModalCloseButton />
-                    <ModalBody>
-                        <FormControl>
-                            <FormLabel fontWeight="600">Enter 10-Digit Mobile Number</FormLabel>
-                            <Input 
-                                placeholder="9876543210" 
-                                value={whatsappPhone} 
-                                onChange={(e) => setWhatsappPhone(e.target.value)} 
-                            />
-                            <Text fontSize="xs" color="gray.500" mt={1}>Example: 9876543210 (Country code '91' is added automatically)</Text>
-                        </FormControl>
-                    </ModalBody>
-                    <ModalFooter>
-                        <Button variant="ghost" mr={3} onClick={onWhatsappClose}>Cancel</Button>
-                        <Button 
-                            bg="#25D366" 
-                            color="white" 
-                            _hover={{ bg: "#128C7E" }} 
-                            isLoading={isWhatsappSending} 
-                            onClick={handleSendProductWhatsapp}
-                        >
-                            Send Image & Desc
-                        </Button>
-                    </ModalFooter>
-                </ModalContent>
-            </Modal>
 
             {/* Delete Confirmation Modal */}
             <Modal isOpen={isDeleteOpen} onClose={onDeleteClose} isCentered>

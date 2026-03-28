@@ -105,24 +105,7 @@ export const CartProvider = ({ children }) => {
     };
 
     const removeFromCart = async (itemId) => {
-        // itemId here is the cart entry _id. We need the productId to call the backend.
-        // Find the actual productId from the cart state first.
-        const item = cart.find(i => i._id === itemId || i.id === itemId);
-        const productId = item?.productId?._id || item?.productId?.id || item?.product?._id || item?.product?.id || item?.productId || item?.product;
-
-        // Optimistically remove from UI immediately
-        setCart((prev) => prev.filter((i) => i._id !== itemId && i.id !== itemId));
-
-        if (productId && sessionId) {
-            try {
-                // Call backend: DELETE /cart/item/:productId?sessionId=xxx
-                await api.delete(`/cart/item/${productId}?sessionId=${sessionId}`);
-            } catch (error) {
-                console.error("Remove from cart failed", error);
-                // Re-sync from server if backend call failed
-                fetchCart(sessionId);
-            }
-        }
+        setCart((prev) => prev.filter((item) => item._id !== itemId && item.id !== itemId));
     };
 
     const updateQuantity = async (productId, quantity) => {
