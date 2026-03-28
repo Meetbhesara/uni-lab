@@ -1,6 +1,7 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid } from '@chakra-ui/react';
 import { FiPlus, FiPrinter, FiTrash, FiDownload } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 import api from '../../api/axios';
 import { DEMO_ENQUIRIES, DEMO_QUOTATIONS } from '../../data/mockData';
 
@@ -10,6 +11,7 @@ const AdminEnquiries = () => {
     const [processedQuotations, setProcessedQuotations] = useState([]); // Done/Rejected
     const [selectedEnquiry, setSelectedEnquiry] = useState(null);
     const [selectedQuotation, setSelectedQuotation] = useState(null);
+    const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
 
     const getImageUrl = (path) => {
         if (!path) return 'https://via.placeholder.com/150';
@@ -144,11 +146,20 @@ const AdminEnquiries = () => {
         setIsSubmittingQuote(false);
         setIsGlobalDealerPrice(false);
 
-        // Initialize custom party details
-        setQuotePartyName(selectedEnquiry.Name || selectedEnquiry.companyName || '');
+        // --- Find last quotation to copy previous prices ---
+        const allEnqQuotes = [...quotations, ...processedQuotations]
+            .filter(q => q.enquiry?._id === selectedEnquiry._id)
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const lastQuote = allEnqQuotes.length > 0 ? allEnqQuotes[0] : null;
+
+        // Initialize custom party details - Don't pre-fill 'Guest' if that's the default name
+        const initialName = (selectedEnquiry.Name === 'Guest' || !selectedEnquiry.Name) ? '' : selectedEnquiry.Name;
+        const initialCompanyName = (selectedEnquiry.companyName === 'Guest' || !selectedEnquiry.companyName) ? '' : selectedEnquiry.companyName;
+
+        setQuotePartyName(initialCompanyName || initialName || '');
         setQuoteContactPerson(selectedEnquiry.contactPersonName || '');
-        setQuoteEmail(selectedEnquiry.email || '');
-        setQuoteMobile(selectedEnquiry.phone || '');
+        setQuoteEmail(selectedEnquiry.email && selectedEnquiry.email !== 'N/A' ? selectedEnquiry.email : '');
+        setQuoteMobile(selectedEnquiry.phone && selectedEnquiry.phone !== 'N/A' ? selectedEnquiry.phone : '');
         setQuoteAddress(''); // Start empty
 
         // Initialize items from enquiry products
@@ -162,20 +173,39 @@ const AdminEnquiries = () => {
             if (!isNaN(endPrice) && endPrice > 0) defaultPrice = endPrice;
             else if (!isNaN(startPrice) && startPrice > 0) defaultPrice = startPrice;
 
+            let defaultQty = p.quantity;
+            let defaultGst = 18;
+
+            // Pre-fill from previous quotation if available
+            if (lastQuote) {
+                const prevItem = lastQuote.items.find(i => 
+                    (i.product?._id || i.product) === product._id
+                );
+                if (prevItem) {
+                    defaultPrice = prevItem.price || defaultPrice;
+                    defaultGst = prevItem.gst || 18;
+                    defaultQty = prevItem.quantity || p.quantity;
+                }
+            }
+
             return {
                 productId: p.productId,
-                quantity: p.quantity,
+                quantity: defaultQty,
                 price: defaultPrice,
-                gst: 18, // Default GST
+                gst: defaultGst, // Default GST
                 dealerPrice: dealerPrice,
                 sellingPriceStart: startPrice || 0,
                 sellingPriceEnd: endPrice || 0,
                 calculatedSellingPrice: defaultPrice
             };
         });
+        
+        const prevDiscount = lastQuote ? (lastQuote.discount || 0) : 0;
         setQuoteItems(initialItems);
-        setQuoteDiscount(0);
-        calculateTotals(initialItems, 0);
+        setQuoteDiscount(prevDiscount);
+        
+        // Pass packaging if we want it too
+        calculateTotals(initialItems, prevDiscount, lastQuote?.packaging || 0);
     };
 
     const handleItemChange = (index, field, value) => {
@@ -192,7 +222,7 @@ const AdminEnquiries = () => {
         calculateTotals(newItems, quoteDiscount);
     };
 
-    const calculateTotals = (items, discount) => {
+    const calculateTotals = (items, discount, packagingOverride) => {
         let sub = 0;
         let gstAmt = 0;
         items.forEach(item => {
@@ -204,7 +234,7 @@ const AdminEnquiries = () => {
         });
 
         setQuoteTotals(prev => {
-            const packaging = prev.packaging || 0;
+            const packaging = packagingOverride !== undefined ? packagingOverride : (prev.packaging || 0);
             const packagingGst = packaging * 0.18;
             const totalGst = gstAmt + packagingGst;
             const disc = parseFloat(discount !== undefined ? discount : quoteDiscount) || 0;
@@ -215,6 +245,7 @@ const AdminEnquiries = () => {
                 subtotal: sub,
                 productGst: gstAmt,
                 gst: totalGst,
+                packaging: packaging,
                 packagingGst,
                 total: grandTotal
             };
@@ -248,8 +279,8 @@ const AdminEnquiries = () => {
                     <td style="border: 1px solid black; text-align: center; vertical-align: middle;">${index + 1}</td>
                     <td style="border: 1px solid black; padding: 5px;">
                         <div style="display: flex; gap: 15px;">
-                            <div style="width: 150px;">
-                                <img src="${imgUrl}" style="width: 100%; border-radius: 4px;" />
+                            <div style="width: 150px; height: 150px; min-width: 150px; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #eee; border-radius: 4px; overflow: hidden;">
+                                <img src="${imgUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
                             </div>
                             <div style="flex: 1;">
                                 <strong style="text-decoration: underline;">${product?.name || 'Product'}</strong><br/>
@@ -276,6 +307,10 @@ const AdminEnquiries = () => {
 
         const discountAmt = parseFloat(discount) || 0;
         const displayRefNo = refNo || 'XXXXXX-' + new Date().getFullYear();
+
+        const isRevised = displayRefNo.includes('(R');
+        // Quotation Title
+        const quoteTitle = isRevised ? 'Revised Quotation' : 'Quotation';
 
         return `
             <div style="font-family: Arial, sans-serif; max-width: 800px; margin: auto; border: 2px solid black; padding: 10px;">
@@ -316,7 +351,7 @@ const AdminEnquiries = () => {
                 </div>
 
                 <!-- Quotation Title -->
-                <div style="text-align: center; font-weight: bold; font-size: 18px; margin-top: 5px;">Quotation</div>
+                <div style="text-align: center; font-weight: bold; font-size: 18px; margin-top: 5px;">${quoteTitle}</div>
                 <div style="text-align: center; font-size: 13px; margin-bottom: 5px;">Respected sir We are send quotation as per your requirement</div>
 
                 <!-- Main Table -->
@@ -422,6 +457,11 @@ const AdminEnquiries = () => {
 
         const payload = {
             enquiryId: selectedEnquiry._id,
+            partyName: quotePartyName,
+            contactPerson: quoteContactPerson,
+            email: quoteEmail,
+            phone: quoteMobile,
+            address: quoteAddress,
             items: quoteItems.map(i => {
                 const pPrice = parseFloat(i.price) || 0;
                 const pQuantity = parseFloat(i.quantity) || 0;
@@ -464,6 +504,30 @@ const AdminEnquiries = () => {
             toast({ title: "Error creating quote", status: "error" });
         } finally {
             setIsSubmittingQuote(false);
+        }
+    };
+
+    const handleSendWhatsApp = async (q) => {
+        const phoneNumber = q.mobile || q.enquiryId?.phone || q.enquiry?.phone;
+        if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 10) {
+             return toast({ title: "No valid 10-digit phone number found", status: "warning" });
+        }
+        setSendingWhatsappId(q._id);
+        try {
+            const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Client';
+            const message = `Hello *${clientName}*,\n\nHere is your *Quotation* from *Uni-BC*.\n\n*Reference:* ${q.refNo || 'N/A'}\n*Date:* ${new Date(q.createdAt).toLocaleDateString('en-GB')}\n*Grand Total:* ₹${q.grandTotal || '0'}\n\nThank you!`;
+            
+            await api.post('/whatsapp/send-quotation', {
+                quotationId: q._id,
+                phone: phoneNumber,
+                message: message
+            });
+            toast({ title: "Quotation sent on WhatsApp!", status: "success" });
+        } catch (e) {
+            console.error(e);
+            toast({ title: "Failed to send", status: "error" });
+        } finally {
+            setSendingWhatsappId(null);
         }
     };
 
@@ -612,22 +676,47 @@ const AdminEnquiries = () => {
                     <TabPanel p={0} pt={4}>
                         <Box overflowX="auto">
                             <Table variant="simple" minW="560px">
-                                <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
+                                <Thead><Tr><Th>Date</Th><Th>Ref No.</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
                                 <Tbody>
-                                    {quotations.map(q => (
-                                        <Tr key={q._id}>
-                                            <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
-                                            <Td fontWeight="medium">{q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'}</Td>
-                                            <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
-                                            <Td>
-                                                <HStack spacing={2}>
-                                                    <Button size="xs" variant="outline" onClick={() => handleViewQuotation(q)}>View</Button>
-                                                    <Button size="xs" colorScheme="green" onClick={() => handleStatusUpdate(q._id, 'Done')}>Done</Button>
-                                                    <Button size="xs" colorScheme="red" onClick={() => handleStatusUpdate(q._id, 'Reject')}>Reject</Button>
-                                                </HStack>
-                                            </Td>
-                                        </Tr>
-                                    ))}
+                                    {quotations.map(q => {
+                                        let refSuffix = '';
+                                        if (q.refNo) {
+                                            const lowerRef = q.refNo.toLowerCase();
+                                            if (lowerRef.includes('(r')) {
+                                                refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
+                                            }
+                                        }
+                                        return (
+                                            <Tr key={q._id}>
+                                                <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
+                                                <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
+                                                <Td fontWeight="medium">
+                                                    {q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text>
+                                                </Td>
+                                                <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
+                                                <Td>
+                                                    <HStack spacing={2}>
+                                                        <Button size="xs" variant="outline" onClick={() => handleViewQuotation(q)}>View</Button>
+                                                        <Button 
+                                                            size="xs" 
+                                                            bg="#25D366" 
+                                                            color="white" 
+                                                            _hover={{ bg: "#128C7E" }} 
+                                                            leftIcon={<FaWhatsapp />} 
+                                                            isLoading={sendingWhatsappId === q._id} 
+                                                            isDisabled={!!sendingWhatsappId} 
+                                                            onClick={() => handleSendWhatsApp(q)}
+                                                        >
+                                                            WhatsApp
+                                                        </Button>
+                                                        <Button size="xs" colorScheme="green" onClick={() => handleStatusUpdate(q._id, 'Done')}>Done</Button>
+                                                        <Button size="xs" colorScheme="red" onClick={() => handleStatusUpdate(q._id, 'Reject')}>Reject</Button>
+                                                    </HStack>
+                                                </Td>
+                                            </Tr>
+                                        );
+                                    })}
+                                    {quotations.length === 0 && <Tr><Td colSpan={5}>No active quotations.</Td></Tr>}
                                 </Tbody>
                             </Table>
                         </Box>
@@ -636,22 +725,34 @@ const AdminEnquiries = () => {
                     <TabPanel p={0} pt={4}>
                         <Box overflowX="auto">
                             <Table variant="simple" minW="560px">
-                                <Thead><Tr><Th>Date</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
+                                <Thead><Tr><Th>Date</Th><Th>Ref No.</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
                                 <Tbody>
-                                    {processedQuotations.map(q => (
-                                        <Tr key={q._id}>
-                                            <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
-                                            <Td fontWeight="medium">{q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'}</Td>
-                                            <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status}</Badge></Td>
-                                            <Td>
-                                                <Button size="sm" variant="outline" mr={2} onClick={() => handleViewQuotation(q)}>View Quote</Button>
-                                                {q.status === 'Done' && (
-                                                    <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
-                                                )}
-                                            </Td>
-                                        </Tr>
-                                    ))}
-                                    {processedQuotations.length === 0 && <Tr><Td colSpan={4}>No processed quotations.</Td></Tr>}
+                                    {processedQuotations.map(q => {
+                                        let refSuffix = '';
+                                        if (q.refNo) {
+                                            const lowerRef = q.refNo.toLowerCase();
+                                            if (lowerRef.includes('(r')) {
+                                                refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
+                                            }
+                                        }
+                                        return (
+                                            <Tr key={q._id}>
+                                                <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
+                                                <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
+                                                <Td fontWeight="medium">
+                                                    {q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text>
+                                                </Td>
+                                                <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status}</Badge></Td>
+                                                <Td>
+                                                    <Button size="sm" variant="outline" mr={2} onClick={() => handleViewQuotation(q)}>View Quote</Button>
+                                                    {q.status === 'Done' && (
+                                                        <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} mr={2} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
+                                                    )}
+                                                </Td>
+                                            </Tr>
+                                        );
+                                    })}
+                                    {processedQuotations.length === 0 && <Tr><Td colSpan={5}>No processed quotations.</Td></Tr>}
                                 </Tbody>
                             </Table>
                         </Box>
