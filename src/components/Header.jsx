@@ -581,11 +581,14 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
         } else if (authStep === 'otp') {
             await handleVerifyOtp();
         } else if (authStep === 'register') {
-            if (!formData.companyName.trim() && !formData.contactPersonName.trim()) {
-                return toast({ title: "Validation Error", description: "Either Company Name or Contact Person Name is required.", status: "error" });
-            }
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
                 return toast({ title: "Validation Error", description: "Please enter a valid email address.", status: "error" });
+            }
+
+            // --- Pre-validate for Admin Keywords (Generic check) ---
+            const lowerEmail = formData.email.toLowerCase();
+            if (lowerEmail.includes('uniqueengineering93@gmail.com') || lowerEmail.includes('iatulkanak@gmail.com')) {
+                return toast({ title: "Restricted", description: "This administrative email cannot be used for client enquiries.", status: "error" });
             }
 
             setIsSending(true);
@@ -594,7 +597,12 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                 await submitEnquiry(res.user);
             } else {
                 setIsSending(false);
-                toast({ title: "Registration Failed", description: res.message, status: "error" });
+                const isEmailErr = res.message?.toLowerCase().includes('admin') || res.message?.toLowerCase().includes('associated');
+                toast({ 
+                    title: isEmailErr ? "Registration Restricted" : "Registration Failed", 
+                    description: res.message, 
+                    status: "error" 
+                });
             }
         }
     };

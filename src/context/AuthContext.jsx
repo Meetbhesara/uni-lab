@@ -7,6 +7,29 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Dynamic daily logout check (12:00 AM reset)
+    useEffect(() => {
+        const checkSessionExpiry = () => {
+            const token = localStorage.getItem('token');
+            const lastLoginStr = localStorage.getItem('lastLoginAt');
+            if (!token || !lastLoginStr) return;
+
+            const lastLogin = new Date(parseInt(lastLoginStr));
+            const todayMidnight = new Date().setHours(0, 0, 0, 0);
+
+            // If last login was before the most recent midnight, logout
+            if (lastLogin.getTime() < todayMidnight) {
+                console.log("Session expired for the day. Automatic logout triggered.");
+                logout();
+            }
+        };
+
+        checkSessionExpiry();
+        // Periodically refresh the check every hour to catch midnight crossovers
+        const interval = setInterval(checkSessionExpiry, 3600000);
+        return () => clearInterval(interval);
+    }, []);
+
     useEffect(() => {
         // Check local storage for token/user on load
         const token = localStorage.getItem('token');
@@ -47,7 +70,9 @@ export const AuthProvider = ({ children }) => {
 
 
 
+            localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(userObj));
+            localStorage.setItem('lastLoginAt', Date.now().toString());
             setUser(userObj);
             return { success: true };
         } catch (error) {
@@ -62,6 +87,7 @@ export const AuthProvider = ({ children }) => {
             const { token, user: userData } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(userData));
+            localStorage.setItem('lastLoginAt', Date.now().toString());
             setUser(userData);
             return { success: true, user: userData };
         } catch (error) {
@@ -75,6 +101,7 @@ export const AuthProvider = ({ children }) => {
             const { token, user: userData } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(userData));
+            localStorage.setItem('lastLoginAt', Date.now().toString());
             setUser(userData);
             return { success: true, user: userData };
         } catch (error) {
@@ -98,6 +125,7 @@ export const AuthProvider = ({ children }) => {
             if (token) {
                 localStorage.setItem('token', token);
                 localStorage.setItem('user', JSON.stringify(userData));
+                localStorage.setItem('lastLoginAt', Date.now().toString());
                 setUser(userData);
             }
             return { success: true, user: userData };
@@ -109,6 +137,7 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('lastLoginAt');
         setUser(null);
     };
 
@@ -136,6 +165,7 @@ export const AuthProvider = ({ children }) => {
             const { token, user: userData } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(userData));
+            localStorage.setItem('lastLoginAt', Date.now().toString());
             setUser(userData);
             return { success: true, user: userData };
         } catch (error) {

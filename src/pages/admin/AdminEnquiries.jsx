@@ -17,6 +17,11 @@ const AdminEnquiries = () => {
     const { isOpen: isStatusConfirmOpen, onOpen: onStatusConfirmOpen, onClose: onStatusConfirmClose } = useDisclosure();
     const [statusConfirmData, setStatusConfirmData] = useState({ id: null, status: '' });
 
+    // Delete Confirmation State
+    const { isOpen: isDeleteConfirmOpen, onOpen: onDeleteConfirmOpen, onClose: onDeleteConfirmClose } = useDisclosure();
+    const [deleteTarget, setDeleteTarget] = useState({ type: '', id: null });
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const getImageUrl = (path) => {
         if (!path) return 'https://via.placeholder.com/150';
         if (path.startsWith('http')) return path;
@@ -150,6 +155,32 @@ const AdminEnquiries = () => {
         } catch (error) {
             console.error("Status update failed", error);
             toast({ title: "Failed to update status", status: "error" });
+        }
+    };
+
+    const handleDeleteRequest = (type, id) => {
+        setDeleteTarget({ type, id });
+        onDeleteConfirmOpen();
+    };
+
+    const confirmDelete = async () => {
+        const { type, id } = deleteTarget;
+        setIsDeleting(true);
+        try {
+            const endpoint = type === 'enquiry' ? `/enquiries/${id}` : `/quotations/${id}`;
+            await api.delete(endpoint);
+            toast({ 
+                title: "Deleted!", 
+                description: `${type.charAt(0).toUpperCase() + type.slice(1)} has been removed.`, 
+                status: "success" 
+            });
+            onDeleteConfirmClose();
+            fetchData();
+        } catch (error) {
+            console.error("Delete failed", error);
+            toast({ title: "Failed to delete", status: "error" });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -680,7 +711,17 @@ const AdminEnquiries = () => {
                                             </Td>
                                             <Td fontWeight="medium">{e.Name}</Td>
                                             <Td>
-                                                <Button size="sm" onClick={() => handleViewEnquiry(e)}>View Details</Button>
+                                                <HStack spacing={2}>
+                                                    <Button size="sm" onClick={() => handleViewEnquiry(e)}>View Details</Button>
+                                                    <IconButton 
+                                                        aria-label="Delete" 
+                                                        icon={<FiTrash />} 
+                                                        size="sm" 
+                                                        colorScheme="red" 
+                                                        variant="ghost" 
+                                                        onClick={() => handleDeleteRequest('enquiry', e._id)}
+                                                    />
+                                                </HStack>
                                             </Td>
                                         </Tr>
                                     ))}
@@ -728,6 +769,14 @@ const AdminEnquiries = () => {
                                                         </Button>
                                                         <Button size="xs" colorScheme="green" onClick={() => handleStatusUpdate(q._id, 'Done')}>Done</Button>
                                                         <Button size="xs" colorScheme="red" onClick={() => handleStatusUpdate(q._id, 'Reject')}>Reject</Button>
+                                                        <IconButton 
+                                                            aria-label="Delete" 
+                                                            icon={<FiTrash />} 
+                                                            size="xs" 
+                                                            colorScheme="red" 
+                                                            variant="ghost" 
+                                                            onClick={() => handleDeleteRequest('quotation', q._id)}
+                                                        />
                                                     </HStack>
                                                 </Td>
                                             </Tr>
@@ -761,11 +810,19 @@ const AdminEnquiries = () => {
                                                 </Td>
                                                 <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status}</Badge></Td>
                                                 <Td>
-                                                    <Button size="sm" variant="outline" mr={2} onClick={() => handleViewQuotation(q)}>View Quote</Button>
-                                                    {q.status === 'Done' && (
-                                                        <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} mr={2} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
-                                                    )}
-                                                </Td>
+                                                        <Button size="sm" variant="outline" mr={2} onClick={() => handleViewQuotation(q)}>View Quote</Button>
+                                                        {q.status === 'Done' && (
+                                                            <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} mr={2} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
+                                                        )}
+                                                        <IconButton 
+                                                            aria-label="Delete" 
+                                                            icon={<FiTrash />} 
+                                                            size="sm" 
+                                                            colorScheme="red" 
+                                                            variant="ghost" 
+                                                            onClick={() => handleDeleteRequest('quotation', q._id)}
+                                                        />
+                                                    </Td>
                                             </Tr>
                                         );
                                     })}
@@ -1245,6 +1302,35 @@ const AdminEnquiries = () => {
                             onClick={confirmStatusUpdate}
                         >
                             Yes, Mark as {statusConfirmData.status}
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* Generic Delete Confirmation Modal */}
+            <Modal isOpen={isDeleteConfirmOpen} onClose={onDeleteConfirmClose} isCentered size="sm">
+                <ModalOverlay backdropFilter="blur(4px)" />
+                <ModalContent borderRadius="2xl" p={2}>
+                    <ModalHeader borderBottomWidth="0px">
+                        Confirm Deletion
+                    </ModalHeader>
+                    <ModalBody>
+                        <Text fontSize="md">
+                            Are you sure you want to delete this <b>{deleteTarget.type}</b>? 
+                            This action is permanent and cannot be undone.
+                        </Text>
+                    </ModalBody>
+                    <ModalFooter borderTopWidth="0px" gap={3}>
+                        <Button variant="ghost" onClick={onDeleteConfirmClose} borderRadius="xl">Cancel</Button>
+                        <Button 
+                            colorScheme="red" 
+                            borderRadius="xl" 
+                            px={8}
+                            isLoading={isDeleting}
+                            loadingText="Deleting..."
+                            onClick={confirmDelete}
+                        >
+                            Delete Forever
                         </Button>
                     </ModalFooter>
                 </ModalContent>
