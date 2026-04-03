@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { DEMO_PRODUCTS, DEMO_ENQUIRIES } from '../../data/mockData';
 
 const AdminDashboard = () => {
-    const { createAdmin } = useAuth();
+    const { user, createAdmin } = useAuth();
     const toast = useToast();
 
     const [stats, setStats] = useState({
@@ -141,63 +141,65 @@ const AdminDashboard = () => {
                 </Stat>
             </SimpleGrid>
 
-            {/* Create Admin Card */}
-            <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="purple.100">
-                <Flex align="center" gap={3} mb={4}>
-                    <Box p={2} bg="purple.100" borderRadius="lg">
-                        <Icon as={FiUserPlus} color="purple.600" w={5} h={5} />
-                    </Box>
-                    <Box>
-                        <Heading fontSize="lg" fontWeight="800" color="purple.700">Create Admin User</Heading>
-                        <Text fontSize="xs" color="gray.500">Add a new admin or promote an existing user. They will login via Email + OTP on WhatsApp.</Text>
-                    </Box>
-                </Flex>
+            {/* Create Admin Card - Restricted to Super Admin (iatulkanak@gmail.com) */}
+            {user?.email === 'iatulkanak@gmail.com' && (
+                <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="purple.100">
+                    <Flex align="center" gap={3} mb={4}>
+                        <Box p={2} bg="purple.100" borderRadius="lg">
+                            <Icon as={FiUserPlus} color="purple.600" w={5} h={5} />
+                        </Box>
+                        <Box>
+                            <Heading fontSize="lg" fontWeight="800" color="purple.700">Create Admin User</Heading>
+                            <Text fontSize="xs" color="gray.500">Add a new admin or promote an existing user. They will login via Email + OTP on WhatsApp.</Text>
+                        </Box>
+                    </Flex>
 
-                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
-                    <FormControl isRequired>
-                        <FormLabel fontSize="sm" fontWeight="700">Full Name</FormLabel>
-                        <Input
-                            placeholder="John Doe"
-                            value={adminForm.name}
-                            onChange={(e) => setAdminForm(p => ({ ...p, name: e.target.value }))}
-                            borderRadius="lg"
-                        />
-                    </FormControl>
-                    <FormControl isRequired>
-                        <FormLabel fontSize="sm" fontWeight="700">Email Address</FormLabel>
-                        <Input
-                            type="email"
-                            placeholder="admin@company.com"
-                            value={adminForm.email}
-                            onChange={(e) => setAdminForm(p => ({ ...p, email: e.target.value }))}
-                            borderRadius="lg"
-                        />
-                    </FormControl>
-                    <FormControl isRequired>
-                        <FormLabel fontSize="sm" fontWeight="700">Phone Number</FormLabel>
-                        <Input
-                            placeholder="9876543210"
-                            value={adminForm.phone}
-                            onChange={(e) => setAdminForm(p => ({ ...p, phone: e.target.value.replace(/\D/g, '') }))}
-                            maxLength={10}
-                            borderRadius="lg"
-                        />
-                    </FormControl>
-                </SimpleGrid>
+                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+                        <FormControl isRequired>
+                            <FormLabel fontSize="sm" fontWeight="700">Full Name</FormLabel>
+                            <Input
+                                placeholder="John Doe"
+                                value={adminForm.name}
+                                onChange={(e) => setAdminForm(p => ({ ...p, name: e.target.value }))}
+                                borderRadius="lg"
+                            />
+                        </FormControl>
+                        <FormControl isRequired>
+                            <FormLabel fontSize="sm" fontWeight="700">Email Address</FormLabel>
+                            <Input
+                                type="email"
+                                placeholder="admin@company.com"
+                                value={adminForm.email}
+                                onChange={(e) => setAdminForm(p => ({ ...p, email: e.target.value }))}
+                                borderRadius="lg"
+                            />
+                        </FormControl>
+                        <FormControl isRequired>
+                            <FormLabel fontSize="sm" fontWeight="700">Phone Number</FormLabel>
+                            <Input
+                                placeholder="9876543210"
+                                value={adminForm.phone}
+                                onChange={(e) => setAdminForm(p => ({ ...p, phone: e.target.value.replace(/\D/g, '') }))}
+                                maxLength={10}
+                                borderRadius="lg"
+                            />
+                        </FormControl>
+                    </SimpleGrid>
 
-                <Button
-                    mt={4}
-                    colorScheme="purple"
-                    leftIcon={<Icon as={FiUserPlus} />}
-                    isLoading={adminLoading}
-                    loadingText="Creating..."
-                    onClick={handleCreateAdmin}
-                    borderRadius="lg"
-                    px={8}
-                >
-                    Create Admin
-                </Button>
-            </Box>
+                    <Button
+                        mt={4}
+                        colorScheme="purple"
+                        leftIcon={<Icon as={FiUserPlus} />}
+                        isLoading={adminLoading}
+                        loadingText="Creating..."
+                        onClick={handleCreateAdmin}
+                        borderRadius="lg"
+                        px={8}
+                    >
+                        Create Admin
+                    </Button>
+                </Box>
+            )}
         </Box>
     );
 };

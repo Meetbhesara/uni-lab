@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid } from '@chakra-ui/react';
+import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure } from '@chakra-ui/react';
 import { FiPlus, FiPrinter, FiTrash, FiDownload } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import api from '../../api/axios';
@@ -12,6 +12,10 @@ const AdminEnquiries = () => {
     const [selectedEnquiry, setSelectedEnquiry] = useState(null);
     const [selectedQuotation, setSelectedQuotation] = useState(null);
     const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
+
+    // Status Confirmation State
+    const { isOpen: isStatusConfirmOpen, onOpen: onStatusConfirmOpen, onClose: onStatusConfirmClose } = useDisclosure();
+    const [statusConfirmData, setStatusConfirmData] = useState({ id: null, status: '' });
 
     const getImageUrl = (path) => {
         if (!path) return 'https://via.placeholder.com/150';
@@ -125,10 +129,23 @@ const AdminEnquiries = () => {
         setCustomNotes("(1) Payment After Performer Invoice\n(2) Transportation And Packing Charge Will be Extra As Per Actual");
     };
 
-    const handleStatusUpdate = async (id, status) => {
+    const handleStatusUpdate = (id, status) => {
+        setStatusConfirmData({ id, status });
+        onStatusConfirmOpen();
+    };
+
+    const confirmStatusUpdate = async () => {
+        const { id, status } = statusConfirmData;
         try {
             await api.put(`/quotations/${id}`, { status });
-            toast({ title: `Quotation marked as ${status}`, status: "success" });
+            toast({ 
+                title: `Success`, 
+                description: `Quotation has been moved to ${status} status.`, 
+                status: "success",
+                duration: 3000,
+                isClosable: true
+            });
+            onStatusConfirmClose();
             fetchData();
         } catch (error) {
             console.error("Status update failed", error);
@@ -1205,8 +1222,34 @@ const AdminEnquiries = () => {
                         <Button onClick={() => setSelectedQuotation(null)}>Close</Button>
                     </ModalFooter>
                 </ModalContent>
-            </Modal >
-        </Box >
+            </Modal>
+            {/* Quotation Status Confirmation Modal */}
+            <Modal isOpen={isStatusConfirmOpen} onClose={onStatusConfirmClose} isCentered size="sm">
+                <ModalOverlay backdropFilter="blur(4px)" />
+                <ModalContent borderRadius="2xl" p={2}>
+                    <ModalHeader borderBottomWidth="0px">
+                        Confirm Action
+                    </ModalHeader>
+                    <ModalBody>
+                        <Text fontSize="md">
+                            Are you sure you want to mark this quotation as <b>{statusConfirmData.status}</b>? 
+                            This will move it to the Processed tab.
+                        </Text>
+                    </ModalBody>
+                    <ModalFooter borderTopWidth="0px" gap={3}>
+                        <Button variant="ghost" onClick={onStatusConfirmClose} borderRadius="xl">Cancel</Button>
+                        <Button 
+                            colorScheme={statusConfirmData.status === 'Done' ? 'green' : 'red'} 
+                            borderRadius="xl" 
+                            px={8}
+                            onClick={confirmStatusUpdate}
+                        >
+                            Yes, Mark as {statusConfirmData.status}
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+        </Box>
     );
 };
 
