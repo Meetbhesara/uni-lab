@@ -5,6 +5,10 @@ import App from './App.jsx'
 import theme from './theme'
 import { AuthProvider } from './context/AuthContext'
 import { CartProvider } from './context/CartContext'
+import { registerSW } from 'virtual:pwa-register'
+
+// Register service worker
+registerSW({ immediate: true })
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
