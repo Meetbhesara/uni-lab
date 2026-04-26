@@ -5,7 +5,9 @@ import Home from "./pages/Home";
 import Products from "./pages/Products";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
-
+import Services from "./pages/Services";
+import EmployeeLogin from "./pages/EmployeeLogin";
+import EmployeeProfile from "./pages/EmployeeProfile";
 
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -25,12 +27,17 @@ function App() {
           <Route path="enquiries" element={<AdminEnquiries />} />
         </Route>
 
+        {/* Employee Portal — standalone (no Layout) */}
+        <Route path="/employee/login" element={<EmployeeLogin />} />
+        <Route path="/employee/profile" element={<EmployeeProfile />} />
+
         {/* Login */}
         <Route path="/login" element={<Layout><Login /></Layout>} />
 
         {/* User Routes */}
         <Route path="/" element={<Layout><Home /></Layout>} />
         <Route path="/products" element={<Layout><Products /></Layout>} />
+        <Route path="/services" element={<Layout><Services /></Layout>} />
         <Route path="/about" element={<Layout><About /></Layout>} />
         <Route path="/contact" element={<Layout><Contact /></Layout>} />
 

@@ -102,8 +102,9 @@ const Header = () => {
                 <Flex display={{ base: 'none', md: 'flex' }} gap={8} align="center">
                     <RouterLink to="/">Home</RouterLink>
                     <RouterLink to="/about">About Us</RouterLink>
-                    <RouterLink to="/products">Products</RouterLink>
-                    <RouterLink to="/contact">Contact</RouterLink>
+                    <RouterLink style={{ color: 'inherit', textDecoration: 'none' }} to="/products">Products</RouterLink>
+                    <RouterLink style={{ color: 'inherit', textDecoration: 'none' }} to="/services">Services</RouterLink>
+                    <RouterLink style={{ color: 'inherit', textDecoration: 'none' }} to="/contact">Contact</RouterLink>
                 </Flex>
 
                 {/* Actions - Desktop */}
@@ -186,6 +187,7 @@ const Header = () => {
                             <MobileNavLink to="/" onClick={toggleNav}>Home</MobileNavLink>
                             <MobileNavLink to="/about" onClick={toggleNav}>About Us</MobileNavLink>
                             <MobileNavLink to="/products" onClick={toggleNav}>Products</MobileNavLink>
+                            <MobileNavLink to="/services" onClick={toggleNav}>Services</MobileNavLink>
                             <MobileNavLink to="/contact" onClick={toggleNav}>Contact</MobileNavLink>
 
                             <Box py={4} px={4}>
