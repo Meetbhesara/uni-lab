@@ -3,13 +3,15 @@ import {
     Box, Container, Heading, Text, SimpleGrid, Icon, Stack, Flex, Button, Card, CardBody,
     Divider, FormControl, FormLabel, Input, VStack, useToast, Image, Badge, HStack, IconButton, Select,
     Tabs, TabList, TabPanels, Tab, TabPanel, Checkbox, Center,
-    Table, Thead, Tbody, Tr, Th, Td, TableContainer, Tag, TagLabel, Wrap, WrapItem
+    Table, Thead, Tbody, Tr, Th, Td, TableContainer, Tag, TagLabel, Wrap, WrapItem, Avatar,
+    Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
+    useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay
 } from '@chakra-ui/react';
-import { 
+import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
     FaUserTie, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope, FaIdCard, FaCamera,
     FaHandshake, FaFingerprint, FaIdBadge, FaMap,
-    FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave
+    FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -135,6 +137,9 @@ const VehicleMasterForm = () => {
     const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [rcFile, setRcFile] = useState(null);
+    const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
+    const cancelRef = React.useRef();
+
     const [formData, setFormData] = useState({
         vehicleNumber: '',
         vehicleName: '',
@@ -144,6 +149,20 @@ const VehicleMasterForm = () => {
         logInName: user?.name || ''
     });
 
+    const [vehicles, setVehicles] = useState([]);
+    const [editId, setEditId] = useState(null);
+
+    const fetchVehicles = async () => {
+        try {
+            const res = await api.get('/vehicle-master');
+            if (res.data.success) setVehicles(res.data.data);
+        } catch (err) { console.error("Failed to fetch vehicles", err); }
+    };
+
+    useEffect(() => {
+        fetchVehicles();
+    }, []);
+
     const formatVehicleNumber = (val) => {
         // Strip all spaces and non-alphanumeric chars
         const raw = val.replace(/\s/g, '').toUpperCase();
@@ -151,7 +170,7 @@ const VehicleMasterForm = () => {
 
         for (let i = 0; i < raw.length && i < 10; i++) {
             const char = raw[i];
-            
+
             // Positions 0-1: Characters only
             if (i < 2) {
                 if (/[A-Z]/.test(char)) formatted += char;
@@ -189,11 +208,48 @@ const VehicleMasterForm = () => {
         setFormData({ ...formData, [name]: value });
     };
     const handleFileChange = (e) => setRcFile(e.target.files[0]);
+
+    const handleVehiclePhotoChange = (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+        setVehiclePhotos(prev => [...prev, ...files]);
+
+        const newPreviews = files.map(file => URL.createObjectURL(file));
+        setVehiclePhotoPreviews(prev => [...prev, ...newPreviews]);
+    };
+
+    const removeVehiclePhoto = (index) => {
+        setVehiclePhotos(prev => prev.filter((_, i) => i !== index));
+        setVehiclePhotoPreviews(prev => prev.filter((_, i) => i !== index));
+    };
+
     const [insuranceFile, setInsuranceFile] = useState(null);
     const [pucFile, setPucFile] = useState(null);
+    const [vehiclePhotos, setVehiclePhotos] = useState([]);
+    const [vehiclePhotoPreviews, setVehiclePhotoPreviews] = useState([]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Strict pattern check (e.g. MH 12 AB 1234)
+        const vNo = formData.vehicleNumber.trim();
+        const vRegex = /^[A-Z]{2}\s\d{2}\s[A-Z]{1,2}\s\d{4}$/;
+
+        if (!vRegex.test(vNo)) {
+            toast({
+                title: 'Format Error',
+                description: 'Vehicle Number must be in MH 12 AB 1234 format',
+                status: 'error',
+                duration: 4000
+            });
+            return;
+        }
+
+        onConfirmOpen();
+    };
+
+    const confirmSubmit = async () => {
+        onConfirmClose();
         setIsLoading(true);
         try {
             const uploadData = new FormData();
@@ -201,15 +257,25 @@ const VehicleMasterForm = () => {
             if (rcFile) uploadData.append('rcBook', rcFile);
             if (insuranceFile) uploadData.append('insurancePhoto', insuranceFile);
             if (pucFile) uploadData.append('pucPhoto', pucFile);
-            
-            const response = await api.post('/vehicle-master', uploadData);
+            vehiclePhotos.forEach(file => uploadData.append('vehiclePhotos', file));
+
+            let response;
+            if (editId) {
+                response = await api.put(`/vehicle-master/${editId}`, uploadData);
+            } else {
+                response = await api.post('/vehicle-master', uploadData);
+            }
 
             if (response.data.success) {
-                toast({ title: "Success", description: "Vehicle record stored successfully", status: "success", duration: 3000 });
+                toast({ title: "Success", description: editId ? "Vehicle record updated successfully" : "Vehicle record stored successfully", status: "success", duration: 3000 });
                 setFormData({ vehicleNumber: '', vehicleName: '', insuranceDate: '', pucDate: '', serviceDate: '', logInName: user?.name || '' });
                 setRcFile(null);
                 setInsuranceFile(null);
                 setPucFile(null);
+                setVehiclePhotos([]);
+                setVehiclePhotoPreviews([]);
+                setEditId(null);
+                fetchVehicles();
             }
         } catch (error) {
             toast({ title: "Error", description: error.response?.data?.message || "Failed to store record", status: "error", duration: 3000 });
@@ -218,12 +284,24 @@ const VehicleMasterForm = () => {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this vehicle record?')) return;
+        try {
+            await api.delete(`/vehicle-master/${id}`);
+            toast({ title: 'Deleted', status: 'info', duration: 2000 });
+            fetchVehicles();
+            if (editId === id) setEditId(null);
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
+        }
+    };
+
     return (
         <Box py={10} bg="gray.100" minH="100vh">
             <Container maxW="container.md">
                 <Card variant="elevated" borderRadius="2xl" boxShadow="2xl" bg="white" overflow="hidden">
                     <Box bg="purple.600" p={8} color="white">
-                        <Heading size="lg">Vehicle Management</Heading>
+                        <Heading size="lg">{editId ? 'Update Vehicle Record' : 'Add Vehicle Record'}</Heading>
                         <Text opacity={0.8} mt={1}>Admin Panel: Manage vehicle compliance and service schedules</Text>
                     </Box>
                     <CardBody p={10}>
@@ -234,13 +312,13 @@ const VehicleMasterForm = () => {
                                         <FormLabel fontWeight="bold">Vehicle Number</FormLabel>
                                         <Box position="relative">
                                             {/* Mask Background (XX NN XX NNNN) */}
-                                            <Box 
-                                                position="absolute" 
-                                                left="16px" 
-                                                top="12.5px" 
-                                                color="gray.300" 
-                                                fontSize="lg" 
-                                                fontFamily="monospace" 
+                                            <Box
+                                                position="absolute"
+                                                left="16px"
+                                                top="12.5px"
+                                                color="gray.300"
+                                                fontSize="lg"
+                                                fontFamily="monospace"
                                                 pointerEvents="none"
                                                 letterSpacing="1px"
                                             >
@@ -248,10 +326,10 @@ const VehicleMasterForm = () => {
                                                     <Text as="span" key={index} opacity={index < formData.vehicleNumber.length ? 0 : 1}>{char}</Text>
                                                 ))}
                                             </Box>
-                                            <Input 
-                                                name="vehicleNumber" 
-                                                placeholder="" 
-                                                value={formData.vehicleNumber} 
+                                            <Input
+                                                name="vehicleNumber"
+                                                placeholder=""
+                                                value={formData.vehicleNumber}
                                                 onChange={handleChange}
                                                 borderRadius="xl"
                                                 size="lg"
@@ -265,38 +343,16 @@ const VehicleMasterForm = () => {
                                     </FormControl>
                                     <FormControl>
                                         <FormLabel fontWeight="bold">Vehicle Name</FormLabel>
-                                        <Input 
-                                            name="vehicleName" 
-                                            placeholder="Enter Vehicle Name (e.g. Tata Tipper)" 
-                                            value={formData.vehicleName} 
+                                        <Input
+                                            name="vehicleName"
+                                            placeholder="Enter Vehicle Name (e.g. Tata Tipper)"
+                                            value={formData.vehicleName}
                                             onChange={handleChange}
                                             borderRadius="xl"
                                             size="lg"
                                         />
                                     </FormControl>
                                 </SimpleGrid>
-
-                                <FormControl>
-                                    <FormLabel fontWeight="bold">RC Book (PDF or Image)</FormLabel>
-                                    <Box 
-                                        p={8} 
-                                        border="2px dashed" 
-                                        borderColor="purple.200" 
-                                        borderRadius="2xl" 
-                                        bg="purple.50"
-                                        textAlign="center"
-                                        cursor="pointer"
-                                        onClick={() => document.getElementById('rc-upload').click()}
-                                        _hover={{ bg: "purple.100", borderColor: "purple.400" }}
-                                    >
-                                        <input type="file" id="rc-upload" hidden onChange={handleFileChange} accept="image/*,.pdf" />
-                                        <Icon as={FaCloudUploadAlt} w={10} h={10} color="purple.500" mb={3} />
-                                        <Text fontWeight="bold" color="purple.700">
-                                            {rcFile ? `Selected: ${rcFile.name}` : "Upload RC Book Photo/PDF"}
-                                        </Text>
-                                    </Box>
-                                </FormControl>
-
                                 <Divider />
 
                                 <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6} w="full">
@@ -314,7 +370,56 @@ const VehicleMasterForm = () => {
                                     </FormControl>
                                 </SimpleGrid>
 
-                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="full">
+                                {/* Multiple Photos Upload for Vehicle */}
+                                <FormControl>
+                                    <FormLabel fontWeight="bold">Multiple Vehicle Photos</FormLabel>
+                                    <Box
+                                        p={6}
+                                        border="2px dashed"
+                                        borderColor="purple.200"
+                                        borderRadius="xl"
+                                        bg="purple.50"
+                                        textAlign="center"
+                                        cursor="pointer"
+                                        onClick={() => document.getElementById('vehicle-photos-upload').click()}
+                                        _hover={{ bg: "purple.100", borderColor: "purple.400" }}
+                                    >
+                                        <input type="file" id="vehicle-photos-upload" hidden multiple onChange={handleVehiclePhotoChange} accept="image/*" />
+                                        <VStack spacing={2}>
+                                            <Icon as={FaCloudUploadAlt} w={8} h={8} color="purple.500" />
+                                            <Text fontSize="sm" fontWeight="bold" color="purple.700">Click to add multiple vehicle photos</Text>
+                                        </VStack>
+                                    </Box>
+                                    {vehiclePhotoPreviews.length > 0 && (
+                                        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mt={4}>
+                                            {vehiclePhotoPreviews.map((src, i) => (
+                                                <Box key={i} position="relative" borderRadius="lg" overflow="hidden" border="1px solid" borderColor="purple.200">
+                                                    <Image src={src} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                                    <IconButton
+                                                        icon={<Icon as={FaTrash} />}
+                                                        size="xs"
+                                                        colorScheme="red"
+                                                        position="absolute"
+                                                        top={1} right={1}
+                                                        onClick={(e) => { e.stopPropagation(); removeVehiclePhoto(i); }}
+                                                    />
+                                                </Box>
+                                            ))}
+                                        </SimpleGrid>
+                                    )}
+                                </FormControl>
+
+                                <Divider />
+
+                                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6} w="full">
+                                    <FormControl>
+                                        <FormLabel fontWeight="bold">RC Book Photo/PDF</FormLabel>
+                                        <Box p={6} border="2px dashed" borderColor="pink.200" borderRadius="xl" bg="pink.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('rc-upload').click()} _hover={{ bg: "pink.100", borderColor: "pink.400" }}>
+                                            <input type="file" id="rc-upload" hidden onChange={handleFileChange} accept="image/*,.pdf" />
+                                            <Icon as={FaCloudUploadAlt} w={8} h={8} color="pink.500" mb={3} />
+                                            <Text fontSize="sm" fontWeight="bold" color="pink.700">{rcFile ? `Selected: ${rcFile.name}` : "Upload RC Book"}</Text>
+                                        </Box>
+                                    </FormControl>
                                     <FormControl>
                                         <FormLabel fontWeight="bold">Insurance Photo/PDF</FormLabel>
                                         <Box p={6} border="2px dashed" borderColor="blue.200" borderRadius="xl" bg="blue.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('ins-upload').click()} _hover={{ bg: "blue.100", borderColor: "blue.400" }}>
@@ -339,24 +444,117 @@ const VehicleMasterForm = () => {
                                     </Text>
                                 </Box>
 
-                                <Button 
-                                    size="lg" 
-                                    colorScheme="purple" 
-                                    w="full" 
-                                    borderRadius="xl" 
+                                <Button
+                                    size="lg"
+                                    colorScheme="purple"
+                                    w="full"
+                                    borderRadius="xl"
                                     h="60px"
                                     type="submit"
                                     leftIcon={<FaTruck />}
                                     isLoading={isLoading}
                                     boxShadow="lg"
                                 >
-                                    Update Vehicle Record
+                                    {editId ? 'Update Vehicle Record' : 'Add Vehicle Record'}
                                 </Button>
+                                {editId && (
+                                    <Button variant="outline" colorScheme="gray" borderRadius="xl" h="60px" w="full" onClick={() => {
+                                        setEditId(null);
+                                        setFormData({ vehicleNumber: '', vehicleName: '', insuranceDate: '', pucDate: '', serviceDate: '', logInName: user?.name || '' });
+                                        setRcFile(null); setInsuranceFile(null); setPucFile(null); setVehiclePhotos([]); setVehiclePhotoPreviews([]);
+                                    }}>
+                                        Cancel Edit
+                                    </Button>
+                                )}
                             </VStack>
                         </form>
+
+                        {/* Vehicle Table View */}
+                        <Box mt={10}>
+                            <Heading size="md" mb={4} color="purple.700" display="flex" alignItems="center">
+                                <Icon as={FaTruck} mr={2} /> Registered Vehicles
+                            </Heading>
+                            <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                <Table variant="simple">
+                                    <Thead bg="purple.50">
+                                        <Tr>
+                                            <Th>Registration</Th>
+                                            <Th>Name</Th>
+                                            <Th>Insurance</Th>
+                                            <Th>PUC</Th>
+                                            <Th textAlign="center">Actions</Th>
+                                        </Tr>
+                                    </Thead>
+                                    <Tbody>
+                                        {vehicles.map(v => (
+                                            <Tr key={v._id} _hover={{ bg: "gray.50" }}>
+                                                <Td fontWeight="bold" color="purple.600">{v.vehicleNumber}</Td>
+                                                <Td>{v.vehicleName}</Td>
+                                                <Td>{v.insuranceDate ? new Date(v.insuranceDate).toLocaleDateString() : '—'}</Td>
+                                                <Td>{v.pucDate ? new Date(v.pucDate).toLocaleDateString() : '—'}</Td>
+                                                <Td textAlign="center">
+                                                    <HStack justify="center">
+                                                        <IconButton
+                                                            aria-label="Edit Vehicle"
+                                                            size="sm"
+                                                            colorScheme="purple"
+                                                            variant="ghost"
+                                                            icon={<Icon as={FaEdit} />}
+                                                            onClick={() => {
+                                                                setEditId(v._id);
+                                                                setFormData({
+                                                                    vehicleNumber: v.vehicleNumber || '',
+                                                                    vehicleName: v.vehicleName || '',
+                                                                    insuranceDate: v.insuranceDate ? v.insuranceDate.substring(0, 10) : '',
+                                                                    pucDate: v.pucDate ? v.pucDate.substring(0, 10) : '',
+                                                                    serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
+                                                                    logInName: v.logInName || user?.name || ''
+                                                                });
+                                                                setRcFile(null); setInsuranceFile(null); setPucFile(null);
+                                                                setVehiclePhotos([]);
+                                                                setVehiclePhotoPreviews(v.photos?.map(p => `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${p.url}`) || []);
+                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                            }}
+                                                        />
+                                                        <IconButton
+                                                            aria-label="Delete Vehicle"
+                                                            size="sm"
+                                                            colorScheme="red"
+                                                            variant="ghost"
+                                                            icon={<Icon as={FaTrash} />}
+                                                            onClick={() => handleDelete(v._id)}
+                                                        />
+                                                    </HStack>
+                                                </Td>
+                                            </Tr>
+                                        ))}
+                                        {vehicles.length === 0 && (
+                                            <Tr>
+                                                <Td colSpan={5} textAlign="center" py={6} color="gray.500">No vehicles found.</Td>
+                                            </Tr>
+                                        )}
+                                    </Tbody>
+                                </Table>
+                            </Box>
+                        </Box>
                     </CardBody>
                 </Card>
             </Container>
+
+            <AlertDialog isOpen={isConfirmOpen} leastDestructiveRef={cancelRef} onClose={onConfirmClose} isCentered>
+                <AlertDialogOverlay>
+                    <AlertDialogContent borderRadius="2xl">
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">Confirm Vehicle Data</AlertDialogHeader>
+                        <AlertDialogBody>
+                            Are you sure you want to {editId ? 'update' : 'save'} the record for vehicle <strong>{formData.vehicleNumber}</strong>?
+                        </AlertDialogBody>
+                        <AlertDialogFooter>
+                            <Button ref={cancelRef} onClick={onConfirmClose} borderRadius="full">Cancel</Button>
+                            <Button colorScheme="purple" onClick={confirmSubmit} ml={3} borderRadius="full" px={10}>Confirm & Save</Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </Box>
     );
 };
@@ -377,6 +575,7 @@ const EmployeeMasterForm = () => {
         bankName: '',
         accountName: '',
         accountNumber: '',
+        confirmAccountNumber: '',
         ifscCode: '',
         salary: '',
         designation: '',
@@ -392,9 +591,14 @@ const EmployeeMasterForm = () => {
     const [sameAsAddress, setSameAsAddress] = useState(false);
     const [bankVerified, setBankVerified] = useState(false);
     const [bankVerifying, setBankVerifying] = useState(false);
-
+    const [accountVerified, setAccountVerified] = useState(false);
+    const [accountVerifying, setAccountVerifying] = useState(false);
     const [employees, setEmployees] = useState([]);
     const [editId, setEditId] = useState('');
+    const [viewEmployee, setViewEmployee] = useState(null);
+    const [viewPos, setViewPos] = useState({ y: 0 });
+    const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
+    const cancelRef = React.useRef();
 
     const fetchNextEmpId = async () => {
         try {
@@ -424,7 +628,7 @@ const EmployeeMasterForm = () => {
                 addressLine1: { street: '', city: '', pincode: '' },
                 addressLine2: { street: '', city: '', pincode: '' },
                 emergencyContact: { name: '', phone: '' },
-                bankName: '', accountName: '', accountNumber: '', ifscCode: '',
+                bankName: '', accountName: '', accountNumber: '', confirmAccountNumber: '', ifscCode: '',
                 salary: '',
                 designation: ''
             });
@@ -449,6 +653,7 @@ const EmployeeMasterForm = () => {
                 bankName: emp.bankDetails?.bankName || '',
                 accountName: emp.bankDetails?.accountName || '',
                 accountNumber: emp.bankDetails?.accountNumber || '',
+                confirmAccountNumber: emp.bankDetails?.accountNumber || '',
                 ifscCode: emp.bankDetails?.ifscCode || '',
                 salary: emp.salary || '',
                 designation: emp.designation || '',
@@ -504,7 +709,9 @@ const EmployeeMasterForm = () => {
             }
         } else {
             setFormData(prev => ({ ...prev, [field]: value }));
-            if (field === 'ifscCode') setBankVerified(false);
+            if (['ifscCode', 'accountNumber', 'confirmAccountNumber'].includes(field)) {
+                setBankVerified(false);
+            }
         }
     };
 
@@ -553,8 +760,37 @@ const EmployeeMasterForm = () => {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this employee record?')) return;
+        try {
+            const res = await api.delete(`/employee-master/${id}`);
+            if (res.data.success) {
+                toast({ title: 'Success', description: 'Employee record deleted', status: 'success', duration: 3000 });
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (!formData.name || !formData.phone || !formData.salary || !formData.accountNumber) {
+            toast({ title: 'Please fill all required fields, including Bank Account', status: 'error', duration: 3000 });
+            return;
+        }
+
+        if (formData.accountNumber !== formData.confirmAccountNumber) {
+            toast({ title: 'Account numbers do not match', status: 'error', duration: 3000 });
+            return;
+        }
+
+        onConfirmOpen();
+    };
+
+    const confirmSubmit = async () => {
+        onConfirmClose();
         setIsLoading(true);
         try {
             const uploadData = new FormData();
@@ -573,7 +809,7 @@ const EmployeeMasterForm = () => {
             }));
             uploadData.append('salary', formData.salary);
             uploadData.append('designation', formData.designation);
-            
+
             Object.keys(files).forEach(key => {
                 if (files[key]) uploadData.append(key, files[key]);
             });
@@ -619,11 +855,11 @@ const EmployeeMasterForm = () => {
     const FileUploadInput = ({ label, field, icon }) => (
         <FormControl>
             <FormLabel fontWeight="bold" fontSize="sm">{label}</FormLabel>
-            <Box 
-                p={4} 
-                border="2px dashed" 
-                borderColor={files[field] ? "green.200" : "blue.100"} 
-                borderRadius="xl" 
+            <Box
+                p={4}
+                border="2px dashed"
+                borderColor={files[field] ? "green.200" : "blue.100"}
+                borderRadius="xl"
                 bg={files[field] ? "green.50" : "blue.50"}
                 textAlign="center"
                 cursor="pointer"
@@ -651,11 +887,11 @@ const EmployeeMasterForm = () => {
                                 <Text opacity={0.8} mt={1}>Admin Panel: Manage company employee records and documents</Text>
                             </Box>
                             <HStack w={{ base: "full", md: "auto" }} spacing={2}>
-                                <Input 
-                                    bg="white" 
-                                    color="gray.800" 
-                                    placeholder="Search ID (e.g. 0001)" 
-                                    size="md" 
+                                <Input
+                                    bg="white"
+                                    color="gray.800"
+                                    placeholder="Search ID (e.g. 0001)"
+                                    size="md"
                                     borderRadius="xl"
                                     w="200px"
                                     onChange={(e) => {
@@ -666,9 +902,9 @@ const EmployeeMasterForm = () => {
                                         }
                                     }}
                                 />
-                                <Button 
-                                    colorScheme="green" 
-                                    leftIcon={<Icon as={FaUsers} />} 
+                                <Button
+                                    colorScheme="green"
+                                    leftIcon={<Icon as={FaUsers} />}
                                     onClick={() => handleSelectEmployee({ target: { value: '' } })}
                                     borderRadius="xl"
                                 >
@@ -876,9 +1112,19 @@ const EmployeeMasterForm = () => {
                                             <FormLabel fontWeight="bold" fontSize="sm">Account Holder Name</FormLabel>
                                             <Input borderRadius="lg" bg="white" placeholder="Name as per bank" value={formData.accountName} onChange={(e) => handleChange(e, 'accountName')} />
                                         </FormControl>
-                                        <FormControl>
+                                    </SimpleGrid>
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
+                                        <FormControl isRequired>
                                             <FormLabel fontWeight="bold" fontSize="sm">Account Number</FormLabel>
-                                            <Input borderRadius="lg" bg="white" placeholder="Bank Account Number" value={formData.accountNumber} onChange={(e) => handleChange(e, 'accountNumber')} type="password" />
+                                            <Input
+                                                borderRadius="lg" bg="white" placeholder="Bank Account Number"
+                                                value={formData.accountNumber} onChange={(e) => handleChange(e, 'accountNumber')}
+                                                type="password"
+                                            />
+                                        </FormControl>
+                                        <FormControl isRequired>
+                                            <FormLabel fontWeight="bold" fontSize="sm">Confirm Account Number</FormLabel>
+                                            <Input borderRadius="lg" bg="white" placeholder="Confirm Account Number" value={formData.confirmAccountNumber} onChange={(e) => handleChange(e, 'confirmAccountNumber')} type="text" />
                                         </FormControl>
                                     </SimpleGrid>
                                 </Box>
@@ -902,11 +1148,11 @@ const EmployeeMasterForm = () => {
                                     </SimpleGrid>
                                 </Box>
 
-                                <Button 
-                                    size="lg" 
-                                    colorScheme="blue" 
-                                    w="full" 
-                                    borderRadius="xl" 
+                                <Button
+                                    size="lg"
+                                    colorScheme="blue"
+                                    w="full"
+                                    borderRadius="xl"
                                     h="60px"
                                     type="submit"
                                     leftIcon={<FaIdBadge />}
@@ -917,6 +1163,203 @@ const EmployeeMasterForm = () => {
                                 </Button>
                             </VStack>
                         </form>
+
+                        {/* Employee Table View */}
+                        <Box mt={10}>
+                            <Heading size="md" mb={4} color="blue.700" display="flex" alignItems="center">
+                                <Icon as={FaUsers} mr={2} /> Registered Employees
+                            </Heading>
+                            <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                <Table variant="simple">
+                                    <Thead bg="gray.50">
+                                        <Tr>
+                                            <Th>Emp ID</Th>
+                                            <Th>Name</Th>
+                                            <Th>Designation</Th>
+                                            <Th>Phone</Th>
+                                            <Th textAlign="center">Actions</Th>
+                                        </Tr>
+                                    </Thead>
+                                    <Tbody>
+                                        {employees.map(emp => (
+                                            <Tr key={emp._id} _hover={{ bg: "gray.50" }}>
+                                                <Td fontWeight="bold" color="blue.600">{emp.empId}</Td>
+                                                <Td>{emp.name}</Td>
+                                                <Td>{emp.designation}</Td>
+                                                <Td>{emp.phone}</Td>
+                                                <Td textAlign="center">
+                                                    <HStack justify="center" spacing={2}>
+                                                        <IconButton
+                                                            aria-label="View Employee"
+                                                            size="sm"
+                                                            colorScheme="teal"
+                                                            variant="ghost"
+                                                            icon={<Icon as={FaEye} />}
+                                                            onClick={(e) => {
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                setViewPos({ y: rect.top });
+                                                                setViewEmployee(emp);
+                                                            }}
+                                                        />
+                                                        <IconButton
+                                                            aria-label="Edit Employee"
+                                                            size="sm"
+                                                            colorScheme="blue"
+                                                            variant="ghost"
+                                                            icon={<Icon as={FaEdit} />}
+                                                            onClick={() => handleSelectEmployee({ target: { value: emp._id } })}
+                                                        />
+                                                        <IconButton
+                                                            aria-label="Delete Employee"
+                                                            size="sm"
+                                                            colorScheme="red"
+                                                            variant="ghost"
+                                                            icon={<Icon as={FaTrash} />}
+                                                            onClick={() => handleDelete(emp._id)}
+                                                        />
+                                                    </HStack>
+                                                </Td>
+                                            </Tr>
+                                        ))}
+                                        {employees.length === 0 && (
+                                            <Tr>
+                                                <Td colSpan={5} textAlign="center" py={6} color="gray.500">No employees found.</Td>
+                                            </Tr>
+                                        )}
+                                    </Tbody>
+                                </Table>
+                            </Box>
+                        </Box>
+                        {/* Perfect Centered Premium Modal View */}
+                        {viewEmployee && (
+                            <Box
+                                position="fixed" top={0} left={0} right={0} bottom={0}
+                                bg="blackAlpha.700" backdropFilter="blur(10px)" zIndex={10000}
+                                display="flex" alignItems="center" justifyContent="center" p={4}
+                                onClick={() => setViewEmployee(null)}
+                            >
+                                <Box
+                                    bg="white" borderRadius="3xl" maxW="850px" w="full" boxShadow="2xl"
+                                    overflow="hidden" onClick={(e) => e.stopPropagation()}
+                                    animation="scaleIn 0.3s ease-out"
+                                >
+                                    <Box bgGradient="linear(to-r, blue.800, cyan.700)" p={6} color="white">
+                                        <HStack justify="space-between">
+                                            <HStack spacing={6}>
+                                                <Avatar size="xl" border="4px solid white" src={viewEmployee.photo?.url ? `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5001' : '')}${viewEmployee.photo.url}` : ''} name={viewEmployee.name} />
+                                                <VStack align="start" spacing={1}>
+                                                    <Heading size="lg">{viewEmployee.name}</Heading>
+                                                    <Badge colorScheme="blue" variant="solid" borderRadius="full" px={3}>{viewEmployee.designation}</Badge>
+                                                    <Text fontSize="xs" opacity={0.8}>{viewEmployee.empId} • Full Employee Profile</Text>
+                                                </VStack>
+                                            </HStack>
+                                            <IconButton aria-label="Close" icon={<Icon as={FaTimes} />} size="md" variant="ghost" color="white" onClick={() => setViewEmployee(null)} />
+                                        </HStack>
+                                    </Box>
+
+                                    <Box p={8}>
+                                        <SimpleGrid columns={3} spacing={10}>
+                                            <VStack align="start" spacing={6}>
+                                                <Box>
+                                                    <Text fontSize="11px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={3}>Personal & Contact</Text>
+                                                    <VStack align="start" spacing={3}>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="gray.500" fontWeight="bold">PHONE</Text>
+                                                            <Text fontSize="sm" fontWeight="bold">{viewEmployee.phone}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="gray.500" fontWeight="bold">EMAIL</Text>
+                                                            <Text fontSize="sm">{viewEmployee.email || 'N/A'}</Text>
+                                                        </Box>
+                                                    </VStack>
+                                                </Box>
+                                                <Box bg="red.50" p={4} borderRadius="2xl" border="1px dashed" borderColor="red.200">
+                                                    <Text fontSize="10px" color="red.600" fontWeight="black">EMERGENCY</Text>
+                                                    <Text fontSize="sm" fontWeight="bold">{viewEmployee.emergencyContact?.name}</Text>
+                                                    <Text fontSize="xs" color="red.700">{viewEmployee.emergencyContact?.phone}</Text>
+                                                </Box>
+                                            </VStack>
+
+                                            <VStack align="start" spacing={6}>
+                                                <Box bg="green.50" p={4} borderRadius="2xl" w="full">
+                                                    <Text fontSize="10px" color="green.600" fontWeight="black">GROSS SALARY (CTC)</Text>
+                                                    <Text fontSize="2xl" fontWeight="black" color="green.800">₹{parseFloat(viewEmployee.salary || 0).toLocaleString()}</Text>
+                                                </Box>
+                                                <Box>
+                                                    <Text fontSize="11px" fontWeight="black" color="orange.500" textTransform="uppercase" mb={3}>Bank Details</Text>
+                                                    <VStack align="start" spacing={2}>
+                                                        <Text fontSize="xs"><strong>Bank:</strong> {viewEmployee.bankDetails?.bankName}</Text>
+                                                        <Text fontSize="xs"><strong>A/C:</strong> {viewEmployee.bankDetails?.accountNumber}</Text>
+                                                        <Text fontSize="xs" color="blue.600" fontWeight="bold">IFSC: {viewEmployee.bankDetails?.ifscCode}</Text>
+                                                    </VStack>
+                                                </Box>
+                                            </VStack>
+
+                                            <VStack align="start" spacing={6}>
+                                                <Box>
+                                                    <Text fontSize="11px" fontWeight="black" color="cyan.500" textTransform="uppercase" mb={3}>Address Info</Text>
+                                                    <Text fontSize="xs" lineHeight="1.6" color="gray.600">
+                                                        <strong>Current:</strong><br />
+                                                        {viewEmployee.addressLine1?.street}, {viewEmployee.addressLine1?.city}<br />
+                                                        <strong>Permanent:</strong><br />
+                                                        {viewEmployee.addressLine2?.street || 'Same'}, {viewEmployee.addressLine2?.city}
+                                                    </Text>
+                                                </Box>
+                                                <Box>
+                                                    <Text fontSize="11px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={3}>Documents</Text>
+                                                    <Wrap spacing={2}>
+                                                        {['aadharCard', 'panCard', 'voterId', 'drivingLicense'].map(field => (
+                                                            viewEmployee[field]?.url && (
+                                                                <Button
+                                                                    key={field} as="a" target="_blank" size="xs" colorScheme="purple" variant="subtle"
+                                                                    href={`${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5001' : '')}${viewEmployee[field].url}`}
+                                                                    leftIcon={<Icon as={FaFileAlt} />}
+                                                                >
+                                                                    {field.replace('Card', '').replace('Id', ' ID').toUpperCase()}
+                                                                </Button>
+                                                            )
+                                                        ))}
+                                                    </Wrap>
+                                                </Box>
+                                            </VStack>
+                                        </SimpleGrid>
+                                    </Box>
+                                    <Box p={5} bg="gray.50" textAlign="right">
+                                        <Button colorScheme="blue" px={10} borderRadius="full" shadow="lg" onClick={() => setViewEmployee(null)}>Close Window</Button>
+                                    </Box>
+                                </Box>
+                            </Box>
+                        )}
+
+                        {/* Mandatory Submission Confirmation */}
+                        <AlertDialog
+                            isOpen={isConfirmOpen}
+                            leastDestructiveRef={cancelRef}
+                            onClose={onConfirmClose}
+                            isCentered
+                        >
+                            <AlertDialogOverlay>
+                                <AlertDialogContent borderRadius="2xl" mx={4}>
+                                    <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                                        Confirm Employee Registration
+                                    </AlertDialogHeader>
+                                    <AlertDialogBody>
+                                        Are you sure you want to {editId ? 'update' : 'register'} <strong>{formData.name}</strong>?
+                                        <br /><br />
+                                        Please ensure the <strong>Account Number</strong> and <strong>IFSC Code</strong> are correct as these cannot be easily changed later.
+                                    </AlertDialogBody>
+                                    <AlertDialogFooter>
+                                        <Button ref={cancelRef} onClick={onConfirmClose} borderRadius="full">
+                                            Go Back
+                                        </Button>
+                                        <Button colorScheme="blue" onClick={confirmSubmit} ml={3} borderRadius="full" px={10} shadow="md">
+                                            Confirm & Save
+                                        </Button>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialogOverlay>
+                        </AlertDialog>
+
                     </CardBody>
                 </Card>
             </Container>
@@ -930,6 +1373,9 @@ const ClientMasterForm = () => {
     const [nextId, setNextId] = useState('');
     const [clients, setClients] = useState([]);
     const [editId, setEditId] = useState('');
+    const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
+    const cancelRef = React.useRef();
+
     const [formData, setFormData] = useState({
         clientName: '',
         email: '',
@@ -989,6 +1435,22 @@ const ClientMasterForm = () => {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this client record?')) return;
+        try {
+            await api.delete(`/client-master/${id}`);
+            toast({ title: 'Deleted', status: 'info', duration: 2000 });
+            fetchClients();
+            if (editId === id) {
+                setEditId('');
+                setFormData({ clientName: '', email: '', contactPersonName: '', contactPersonPhone: '', panCard: '', clientAddress: '', gstNo: '', msmeNo: '' });
+                fetchNextId();
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
+        }
+    };
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -1000,6 +1462,11 @@ const ClientMasterForm = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        onConfirmOpen();
+    };
+
+    const confirmSubmit = async () => {
+        onConfirmClose();
         setIsLoading(true);
         try {
             const uploadData = new FormData();
@@ -1035,8 +1502,8 @@ const ClientMasterForm = () => {
     const FileUpload = ({ label, field, icon }) => (
         <FormControl>
             <FormLabel fontWeight="bold" fontSize="sm">{label}</FormLabel>
-            <Box 
-                p={4} border="2px dashed" borderColor={files[field] ? "green.200" : "orange.100"} 
+            <Box
+                p={4} border="2px dashed" borderColor={files[field] ? "green.200" : "orange.100"}
                 borderRadius="xl" bg={files[field] ? "green.50" : "orange.50"} textAlign="center" cursor="pointer"
                 onClick={() => document.getElementById(`${field}-client-upload`).click()}
                 _hover={{ bg: "orange.100", borderColor: "orange.300" }}
@@ -1060,11 +1527,21 @@ const ClientMasterForm = () => {
                                 <Heading size="lg">{editId ? 'Edit Client' : 'Client Management'}</Heading>
                                 <Text opacity={0.8} mt={1}>Admin Panel: Manage corporate clients and statutory registration details</Text>
                             </Box>
-                            <Box w={{ base: "full", md: "300px" }}>
+                            <HStack w={{ base: "full", md: "400px" }} spacing={2}>
                                 <Select bg="white" color="gray.800" placeholder="-- Create New Client --" value={editId} onChange={handleSelectClient} size="md" borderRadius="xl">
                                     {clients.map(c => <option key={c._id} value={c._id}>{c.clientId || 'N/A'} - {c.clientName}</option>)}
                                 </Select>
-                            </Box>
+                                {editId && (
+                                    <IconButton
+                                        aria-label="Delete Client"
+                                        icon={<Icon as={FaTrash} />}
+                                        colorScheme="red"
+                                        variant="solid"
+                                        onClick={() => handleDelete(editId)}
+                                        borderRadius="xl"
+                                    />
+                                )}
+                            </HStack>
                         </Flex>
                     </Box>
                     <CardBody p={{ base: 5, md: 10 }}>
@@ -1078,13 +1555,13 @@ const ClientMasterForm = () => {
                                     </HStack>
                                 </FormControl>
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
-                                <FormControl>
-                                    <FormLabel fontWeight="bold" fontSize="sm">Reference No (Auto Generated)</FormLabel>
-                                    <HStack bg="gray.50" p={1} borderRadius="xl" border="1px dashed" borderColor="gray.300">
-                                        <Icon as={FaFingerprint} ml={2} color="orange.500" />
-                                        <Input variant="unstyled" p={2} value={nextId || 'Generating...'} isReadOnly color="orange.700" fontWeight="bold" />
-                                    </HStack>
-                                </FormControl>
+                                    <FormControl>
+                                        <FormLabel fontWeight="bold" fontSize="sm">Reference No (Auto Generated)</FormLabel>
+                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px dashed" borderColor="gray.300">
+                                            <Icon as={FaFingerprint} ml={2} color="orange.500" />
+                                            <Input variant="unstyled" p={2} value={nextId || 'Generating...'} isReadOnly color="orange.700" fontWeight="bold" />
+                                        </HStack>
+                                    </FormControl>
                                 </SimpleGrid>
 
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={5}>
@@ -1151,7 +1628,7 @@ const ClientMasterForm = () => {
                                     </SimpleGrid>
                                 </Box>
 
-                                <Button 
+                                <Button
                                     size="lg" colorScheme="orange" w="full" borderRadius="xl" h="60px"
                                     type="submit" leftIcon={<FaHandshake />} isLoading={isLoading} boxShadow="lg" mt={4}
                                 >
@@ -1162,6 +1639,21 @@ const ClientMasterForm = () => {
                     </CardBody>
                 </Card>
             </Container>
+
+            <AlertDialog isOpen={isConfirmOpen} leastDestructiveRef={cancelRef} onClose={onConfirmClose} isCentered>
+                <AlertDialogOverlay>
+                    <AlertDialogContent borderRadius="2xl">
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">Confirm Client Record</AlertDialogHeader>
+                        <AlertDialogBody>
+                            Are you sure you want to {editId ? 'update' : 'save'} <strong>{formData.clientName}</strong>?
+                        </AlertDialogBody>
+                        <AlertDialogFooter>
+                            <Button ref={cancelRef} onClick={onConfirmClose} borderRadius="full">Cancel</Button>
+                            <Button colorScheme="orange" onClick={confirmSubmit} ml={3} borderRadius="full" px={8}>Confirm & Save</Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </Box>
     );
 };
@@ -1173,7 +1665,7 @@ const SiteMasterForm = () => {
     const [employees, setEmployees] = useState([]);
     const [ledgers, setLedgers] = useState([]);
     const [ledgerSites, setLedgerSites] = useState([]);
-    
+
     const [formData, setFormData] = useState({
         client: '',
         siteName: '',
@@ -1324,14 +1816,14 @@ const SiteMasterForm = () => {
                                         <FormLabel fontWeight="bold">Site Ledger (Category)</FormLabel>
                                         <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
                                             <Icon as={FaFileInvoiceDollar} ml={3} color="teal.500" />
-                                            <Input 
-                                                name="ledger" 
-                                                list="site-ledgers" 
-                                                variant="unstyled" 
-                                                p={2} 
-                                                placeholder="Select or Create Ledger" 
-                                                value={formData.ledger} 
-                                                onChange={handleChange} 
+                                            <Input
+                                                name="ledger"
+                                                list="site-ledgers"
+                                                variant="unstyled"
+                                                p={2}
+                                                placeholder="Select or Create Ledger"
+                                                value={formData.ledger}
+                                                onChange={handleChange}
                                             />
                                             <datalist id="site-ledgers">
                                                 {ledgers.map((l, i) => <option key={i} value={l} />)}
@@ -1443,8 +1935,8 @@ const SiteMasterForm = () => {
 
                                 <FormControl>
                                     <FormLabel fontWeight="bold">Site Documents (Maps / Permits)</FormLabel>
-                                    <Box 
-                                        p={6} border="2px dashed" borderColor="teal.100" 
+                                    <Box
+                                        p={6} border="2px dashed" borderColor="teal.100"
                                         borderRadius="xl" bg="teal.50" textAlign="center" cursor="pointer"
                                         onClick={() => document.getElementById('site-docs-upload').click()}
                                         _hover={{ bg: "teal.100", borderColor: "teal.300" }}
@@ -1457,7 +1949,7 @@ const SiteMasterForm = () => {
                                     </Box>
                                 </FormControl>
 
-                                <Button 
+                                <Button
                                     size="lg" colorScheme="teal" w="full" borderRadius="xl" h="60px"
                                     type="submit" leftIcon={<FaMap />} isLoading={isLoading} boxShadow="lg" mt={2}
                                 >
@@ -1574,7 +2066,7 @@ const ScheduleMasterForm = () => {
         if (loadedOperatives.length === 0 && schedule.operativeName) {
             loadedOperatives.push(schedule.operativeName._id || schedule.operativeName);
         }
-        
+
         setFormData({
             client: schedule.client?._id || '',
             site: schedule.site?._id || '',
@@ -1942,8 +2434,11 @@ const InstrumentMasterForm = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [instruments, setInstruments] = useState([]);
     const [editId, setEditId] = useState(null);
-    const [photoFile, setPhotoFile] = useState(null);
-    const [photoPreview, setPhotoPreview] = useState(null);
+    const [photoFiles, setPhotoFiles] = useState([]);
+    const [photoPreviews, setPhotoPreviews] = useState([]);
+    const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
+    const cancelRef = React.useRef();
+
     const [formData, setFormData] = useState({ refNo: '', instrumentName: '', notes: '' });
 
     const fetchInstruments = async () => {
@@ -1961,36 +2456,48 @@ const InstrumentMasterForm = () => {
     };
 
     const handlePhotoChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        setPhotoFile(file);
-        setPhotoPreview(URL.createObjectURL(file));
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+        setPhotoFiles(prev => [...prev, ...files]);
+
+        const newPreviews = files.map(file => URL.createObjectURL(file));
+        setPhotoPreviews(prev => [...prev, ...newPreviews]);
+    };
+
+    const removePhoto = (index) => {
+        setPhotoFiles(prev => prev.filter((_, i) => i !== index));
+        setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleEdit = (inst) => {
         setEditId(inst._id);
         setFormData({ refNo: inst.refNo, instrumentName: inst.instrumentName, notes: inst.notes || '' });
-        setPhotoPreview(inst.photo?.url ? `http://localhost:5001${inst.photo.url}` : null);
-        setPhotoFile(null);
+        setPhotoPreviews(inst.photos?.map(p => `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${p.url}`) || (inst.photo?.url ? [`${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${inst.photo.url}`] : []));
+        setPhotoFiles([]);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleClear = () => {
         setEditId(null);
         setFormData({ refNo: '', instrumentName: '', notes: '' });
-        setPhotoFile(null);
-        setPhotoPreview(null);
+        setPhotoFiles([]);
+        setPhotoPreviews(inst.photos?.map(p => `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${p.url}`) || (inst.photo?.url ? [`${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${inst.photo.url}`] : []));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        onConfirmOpen();
+    };
+
+    const confirmSubmit = async () => {
+        onConfirmClose();
         setIsLoading(true);
         try {
             const uploadData = new FormData();
             uploadData.append('refNo', formData.refNo);
             uploadData.append('instrumentName', formData.instrumentName);
             if (formData.notes) uploadData.append('notes', formData.notes);
-            if (photoFile) uploadData.append('photo', photoFile);
+            photoFiles.forEach(file => uploadData.append('photos', file));
 
             let response;
             if (editId) {
@@ -2052,48 +2559,48 @@ const InstrumentMasterForm = () => {
                                     </FormControl>
                                 </SimpleGrid>
 
-                                {/* Photo Upload — updates live on selection and when editing */}
+                                {/* Multiple Photos Upload */}
                                 <FormControl>
                                     <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                        📷 Instrument Photo <Text as="span" color="gray.400" fontWeight="normal">(optional)</Text>
+                                        📷 Instrument Photos <Text as="span" color="gray.400" fontWeight="normal">(optional)</Text>
                                     </FormLabel>
                                     <Box
                                         border="2px dashed"
-                                        borderColor={photoPreview ? 'blue.300' : 'gray.200'}
+                                        borderColor="blue.300"
                                         borderRadius="2xl"
                                         p={5}
-                                        bg={photoPreview ? 'blue.50' : 'gray.50'}
+                                        bg="blue.50"
                                         cursor="pointer"
                                         onClick={() => document.getElementById('instr-photo-upload').click()}
-                                        _hover={{ borderColor: 'blue.400', bg: 'blue.50' }}
+                                        _hover={{ bg: 'blue.100', borderColor: 'blue.400' }}
                                         transition="all 0.2s"
                                         textAlign="center"
                                     >
-                                        <input type="file" id="instr-photo-upload" hidden accept="image/*" onChange={handlePhotoChange} />
-                                        {photoPreview ? (
-                                            <Box>
-                                                <Image
-                                                    src={photoPreview}
-                                                    alt="Preview"
-                                                    maxH="220px"
-                                                    mx="auto"
-                                                    borderRadius="xl"
-                                                    objectFit="cover"
-                                                    boxShadow="md"
-                                                />
-                                                <HStack justify="center" mt={3} spacing={1}>
-                                                    <Icon as={FaCamera} color="blue.500" w={3} h={3} />
-                                                    <Text fontSize="xs" color="blue.600" fontWeight="bold">Click to change photo</Text>
-                                                </HStack>
-                                            </Box>
-                                        ) : (
-                                            <Box py={8}>
-                                                <Icon as={FaCamera} w={10} h={10} color="gray.300" />
-                                                <Text fontSize="sm" color="gray.400" mt={3}>Click to upload instrument photo</Text>
-                                                <Text fontSize="xs" color="gray.300" mt={1}>JPG, PNG — up to 5MB</Text>
-                                            </Box>
-                                        )}
+                                        <input type="file" id="instr-photo-upload" hidden multiple onChange={handlePhotoChange} accept="image/*" />
+                                        <VStack spacing={2}>
+                                            <Icon as={FaCloudUploadAlt} w={8} h={8} color="blue.400" />
+                                            <Text fontSize="sm" fontWeight="bold" color="blue.700">Click to add multiple photos</Text>
+                                        </VStack>
                                     </Box>
+
+                                    {photoPreviews && photoPreviews.length > 0 && (
+                                        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mt={4}>
+                                            {photoPreviews.map((src, i) => (
+                                                <Box key={i} position="relative" borderRadius="lg" overflow="hidden" border="1px solid" borderColor="blue.200">
+                                                    <Image src={src} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                                    <IconButton
+                                                        aria-label="Remove Photo"
+                                                        icon={<Icon as={FaTrash} />}
+                                                        size="xs"
+                                                        colorScheme="red"
+                                                        position="absolute"
+                                                        top={1} right={1}
+                                                        onClick={(e) => { e.stopPropagation(); removePhoto(i); }}
+                                                    />
+                                                </Box>
+                                            ))}
+                                        </SimpleGrid>
+                                    )}
                                 </FormControl>
 
                                 <FormControl>
@@ -2131,7 +2638,65 @@ const InstrumentMasterForm = () => {
                         </form>
                     </CardBody>
                 </Card>
+
+                {/* Instrument Table List */}
+                <Box mt={10}>
+                    <Heading size="md" mb={4} color="blue.700" display="flex" alignItems="center">
+                        <Icon as={FaWrench} mr={2} /> Registered Instruments
+                    </Heading>
+                    <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                        <Table variant="simple">
+                            <Thead bg="gray.50">
+                                <Tr>
+                                    <Th>Ref No</Th>
+                                    <Th>Instrument Name</Th>
+                                    <Th textAlign="center">Actions</Th>
+                                </Tr>
+                            </Thead>
+                            <Tbody>
+                                {instruments.map(inst => (
+                                    <Tr key={inst._id} _hover={{ bg: "gray.50" }}>
+                                        <Td fontWeight="bold" color="blue.600">{inst.refNo}</Td>
+                                        <Td>{inst.instrumentName}</Td>
+                                        <Td textAlign="center">
+                                            <HStack justify="center" spacing={2}>
+                                                <IconButton
+                                                    aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />}
+                                                    onClick={() => handleEdit(inst)}
+                                                />
+                                                <IconButton
+                                                    aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />}
+                                                    onClick={() => handleDelete(inst._id)}
+                                                />
+                                            </HStack>
+                                        </Td>
+                                    </Tr>
+                                ))}
+                                {instruments.length === 0 && (
+                                    <Tr>
+                                        <Td colSpan={3} textAlign="center" py={6} color="gray.500">No instruments found.</Td>
+                                    </Tr>
+                                )}
+                            </Tbody>
+                        </Table>
+                    </Box>
+                </Box>
             </Container>
+
+            <AlertDialog isOpen={isConfirmOpen} leastDestructiveRef={cancelRef} onClose={onConfirmClose} isCentered>
+                <AlertDialogOverlay>
+                    <AlertDialogContent borderRadius="2xl">
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">Confirm Instrument Resource</AlertDialogHeader>
+                        <AlertDialogBody>
+                            Are you sure you want to {editId ? 'update' : 'save'} <strong>{formData.instrumentName}</strong>?
+                        </AlertDialogBody>
+                        <AlertDialogFooter>
+                            <Button ref={cancelRef} onClick={onConfirmClose} borderRadius="full">Cancel</Button>
+                            <Button colorScheme="blue" onClick={confirmSubmit} ml={3} borderRadius="full" px={8}>Confirm & Save</Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </Box>
     );
 };
@@ -2139,7 +2704,7 @@ const InstrumentMasterForm = () => {
 const ExpenseReportsTab = () => {
     const [employees, setEmployees] = useState([]);
     const [selectedId, setSelectedId] = useState('');
-    
+
     useEffect(() => {
         const fetchEmp = async () => {
             try {
@@ -2164,7 +2729,7 @@ const ExpenseReportsTab = () => {
                     </FormControl>
                 </CardBody>
             </Card>
-            
+
             {selectedId ? (
                 <AdminEmployeeExpenses employeeId={selectedId} employeeName={selectedName} />
             ) : (
