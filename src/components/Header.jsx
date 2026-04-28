@@ -3,7 +3,7 @@ import {
     Box, Flex, Text, Button, Stack, useDisclosure,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton,
     Drawer, DrawerBody, DrawerFooter, DrawerHeader, DrawerOverlay, DrawerContent, DrawerCloseButton,
-    FormControl, FormLabel, Input, useToast, Image, IconButton
+    FormControl, FormLabel, Input, useToast, Image, IconButton, Divider, VStack
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -240,16 +240,19 @@ const Header = () => {
 };
 
 const AuthModal = ({ isOpen, onClose }) => {
-    const { sendAdminOtp, verifyAdminOtp } = useAuth();
+    const { sendAdminOtp, verifyAdminOtp, setup2FA, verifyEnable2FA, login2FA } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
-    const [step, setStep] = React.useState('email'); // 'email' | 'otp'
+    const [step, setStep] = React.useState('email'); // 'email' | 'otp' | 'mfa' | 'mfa-setup'
     const [isLoading, setIsLoading] = React.useState(false);
     const [email, setEmail] = React.useState('');
     const [otp, setOtp] = React.useState('');
+    const [mfaCode, setMfaCode] = React.useState('');
+    const [qrCode, setQrCode] = React.useState('');
+    const [is2FAEnabled, setIs2FAEnabled] = React.useState(false);
 
     const resetAndClose = () => {
-        setStep('email'); setEmail(''); setOtp('');
+        setStep('email'); setEmail(''); setOtp(''); setMfaCode(''); setQrCode('');
         onClose();
     };
 
@@ -262,11 +265,12 @@ const AuthModal = ({ isOpen, onClose }) => {
         setIsLoading(false);
 
         if (res.success) {
-            toast({ 
-                title: '✅ OTP Sent!', 
-                description: res.msg || 'Check your WhatsApp for the 4-digit code.', 
+            setIs2FAEnabled(res.is2FAEnabled);
+            toast({
+                title: '✅ OTP Sent!',
+                description: res.msg || 'Check your WhatsApp for the code.',
                 status: 'success',
-                duration: res.msg?.includes('Dev Mode') ? 6000 : 3000
+                duration: 3000
             });
             setStep('otp');
         } else {
@@ -292,15 +296,60 @@ const AuthModal = ({ isOpen, onClose }) => {
         }
     };
 
+    const handleMfaLogin = async () => {
+        if (!/^\d{6}$/.test(mfaCode)) {
+            return toast({ title: 'Enter 6-digit code', status: 'error' });
+        }
+        setIsLoading(true);
+        const res = await login2FA(email, mfaCode);
+        setIsLoading(false);
+
+        if (res.success) {
+            toast({ title: 'Authenticated!', status: 'success' });
+            resetAndClose();
+            navigate('/admin/dashboard');
+        } else {
+            toast({ title: 'Invalid Code', description: res.message, status: 'error' });
+        }
+    };
+
+    const handleStartMfaSetup = async () => {
+        setIsLoading(true);
+        const res = await setup2FA(email);
+        setIsLoading(false);
+        if (res.success) {
+            setQrCode(res.qrCode);
+            setStep('mfa-setup');
+        } else {
+            toast({ title: 'Error', description: res.message, status: 'error' });
+        }
+    };
+
+    const handleCompleteMfaSetup = async () => {
+        if (!/^\d{6}$/.test(mfaCode)) {
+            return toast({ title: 'Enter 6-digit code from app', status: 'error' });
+        }
+        setIsLoading(true);
+        const res = await verifyEnable2FA(email, mfaCode);
+        setIsLoading(false);
+        if (res.success) {
+            toast({ title: 'Google Authenticator Enabled!', status: 'success' });
+            setStep('mfa');
+        } else {
+            toast({ title: 'Verification Failed', description: res.message, status: 'error' });
+        }
+    };
     return (
         <Modal isOpen={isOpen} onClose={resetAndClose} isCentered size="sm">
             <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.400" />
             <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
-                {/* Header bar */}
                 <Box bg="blue.700" px={6} py={4}>
                     <Text fontWeight="800" color="white" fontSize="lg">🔐 Admin Login</Text>
                     <Text fontSize="xs" color="blue.200" mt={1}>
-                        {step === 'email' ? 'Enter your admin email to receive an OTP on WhatsApp.' : `Enter the OTP sent to your phone for ${email}`}
+                        {step === 'email' && 'Enter your admin email to continue.'}
+                        {step === 'otp' && `Enter the WhatsApp OTP sent for ${email}`}
+                        {step === 'mfa' && 'Enter the 6-digit code from Google Authenticator.'}
+                        {step === 'mfa-setup' && 'Scan this QR code with Google Authenticator app.'}
                     </Text>
                 </Box>
                 <ModalCloseButton color="white" top={3} right={3} />
@@ -309,67 +358,100 @@ const AuthModal = ({ isOpen, onClose }) => {
                     {step === 'email' && (
                         <Stack spacing={4}>
                             <FormControl isRequired>
-                                <FormLabel fontSize="sm" fontWeight="700" color="gray.700">Admin Email</FormLabel>
+                                <FormLabel fontSize="sm" fontWeight="700">Admin Email</FormLabel>
                                 <Input
                                     type="email"
                                     placeholder="admin@uniqueengineering.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
-                                    size="lg"
-                                    borderRadius="xl"
-                                    focusBorderColor="blue.500"
+                                    size="lg" borderRadius="xl"
                                 />
                             </FormControl>
-                            <Button
-                                colorScheme="blue" w="full" size="lg" borderRadius="xl"
-                                isLoading={isLoading} loadingText="Checking..."
-                                onClick={handleSendOtp}
-                            >
-                                Send OTP
+                            <Button colorScheme="blue" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleSendOtp}>
+                                Next
                             </Button>
                         </Stack>
                     )}
 
                     {step === 'otp' && (
                         <Stack spacing={4}>
-                            <Box p={3} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.100">
-                                <Text fontSize="xs" color="blue.700" fontWeight="700">OTP sent to WhatsApp</Text>
-                                <Text fontSize="xs" color="gray.600" mt={0.5}>Check the WhatsApp linked to your admin account. (OTP also in backend console if WhatsApp offline)</Text>
-                            </Box>
                             <FormControl isRequired>
-                                <FormLabel fontSize="sm" fontWeight="700" color="gray.700">4-Digit OTP</FormLabel>
+                                <FormLabel fontSize="sm" fontWeight="700">WhatsApp OTP</FormLabel>
                                 <Input
                                     placeholder="• • • •"
                                     maxLength={4}
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
-                                    letterSpacing="0.5em"
-                                    fontSize="2xl"
-                                    textAlign="center"
-                                    size="lg"
-                                    borderRadius="xl"
-                                    focusBorderColor="green.500"
+                                    textAlign="center" fontSize="2xl" letterSpacing="0.5em"
+                                    size="lg" borderRadius="xl"
                                 />
                             </FormControl>
-                            <Button
-                                colorScheme="green" w="full" size="lg" borderRadius="xl"
-                                isLoading={isLoading} loadingText="Verifying..."
-                                onClick={handleVerifyOtp}
-                            >
-                                Verify & Enter Panel
+                            <Button colorScheme="green" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleVerifyOtp}>
+                                Verify WhatsApp OTP
                             </Button>
-                            <Button variant="ghost" size="sm" colorScheme="blue" onClick={() => { setStep('email'); setOtp(''); }}>
-                                ← Use different email
-                            </Button>
+                            
+                            <Divider />
+                            
+                            {is2FAEnabled ? (
+                                <Button variant="outline" colorScheme="orange" size="sm" onClick={() => setStep('mfa')}>
+                                    Use Google Authenticator instead
+                                </Button>
+                            ) : (
+                                <Button variant="ghost" colorScheme="blue" size="sm" onClick={handleStartMfaSetup}>
+                                    Setup Google Authenticator
+                                </Button>
+                            )}
+                            
+                            <Button variant="link" size="xs" onClick={() => setStep('email')}>← Back</Button>
                         </Stack>
+                    )}
+
+                    {step === 'mfa' && (
+                        <Stack spacing={4}>
+                            <FormControl isRequired>
+                                <FormLabel fontSize="sm" fontWeight="700">Authenticator Code</FormLabel>
+                                <Input
+                                    placeholder="000000"
+                                    maxLength={6}
+                                    value={mfaCode}
+                                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                                    textAlign="center" fontSize="2xl" letterSpacing="0.2em"
+                                    size="lg" borderRadius="xl"
+                                />
+                            </FormControl>
+                            <Button colorScheme="orange" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleMfaLogin}>
+                                Verify & Login
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setStep('otp')}>Use WhatsApp OTP instead</Button>
+                        </Stack>
+                    )}
+
+                    {step === 'mfa-setup' && (
+                        <VStack spacing={4}>
+                            <Box border="4px solid" borderColor="gray.100" p={2} borderRadius="lg">
+                                <Image src={qrCode} alt="MFA QR Code" />
+                            </Box>
+                            <Text fontSize="xs" textAlign="center" color="gray.600">
+                                Scan this with Google Authenticator, then enter the 6-digit code below to enable.
+                            </Text>
+                            <Input
+                                placeholder="000000"
+                                maxLength={6}
+                                value={mfaCode}
+                                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                                textAlign="center" size="lg" borderRadius="xl"
+                            />
+                            <Button colorScheme="blue" w="full" onClick={handleCompleteMfaSetup} isLoading={isLoading}>
+                                Confirm & Enable
+                            </Button>
+                            <Button variant="ghost" size="xs" onClick={() => setStep('otp')}>Cancel Setup</Button>
+                        </VStack>
                     )}
                 </Box>
             </ModalContent>
         </Modal>
     );
-}
+};
 
 // Helper for images
 const getImageUrl = (path) => {
@@ -600,10 +682,10 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             } else {
                 setIsSending(false);
                 const isEmailErr = res.message?.toLowerCase().includes('admin') || res.message?.toLowerCase().includes('associated');
-                toast({ 
-                    title: isEmailErr ? "Registration Restricted" : "Registration Failed", 
-                    description: res.message, 
-                    status: "error" 
+                toast({
+                    title: isEmailErr ? "Registration Restricted" : "Registration Failed",
+                    description: res.message,
+                    status: "error"
                 });
             }
         }

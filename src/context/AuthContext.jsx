@@ -182,8 +182,40 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const setup2FA = async (email) => {
+        try {
+            const response = await api.post('/auth/setup-2fa', { email });
+            return { success: true, ...response.data };
+        } catch (error) {
+            return { success: false, message: error.response?.data?.msg || 'Failed to setup 2FA' };
+        }
+    };
+
+    const verifyEnable2FA = async (email, token) => {
+        try {
+            const response = await api.post('/auth/verify-enable-2fa', { email, token });
+            return { success: true, ...response.data };
+        } catch (error) {
+            return { success: false, message: error.response?.data?.msg || 'Verification failed' };
+        }
+    };
+
+    const login2FA = async (email, token) => {
+        try {
+            const response = await api.post('/auth/login-2fa', { email, token });
+            const { token: authToken, user: userData } = response.data;
+            localStorage.setItem('token', authToken);
+            localStorage.setItem('user', JSON.stringify(userData));
+            localStorage.setItem('lastLoginAt', Date.now().toString());
+            setUser(userData);
+            return { success: true, user: userData };
+        } catch (error) {
+            return { success: false, message: error.response?.data?.msg || '2FA Login failed' };
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, loading }}>
+        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, setup2FA, verifyEnable2FA, login2FA, loading }}>
             {children}
         </AuthContext.Provider>
     );

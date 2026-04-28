@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure } from '@chakra-ui/react';
-import { FiPlus, FiPrinter, FiTrash, FiDownload } from 'react-icons/fi';
-import { FaWhatsapp } from 'react-icons/fa';
+import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement } from '@chakra-ui/react';
+import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch } from 'react-icons/fi';
+import { FaWhatsapp, FaChevronLeft } from 'react-icons/fa';
 import api from '../../api/axios';
 import { DEMO_ENQUIRIES, DEMO_QUOTATIONS } from '../../data/mockData';
 
@@ -12,6 +12,7 @@ const AdminEnquiries = () => {
     const [selectedEnquiry, setSelectedEnquiry] = useState(null);
     const [selectedQuotation, setSelectedQuotation] = useState(null);
     const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
+    const [allProducts, setAllProducts] = useState([]);
 
     // Status Confirmation State
     const { isOpen: isStatusConfirmOpen, onOpen: onStatusConfirmOpen, onClose: onStatusConfirmClose } = useDisclosure();
@@ -71,6 +72,20 @@ const AdminEnquiries = () => {
     }, [policies]);
     const [customNotes, setCustomNotes] = useState("(1) Payment After Performer Invoice\n(2) Transportation And Packing Charge Will be Extra As Per Actual");
     const [newPolicy, setNewPolicy] = useState({ label: '', value: '' });
+    
+    // Product Picker Modal State
+    const { isOpen: isPickerOpen, onOpen: onPickerOpen, onClose: onPickerClose } = useDisclosure();
+    const [pickerCategory, setPickerCategory] = useState(null);
+    const [pickerSearch, setPickerSearch] = useState('');
+
+    const PRODUCT_CATEGORIES = [
+        { id: "CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT", title: "Cement, Concrete & Aggregate" },
+        { id: "SOIL TESTING EQUIPMENT", title: "Soil Testing Equipment" },
+        { id: "BITUMIN TESTING EQUPMENT", title: "Bitumen Testing Equipment" },
+        { id: "Construction Machinery", title: "Construction Machinery" },
+        { id: "SURVEY & MEASURING INSTRUMENT", title: "Survey & Measuring Instruments" },
+        { id: "SAFETY PRODUCTS", title: "Safety Products" }
+    ];
 
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const isSuperAdmin = user.email === 'iatulkanak@gmail.com';
@@ -83,10 +98,15 @@ const AdminEnquiries = () => {
 
     const fetchData = async () => {
         try {
-            const [enqRes, quoteRes] = await Promise.all([
+            const [enqRes, quoteRes, prodRes] = await Promise.all([
                 api.get('/enquiries'),
-                api.get('/quotations')
+                api.get('/quotations'),
+                api.get('/products')
             ]);
+
+            // Normalize Products
+            const prods = (Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data.data || []));
+            setAllProducts(prods);
 
             // Normalize Enquiries
             const enqs = (Array.isArray(enqRes.data) ? enqRes.data : (enqRes.data.data || []));
@@ -210,43 +230,69 @@ const AdminEnquiries = () => {
         setQuoteMobile(selectedEnquiry.phone && selectedEnquiry.phone !== 'N/A' ? selectedEnquiry.phone : '');
         setQuoteAddress(''); // Start empty
 
-        // Initialize items from enquiry products
-        const initialItems = (selectedEnquiry.products || []).map(p => {
-            const product = p.productId || {};
-            const endPrice = parseFloat(product.sellingPriceEnd);
-            const startPrice = parseFloat(product.sellingPriceStart);
-            const dealerPrice = parseFloat(product.dealerPrice) || 0;
+        // Initialize items
+        let initialItems = [];
 
-            let defaultPrice = 0;
-            if (!isNaN(endPrice) && endPrice > 0) defaultPrice = endPrice;
-            else if (!isNaN(startPrice) && startPrice > 0) defaultPrice = startPrice;
+        if (lastQuote) {
+            // If updating, take everything from the last quote as the base
+            initialItems = lastQuote.items.map(i => {
+                const product = i.product || i.productId || {};
+                const endPrice = parseFloat(product.sellingPriceEnd) || 0;
+                const startPrice = parseFloat(product.sellingPriceStart) || 0;
+                const dealerPrice = parseFloat(product.dealerPrice) || 0;
 
-            let defaultQty = p.quantity;
-            let defaultGst = 18;
+                return {
+                    productId: product,
+                    quantity: i.quantity || 1,
+                    price: i.price || 0,
+                    gst: i.gst || 18,
+                    dealerPrice: dealerPrice,
+                    sellingPriceStart: startPrice,
+                    sellingPriceEnd: endPrice,
+                    calculatedSellingPrice: i.price || 0
+                };
+            });
 
-            // Pre-fill from previous quotation if available
-            if (lastQuote) {
-                const prevItem = lastQuote.items.find(i => 
-                    (i.product?._id || i.product) === product._id
-                );
-                if (prevItem) {
-                    defaultPrice = prevItem.price || defaultPrice;
-                    defaultGst = prevItem.gst || 18;
-                    defaultQty = prevItem.quantity || p.quantity;
+            // Also check if any items from the enquiry are NOT in the last quote (unlikely but possible)
+            (selectedEnquiry.products || []).forEach(p => {
+                const pId = p.productId?._id || p.productId;
+                const alreadyIn = initialItems.some(ii => (ii.productId?._id || ii.productId) === pId);
+                if (!alreadyIn) {
+                    const product = p.productId || {};
+                    initialItems.push({
+                        productId: product,
+                        quantity: p.quantity || 1,
+                        price: parseFloat(product.sellingPriceEnd) || parseFloat(product.sellingPriceStart) || 0,
+                        gst: 18,
+                        dealerPrice: parseFloat(product.dealerPrice) || 0,
+                        sellingPriceStart: parseFloat(product.sellingPriceStart) || 0,
+                        sellingPriceEnd: parseFloat(product.sellingPriceEnd) || 0,
+                        calculatedSellingPrice: parseFloat(product.sellingPriceEnd) || parseFloat(product.sellingPriceStart) || 0
+                    });
                 }
-            }
+            });
+        } else {
+            // First time creating quote - use enquiry products
+            initialItems = (selectedEnquiry.products || []).map(p => {
+                const product = p.productId || {};
+                const endPrice = parseFloat(product.sellingPriceEnd) || 0;
+                const startPrice = parseFloat(product.sellingPriceStart) || 0;
+                const dealerPrice = parseFloat(product.dealerPrice) || 0;
 
-            return {
-                productId: p.productId,
-                quantity: defaultQty,
-                price: defaultPrice,
-                gst: defaultGst, // Default GST
-                dealerPrice: dealerPrice,
-                sellingPriceStart: startPrice || 0,
-                sellingPriceEnd: endPrice || 0,
-                calculatedSellingPrice: defaultPrice
-            };
-        });
+                let defaultPrice = endPrice > 0 ? endPrice : (startPrice > 0 ? startPrice : 0);
+
+                return {
+                    productId: product,
+                    quantity: p.quantity || 1,
+                    price: defaultPrice,
+                    gst: 18,
+                    dealerPrice: dealerPrice,
+                    sellingPriceStart: startPrice,
+                    sellingPriceEnd: endPrice,
+                    calculatedSellingPrice: defaultPrice
+                };
+            });
+        }
         
         const prevDiscount = lastQuote ? (lastQuote.discount || 0) : 0;
         setQuoteItems(initialItems);
@@ -268,6 +314,41 @@ const AdminEnquiries = () => {
         const newItems = quoteItems.filter((_, i) => i !== index);
         setQuoteItems(newItems);
         calculateTotals(newItems, quoteDiscount);
+    };
+
+    const handleAddNewItem = (productId) => {
+        if (!productId) return;
+        const product = allProducts.find(p => p._id === productId || p.id === productId);
+        if (!product) return;
+
+        // Check if already in quoteItems
+        if (quoteItems.some(i => (i.productId?._id || i.productId) === productId)) {
+            toast({ title: "Product already in list", status: "warning" });
+            return;
+        }
+
+        const endPrice = parseFloat(product.sellingPriceEnd);
+        const startPrice = parseFloat(product.sellingPriceStart);
+        const dealerPrice = parseFloat(product.dealerPrice) || 0;
+
+        let defaultPrice = 0;
+        if (!isNaN(endPrice) && endPrice > 0) defaultPrice = endPrice;
+        else if (!isNaN(startPrice) && startPrice > 0) defaultPrice = startPrice;
+
+        const newItem = {
+            productId: product,
+            quantity: 1,
+            price: defaultPrice,
+            gst: 18,
+            dealerPrice: dealerPrice,
+            sellingPriceStart: startPrice || 0,
+            sellingPriceEnd: endPrice || 0,
+            calculatedSellingPrice: defaultPrice
+        };
+
+        const updatedItems = [...quoteItems, newItem];
+        setQuoteItems(updatedItems);
+        calculateTotals(updatedItems, quoteDiscount);
     };
 
     const calculateTotals = (items, discount, packagingOverride) => {
@@ -757,6 +838,21 @@ const AdminEnquiries = () => {
                                                         <Button size="xs" variant="outline" onClick={() => handleViewQuotation(q)}>View</Button>
                                                         <Button 
                                                             size="xs" 
+                                                            colorScheme="blue" 
+                                                            variant="outline" 
+                                                            onClick={() => {
+                                                                const enq = q.enquiryId || q.enquiry;
+                                                                if (enq) {
+                                                                    setSelectedEnquiry(enq);
+                                                                    // Trigger update mode after state settles
+                                                                    setTimeout(() => initCreateQuote(), 50);
+                                                                }
+                                                            }}
+                                                        >
+                                                            Edit
+                                                        </Button>
+                                                        <Button 
+                                                            size="xs" 
                                                             bg="#25D366" 
                                                             color="white" 
                                                             _hover={{ bg: "#128C7E" }} 
@@ -952,12 +1048,22 @@ const AdminEnquiries = () => {
                                                         fallbackSrc="https://via.placeholder.com/50?text=No+Img"
                                                     />
                                                     <Text fontWeight="bold" fontSize="sm">
-                                                        {item.productId?.name || 'Product'} (Qty: {item.quantity})
+                                                        {item.productId?.name || 'Product'}
                                                     </Text>
                                                 </HStack>
-                                                <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>
-                                                    <FiTrash />
-                                                </Button>
+                                                <HStack>
+                                                    <Text fontSize="xs" fontWeight="bold">Qty:</Text>
+                                                    <Input
+                                                        size="xs"
+                                                        type="number"
+                                                        w="60px"
+                                                        value={item.quantity}
+                                                        onChange={(e) => handleItemChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                    <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>
+                                                        <FiTrash />
+                                                    </Button>
+                                                </HStack>
                                             </HStack>
                                             <Stack direction={{ base: 'column', md: 'row' }} spacing={3}>
                                                 <FormControl isRequired>
@@ -1022,6 +1128,41 @@ const AdminEnquiries = () => {
                                             </Stack>
                                         </Box>
                                     ))}
+
+                                    {/* Add New Item to Quotation */}
+                                    <Box mt={4} p={3} border="1px dashed" borderColor="brand.300" borderRadius="md" bg="orange.50">
+                                        <Text fontSize="xs" fontWeight="bold" mb={2} color="orange.700">Add Another Item to this Quotation:</Text>
+                                        <Stack direction={{ base: 'column', md: 'row' }} spacing={2}>
+                                            <Button 
+                                                leftIcon={<FiPlus />} 
+                                                colorScheme="orange" 
+                                                size="sm" 
+                                                onClick={() => {
+                                                    setPickerCategory(null);
+                                                    onPickerOpen();
+                                                }}
+                                            >
+                                                Select Product from Categories
+                                            </Button>
+                                            
+                                            <FormControl flex="1">
+                                                <Select 
+                                                    size="sm" 
+                                                    placeholder="Or quick select product..." 
+                                                    bg="white"
+                                                    onChange={(e) => handleAddNewItem(e.target.value)}
+                                                    value=""
+                                                >
+                                                    {allProducts
+                                                        .filter(p => !quoteItems.some(qi => (qi.productId?._id || qi.productId) === p._id))
+                                                        .map(p => (
+                                                            <option key={p._id} value={p._id}>{p.name}</option>
+                                                        ))
+                                                    }
+                                                </Select>
+                                            </FormControl>
+                                        </Stack>
+                                    </Box>
                                 </Box>
 
                                 <Divider />
@@ -1306,7 +1447,6 @@ const AdminEnquiries = () => {
                     </ModalFooter>
                 </ModalContent>
             </Modal>
-
             {/* Generic Delete Confirmation Modal */}
             <Modal isOpen={isDeleteConfirmOpen} onClose={onDeleteConfirmClose} isCentered size="sm">
                 <ModalOverlay backdropFilter="blur(4px)" />
@@ -1333,6 +1473,120 @@ const AdminEnquiries = () => {
                             Delete Forever
                         </Button>
                     </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* PRODUCT PICKER MODAL */}
+            <Modal isOpen={isPickerOpen} onClose={onPickerClose} size="4xl" scrollBehavior="inside">
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>
+                        <HStack justify="space-between" pr={10}>
+                            <Text>Select Product</Text>
+                            {pickerCategory && (
+                                <Button size="xs" variant="ghost" leftIcon={<FaChevronLeft />} onClick={() => setPickerCategory(null)}>
+                                    Back to Categories
+                                </Button>
+                            )}
+                        </HStack>
+                    </ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody p={6}>
+                        {!pickerCategory ? (
+                            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
+                                {PRODUCT_CATEGORIES.map(cat => (
+                                    <Box 
+                                        key={cat.id} 
+                                        p={6} 
+                                        border="1px solid" 
+                                        borderColor="gray.200" 
+                                        borderRadius="xl" 
+                                        cursor="pointer"
+                                        _hover={{ bg: 'brand.50', borderColor: 'brand.200', transform: 'translateY(-2px)' }}
+                                        transition="all 0.2s"
+                                        onClick={() => setPickerCategory(cat.id)}
+                                        textAlign="center"
+                                    >
+                                        <Text fontWeight="800" fontSize="md">{cat.title}</Text>
+                                        <Text fontSize="xs" color="gray.500" mt={2}>
+                                            {allProducts.filter(p => p.category === cat.id).length} Products
+                                        </Text>
+                                    </Box>
+                                ))}
+                                <Box 
+                                    p={6} 
+                                    border="1px solid" 
+                                    borderColor="gray.200" 
+                                    borderRadius="xl" 
+                                    cursor="pointer"
+                                    _hover={{ bg: 'gray.100' }}
+                                    onClick={() => setPickerCategory('OTHER')}
+                                    textAlign="center"
+                                >
+                                    <Text fontWeight="800" fontSize="md">Other / Uncategorized</Text>
+                                    <Text fontSize="xs" color="gray.500" mt={2}>
+                                        {allProducts.filter(p => !PRODUCT_CATEGORIES.some(cat => cat.id === p.category)).length} Products
+                                    </Text>
+                                </Box>
+                            </SimpleGrid>
+                        ) : (
+                            <VStack align="stretch" spacing={4}>
+                                <InputGroup>
+                                    <InputLeftElement pointerEvents="none">
+                                        <FiSearch color="gray.300" />
+                                    </InputLeftElement>
+                                    <Input 
+                                        placeholder="Search products in this category..." 
+                                        bg="gray.50" 
+                                        value={pickerSearch}
+                                        onChange={(e) => setPickerSearch(e.target.value)}
+                                    />
+                                </InputGroup>
+
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                                    {allProducts
+                                        .filter(p => pickerCategory === 'OTHER' 
+                                            ? !PRODUCT_CATEGORIES.some(cat => cat.id === p.category)
+                                            : p.category === pickerCategory
+                                        )
+                                        .filter(p => p.name.toLowerCase().includes(pickerSearch.toLowerCase()))
+                                        .map(p => (
+                                            <Box 
+                                                key={p._id} 
+                                                p={3} 
+                                                borderWidth="1px" 
+                                                borderRadius="lg" 
+                                                _hover={{ bg: 'green.50', borderColor: 'green.200' }}
+                                                cursor="pointer"
+                                                onClick={() => {
+                                                    handleAddNewItem(p._id);
+                                                    onPickerClose();
+                                                }}
+                                            >
+                                                <Flex align="center" gap={3}>
+                                                    <Image 
+                                                        src={getImageUrl(p.images?.[0] || p.photos?.[0] || p.image)} 
+                                                        boxSize="50px" 
+                                                        objectFit="contain" 
+                                                        borderRadius="md"
+                                                        fallbackSrc="https://via.placeholder.com/50"
+                                                    />
+                                                    <Box flex="1">
+                                                        <Text fontWeight="bold" fontSize="sm" noOfLines={2}>{p.name}</Text>
+                                                        <Text fontSize="xs" color="gray.500">₹{p.sellingPriceStart?.toLocaleString()} - ₹{p.sellingPriceEnd?.toLocaleString()}</Text>
+                                                    </Box>
+                                                    <FiPlus color="green" />
+                                                </Flex>
+                                            </Box>
+                                        ))
+                                    }
+                                </SimpleGrid>
+                                {allProducts.filter(p => pickerCategory === 'OTHER' ? !PRODUCT_CATEGORIES.some(cat => cat.id === p.category) : p.category === pickerCategory).length === 0 && (
+                                    <Text textAlign="center" py={10} color="gray.500">No products found in this category.</Text>
+                                )}
+                            </VStack>
+                        )}
+                    </ModalBody>
                 </ModalContent>
             </Modal>
         </Box>
