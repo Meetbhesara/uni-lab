@@ -267,10 +267,10 @@ const AuthModal = ({ isOpen, onClose }) => {
         if (res.success) {
             setIs2FAEnabled(res.is2FAEnabled);
             toast({
-                title: '✅ OTP Sent!',
+                title: res.whatsappStatus === 'failed' ? '⚠️ WhatsApp Offline' : '✅ OTP Sent!',
                 description: res.msg || 'Check your WhatsApp for the code.',
-                status: 'success',
-                duration: 3000
+                status: res.whatsappStatus === 'failed' ? 'warning' : 'success',
+                duration: 5000
             });
             setStep('otp');
         } else {
