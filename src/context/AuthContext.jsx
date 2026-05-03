@@ -214,8 +214,18 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Reset 2FA — admin proves identity via WhatsApp OTP, backend clears the TOTP secret
+    const resetWithBackup = async (email, backupCode) => {
+        try {
+            const response = await api.post('/auth/reset-with-backup', { email, backupCode });
+            return { success: true, ...response.data };
+        } catch (error) {
+            return { success: false, message: error.response?.data?.msg || 'Failed to reset 2FA' };
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, setup2FA, verifyEnable2FA, login2FA, loading }}>
+        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, setup2FA, verifyEnable2FA, login2FA, resetWithBackup, loading }}>
             {children}
         </AuthContext.Provider>
     );

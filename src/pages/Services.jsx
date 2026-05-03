@@ -5,7 +5,8 @@ import {
     Tabs, TabList, TabPanels, Tab, TabPanel, Checkbox, Center,
     Table, Thead, Tbody, Tr, Th, Td, TableContainer, Tag, TagLabel, Wrap, WrapItem, Avatar,
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
-    useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay
+    useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
+    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
@@ -18,6 +19,8 @@ import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
 import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
 const CivilEngineeringServices = () => {
     const navigate = useNavigate();
@@ -64,7 +67,7 @@ const CivilEngineeringServices = () => {
                             <Button mt={10} colorScheme="orange" size="lg" px={10} borderRadius="xl" boxShadow="lg">Consult Now</Button>
                         </Box>
                         <Box>
-                            <Image borderRadius="3xl" src="http://localhost:5001/uploads/local/construction.jpeg" alt="Construction" objectFit="cover" h="400px" w="full" fallbackSrc="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" />
+                            <Image borderRadius="3xl" src={`${API_BASE_URL}/uploads/local/construction.jpeg`} alt="Construction" objectFit="cover" h="400px" w="full" fallbackSrc="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" />
                         </Box>
                     </SimpleGrid>
                 </Box>
@@ -137,8 +140,22 @@ const VehicleMasterForm = () => {
     const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [rcFile, setRcFile] = useState(null);
+    const [insuranceFile, setInsuranceFile] = useState(null);
+    const [pucFile, setPucFile] = useState(null);
+    const [vehiclePhotos, setVehiclePhotos] = useState([]);
+    const [vehiclePhotoPreviews, setVehiclePhotoPreviews] = useState([]);
+    const [vehicles, setVehicles] = useState([]);
+    const [editId, setEditId] = useState(null);
+    const [viewVehicle, setViewVehicle] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = useState('table');
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
+
+    const filteredVehicles = vehicles.filter(v =>
+        v.vehicleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.vehicleName?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const [formData, setFormData] = useState({
         vehicleNumber: '',
@@ -149,8 +166,6 @@ const VehicleMasterForm = () => {
         logInName: user?.name || ''
     });
 
-    const [vehicles, setVehicles] = useState([]);
-    const [editId, setEditId] = useState(null);
 
     const fetchVehicles = async () => {
         try {
@@ -223,10 +238,6 @@ const VehicleMasterForm = () => {
         setVehiclePhotoPreviews(prev => prev.filter((_, i) => i !== index));
     };
 
-    const [insuranceFile, setInsuranceFile] = useState(null);
-    const [pucFile, setPucFile] = useState(null);
-    const [vehiclePhotos, setVehiclePhotos] = useState([]);
-    const [vehiclePhotoPreviews, setVehiclePhotoPreviews] = useState([]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -300,9 +311,33 @@ const VehicleMasterForm = () => {
         <Box py={10} bg="gray.100" minH="100vh">
             <Container maxW="container.md">
                 <Card variant="elevated" borderRadius="2xl" boxShadow="2xl" bg="white" overflow="hidden">
-                    <Box bg="purple.600" p={8} color="white">
-                        <Heading size="lg">{editId ? 'Update Vehicle Record' : 'Add Vehicle Record'}</Heading>
-                        <Text opacity={0.8} mt={1}>Admin Panel: Manage vehicle compliance and service schedules</Text>
+                    <Box bg="purple.600" p={{ base: 5, md: 8 }} color="white">
+                        <Stack direction={{ base: "column", md: "row" }} justify="space-between" align="center" spacing={4}>
+                            <Box>
+                                <Heading size="lg">{editId ? 'Edit Vehicle' : 'Vehicle Management'}</Heading>
+                                <Text opacity={0.8} mt={1}>Admin Panel: Manage fleet assets and maintenance records</Text>
+                            </Box>
+                            <HStack w={{ base: "full", md: "auto" }} spacing={2}>
+                                <Input
+                                    bg="white" color="gray.800" placeholder="Search Vehicle No, Name..." size="md" borderRadius="xl"
+                                    w={{ base: "full", md: "250px" }} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                <IconButton
+                                    icon={<Icon as={viewMode === 'table' ? FaTruck : FaTruck} />}
+                                    onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')}
+                                    borderRadius="xl" colorScheme="whiteAlpha" variant="solid" aria-label="Toggle View"
+                                />
+                                <Button
+                                    colorScheme="green" leftIcon={<Icon as={FaTruck} />}
+                                    onClick={() => {
+                                        setEditId(null);
+                                        setFormData({ vehicleNumber: '', vehicleName: '', insuranceDate: '', pucDate: '', serviceDate: '', logInName: user?.name || '' });
+                                    }} borderRadius="xl"
+                                >
+                                    Add New
+                                </Button>
+                            </HStack>
+                        </Stack>
                     </Box>
                     <CardBody p={10}>
                         <form onSubmit={handleSubmit}>
@@ -469,38 +504,35 @@ const VehicleMasterForm = () => {
                             </VStack>
                         </form>
 
-                        {/* Vehicle Table View */}
+                        {/* Vehicle List View */}
                         <Box mt={10}>
-                            <Heading size="md" mb={4} color="purple.700" display="flex" alignItems="center">
-                                <Icon as={FaTruck} mr={2} /> Registered Vehicles
-                            </Heading>
-                            <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                <Table variant="simple">
-                                    <Thead bg="purple.50">
-                                        <Tr>
-                                            <Th>Registration</Th>
-                                            <Th>Name</Th>
-                                            <Th>Insurance</Th>
-                                            <Th>PUC</Th>
-                                            <Th textAlign="center">Actions</Th>
-                                        </Tr>
-                                    </Thead>
-                                    <Tbody>
-                                        {vehicles.map(v => (
-                                            <Tr key={v._id} _hover={{ bg: "gray.50" }}>
-                                                <Td fontWeight="bold" color="purple.600">{v.vehicleNumber}</Td>
-                                                <Td>{v.vehicleName}</Td>
-                                                <Td>{v.insuranceDate ? new Date(v.insuranceDate).toLocaleDateString() : '—'}</Td>
-                                                <Td>{v.pucDate ? new Date(v.pucDate).toLocaleDateString() : '—'}</Td>
-                                                <Td textAlign="center">
-                                                    <HStack justify="center">
-                                                        <IconButton
-                                                            aria-label="Edit Vehicle"
-                                                            size="sm"
-                                                            colorScheme="purple"
-                                                            variant="ghost"
-                                                            icon={<Icon as={FaEdit} />}
-                                                            onClick={() => {
+                            <Flex justify="space-between" align="center" mb={4}>
+                                <Heading size="md" color="purple.700" display="flex" alignItems="center">
+                                    <Icon as={FaTruck} mr={2} /> Registered Vehicles ({filteredVehicles.length})
+                                </Heading>
+                            </Flex>
+
+                            {viewMode === 'table' ? (
+                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th>Vehicle No</Th>
+                                                <Th>Name</Th>
+                                                <Th>Next Service</Th>
+                                                <Th textAlign="center">Actions</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {filteredVehicles.map(v => (
+                                                <Tr key={v._id} _hover={{ bg: "purple.50" }} transition="background 0.2s">
+                                                    <Td fontWeight="bold" color="purple.600">{v.vehicleNumber}</Td>
+                                                    <Td>{v.vehicleName}</Td>
+                                                    <Td><Badge colorScheme="red" variant="subtle" borderRadius="full" px={2}>{v.serviceDate?.substring(0, 10)}</Badge></Td>
+                                                    <Td textAlign="center">
+                                                        <HStack justify="center" spacing={1}>
+                                                            <IconButton aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} onClick={() => setViewVehicle(v)} />
+                                                            <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => {
                                                                 setEditId(v._id);
                                                                 setFormData({
                                                                     vehicleNumber: v.vehicleNumber || '',
@@ -510,33 +542,126 @@ const VehicleMasterForm = () => {
                                                                     serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
                                                                     logInName: v.logInName || user?.name || ''
                                                                 });
-                                                                setRcFile(null); setInsuranceFile(null); setPucFile(null);
-                                                                setVehiclePhotos([]);
-                                                                setVehiclePhotoPreviews(v.photos?.map(p => `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${p.url}`) || []);
                                                                 window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                            }}
-                                                        />
-                                                        <IconButton
-                                                            aria-label="Delete Vehicle"
-                                                            size="sm"
-                                                            colorScheme="red"
-                                                            variant="ghost"
-                                                            icon={<Icon as={FaTrash} />}
-                                                            onClick={() => handleDelete(v._id)}
-                                                        />
-                                                    </HStack>
-                                                </Td>
-                                            </Tr>
-                                        ))}
-                                        {vehicles.length === 0 && (
-                                            <Tr>
-                                                <Td colSpan={5} textAlign="center" py={6} color="gray.500">No vehicles found.</Td>
-                                            </Tr>
-                                        )}
-                                    </Tbody>
-                                </Table>
-                            </Box>
+                                                            }} />
+                                                            <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                            ) : (
+                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
+                                    {filteredVehicles.map(v => (
+                                        <Card key={v._id} borderRadius="xl" border="1px solid" borderColor="gray.100" _hover={{ shadow: 'md', borderColor: 'purple.300' }} transition="all 0.2s">
+                                            <CardBody p={4}>
+                                                <HStack spacing={4} mb={4}>
+                                                    <Box p={2} bg="purple.50" borderRadius="lg"><Icon as={FaTruck} color="purple.500" w={6} h={6} /></Box>
+                                                    <Box flex={1}>
+                                                        <Text fontWeight="bold" fontSize="md" noOfLines={1}>{v.vehicleNumber}</Text>
+                                                        <Text fontSize="xs" color="gray.500">{v.vehicleName}</Text>
+                                                    </Box>
+                                                </HStack>
+                                                <VStack align="stretch" spacing={2} mb={4}>
+                                                    <HStack fontSize="xs" justify="space-between"><Text color="gray.500">Service Due:</Text><Text fontWeight="bold" color="red.500">{v.serviceDate?.substring(0, 10)}</Text></HStack>
+                                                    <HStack fontSize="xs" justify="space-between"><Text color="gray.500">Insurance:</Text><Text fontWeight="bold">{v.insuranceDate?.substring(0, 10)}</Text></HStack>
+                                                </VStack>
+                                                <HStack justify="flex-end" spacing={2} pt={2} borderTop="1px solid" borderColor="gray.50">
+                                                    <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<FaEye />} onClick={() => setViewVehicle(v)}>View</Button>
+                                                    <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<FaEdit />} onClick={() => {
+                                                        setEditId(v._id);
+                                                        setFormData({
+                                                            vehicleNumber: v.vehicleNumber || '',
+                                                            vehicleName: v.vehicleName || '',
+                                                            insuranceDate: v.insuranceDate ? v.insuranceDate.substring(0, 10) : '',
+                                                            pucDate: v.pucDate ? v.pucDate.substring(0, 10) : '',
+                                                            serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
+                                                            logInName: v.logInName || user?.name || ''
+                                                        });
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    }}>Edit</Button>
+                                                </HStack>
+                                            </CardBody>
+                                        </Card>
+                                    ))}
+                                </SimpleGrid>
+                            )}
+
+                            {filteredVehicles.length === 0 && (
+                                <Center p={10} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.200">
+                                    <VStack spacing={2}>
+                                        <Icon as={FaTruck} w={8} h={8} color="gray.300" />
+                                        <Text color="gray.500">No vehicles found matching "{searchQuery}"</Text>
+                                    </VStack>
+                                </Center>
+                            )}
                         </Box>
+
+                        {/* Standardized Vehicle View Modal */}
+                        <Modal isOpen={!!viewVehicle} onClose={() => setViewVehicle(null)} size="3xl" isCentered motionPreset="slideInBottom">
+                            <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
+                            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
+                                <ModalHeader p={0}>
+                                    <Box bgGradient="linear(to-r, purple.800, purple.600)" p={6} color="white">
+                                        <HStack justify="space-between">
+                                            <HStack spacing={4}>
+                                                <Icon as={FaTruck} w={8} h={8} />
+                                                <VStack align="start" spacing={0}>
+                                                    <Heading size="md">{viewVehicle?.vehicleNumber}</Heading>
+                                                    <Text fontSize="xs" opacity={0.8}>{viewVehicle?.vehicleName} • Asset Management</Text>
+                                                </VStack>
+                                            </HStack>
+                                            <ModalCloseButton position="static" borderRadius="full" />
+                                        </HStack>
+                                    </Box>
+                                </ModalHeader>
+                                <ModalBody p={8}>
+                                    {viewVehicle && (
+                                        <>
+                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
+                                                <VStack align="start" spacing={5}>
+                                                    <Box>
+                                                        <Text fontSize="10px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={1}>Maintenance Status</Text>
+                                                        <VStack align="start" spacing={2}>
+                                                            <HStack><Text fontSize="xs" color="gray.500">Insurance:</Text><Text fontSize="xs" fontWeight="bold">{viewVehicle.insuranceDate?.substring(0, 10)}</Text></HStack>
+                                                            <HStack><Text fontSize="xs" color="gray.500">PUC Date:</Text><Text fontSize="xs" fontWeight="bold">{viewVehicle.pucDate?.substring(0, 10)}</Text></HStack>
+                                                            <HStack><Text fontSize="xs" color="gray.500">Next Service:</Text><Text fontSize="xs" fontWeight="bold" color="red.500">{viewVehicle.serviceDate?.substring(0, 10)}</Text></HStack>
+                                                        </VStack>
+                                                    </Box>
+                                                </VStack>
+                                                <Box bg="purple.50" p={4} borderRadius="2xl">
+                                                    <Text fontSize="10px" color="purple.600" fontWeight="black" mb={2}>Statutory Documents</Text>
+                                                    <Wrap spacing={2}>
+                                                        {['rcBook', 'insurancePhoto', 'pucPhoto'].map(doc => viewVehicle[doc]?.url && (
+                                                            <Button key={doc} size="xs" colorScheme="purple" variant="subtle" leftIcon={<FaFilePdf />} onClick={() => window.open(`${API_BASE_URL}${viewVehicle[doc].url}`, '_blank')}>
+                                                                {doc.replace('Photo', '').toUpperCase()}
+                                                            </Button>
+                                                        ))}
+                                                    </Wrap>
+                                                </Box>
+                                            </SimpleGrid>
+
+                                            <Box mt={8}>
+                                                <Text fontSize="10px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={3}>Vehicle Gallery ({viewVehicle.vehiclePhotos?.length || 0})</Text>
+                                                <SimpleGrid columns={4} spacing={3}>
+                                                    {viewVehicle.vehiclePhotos?.map((p, i) => (
+                                                        <Box key={i} borderRadius="xl" overflow="hidden" boxShadow="sm" cursor="pointer" onClick={() => window.open(`${API_BASE_URL}${p.url}`, '_blank')} _hover={{ transform: 'scale(1.05)', boxShadow: 'md' }} transition="all 0.2s">
+                                                            <Image src={`${API_BASE_URL}${p.url}`} alt="Vehicle" h="70px" w="full" objectFit="cover" />
+                                                        </Box>
+                                                    ))}
+                                                    {(!viewVehicle.vehiclePhotos || viewVehicle.vehiclePhotos.length === 0) && <Text fontSize="xs" color="gray.400">No photos available.</Text>}
+                                                </SimpleGrid>
+                                            </Box>
+                                        </>
+                                    )}
+                                </ModalBody>
+                                <ModalFooter bg="gray.50">
+                                    <Button colorScheme="purple" borderRadius="full" px={10} shadow="lg" onClick={() => setViewVehicle(null)}>Close</Button>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
                     </CardBody>
                 </Card>
             </Container>
@@ -596,9 +721,17 @@ const EmployeeMasterForm = () => {
     const [employees, setEmployees] = useState([]);
     const [editId, setEditId] = useState('');
     const [viewEmployee, setViewEmployee] = useState(null);
-    const [viewPos, setViewPos] = useState({ y: 0 });
+    const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
+
+    const filteredEmployees = employees.filter(emp =>
+        emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.empId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.designation?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const fetchNextEmpId = async () => {
         try {
@@ -890,17 +1023,20 @@ const EmployeeMasterForm = () => {
                                 <Input
                                     bg="white"
                                     color="gray.800"
-                                    placeholder="Search ID (e.g. 0001)"
+                                    placeholder="Search Name, ID, Phone..."
                                     size="md"
                                     borderRadius="xl"
-                                    w="200px"
-                                    onChange={(e) => {
-                                        const val = e.target.value.trim();
-                                        if (val.length >= 2) {
-                                            const found = employees.find(emp => emp.empId.includes(val));
-                                            if (found) handleSelectEmployee({ target: { value: found._id } });
-                                        }
-                                    }}
+                                    w={{ base: "full", md: "250px" }}
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                <IconButton
+                                    icon={<Icon as={viewMode === 'table' ? FaUsers : FaUsers} />}
+                                    onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')}
+                                    borderRadius="xl"
+                                    colorScheme="whiteAlpha"
+                                    variant="solid"
+                                    aria-label="Toggle View"
                                 />
                                 <Button
                                     colorScheme="green"
@@ -908,7 +1044,7 @@ const EmployeeMasterForm = () => {
                                     onClick={() => handleSelectEmployee({ target: { value: '' } })}
                                     borderRadius="xl"
                                 >
-                                    New Employee
+                                    Add New
                                 </Button>
                             </HStack>
                         </Stack>
@@ -1164,156 +1300,187 @@ const EmployeeMasterForm = () => {
                             </VStack>
                         </form>
 
-                        {/* Employee Table View */}
+                        {/* Employee List View */}
                         <Box mt={10}>
-                            <Heading size="md" mb={4} color="blue.700" display="flex" alignItems="center">
-                                <Icon as={FaUsers} mr={2} /> Registered Employees
-                            </Heading>
-                            <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                <Table variant="simple">
-                                    <Thead bg="gray.50">
-                                        <Tr>
-                                            <Th>Emp ID</Th>
-                                            <Th>Name</Th>
-                                            <Th>Designation</Th>
-                                            <Th>Phone</Th>
-                                            <Th textAlign="center">Actions</Th>
-                                        </Tr>
-                                    </Thead>
-                                    <Tbody>
-                                        {employees.map(emp => (
-                                            <Tr key={emp._id} _hover={{ bg: "gray.50" }}>
-                                                <Td fontWeight="bold" color="blue.600">{emp.empId}</Td>
-                                                <Td>{emp.name}</Td>
-                                                <Td>{emp.designation}</Td>
-                                                <Td>{emp.phone}</Td>
-                                                <Td textAlign="center">
-                                                    <HStack justify="center" spacing={2}>
-                                                        <IconButton
-                                                            aria-label="View Employee"
-                                                            size="sm"
-                                                            colorScheme="teal"
-                                                            variant="ghost"
-                                                            icon={<Icon as={FaEye} />}
-                                                            onClick={(e) => {
-                                                                const rect = e.currentTarget.getBoundingClientRect();
-                                                                setViewPos({ y: rect.top });
-                                                                setViewEmployee(emp);
-                                                            }}
-                                                        />
-                                                        <IconButton
-                                                            aria-label="Edit Employee"
-                                                            size="sm"
-                                                            colorScheme="blue"
-                                                            variant="ghost"
-                                                            icon={<Icon as={FaEdit} />}
-                                                            onClick={() => handleSelectEmployee({ target: { value: emp._id } })}
-                                                        />
-                                                        <IconButton
-                                                            aria-label="Delete Employee"
-                                                            size="sm"
-                                                            colorScheme="red"
-                                                            variant="ghost"
-                                                            icon={<Icon as={FaTrash} />}
-                                                            onClick={() => handleDelete(emp._id)}
-                                                        />
-                                                    </HStack>
-                                                </Td>
-                                            </Tr>
-                                        ))}
-                                        {employees.length === 0 && (
+                            <Flex justify="space-between" align="center" mb={4}>
+                                <Heading size="md" color="blue.700" display="flex" alignItems="center">
+                                    <Icon as={FaUsers} mr={2} /> Registered Employees ({filteredEmployees.length})
+                                </Heading>
+                            </Flex>
+
+                            {viewMode === 'table' ? (
+                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple">
+                                        <Thead bg="gray.50">
                                             <Tr>
-                                                <Td colSpan={5} textAlign="center" py={6} color="gray.500">No employees found.</Td>
+                                                <Th>ID</Th>
+                                                <Th>Name</Th>
+                                                <Th>Designation</Th>
+                                                <Th>Phone</Th>
+                                                <Th textAlign="center">Actions</Th>
                                             </Tr>
-                                        )}
-                                    </Tbody>
-                                </Table>
-                            </Box>
+                                        </Thead>
+                                        <Tbody>
+                                            {filteredEmployees.map(emp => (
+                                                <Tr key={emp._id} _hover={{ bg: "blue.50" }} transition="background 0.2s">
+                                                    <Td fontWeight="bold" color="blue.600">{emp.empId}</Td>
+                                                    <Td>
+                                                        <HStack spacing={3}>
+                                                            <Avatar size="xs" src={emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : undefined} name={emp.name} />
+                                                            <Text fontWeight="semibold">{emp.name}</Text>
+                                                        </HStack>
+                                                    </Td>
+                                                    <Td><Badge colorScheme="blue" variant="subtle" borderRadius="full" px={2}>{emp.designation}</Badge></Td>
+                                                    <Td>{emp.phone}</Td>
+                                                    <Td textAlign="center">
+                                                        <HStack justify="center" spacing={1}>
+                                                            <IconButton aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} onClick={() => setViewEmployee(emp)} />
+                                                            <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => handleSelectEmployee({ target: { value: emp._id } })} />
+                                                            <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(emp._id)} />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                            ) : (
+                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
+                                    {filteredEmployees.map(emp => (
+                                        <Card key={emp._id} borderRadius="xl" border="1px solid" borderColor="gray.100" _hover={{ shadow: 'md', borderColor: 'blue.300' }} transition="all 0.2s">
+                                            <CardBody p={4}>
+                                                <HStack spacing={4} mb={4}>
+                                                    <Avatar size="md" src={emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : undefined} name={emp.name} borderRadius="lg" />
+                                                    <Box flex={1}>
+                                                        <Text fontWeight="bold" fontSize="md" noOfLines={1}>{emp.name}</Text>
+                                                        <Text fontSize="xs" color="gray.500">{emp.empId} • {emp.designation}</Text>
+                                                    </Box>
+                                                </HStack>
+                                                <VStack align="stretch" spacing={2} mb={4}>
+                                                    <HStack fontSize="xs"><Icon as={FaPhoneAlt} color="gray.400" /><Text>{emp.phone}</Text></HStack>
+                                                    <HStack fontSize="xs"><Icon as={FaEnvelope} color="gray.400" /><Text noOfLines={1}>{emp.email || 'No email'}</Text></HStack>
+                                                </VStack>
+                                                <HStack justify="flex-end" spacing={2} pt={2} borderTop="1px solid" borderColor="gray.50">
+                                                    <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<FaEye />} onClick={() => setViewEmployee(emp)}>View</Button>
+                                                    <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<FaEdit />} onClick={() => handleSelectEmployee({ target: { value: emp._id } })}>Edit</Button>
+                                                </HStack>
+                                            </CardBody>
+                                        </Card>
+                                    ))}
+                                </SimpleGrid>
+                            )}
+
+                            {filteredEmployees.length === 0 && (
+                                <Center p={10} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.200">
+                                    <VStack spacing={2}>
+                                        <Icon as={FaUsers} w={8} h={8} color="gray.300" />
+                                        <Text color="gray.500">No employees found matching "{searchQuery}"</Text>
+                                    </VStack>
+                                </Center>
+                            )}
                         </Box>
-                        {/* Perfect Centered Premium Modal View */}
-                        {viewEmployee && (
-                            <Box
-                                position="fixed" top={0} left={0} right={0} bottom={0}
-                                bg="blackAlpha.700" backdropFilter="blur(10px)" zIndex={10000}
-                                display="flex" alignItems="center" justifyContent="center" p={4}
-                                onClick={() => setViewEmployee(null)}
-                            >
-                                <Box
-                                    bg="white" borderRadius="3xl" maxW="850px" w="full" boxShadow="2xl"
-                                    overflow="hidden" onClick={(e) => e.stopPropagation()}
-                                    animation="scaleIn 0.3s ease-out"
-                                >
-                                    <Box bgGradient="linear(to-r, blue.800, cyan.700)" p={6} color="white">
-                                        <HStack justify="space-between">
-                                            <HStack spacing={6}>
-                                                <Avatar size="xl" border="4px solid white" src={viewEmployee.photo?.url ? `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5001' : '')}${viewEmployee.photo.url}` : ''} name={viewEmployee.name} />
-                                                <VStack align="start" spacing={1}>
-                                                    <Heading size="lg">{viewEmployee.name}</Heading>
-                                                    <Badge colorScheme="blue" variant="solid" borderRadius="full" px={3}>{viewEmployee.designation}</Badge>
-                                                    <Text fontSize="xs" opacity={0.8}>{viewEmployee.empId} • Full Employee Profile</Text>
+                        {/* Standardized Employee View Modal */}
+                        <Modal isOpen={!!viewEmployee} onClose={() => setViewEmployee(null)} size="4xl" isCentered motionPreset="slideInBottom">
+                            <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
+                            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
+                                <ModalHeader p={0}>
+                                    <Box bgGradient="linear(to-r, blue.800, blue.600)" p={6} color="white">
+                                        <HStack justify="space-between" spacing={4}>
+                                            <HStack spacing={4}>
+                                                <Avatar
+                                                    size="lg"
+                                                    src={viewEmployee?.photo?.url ? `${API_BASE_URL}${viewEmployee.photo.url}` : undefined}
+                                                    name={viewEmployee?.name}
+                                                    borderRadius="xl"
+                                                    border="2px solid white"
+                                                />
+                                                <VStack align="start" spacing={0}>
+                                                    <Heading size="md">{viewEmployee?.name}</Heading>
+                                                    <Text fontSize="xs" opacity={0.8}>{viewEmployee?.empId} • {viewEmployee?.designation}</Text>
                                                 </VStack>
                                             </HStack>
-                                            <IconButton aria-label="Close" icon={<Icon as={FaTimes} />} size="md" variant="ghost" color="white" onClick={() => setViewEmployee(null)} />
+                                            <ModalCloseButton position="static" borderRadius="full" />
                                         </HStack>
                                     </Box>
+                                </ModalHeader>
 
-                                    <Box p={8}>
-                                        <SimpleGrid columns={3} spacing={10}>
+                                <ModalBody p={8}>
+                                    {viewEmployee && (
+                                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={10}>
                                             <VStack align="start" spacing={6}>
-                                                <Box>
+                                                <Box w="full">
                                                     <Text fontSize="11px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={3}>Personal & Contact</Text>
                                                     <VStack align="start" spacing={3}>
                                                         <Box>
-                                                            <Text fontSize="9px" color="gray.500" fontWeight="bold">PHONE</Text>
-                                                            <Text fontSize="sm" fontWeight="bold">{viewEmployee.phone}</Text>
+                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">PHONE</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.700">{viewEmployee.phone}</Text>
                                                         </Box>
                                                         <Box>
-                                                            <Text fontSize="9px" color="gray.500" fontWeight="bold">EMAIL</Text>
-                                                            <Text fontSize="sm">{viewEmployee.email || 'N/A'}</Text>
+                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">EMAIL</Text>
+                                                            <Text fontSize="sm" color="gray.700">{viewEmployee.email || 'N/A'}</Text>
                                                         </Box>
                                                     </VStack>
                                                 </Box>
-                                                <Box bg="red.50" p={4} borderRadius="2xl" border="1px dashed" borderColor="red.200">
-                                                    <Text fontSize="10px" color="red.600" fontWeight="black">EMERGENCY</Text>
-                                                    <Text fontSize="sm" fontWeight="bold">{viewEmployee.emergencyContact?.name}</Text>
+                                                <Box bg="red.50" p={4} borderRadius="2xl" border="1px dashed" borderColor="red.200" w="full">
+                                                    <Text fontSize="10px" color="red.600" fontWeight="black">EMERGENCY CONTACT</Text>
+                                                    <Text fontSize="sm" fontWeight="bold" color="red.800">{viewEmployee.emergencyContact?.name}</Text>
                                                     <Text fontSize="xs" color="red.700">{viewEmployee.emergencyContact?.phone}</Text>
                                                 </Box>
                                             </VStack>
 
                                             <VStack align="start" spacing={6}>
-                                                <Box bg="green.50" p={4} borderRadius="2xl" w="full">
+                                                <Box bg="green.50" p={4} borderRadius="2xl" w="full" border="1px solid" borderColor="green.100">
                                                     <Text fontSize="10px" color="green.600" fontWeight="black">GROSS SALARY (CTC)</Text>
                                                     <Text fontSize="2xl" fontWeight="black" color="green.800">₹{parseFloat(viewEmployee.salary || 0).toLocaleString()}</Text>
                                                 </Box>
-                                                <Box>
+                                                <Box w="full">
                                                     <Text fontSize="11px" fontWeight="black" color="orange.500" textTransform="uppercase" mb={3}>Bank Details</Text>
-                                                    <VStack align="start" spacing={2}>
-                                                        <Text fontSize="xs"><strong>Bank:</strong> {viewEmployee.bankDetails?.bankName}</Text>
-                                                        <Text fontSize="xs"><strong>A/C:</strong> {viewEmployee.bankDetails?.accountNumber}</Text>
-                                                        <Text fontSize="xs" color="blue.600" fontWeight="bold">IFSC: {viewEmployee.bankDetails?.ifscCode}</Text>
+                                                    <VStack align="start" spacing={3} bg="orange.50" p={4} borderRadius="xl">
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">BANK</Text>
+                                                            <Text fontSize="xs" fontWeight="bold">{viewEmployee.bankDetails?.bankName || 'N/A'}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">A/C NUMBER</Text>
+                                                            <Text fontSize="xs" fontWeight="bold">{viewEmployee.bankDetails?.accountNumber || 'N/A'}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">IFSC CODE</Text>
+                                                            <Text fontSize="xs" color="blue.600" fontWeight="bold">{viewEmployee.bankDetails?.ifscCode || 'N/A'}</Text>
+                                                        </Box>
                                                     </VStack>
                                                 </Box>
                                             </VStack>
 
                                             <VStack align="start" spacing={6}>
-                                                <Box>
-                                                    <Text fontSize="11px" fontWeight="black" color="cyan.500" textTransform="uppercase" mb={3}>Address Info</Text>
-                                                    <Text fontSize="xs" lineHeight="1.6" color="gray.600">
-                                                        <strong>Current:</strong><br />
-                                                        {viewEmployee.addressLine1?.street}, {viewEmployee.addressLine1?.city}<br />
-                                                        <strong>Permanent:</strong><br />
-                                                        {viewEmployee.addressLine2?.street || 'Same'}, {viewEmployee.addressLine2?.city}
-                                                    </Text>
+                                                <Box w="full">
+                                                    <Text fontSize="11px" fontWeight="black" color="cyan.500" textTransform="uppercase" mb={3}>Address Details</Text>
+                                                    <VStack align="start" spacing={4}>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">CURRENT ADDRESS</Text>
+                                                            <Text fontSize="xs" lineHeight="1.6" color="gray.700">
+                                                                {viewEmployee.addressLine1?.street}, {viewEmployee.addressLine1?.city} - {viewEmployee.addressLine1?.pincode}
+                                                            </Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">PERMANENT ADDRESS</Text>
+                                                            <Text fontSize="xs" lineHeight="1.6" color="gray.700">
+                                                                {viewEmployee.addressLine2?.street || 'Same'}, {viewEmployee.addressLine2?.city} - {viewEmployee.addressLine2?.pincode}
+                                                            </Text>
+                                                        </Box>
+                                                    </VStack>
                                                 </Box>
-                                                <Box>
-                                                    <Text fontSize="11px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={3}>Documents</Text>
+                                                <Box w="full">
+                                                    <Text fontSize="11px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={3}>KYC Documents</Text>
                                                     <Wrap spacing={2}>
                                                         {['aadharCard', 'panCard', 'voterId', 'drivingLicense'].map(field => (
                                                             viewEmployee[field]?.url && (
                                                                 <Button
                                                                     key={field} as="a" target="_blank" size="xs" colorScheme="purple" variant="subtle"
-                                                                    href={`${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5001' : '')}${viewEmployee[field].url}`}
+                                                                    href={`${API_BASE_URL}${viewEmployee[field].url}`}
                                                                     leftIcon={<Icon as={FaFileAlt} />}
+                                                                    borderRadius="lg"
+                                                                    _hover={{ transform: 'translateY(-2px)', boxShadow: 'sm' }}
                                                                 >
                                                                     {field.replace('Card', '').replace('Id', ' ID').toUpperCase()}
                                                                 </Button>
@@ -1323,13 +1490,13 @@ const EmployeeMasterForm = () => {
                                                 </Box>
                                             </VStack>
                                         </SimpleGrid>
-                                    </Box>
-                                    <Box p={5} bg="gray.50" textAlign="right">
-                                        <Button colorScheme="blue" px={10} borderRadius="full" shadow="lg" onClick={() => setViewEmployee(null)}>Close Window</Button>
-                                    </Box>
-                                </Box>
-                            </Box>
-                        )}
+                                    )}
+                                </ModalBody>
+                                <ModalFooter bg="gray.50">
+                                    <Button colorScheme="blue" px={10} borderRadius="full" shadow="lg" onClick={() => setViewEmployee(null)}>Close Profile</Button>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
 
                         {/* Mandatory Submission Confirmation */}
                         <AlertDialog
@@ -1373,8 +1540,17 @@ const ClientMasterForm = () => {
     const [nextId, setNextId] = useState('');
     const [clients, setClients] = useState([]);
     const [editId, setEditId] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = useState('table');
+    const [viewClient, setViewClient] = useState(null);
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
+
+    const filteredClients = clients.filter(c =>
+        c.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.clientId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.contactPersonPhone?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const [formData, setFormData] = useState({
         clientName: '',
@@ -1521,28 +1697,30 @@ const ClientMasterForm = () => {
         <Box py={5} bg="gray.100" minH="100vh">
             <Container maxW="container.lg">
                 <Card variant="elevated" borderRadius="2xl" boxShadow="2xl" bg="white" overflow="hidden">
-                    <Box bg="orange.500" p={8} color="white">
-                        <Flex justify="space-between" align="center" flexWrap="wrap" gap={4}>
+                    <Box bg="orange.600" p={{ base: 5, md: 8 }} color="white">
+                        <Stack direction={{ base: "column", md: "row" }} justify="space-between" align="center" spacing={4}>
                             <Box>
                                 <Heading size="lg">{editId ? 'Edit Client' : 'Client Management'}</Heading>
-                                <Text opacity={0.8} mt={1}>Admin Panel: Manage corporate clients and statutory registration details</Text>
+                                <Text opacity={0.8} mt={1}>Admin Panel: Manage enterprise clients and statutory documents</Text>
                             </Box>
-                            <HStack w={{ base: "full", md: "400px" }} spacing={2}>
-                                <Select bg="white" color="gray.800" placeholder="-- Create New Client --" value={editId} onChange={handleSelectClient} size="md" borderRadius="xl">
-                                    {clients.map(c => <option key={c._id} value={c._id}>{c.clientId || 'N/A'} - {c.clientName}</option>)}
-                                </Select>
-                                {editId && (
-                                    <IconButton
-                                        aria-label="Delete Client"
-                                        icon={<Icon as={FaTrash} />}
-                                        colorScheme="red"
-                                        variant="solid"
-                                        onClick={() => handleDelete(editId)}
-                                        borderRadius="xl"
-                                    />
-                                )}
+                            <HStack w={{ base: "full", md: "auto" }} spacing={2}>
+                                <Input
+                                    bg="white" color="gray.800" placeholder="Search Client, ID, Phone..." size="md" borderRadius="xl"
+                                    w={{ base: "full", md: "250px" }} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                <IconButton
+                                    icon={<Icon as={viewMode === 'table' ? FaUserTie : FaUserTie} />}
+                                    onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')}
+                                    borderRadius="xl" colorScheme="whiteAlpha" variant="solid" aria-label="Toggle View"
+                                />
+                                <Button
+                                    colorScheme="green" leftIcon={<Icon as={FaUserTie} />}
+                                    onClick={() => handleSelectClient({ target: { value: '' } })} borderRadius="xl"
+                                >
+                                    Add New
+                                </Button>
                             </HStack>
-                        </Flex>
+                        </Stack>
                     </Box>
                     <CardBody p={{ base: 5, md: 10 }}>
                         <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
@@ -1636,6 +1814,163 @@ const ClientMasterForm = () => {
                                 </Button>
                             </VStack>
                         </form>
+
+                        {/* Client List View */}
+                        <Box mt={10}>
+                            <Flex justify="space-between" align="center" mb={4}>
+                                <Heading size="md" color="orange.700" display="flex" alignItems="center">
+                                    <Icon as={FaUserTie} mr={2} /> Registered Clients ({filteredClients.length})
+                                </Heading>
+                            </Flex>
+
+                            {viewMode === 'table' ? (
+                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th>ID</Th>
+                                                <Th>Client Name</Th>
+                                                <Th>Contact Person</Th>
+                                                <Th>GST No</Th>
+                                                <Th textAlign="center">Actions</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {filteredClients.map(c => (
+                                                <Tr key={c._id} _hover={{ bg: "orange.50" }} transition="background 0.2s">
+                                                    <Td fontWeight="bold" color="orange.600">{c.clientId}</Td>
+                                                    <Td fontWeight="semibold">{c.clientName}</Td>
+                                                    <Td>
+                                                        <VStack align="start" spacing={0}>
+                                                            <Text fontSize="sm" fontWeight="bold">{c.contactPersonName || c.contactPerson?.name}</Text>
+                                                            <Text fontSize="xs" color="gray.500">{c.contactPersonPhone || c.contactPerson?.phone}</Text>
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td><Badge colorScheme="blue" variant="subtle" borderRadius="md">{c.gstNo || 'N/A'}</Badge></Td>
+                                                    <Td textAlign="center">
+                                                        <HStack justify="center" spacing={1}>
+                                                            <IconButton aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} onClick={() => setViewClient(c)} />
+                                                            <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => handleSelectClient({ target: { value: c._id } })} />
+                                                            <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(c._id)} />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                            ) : (
+                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
+                                    {filteredClients.map(c => (
+                                        <Card key={c._id} borderRadius="xl" border="1px solid" borderColor="gray.100" _hover={{ shadow: 'md', borderColor: 'orange.300' }} transition="all 0.2s">
+                                            <CardBody p={4}>
+                                                <HStack spacing={4} mb={4}>
+                                                    <Box p={2} bg="orange.50" borderRadius="lg"><Icon as={FaUserTie} color="orange.500" w={6} h={6} /></Box>
+                                                    <Box flex={1}>
+                                                        <Text fontWeight="bold" fontSize="md" noOfLines={1}>{c.clientName}</Text>
+                                                        <Text fontSize="xs" color="gray.500">{c.clientId}</Text>
+                                                    </Box>
+                                                </HStack>
+                                                <VStack align="stretch" spacing={2} mb={4}>
+                                                    <HStack fontSize="xs"><Icon as={FaUserTie} color="gray.400" /><Text fontWeight="bold">{c.contactPersonName || c.contactPerson?.name}</Text></HStack>
+                                                    <HStack fontSize="xs"><Icon as={FaPhoneAlt} color="gray.400" /><Text>{c.contactPersonPhone || c.contactPerson?.phone}</Text></HStack>
+                                                    <HStack fontSize="xs"><Icon as={FaEnvelope} color="gray.400" /><Text noOfLines={1}>{c.email || 'No email'}</Text></HStack>
+                                                </VStack>
+                                                <HStack justify="flex-end" spacing={2} pt={2} borderTop="1px solid" borderColor="gray.50">
+                                                    <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<FaEye />} onClick={() => setViewClient(c)}>View</Button>
+                                                    <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<FaEdit />} onClick={() => handleSelectClient({ target: { value: c._id } })}>Edit</Button>
+                                                </HStack>
+                                            </CardBody>
+                                        </Card>
+                                    ))}
+                                </SimpleGrid>
+                            )}
+
+                            {filteredClients.length === 0 && (
+                                <Center p={10} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.200">
+                                    <VStack spacing={2}>
+                                        <Icon as={FaUserTie} w={8} h={8} color="gray.300" />
+                                        <Text color="gray.500">No clients found matching "{searchQuery}"</Text>
+                                    </VStack>
+                                </Center>
+                            )}
+                        </Box>
+
+                        {/* Standardized Client View Modal */}
+                        <Modal isOpen={!!viewClient} onClose={() => setViewClient(null)} size="3xl" isCentered motionPreset="slideInBottom">
+                            <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
+                            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
+                                <ModalHeader p={0}>
+                                    <Box bgGradient="linear(to-r, orange.800, orange.600)" p={6} color="white">
+                                        <HStack justify="space-between">
+                                            <HStack spacing={4}>
+                                                <Icon as={FaUserTie} w={8} h={8} />
+                                                <VStack align="start" spacing={0}>
+                                                    <Heading size="md">{viewClient?.clientName}</Heading>
+                                                    <Text fontSize="xs" opacity={0.8}>{viewClient?.clientId} • Enterprise Client</Text>
+                                                </VStack>
+                                            </HStack>
+                                            <ModalCloseButton position="static" borderRadius="full" />
+                                        </HStack>
+                                    </Box>
+                                </ModalHeader>
+                                <ModalBody p={8}>
+                                    {viewClient && (
+                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={10}>
+                                            <VStack align="start" spacing={6}>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="orange.500" textTransform="uppercase" mb={3}>Primary Contact</Text>
+                                                    <VStack align="start" spacing={4} p={4} bg="orange.50" borderRadius="2xl" w="full">
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">CONTACT PERSON</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.contactPersonName || viewClient.contactPerson?.name}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">PHONE NUMBER</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.contactPersonPhone || viewClient.contactPerson?.phone}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">EMAIL ADDRESS</Text>
+                                                            <Text fontSize="sm" color="gray.800">{viewClient.email || 'N/A'}</Text>
+                                                        </Box>
+                                                    </VStack>
+                                                </Box>
+                                            </VStack>
+
+                                            <VStack align="start" spacing={6}>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={3}>Statutory Info</Text>
+                                                    <VStack align="start" spacing={4} p={4} bg="blue.50" borderRadius="2xl" w="full">
+                                                        <Box>
+                                                            <Text fontSize="9px" color="blue.600" fontWeight="bold">GST NUMBER</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.gstNo || 'N/A'}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="blue.600" fontWeight="bold">PAN CARD</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.panCard || 'N/A'}</Text>
+                                                        </Box>
+                                                    </VStack>
+                                                </Box>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={3}>Documents</Text>
+                                                    <Wrap spacing={2}>
+                                                        {viewClient.documents?.find(d => d.type === 'GST') && (
+                                                            <Button as="a" target="_blank" href={`${API_BASE_URL}${viewClient.documents.find(d => d.type === 'GST').url}`} size="xs" colorScheme="purple" variant="subtle" leftIcon={<Icon as={FaFileAlt} />}>GST CERT</Button>
+                                                        )}
+                                                        {viewClient.documents?.find(d => d.type === 'MSME') && (
+                                                            <Button as="a" target="_blank" href={`${API_BASE_URL}${viewClient.documents.find(d => d.type === 'MSME').url}`} size="xs" colorScheme="teal" variant="subtle" leftIcon={<Icon as={FaFileAlt} />}>MSME CERT</Button>
+                                                        )}
+                                                    </Wrap>
+                                                </Box>
+                                            </VStack>
+                                        </SimpleGrid>
+                                    )}
+                                </ModalBody>
+                                <ModalFooter bg="gray.50">
+                                    <Button colorScheme="orange" px={10} borderRadius="full" shadow="lg" onClick={() => setViewClient(null)}>Close</Button>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
                     </CardBody>
                 </Card>
             </Container>
@@ -1665,6 +2000,12 @@ const SiteMasterForm = () => {
     const [employees, setEmployees] = useState([]);
     const [ledgers, setLedgers] = useState([]);
     const [ledgerSites, setLedgerSites] = useState([]);
+    const [allSites, setAllSites] = useState([]);
+    const [filterClientId, setFilterClientId] = useState('');
+    const [editId, setEditId] = useState('');
+    const [viewSite, setViewSite] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = useState('table');
 
     const [formData, setFormData] = useState({
         client: '',
@@ -1678,37 +2019,28 @@ const SiteMasterForm = () => {
     const [docs, setDocs] = useState(null);
     const [locationLoading, setLocationLoading] = useState(false);
 
-    useEffect(() => {
-        if (!formData.ledger || !ledgers.includes(formData.ledger)) {
-            setLedgerSites([]);
-            return;
-        }
-        const fetchLedgerData = async () => {
-            try {
-                const res = await api.get(`/site-master/by-ledger/${encodeURIComponent(formData.ledger)}`);
-                if (res.data.success) setLedgerSites(res.data.data);
-            } catch (err) { console.error(err); }
-        };
-        fetchLedgerData();
-    }, [formData.ledger, ledgers]);
-
-    useEffect(() => {
-        const fetchInitial = async () => {
-            try {
-                const [cRes, eRes, lRes] = await Promise.all([
-                    api.get('/client-master'),
-                    api.get('/employee-master'),
-                    api.get('/site-master/ledgers')
-                ]);
-                if (cRes.data.success) setClients(cRes.data.data);
-                if (eRes.data.success) setEmployees(eRes.data.data);
-                if (lRes.data.success) setLedgers(lRes.data.data);
-            } catch (error) {
-                console.error("Error fetching dependencies:", error);
+    const fetchInitial = async () => {
+        try {
+            const [cRes, eRes, lRes, sRes] = await Promise.all([
+                api.get('/client-master'),
+                api.get('/employee-master'),
+                api.get('/site-master/ledgers'),
+                api.get('/site-master')
+            ]);
+            if (cRes.data.success) {
+                const clientList = cRes.data.data;
+                setClients(clientList);
+                // Default filter to 00001
+                const defaultClient = clientList.find(c => c.clientId === '00001') || clientList[0];
+                if (defaultClient && !filterClientId) setFilterClientId(defaultClient._id);
             }
-        };
-        fetchInitial();
-    }, []);
+            if (eRes.data.success) setEmployees(eRes.data.data);
+            if (lRes.data.success) setLedgers(lRes.data.data);
+            if (sRes.data.success) setAllSites(sRes.data.data);
+        } catch (error) {
+            console.error("Error fetching dependencies:", error);
+        }
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -1756,7 +2088,6 @@ const SiteMasterForm = () => {
         const [lat, lng] = formData.siteLocation.split(',');
         window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
     };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -1768,15 +2099,21 @@ const SiteMasterForm = () => {
             if (docs) {
                 Array.from(docs).forEach(file => uploadData.append('docs', file));
             }
-            const response = await api.post('/site-master', uploadData);
+
+            let response;
+            if (editId) {
+                response = await api.put(`/site-master/${editId}`, uploadData);
+            } else {
+                response = await api.post('/site-master', uploadData);
+            }
+
             if (response.data.success) {
-                toast({ title: "Success", description: "Site record stored successfully", status: "success", duration: 3000 });
+                toast({ title: editId ? "Updated" : "Success", description: editId ? "Site record updated" : "Site record stored successfully", status: "success", duration: 3000 });
                 setFormData({ client: '', siteName: '', siteAddress: '', siteLocation: '', ledger: '', amount: '' });
                 setContactPersons([{ name: '', phone: '' }]);
                 setDocs(null);
-                // Refresh ledgers
-                const lRes = await api.get('/site-master/ledgers');
-                if (lRes.data.success) setLedgers(lRes.data.data);
+                setEditId('');
+                fetchInitial();
             }
         } catch (error) {
             toast({ title: "Error", description: error.response?.data?.message || "Failed to store record", status: "error", duration: 3000 });
@@ -1785,23 +2122,118 @@ const SiteMasterForm = () => {
         }
     };
 
+    const handleEditSite = (s) => {
+        setEditId(s._id);
+        setFormData({
+            client: s.client?._id || s.client || '',
+            siteName: s.siteName || '',
+            siteAddress: s.siteAddress || '',
+            siteLocation: s.siteLocation || '',
+            ledger: s.ledger || '',
+            amount: s.amount || '',
+        });
+        setContactPersons(s.contactPersons?.length > 0 ? s.contactPersons : [{ name: '', phone: '' }]);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleDeleteSite = async (id) => {
+        if (!window.confirm('Delete this site record?')) return;
+        try {
+            await api.delete(`/site-master/${id}`);
+            toast({ title: 'Deleted', status: 'info', duration: 2000 });
+            fetchInitial();
+            if (editId === id) setEditId('');
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
+        }
+    };
+
+    const filteredSites = allSites.filter(s => {
+        const matchesSearch = s.siteName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            s.client?.clientName?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        if (filterClientId) {
+            const cId = s.client?._id || s.client;
+            return cId === filterClientId && matchesSearch;
+        }
+        return matchesSearch;
+    });
+
+    useEffect(() => { fetchInitial(); }, []);
+
+    useEffect(() => {
+        if (!formData.ledger || !ledgers.includes(formData.ledger)) {
+            setLedgerSites([]);
+            return;
+        }
+        const fetchLedgerData = async () => {
+            try {
+                const res = await api.get(`/site-master/by-ledger/${encodeURIComponent(formData.ledger)}`);
+                if (res.data.success) setLedgerSites(res.data.data);
+            } catch (err) { console.error(err); }
+        };
+        fetchLedgerData();
+    }, [formData.ledger, ledgers]);
+
     return (
         <Box py={5} bg="gray.100" minH="100vh">
             <Container maxW="container.lg">
                 <Card variant="elevated" borderRadius="2xl" boxShadow="2xl" bg="white" overflow="hidden">
-                    <Box bg="teal.500" p={{ base: 5, md: 8 }} color="white">
-                        <Heading size="lg">Site Management</Heading>
-                        <Text opacity={0.8} mt={1}>Admin Panel: Link project sites to clients and manage location details</Text>
+                    <Box bg="teal.600" p={{ base: 5, md: 8 }} color="white">
+                        <Stack direction={{ base: "column", md: "row" }} justify="space-between" align="center" spacing={4}>
+                            <Box>
+                                <Heading size="lg">{editId ? 'Edit Site' : 'Site Management'}</Heading>
+                                <Text opacity={0.8} mt={1}>Admin Panel: Link project sites to clients and manage location details</Text>
+                            </Box>
+                            <HStack w={{ base: "full", md: "auto" }} spacing={2}>
+                                <Input
+                                    bg="white" color="gray.800" placeholder="Search Site, Client..." size="md" borderRadius="xl"
+                                    w={{ base: "full", md: "250px" }} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                <IconButton
+                                    icon={<Icon as={viewMode === 'table' ? FaMapMarkerAlt : FaMapMarkerAlt} />}
+                                    onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')}
+                                    borderRadius="xl" colorScheme="whiteAlpha" variant="solid" aria-label="Toggle View"
+                                />
+                                <Button
+                                    colorScheme="green" leftIcon={<Icon as={FaMapMarkerAlt} />}
+                                    onClick={() => {
+                                        setEditId('');
+                                        setFormData({ client: '', siteName: '', siteAddress: '', siteLocation: '', ledger: '', amount: '' });
+                                        setContactPersons([{ name: '', phone: '' }]);
+                                    }} borderRadius="xl"
+                                >
+                                    Add New
+                                </Button>
+                            </HStack>
+                        </Stack>
                     </Box>
                     <CardBody p={{ base: 4, md: 10 }}>
                         <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
                             <VStack spacing={6} align="stretch">
-                                <FormControl>
-                                    <FormLabel fontWeight="bold">Select Client</FormLabel>
-                                    <Select name="client" placeholder="Choose Client" value={formData.client} onChange={handleChange} borderRadius="xl" size="lg" bg="gray.50">
-                                        {clients.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>)}
-                                    </Select>
-                                </FormControl>
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
+                                    <FormControl isRequired>
+                                        <FormLabel fontWeight="bold">Select Client</FormLabel>
+                                        <Select name="client" placeholder="Choose Client" value={formData.client} onChange={handleChange} borderRadius="xl" size="lg" bg="gray.50">
+                                            {clients.map(c => <option key={c._id} value={c._id}>{c.clientId} - {c.clientName}</option>)}
+                                        </Select>
+                                    </FormControl>
+
+                                    <FormControl>
+                                        <FormLabel fontWeight="bold" fontSize="sm">Site ID (Generated)</FormLabel>
+                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px dashed" borderColor="gray.300">
+                                            <Icon as={FaFingerprint} ml={2} color="teal.500" />
+                                            <Input
+                                                variant="unstyled"
+                                                p={2}
+                                                value={allSites.find(s => s._id === editId)?.siteId || 'NEW'}
+                                                isReadOnly
+                                                color="teal.700"
+                                                fontWeight="bold"
+                                            />
+                                        </HStack>
+                                    </FormControl>
+                                </SimpleGrid>
 
                                 <FormControl isRequired>
                                     <FormLabel fontWeight="bold">Site Name</FormLabel>
@@ -1953,10 +2385,209 @@ const SiteMasterForm = () => {
                                     size="lg" colorScheme="teal" w="full" borderRadius="xl" h="60px"
                                     type="submit" leftIcon={<FaMap />} isLoading={isLoading} boxShadow="lg" mt={2}
                                 >
-                                    Save Master Site Profile
+                                    {editId ? 'Update Site Record' : 'Save Master Site Profile'}
                                 </Button>
                             </VStack>
                         </form>
+
+                        {/* Site List View */}
+                        <Box mt={10}>
+                            <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={4}>
+                                <Heading size="md" color="teal.700" display="flex" alignItems="center">
+                                    <Icon as={FaMapMarkerAlt} mr={2} /> Registered Sites ({filteredSites.length})
+                                </Heading>
+                                <HStack spacing={3} bg="teal.50" p={2} borderRadius="2xl" border="1px solid" borderColor="teal.100">
+                                    <Text fontSize="xs" fontWeight="bold" color="teal.700" whiteSpace="nowrap">Client Wise:</Text>
+                                    <Select
+                                        size="sm" borderRadius="xl" bg="white" w="200px"
+                                        value={filterClientId} onChange={(e) => setFilterClientId(e.target.value)}
+                                    >
+                                        <option value="">All Clients</option>
+                                        {clients.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>)}
+                                    </Select>
+                                </HStack>
+                            </Flex>
+
+                            {viewMode === 'table' ? (
+                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th>Site Name</Th>
+                                                <Th>Client</Th>
+                                                <Th>Contact(s)</Th>
+                                                <Th textAlign="center">Actions</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {filteredSites.map(s => (
+                                                <Tr key={s._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
+                                                    <Td fontWeight="bold" color="teal.600">{s.siteName}</Td>
+                                                    <Td fontSize="sm">{s.client?.clientName}</Td>
+                                                    <Td>
+                                                        <VStack align="start" spacing={0}>
+                                                            {s.contactPersons?.slice(0, 1).map((cp, idx) => (
+                                                                <Text key={idx} fontSize="xs" fontWeight="bold">{cp.name} • {cp.phone}</Text>
+                                                            ))}
+                                                            {s.contactPersons?.length > 1 && <Text fontSize="10px" color="gray.500">+{s.contactPersons.length - 1} more</Text>}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td textAlign="center">
+                                                        <HStack justify="center" spacing={1}>
+                                                            <IconButton aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} onClick={() => setViewSite(s)} />
+                                                            <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => {
+                                                                setEditId(s._id);
+                                                                setFormData({
+                                                                    client: s.client?._id || s.client || '',
+                                                                    siteName: s.siteName || '',
+                                                                    siteAddress: s.siteAddress || '',
+                                                                    siteLocation: s.siteLocation || '',
+                                                                    ledger: s.ledger || '',
+                                                                    amount: s.amount || ''
+                                                                });
+                                                                setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
+                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                            }} />
+                                                            <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(s._id)} />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                            ) : (
+                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
+                                    {filteredSites.map(s => (
+                                        <Card key={s._id} borderRadius="xl" border="1px solid" borderColor="gray.100" _hover={{ shadow: 'md', borderColor: 'teal.300' }} transition="all 0.2s">
+                                            <CardBody p={4}>
+                                                <HStack spacing={4} mb={4}>
+                                                    <Box p={2} bg="teal.50" borderRadius="lg"><Icon as={FaMapMarkerAlt} color="teal.500" w={6} h={6} /></Box>
+                                                    <Box flex={1}>
+                                                        <Text fontWeight="bold" fontSize="md" noOfLines={1}>{s.siteName}</Text>
+                                                        <Text fontSize="xs" color="gray.500">{s.client?.clientName}</Text>
+                                                    </Box>
+                                                </HStack>
+                                                <VStack align="stretch" spacing={2} mb={4}>
+                                                    <HStack fontSize="xs" justify="space-between"><Text color="gray.500">Contacts:</Text><Text fontWeight="bold">{s.contactPersons?.length || 0}</Text></HStack>
+                                                    <HStack fontSize="xs" justify="space-between"><Text color="gray.500">Ledger:</Text><Text noOfLines={1}>{s.ledger || 'N/A'}</Text></HStack>
+                                                </VStack>
+                                                <HStack justify="flex-end" spacing={2} pt={2} borderTop="1px solid" borderColor="gray.50">
+                                                    <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<FaEye />} onClick={() => setViewSite(s)}>View</Button>
+                                                    <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<FaEdit />} onClick={() => {
+                                                        setEditId(s._id);
+                                                        setFormData({
+                                                            client: s.client?._id || s.client || '',
+                                                            siteName: s.siteName || '',
+                                                            siteAddress: s.siteAddress || '',
+                                                            siteLocation: s.siteLocation || '',
+                                                            ledger: s.ledger || '',
+                                                            amount: s.amount || ''
+                                                        });
+                                                        setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    }}>Edit</Button>
+                                                </HStack>
+                                            </CardBody>
+                                        </Card>
+                                    ))}
+                                </SimpleGrid>
+                            )}
+
+                            {filteredSites.length === 0 && (
+                                <Center p={10} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.200">
+                                    <VStack spacing={2}>
+                                        <Icon as={FaMapMarkerAlt} w={8} h={8} color="gray.300" />
+                                        <Text color="gray.500">No sites found matching "{searchQuery}"</Text>
+                                    </VStack>
+                                </Center>
+                            )}
+                        </Box>
+
+                        {/* Standardized Site View Modal */}
+                        <Modal isOpen={!!viewSite} onClose={() => setViewSite(null)} size="3xl" isCentered motionPreset="slideInBottom">
+                            <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
+                            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
+                                <ModalHeader p={0}>
+                                    <Box bgGradient="linear(to-r, teal.800, teal.600)" p={6} color="white">
+                                        <HStack justify="space-between">
+                                            <HStack spacing={4}>
+                                                <Icon as={FaMapMarkerAlt} w={8} h={8} />
+                                                <VStack align="start" spacing={0}>
+                                                    <Heading size="md">{viewSite?.siteName}</Heading>
+                                                    <Text fontSize="xs" opacity={0.8}>{viewSite?.client?.clientName} • Project Location</Text>
+                                                </VStack>
+                                            </HStack>
+                                            <ModalCloseButton position="static" borderRadius="full" />
+                                        </HStack>
+                                    </Box>
+                                </ModalHeader>
+                                <ModalBody p={8}>
+                                    {viewSite && (
+                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={10}>
+                                            <VStack align="start" spacing={6}>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="teal.500" textTransform="uppercase" mb={3}>Site Information</Text>
+                                                    <VStack align="start" spacing={4} p={4} bg="teal.50" borderRadius="2xl" w="full">
+                                                        <Box>
+                                                            <Text fontSize="9px" color="teal.600" fontWeight="bold">SITE ADDRESS</Text>
+                                                            <Text fontSize="sm" color="gray.800">{viewSite.siteAddress}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="teal.600" fontWeight="bold">LOCATION LINK</Text>
+                                                            {viewSite.siteLocation ? (
+                                                                <Button as="a" target="_blank" href={viewSite.siteLocation} size="xs" colorScheme="blue" variant="link" leftIcon={<Icon as={FaMapMarkedAlt} />}>View on Google Maps</Button>
+                                                            ) : 'N/A'}
+                                                        </Box>
+                                                    </VStack>
+                                                </Box>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="orange.500" textTransform="uppercase" mb={3}>Financials</Text>
+                                                    <VStack align="start" spacing={4} p={4} bg="orange.50" borderRadius="2xl" w="full">
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">LEDGER ACCOUNT</Text>
+                                                            <Text fontSize="sm" fontWeight="bold">{viewSite.ledger || 'N/A'}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">CONTRACT AMOUNT</Text>
+                                                            <Text fontSize="sm" fontWeight="bold">₹{viewSite.amount || '0'}</Text>
+                                                        </Box>
+                                                    </VStack>
+                                                </Box>
+                                            </VStack>
+
+                                            <VStack align="start" spacing={6}>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={3}>On-Site Contacts</Text>
+                                                    <VStack align="stretch" spacing={2}>
+                                                        {viewSite.contactPersons?.map((cp, i) => (
+                                                            <HStack key={i} p={3} bg="purple.50" borderRadius="xl" justify="space-between">
+                                                                <VStack align="start" spacing={0}>
+                                                                    <Text fontSize="sm" fontWeight="bold">{cp.name}</Text>
+                                                                    <Text fontSize="xs" color="gray.500">{cp.phone}</Text>
+                                                                </VStack>
+                                                                <IconButton as="a" href={`tel:${cp.phone}`} icon={<FaPhoneAlt />} size="sm" borderRadius="full" colorScheme="purple" variant="ghost" />
+                                                            </HStack>
+                                                        ))}
+                                                    </VStack>
+                                                </Box>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={3}>Documents</Text>
+                                                    <Wrap spacing={2}>
+                                                        {viewSite.documents?.map((doc, i) => (
+                                                            <Button key={i} as="a" target="_blank" href={`${API_BASE_URL}${doc.url}`} size="xs" colorScheme="blue" variant="subtle" leftIcon={<Icon as={FaFileAlt} />}>{doc.name}</Button>
+                                                        ))}
+                                                    </Wrap>
+                                                </Box>
+                                            </VStack>
+                                        </SimpleGrid>
+                                    )}
+                                </ModalBody>
+                                <ModalFooter bg="gray.50">
+                                    <Button colorScheme="teal" px={10} borderRadius="full" shadow="lg" onClick={() => setViewSite(null)}>Close</Button>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
                     </CardBody>
                 </Card>
             </Container>
@@ -2472,7 +3103,7 @@ const InstrumentMasterForm = () => {
     const handleEdit = (inst) => {
         setEditId(inst._id);
         setFormData({ refNo: inst.refNo, instrumentName: inst.instrumentName, notes: inst.notes || '' });
-        setPhotoPreviews(inst.photos?.map(p => `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${p.url}`) || (inst.photo?.url ? [`${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${inst.photo.url}`] : []));
+        setPhotoPreviews(inst.photos?.map(p => `${API_BASE_URL}${p.url}`) || (inst.photo?.url ? [`${API_BASE_URL}${inst.photo.url}`] : []));
         setPhotoFiles([]);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -2481,8 +3112,11 @@ const InstrumentMasterForm = () => {
         setEditId(null);
         setFormData({ refNo: '', instrumentName: '', notes: '' });
         setPhotoFiles([]);
-        setPhotoPreviews(inst.photos?.map(p => `${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${p.url}`) || (inst.photo?.url ? [`${import.meta.env.VITE_STATIC_BASE_URL || (import.meta.env.DEV ? "http://localhost:5001" : "")}${inst.photo.url}`] : []));
+        setPhotoPreviews([]);
+        document.getElementById('instr-photo-upload').value = '';
     };
+
+    const [viewInstrument, setViewInstrument] = useState(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -2511,7 +3145,15 @@ const InstrumentMasterForm = () => {
                 fetchInstruments();
             }
         } catch (error) {
-            toast({ title: 'Error', description: error.response?.data?.message || 'Operation failed', status: 'error', duration: 3000 });
+            console.error('Instrument storage error:', error);
+            const errMsg = error.response?.data?.message || error.message || 'Operation failed';
+            toast({
+                title: 'Error',
+                description: errMsg,
+                status: 'error',
+                duration: 5000,
+                isClosable: true
+            });
         } finally { setIsLoading(false); }
     };
 
@@ -2641,25 +3283,32 @@ const InstrumentMasterForm = () => {
 
                 {/* Instrument Table List */}
                 <Box mt={10}>
-                    <Heading size="md" mb={4} color="blue.700" display="flex" alignItems="center">
-                        <Icon as={FaWrench} mr={2} /> Registered Instruments
-                    </Heading>
-                    <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                    <HStack justify="space-between" mb={4}>
+                        <Heading size="md" color="blue.700" display="flex" alignItems="center">
+                            <Icon as={FaWrench} mr={2} /> Registered Instruments
+                        </Heading>
+                        <Tag colorScheme="blue" variant="subtle" borderRadius="full">{instruments.length} Total</Tag>
+                    </HStack>
+                    <Box overflowX="auto" bg="white" borderRadius="2xl" boxShadow="xl" border="1px solid" borderColor="gray.100">
                         <Table variant="simple">
-                            <Thead bg="gray.50">
+                            <Thead bg="blue.50">
                                 <Tr>
-                                    <Th>Ref No</Th>
-                                    <Th>Instrument Name</Th>
-                                    <Th textAlign="center">Actions</Th>
+                                    <Th color="blue.700" py={4}>Ref No</Th>
+                                    <Th color="blue.700" py={4}>Instrument Name</Th>
+                                    <Th color="blue.700" py={4} textAlign="center">Actions</Th>
                                 </Tr>
                             </Thead>
                             <Tbody>
                                 {instruments.map(inst => (
-                                    <Tr key={inst._id} _hover={{ bg: "gray.50" }}>
-                                        <Td fontWeight="bold" color="blue.600">{inst.refNo}</Td>
-                                        <Td>{inst.instrumentName}</Td>
+                                    <Tr key={inst._id} _hover={{ bg: "blue.50" }} transition="all 0.2s">
+                                        <Td fontWeight="bold" color="blue.600">{inst.refNo || 'N/A'}</Td>
+                                        <Td fontWeight="medium">{inst.instrumentName}</Td>
                                         <Td textAlign="center">
                                             <HStack justify="center" spacing={2}>
+                                                <IconButton
+                                                    aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />}
+                                                    onClick={() => setViewInstrument(inst)}
+                                                />
                                                 <IconButton
                                                     aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />}
                                                     onClick={() => handleEdit(inst)}
@@ -2674,13 +3323,84 @@ const InstrumentMasterForm = () => {
                                 ))}
                                 {instruments.length === 0 && (
                                     <Tr>
-                                        <Td colSpan={3} textAlign="center" py={6} color="gray.500">No instruments found.</Td>
+                                        <Td colSpan={3} textAlign="center" py={10} color="gray.400">
+                                            <VStack spacing={2}>
+                                                <Icon as={FaWrench} w={8} h={8} opacity={0.2} />
+                                                <Text>No instruments found.</Text>
+                                            </VStack>
+                                        </Td>
                                     </Tr>
                                 )}
                             </Tbody>
                         </Table>
                     </Box>
                 </Box>
+
+                {/* View Instrument Modal */}
+                {viewInstrument && (
+                    <Box
+                        position="fixed" top={0} left={0} right={0} bottom={0}
+                        bg="blackAlpha.700"
+                        zIndex={10000}
+                        display="flex" alignItems="center" justifyContent="center" p={4}
+                        onClick={() => setViewInstrument(null)}
+                        className="uni-modal-overlay"
+                    >
+                        <Box
+                            bg="white" borderRadius="3xl" maxW="600px" w="full" boxShadow="2xl"
+                            overflow="hidden" onClick={(e) => e.stopPropagation()}
+                            className="uni-modal-box"
+                        >
+                            <Box bgGradient="linear(to-r, blue.800, blue.600)" p={6} color="white">
+                                <HStack justify="space-between">
+                                    <HStack spacing={4}>
+                                        <Icon as={FaWrench} w={8} h={8} />
+                                        <VStack align="start" spacing={0}>
+                                            <Heading size="md">{viewInstrument.instrumentName}</Heading>
+                                            <Text fontSize="xs" opacity={0.8}>{viewInstrument.refNo || 'No Ref No'} • Technical Asset</Text>
+                                        </VStack>
+                                    </HStack>
+                                    <IconButton aria-label="Close" icon={<Icon as={FaTimes} />} size="md" variant="ghost" color="white" onClick={() => setViewInstrument(null)} />
+                                </HStack>
+                            </Box>
+
+                            <Box p={8}>
+                                <VStack align="start" spacing={6}>
+                                    <Box w="full">
+                                        <Text fontSize="10px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={2}>Description / Notes</Text>
+                                        <Text fontSize="sm" bg="gray.50" p={4} borderRadius="xl" borderLeft="4px solid" borderColor="blue.400">
+                                            {viewInstrument.notes || 'No specific notes provided for this instrument.'}
+                                        </Text>
+                                    </Box>
+
+                                    <Box w="full">
+                                        <Text fontSize="10px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={3}>Gallery ({viewInstrument.photos?.length || (viewInstrument.photo ? 1 : 0)})</Text>
+                                        <SimpleGrid columns={3} spacing={3}>
+                                            {viewInstrument.photos?.map((p, idx) => (
+                                                <Box key={idx} borderRadius="xl" overflow="hidden" boxShadow="sm" border="1px solid" borderColor="gray.100" cursor="pointer" onClick={() => window.open(`${API_BASE_URL}${p.url}`, '_blank')}>
+                                                    <Image src={`${API_BASE_URL}${p.url}`} alt="Inst" h="80px" w="full" objectFit="cover" _hover={{ transform: 'scale(1.1)' }} transition="transform 0.3s" />
+                                                </Box>
+                                            ))}
+                                            {viewInstrument.photo && (
+                                                <Box borderRadius="xl" overflow="hidden" boxShadow="sm" border="1px solid" borderColor="gray.100" cursor="pointer" onClick={() => window.open(`${API_BASE_URL}${viewInstrument.photo.url}`, '_blank')}>
+                                                    <Image src={`${API_BASE_URL}${viewInstrument.photo.url}`} alt="Inst" h="80px" w="full" objectFit="cover" />
+                                                </Box>
+                                            )}
+                                            {(!viewInstrument.photos?.length && !viewInstrument.photo) && (
+                                                <Center gridColumn="span 3" py={4} border="1px dashed" borderColor="gray.200" borderRadius="xl">
+                                                    <Text fontSize="xs" color="gray.400">No photos available</Text>
+                                                </Center>
+                                            )}
+                                        </SimpleGrid>
+                                    </Box>
+                                </VStack>
+                            </Box>
+                            <Box p={5} bg="gray.50" textAlign="right">
+                                <Button colorScheme="blue" borderRadius="full" px={10} shadow="lg" onClick={() => setViewInstrument(null)}>Close</Button>
+                            </Box>
+                        </Box>
+                    </Box>
+                )}
             </Container>
 
             <AlertDialog isOpen={isConfirmOpen} leastDestructiveRef={cancelRef} onClose={onConfirmClose} isCentered>
@@ -2747,7 +3467,7 @@ const Services = () => {
             {isAdmin ? (
                 <Box bg="gray.100" minH="100vh" pt={10}>
                     <Container maxW="full" px={{ base: 2, xl: 6 }}>
-                        <Tabs variant="soft-rounded" colorScheme="purple" orientation="vertical" w="full">
+                        <Tabs isLazy variant="soft-rounded" colorScheme="purple" orientation="vertical" w="full">
                             <TabList bg="white" p={4} borderRadius="2xl" boxShadow="md" mr={4} minW="180px" gap={2}>
                                 <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
                                     <Icon as={FaTruck} mr={2} /> Vehicle Master

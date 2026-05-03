@@ -240,19 +240,23 @@ const Header = () => {
 };
 
 const AuthModal = ({ isOpen, onClose }) => {
-    const { sendAdminOtp, verifyAdminOtp, setup2FA, verifyEnable2FA, login2FA } = useAuth();
+    const { sendAdminOtp, verifyAdminOtp, setup2FA, verifyEnable2FA, login2FA, resetWithBackup } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
-    const [step, setStep] = React.useState('email'); // 'email' | 'otp' | 'mfa' | 'mfa-setup'
+    const [step, setStep] = React.useState('email'); // 'email' | 'choose' | 'otp' | 'mfa' | 'mfa-setup' | 'reset-2fa'
     const [isLoading, setIsLoading] = React.useState(false);
     const [email, setEmail] = React.useState('');
     const [otp, setOtp] = React.useState('');
     const [mfaCode, setMfaCode] = React.useState('');
     const [qrCode, setQrCode] = React.useState('');
     const [is2FAEnabled, setIs2FAEnabled] = React.useState(false);
+    const [whatsappFailed, setWhatsappFailed] = React.useState(false);
+    const [resetLoading, setResetLoading] = React.useState(false);
+    const [backupCodeInput, setBackupCodeInput] = React.useState('');
 
     const resetAndClose = () => {
         setStep('email'); setEmail(''); setOtp(''); setMfaCode(''); setQrCode('');
+        setWhatsappFailed(false); setBackupCodeInput(''); setIs2FAEnabled(false);
         onClose();
     };
 
@@ -266,13 +270,31 @@ const AuthModal = ({ isOpen, onClose }) => {
 
         if (res.success) {
             setIs2FAEnabled(res.is2FAEnabled);
-            toast({
-                title: res.whatsappStatus === 'failed' ? '⚠️ WhatsApp Offline' : '✅ OTP Sent!',
-                description: res.msg || 'Check your WhatsApp for the code.',
-                status: res.whatsappStatus === 'failed' ? 'warning' : 'success',
-                duration: 5000
-            });
-            setStep('otp');
+            const failed = res.whatsappStatus === 'failed';
+            setWhatsappFailed(failed);
+
+            if (failed) {
+                toast({
+                    title: '⚠️ WhatsApp OTP Failed',
+                    description: 'WhatsApp service is offline. Use Google Authenticator to login.',
+                    status: 'warning',
+                    duration: 6000,
+                    isClosable: true,
+                });
+            } else {
+                toast({
+                    title: '✅ OTP Sent!',
+                    description: res.msg || 'Check your WhatsApp for the OTP code.',
+                    status: 'success',
+                    duration: 4000,
+                });
+            }
+            // Always go to choose — if WhatsApp failed + 2FA enabled, skip straight to mfa
+            if (failed && res.is2FAEnabled) {
+                setStep('mfa');
+            } else {
+                setStep('choose');
+            }
         } else {
             toast({ title: 'Failed', description: res.message, status: 'error' });
         }
@@ -339,6 +361,23 @@ const AuthModal = ({ isOpen, onClose }) => {
             toast({ title: 'Verification Failed', description: res.message, status: 'error' });
         }
     };
+
+    const handleResetWithBackup = async () => {
+        if (!backupCodeInput) return toast({ title: 'Enter Master Code', status: 'error' });
+        setResetLoading(true);
+        const res = await resetWithBackup(email, backupCodeInput);
+        setResetLoading(false);
+        if (res.success) {
+            toast({ title: '2FA Reset Successful!', description: 'You can now scan a new QR code.', status: 'success' });
+            setBackupCodeInput('');
+            await handleStartMfaSetup();
+        } else {
+            toast({ title: 'Failed', description: res.message || 'Invalid Master Code', status: 'error' });
+        }
+    };
+// ── Recovery handlers removed (WhatsApp) ─────────────────────────────────────────────────────
+
+
     return (
         <Modal isOpen={isOpen} onClose={resetAndClose} isCentered size="sm">
             <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.400" />
@@ -347,14 +386,17 @@ const AuthModal = ({ isOpen, onClose }) => {
                     <Text fontWeight="800" color="white" fontSize="lg">🔐 Admin Login</Text>
                     <Text fontSize="xs" color="blue.200" mt={1}>
                         {step === 'email' && 'Enter your admin email to continue.'}
+                        {step === 'choose' && 'Choose your login method.'}
                         {step === 'otp' && `Enter the WhatsApp OTP sent for ${email}`}
                         {step === 'mfa' && 'Enter the 6-digit code from Google Authenticator.'}
                         {step === 'mfa-setup' && 'Scan this QR code with Google Authenticator app.'}
+                        {step === 'reset-backup' && 'Enter the Master Recovery Code to reset 2FA.'}
                     </Text>
                 </Box>
                 <ModalCloseButton color="white" top={3} right={3} />
 
                 <Box p={6}>
+                    {/* Step 1: Email */}
                     {step === 'email' && (
                         <Stack spacing={4}>
                             <FormControl isRequired>
@@ -364,15 +406,90 @@ const AuthModal = ({ isOpen, onClose }) => {
                                     placeholder="admin@uniqueengineering.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
                                     size="lg" borderRadius="xl"
                                 />
                             </FormControl>
                             <Button colorScheme="blue" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleSendOtp}>
-                                Next
+                                Next →
                             </Button>
                         </Stack>
                     )}
 
+                    {/* Step 2: Choose Method */}
+                    {step === 'choose' && (
+                        <Stack spacing={4}>
+                            {whatsappFailed && (
+                                <Box bg="red.50" border="1px solid" borderColor="red.300" borderRadius="xl" p={3}>
+                                    <Text fontSize="xs" fontWeight="700" color="red.700">⚠️ WhatsApp OTP Failed</Text>
+                                    <Text fontSize="xs" color="red.600" mt={1}>
+                                        WhatsApp is offline. Only Google Authenticator is available.
+                                    </Text>
+                                </Box>
+                            )}
+
+                            <Text fontSize="sm" fontWeight="700" color="gray.500" textAlign="center">
+                                Select login method:
+                            </Text>
+
+                            {/* WhatsApp OTP card */}
+                            <Box
+                                p={4} borderRadius="xl" border="2px solid"
+                                borderColor={whatsappFailed ? 'gray.200' : 'green.400'}
+                                bg={whatsappFailed ? 'gray.50' : 'green.50'}
+                                opacity={whatsappFailed ? 0.45 : 1}
+                                cursor={whatsappFailed ? 'not-allowed' : 'pointer'}
+                                onClick={() => !whatsappFailed && setStep('otp')}
+                                transition="all 0.15s"
+                                _hover={!whatsappFailed ? { borderColor: 'green.600', bg: 'green.100' } : {}}
+                            >
+                                <Text fontWeight="800" color={whatsappFailed ? 'gray.400' : 'green.800'} fontSize="sm">
+                                    📱 WhatsApp OTP
+                                </Text>
+                                <Text fontSize="xs" color={whatsappFailed ? 'gray.400' : 'green.600'} mt={1}>
+                                    {whatsappFailed ? 'Unavailable — service offline' : 'OTP already sent to your linked WhatsApp'}
+                                </Text>
+                            </Box>
+
+                            {/* Google Authenticator card */}
+                            <Box
+                                p={4} borderRadius="xl" border="2px solid"
+                                borderColor="orange.400" bg="orange.50"
+                                cursor={isLoading ? 'wait' : 'pointer'}
+                                onClick={() => !isLoading && (is2FAEnabled ? setStep('mfa') : handleStartMfaSetup())}
+                                transition="all 0.15s"
+                                _hover={{ borderColor: 'orange.600', bg: 'orange.100' }}
+                            >
+                                <Text fontWeight="800" color="orange.800" fontSize="sm">
+                                    🔑 Google Authenticator
+                                </Text>
+                                <Text fontSize="xs" color="orange.600" mt={1}>
+                                    {is2FAEnabled ? 'Use your 6-digit TOTP code' : 'Set up Google Authenticator for future logins'}
+                                </Text>
+                                {isLoading && <Text fontSize="xs" color="orange.500" mt={1}>Setting up...</Text>}
+                            </Box>
+
+                            {/* ── Master Code Reset Option (Always Visible for Admins) ── */}
+                            <Box textAlign="center" pt={2}>
+                                <Divider mb={4} />
+                                <Button
+                                    variant="outline"
+                                    colorScheme="red"
+                                    size="md"
+                                    w="full"
+                                    borderRadius="xl"
+                                    leftIcon={<span>🔄</span>}
+                                    onClick={() => setStep('reset-backup')}
+                                >
+                                    Forgot Authenticator? Reset 2FA
+                                </Button>
+                            </Box>
+
+                            <Button variant="link" size="xs" onClick={() => setStep('email')}>{'<-'} Back</Button>
+                        </Stack>
+                    )}
+
+                    {/* Step 3a: WhatsApp OTP entry */}
                     {step === 'otp' && (
                         <Stack spacing={4}>
                             <FormControl isRequired>
@@ -382,6 +499,7 @@ const AuthModal = ({ isOpen, onClose }) => {
                                     maxLength={4}
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
                                     textAlign="center" fontSize="2xl" letterSpacing="0.5em"
                                     size="lg" borderRadius="xl"
                                 />
@@ -389,23 +507,11 @@ const AuthModal = ({ isOpen, onClose }) => {
                             <Button colorScheme="green" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleVerifyOtp}>
                                 Verify WhatsApp OTP
                             </Button>
-                            
-                            <Divider />
-                            
-                            {is2FAEnabled ? (
-                                <Button variant="outline" colorScheme="orange" size="sm" onClick={() => setStep('mfa')}>
-                                    Use Google Authenticator instead
-                                </Button>
-                            ) : (
-                                <Button variant="ghost" colorScheme="blue" size="sm" onClick={handleStartMfaSetup}>
-                                    Setup Google Authenticator
-                                </Button>
-                            )}
-                            
-                            <Button variant="link" size="xs" onClick={() => setStep('email')}>← Back</Button>
+                            <Button variant="link" size="xs" onClick={() => setStep('choose')}>← Choose different method</Button>
                         </Stack>
                     )}
 
+                    {/* Step 3b: Google Authenticator login */}
                     {step === 'mfa' && (
                         <Stack spacing={4}>
                             <FormControl isRequired>
@@ -415,17 +521,37 @@ const AuthModal = ({ isOpen, onClose }) => {
                                     maxLength={6}
                                     value={mfaCode}
                                     onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleMfaLogin()}
                                     textAlign="center" fontSize="2xl" letterSpacing="0.2em"
                                     size="lg" borderRadius="xl"
                                 />
                             </FormControl>
-                            <Button colorScheme="orange" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleMfaLogin}>
-                                Verify & Login
+                            <Button colorScheme="blue" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleMfaLogin}>
+                                Verify &amp; Login
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setStep('otp')}>Use WhatsApp OTP instead</Button>
+                            {!whatsappFailed && (
+                                <Button variant="ghost" size="sm" onClick={() => setStep('choose')}>{'<-'} Choose different method</Button>
+                            )}
+                            {/* ── Lost authenticator recovery ── */}
+                            <Divider />
+                            <Box textAlign="center">
+                                <Text fontSize="xs" color="gray.500" mb={1}>Lost access to your authenticator app?</Text>
+                                <Button
+                                    variant="link"
+                                    colorScheme="red"
+                                    size="xs"
+                                    onClick={() => {
+                                        setBackupCodeInput('');
+                                        setStep('reset-backup');
+                                    }}
+                                >
+                                    🔄 Reset 2FA using Master Code
+                                </Button>
+                            </Box>
                         </Stack>
                     )}
 
+                    {/* Step 4: Google Authenticator setup */}
                     {step === 'mfa-setup' && (
                         <VStack spacing={4}>
                             <Box border="4px solid" borderColor="gray.100" p={2} borderRadius="lg">
@@ -442,10 +568,44 @@ const AuthModal = ({ isOpen, onClose }) => {
                                 textAlign="center" size="lg" borderRadius="xl"
                             />
                             <Button colorScheme="blue" w="full" onClick={handleCompleteMfaSetup} isLoading={isLoading}>
-                                Confirm & Enable
+                                Confirm &amp; Enable
                             </Button>
-                            <Button variant="ghost" size="xs" onClick={() => setStep('otp')}>Cancel Setup</Button>
+                            <Button variant="ghost" size="xs" onClick={() => setStep('choose')}>Cancel Setup</Button>
                         </VStack>
+                    )}
+
+                    {/* Step 6: Reset via Master Code */}
+                    {step === 'reset-backup' && (
+                        <Stack spacing={4}>
+                            <Box bg="blue.50" border="1px solid" borderColor="blue.300" borderRadius="xl" p={3}>
+                                <Text fontSize="xs" fontWeight="700" color="blue.700">🔐 Master Recovery</Text>
+                                <Text fontSize="xs" color="blue.600" mt={1}>
+                                    Enter the master recovery code to wipe your 2FA settings and scan a new QR code.
+                                </Text>
+                            </Box>
+                            <FormControl isRequired>
+                                <FormLabel fontSize="sm" fontWeight="700">Master Recovery Code</FormLabel>
+                                <Input
+                                    placeholder="Enter Master Code"
+                                    type="password"
+                                    autoComplete="off"
+                                    value={backupCodeInput}
+                                    onChange={(e) => setBackupCodeInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleResetWithBackup()}
+                                    textAlign="center" fontSize="xl"
+                                    size="lg" borderRadius="xl"
+                                />
+                            </FormControl>
+                            <Button
+                                colorScheme="blue"
+                                w="full" size="lg" borderRadius="xl"
+                                isLoading={resetLoading}
+                                onClick={handleResetWithBackup}
+                            >
+                                Reset 2FA Now
+                            </Button>
+                            <Button variant="link" size="xs" onClick={() => setStep('mfa')}>← Back to login</Button>
+                        </Stack>
                     )}
                 </Box>
             </ModalContent>
@@ -483,6 +643,14 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
         email: '',
         gstNumber: ''
     });
+
+    // Reset flow when drawer is opened
+    React.useEffect(() => {
+        if (isOpen) {
+            setAuthStep('phone');
+            setOtpInput('');
+        }
+    }, [isOpen]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -534,7 +702,12 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                     if (err.response?.status === 404) {
                         setAdminClientStatus('notfound');
                         setShowFullAdminForm(true);
-                        setFormData({ companyName: '', contactPersonName: '', email: '', gstNumber: '' });
+                        setFormData({ 
+                            companyName: '', 
+                            contactPersonName: '', 
+                            email: `${cleanPhone}@gmail.com`, 
+                            gstNumber: '' 
+                        });
                     }
                 } finally {
                     setIsCheckingPhone(false);
@@ -614,6 +787,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             if (res.status === 404) {
                 toast({ title: "Registration", description: "Welcome! Please enter your details below.", status: "success" });
                 setAuthStep('register');
+                setFormData(prev => ({ ...prev, email: `${phoneInput.replace(/\D/g, '')}@gmail.com` }));
             } else {
                 toast({ title: "Failed", description: res.message || "Could not send OTP", status: "error" });
             }
@@ -828,7 +1002,23 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                     </Stack>
                                 ) : authStep === 'otp' ? (
                                     <Stack spacing={3}>
-                                        <Text fontSize="sm" color="gray.600">We have sent a verification code to WhatsApp number **{phoneInput}**.</Text>
+                                        <Box p={3} bg="blue.50" borderRadius="md" borderLeft="4px solid" borderColor="blue.400">
+                                            <Text fontSize="sm" color="gray.700">
+                                                OTP sent to: <b>{phoneInput}</b>
+                                            </Text>
+                                            <Button 
+                                                size="xs" 
+                                                variant="link" 
+                                                colorScheme="blue" 
+                                                mt={1} 
+                                                onClick={() => {
+                                                    setAuthStep('phone');
+                                                    setOtpInput('');
+                                                }}
+                                            >
+                                                Change Number?
+                                            </Button>
+                                        </Box>
                                         <FormControl isRequired>
                                             <FormLabel fontSize="sm" mb={1}>Enter 4-Digit OTP</FormLabel>
                                             <Input size="md" placeholder="1234" maxLength={4} value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} />
@@ -843,7 +1033,10 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                         </Box>
                                         <FormControl isRequired>
                                             <FormLabel fontSize="sm" mb={1}>Phone Number</FormLabel>
-                                            <Input size="sm" bg="gray.50" value={phoneInput} isReadOnly />
+                                            <Flex gap={2}>
+                                                <Input size="sm" bg="gray.50" value={phoneInput} isReadOnly />
+                                                <Button size="xs" variant="outline" colorScheme="gray" onClick={() => setAuthStep('phone')}>Change</Button>
+                                            </Flex>
                                         </FormControl>
                                         <FormControl>
                                             <FormLabel fontSize="sm" mb={1}>Company Name</FormLabel>
