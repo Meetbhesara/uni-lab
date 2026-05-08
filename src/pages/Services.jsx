@@ -12,10 +12,11 @@ import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
     FaUserTie, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope, FaIdCard, FaCamera,
     FaHandshake, FaFingerprint, FaIdBadge, FaMap,
-    FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt
+    FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt, FaUndo, FaListUl
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
+import EmployeeExpensesModule from '../pages/EmployeeExpensesModule';
 import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -2012,12 +2013,14 @@ const SiteMasterForm = () => {
         siteName: '',
         siteAddress: '',
         siteLocation: '',
-        ledger: '',
-        amount: '',
+        status: 'Active'
     });
+    const [ledgerItems, setLedgerItems] = useState([{ ledger: '', amount: '', isNew: false }]);
     const [contactPersons, setContactPersons] = useState([{ name: '', phone: '' }]);
     const [docs, setDocs] = useState(null);
     const [locationLoading, setLocationLoading] = useState(false);
+    const [nextSiteId, setNextSiteId] = useState('');
+    const [isNewLedger, setIsNewLedger] = useState(false);
 
     const fetchInitial = async () => {
         try {
@@ -2042,9 +2045,18 @@ const SiteMasterForm = () => {
         }
     };
 
-    const handleChange = (e) => {
+    const handleChange = async (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+
+        if (name === 'client' && value && !editId) {
+            try {
+                const res = await api.get(`/site-master/next-id/${value}`);
+                if (res.data.success) setNextSiteId(res.data.nextId);
+            } catch (err) { console.error('Failed to fetch next site ID', err); }
+        } else if (name === 'client' && !value) {
+            setNextSiteId('');
+        }
     };
 
     const handleFileChange = (e) => setDocs(e.target.files);
@@ -2093,7 +2105,11 @@ const SiteMasterForm = () => {
         setIsLoading(true);
         try {
             const uploadData = new FormData();
-            Object.keys(formData).forEach(key => uploadData.append(key, formData[key]));
+            Object.keys(formData).forEach(key => {
+                if (formData[key]) uploadData.append(key, formData[key]);
+            });
+            const cleanedLedgers = ledgerItems.filter(li => li.ledger && li.ledger.trim() !== '' && li.amount);
+            uploadData.append('ledgerItems', JSON.stringify(cleanedLedgers.map(item => ({ ledger: item.ledger, amount: item.amount }))));
             const cleanedContacts = contactPersons.filter(cp => cp.name.trim() || cp.phone.trim());
             uploadData.append('contactPersons', JSON.stringify(cleanedContacts));
             if (docs) {
@@ -2109,10 +2125,12 @@ const SiteMasterForm = () => {
 
             if (response.data.success) {
                 toast({ title: editId ? "Updated" : "Success", description: editId ? "Site record updated" : "Site record stored successfully", status: "success", duration: 3000 });
-                setFormData({ client: '', siteName: '', siteAddress: '', siteLocation: '', ledger: '', amount: '' });
+                setFormData({ client: '', siteName: '', siteAddress: '', siteLocation: '', status: 'Active' });
+                setLedgerItems([{ ledger: '', amount: '', isNew: false }]);
                 setContactPersons([{ name: '', phone: '' }]);
                 setDocs(null);
                 setEditId('');
+                setNextSiteId('');
                 fetchInitial();
             }
         } catch (error) {
@@ -2129,9 +2147,9 @@ const SiteMasterForm = () => {
             siteName: s.siteName || '',
             siteAddress: s.siteAddress || '',
             siteLocation: s.siteLocation || '',
-            ledger: s.ledger || '',
-            amount: s.amount || '',
+            status: s.status || 'Active'
         });
+        setLedgerItems(s.ledgerItems?.length > 0 ? s.ledgerItems.map(li => ({ ...li, isNew: false })) : [{ ledger: '', amount: '', isNew: false }]);
         setContactPersons(s.contactPersons?.length > 0 ? s.contactPersons : [{ name: '', phone: '' }]);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -2226,7 +2244,7 @@ const SiteMasterForm = () => {
                                             <Input
                                                 variant="unstyled"
                                                 p={2}
-                                                value={allSites.find(s => s._id === editId)?.siteId || 'NEW'}
+                                                value={editId ? (allSites.find(s => s._id === editId)?.siteId || '') : (nextSiteId || 'NEW')}
                                                 isReadOnly
                                                 color="teal.700"
                                                 fontWeight="bold"
@@ -2235,63 +2253,95 @@ const SiteMasterForm = () => {
                                     </FormControl>
                                 </SimpleGrid>
 
-                                <FormControl isRequired>
-                                    <FormLabel fontWeight="bold">Site Name</FormLabel>
-                                    <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                        <Icon as={FaMap} ml={3} color="teal.500" />
-                                        <Input name="siteName" variant="unstyled" p={2} placeholder="Construction Site Alpha" value={formData.siteName} onChange={handleChange} />
-                                    </HStack>
-                                </FormControl>
-
-                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold">Site Ledger (Category)</FormLabel>
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
+                                    <FormControl isRequired>
+                                        <FormLabel fontWeight="bold">Site Name</FormLabel>
                                         <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                            <Icon as={FaFileInvoiceDollar} ml={3} color="teal.500" />
-                                            <Input
-                                                name="ledger"
-                                                list="site-ledgers"
-                                                variant="unstyled"
-                                                p={2}
-                                                placeholder="Select or Create Ledger"
-                                                value={formData.ledger}
-                                                onChange={handleChange}
-                                            />
-                                            <datalist id="site-ledgers">
-                                                {ledgers.map((l, i) => <option key={i} value={l} />)}
-                                            </datalist>
+                                            <Icon as={FaMap} ml={3} color="teal.500" />
+                                            <Input name="siteName" variant="unstyled" p={2} placeholder="Construction Site Alpha" value={formData.siteName} onChange={handleChange} />
                                         </HStack>
                                     </FormControl>
                                     <FormControl>
-                                        <FormLabel fontWeight="bold">Budget / Amount (₹)</FormLabel>
-                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                            <Icon as={FaMoneyBillWave} ml={3} color="teal.500" />
-                                            <Input name="amount" type="number" variant="unstyled" p={2} placeholder="e.g. 500000" value={formData.amount} onChange={handleChange} />
-                                        </HStack>
+                                        <FormLabel fontWeight="bold">Status</FormLabel>
+                                        <Select name="status" value={formData.status} onChange={handleChange} borderRadius="xl" size="lg" bg="gray.50">
+                                            <option value="Active">Active</option>
+                                            <option value="Deactive">Deactive</option>
+                                        </Select>
                                     </FormControl>
                                 </SimpleGrid>
 
-                                {ledgerSites.length > 0 && (
-                                    <Box p={4} bg="teal.50" borderRadius="xl" border="1px solid" borderColor="teal.200">
-                                        <Text fontWeight="bold" fontSize="sm" color="teal.700" mb={2}>
-                                            Existing Sites in Ledger "{formData.ledger}":
-                                        </Text>
-                                        <VStack align="stretch" spacing={2}>
-                                            {ledgerSites.map((s, i) => (
-                                                <HStack key={i} justify="space-between" bg="white" p={2} borderRadius="md" shadow="sm">
-                                                    <Text fontSize="xs" fontWeight="bold">{s.siteName}</Text>
-                                                    <Text fontSize="xs" color="gray.600">Amt: ₹{s.amount?.toLocaleString()}</Text>
+                                <Box p={6} bg="teal.50" borderRadius="2xl" border="1px solid" borderColor="teal.100">
+                                    <HStack justify="space-between" mb={4}>
+                                        <Heading size="sm" color="teal.700" display="flex" alignItems="center">
+                                            <Icon as={FaFileInvoiceDollar} mr={2} /> Ledger Assignments
+                                        </Heading>
+                                        <Button size="xs" colorScheme="teal" onClick={() => addArrayItem(setLedgerItems, { ledger: '', amount: '', isNew: false })}>
+                                            + Add Item
+                                        </Button>
+                                    </HStack>
+                                    <VStack spacing={4} align="stretch">
+                                        {ledgerItems.map((item, idx) => (
+                                            <SimpleGrid key={idx} columns={{ base: 1, md: 3 }} spacing={4} bg="white" p={3} borderRadius="xl" shadow="sm">
+                                                <FormControl>
+                                                    {!item.isNew ? (
+                                                        <Select 
+                                                            placeholder="Select Ledger" 
+                                                            value={item.ledger} 
+                                                            onChange={(e) => {
+                                                                if (e.target.value === 'NEW_LEDGER_TRIGGER') {
+                                                                    handleArrayChange(setLedgerItems, idx, 'isNew', true);
+                                                                    handleArrayChange(setLedgerItems, idx, 'ledger', '');
+                                                                } else {
+                                                                    handleArrayChange(setLedgerItems, idx, 'ledger', e.target.value);
+                                                                }
+                                                            }}
+                                                            borderRadius="lg"
+                                                        >
+                                                            {ledgers.map((l, i) => <option key={i} value={l}>{l}</option>)}
+                                                            <option value="NEW_LEDGER_TRIGGER">+ Create New Ledger</option>
+                                                        </Select>
+                                                    ) : (
+                                                        <HStack>
+                                                            <Input 
+                                                                placeholder="Enter Ledger Name" 
+                                                                value={item.ledger}
+                                                                onChange={(e) => handleArrayChange(setLedgerItems, idx, 'ledger', e.target.value)} 
+                                                                borderRadius="lg" 
+                                                                autoFocus
+                                                            />
+                                                            <IconButton 
+                                                                icon={<FaUndo />} 
+                                                                size="sm" 
+                                                                variant="ghost" 
+                                                                onClick={() => handleArrayChange(setLedgerItems, idx, 'isNew', false)}
+                                                                title="Switch back to list"
+                                                            />
+                                                        </HStack>
+                                                    )}
+                                                </FormControl>
+                                                <FormControl>
+                                                    <Input 
+                                                        type="number" 
+                                                        placeholder="Amount" 
+                                                        value={item.amount} 
+                                                        onChange={(e) => handleArrayChange(setLedgerItems, idx, 'amount', e.target.value)} 
+                                                        borderRadius="lg" 
+                                                    />
+                                                </FormControl>
+                                                <HStack justify="flex-end">
+                                                    <IconButton 
+                                                        icon={<FaTrash />} 
+                                                        colorScheme="red" 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        onClick={() => removeArrayItem(setLedgerItems, idx)}
+                                                        isDisabled={ledgerItems.length === 1}
+                                                    />
                                                 </HStack>
-                                            ))}
-                                            <HStack justify="space-between" pt={1} borderTop="1px solid" borderColor="teal.100">
-                                                <Text fontSize="xs" fontWeight="bold">Total Ledger Amount:</Text>
-                                                <Text fontSize="xs" fontWeight="bold" color="teal.600">
-                                                    ₹{ledgerSites.reduce((sum, s) => sum + (s.amount || 0), 0).toLocaleString()}
-                                                </Text>
-                                            </HStack>
-                                        </VStack>
-                                    </Box>
-                                )}
+                                            </SimpleGrid>
+                                        ))}
+                                    </VStack>
+                                </Box>
 
                                 {/* ── GPS Location Field ── */}
                                 <FormControl>
@@ -2415,6 +2465,8 @@ const SiteMasterForm = () => {
                                             <Tr>
                                                 <Th>Site Name</Th>
                                                 <Th>Client</Th>
+                                                <Th>Ledgers (Amt)</Th>
+                                                <Th>Status</Th>
                                                 <Th>Contact(s)</Th>
                                                 <Th textAlign="center">Actions</Th>
                                             </Tr>
@@ -2424,6 +2476,21 @@ const SiteMasterForm = () => {
                                                 <Tr key={s._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
                                                     <Td fontWeight="bold" color="teal.600">{s.siteName}</Td>
                                                     <Td fontSize="sm">{s.client?.clientName}</Td>
+                                                    <Td>
+                                                        <VStack align="start" spacing={1}>
+                                                            {s.ledgerItems?.filter(li => li.ledger && li.amount).map((li, idx) => (
+                                                                <Badge key={idx} colorScheme="teal" variant="subtle" fontSize="10px">
+                                                                    {li.ledger} (₹{li.amount?.toLocaleString()})
+                                                                </Badge>
+                                                            ))}
+                                                            {(!s.ledgerItems || s.ledgerItems.filter(li => li.ledger && li.amount).length === 0) && <Text fontSize="xs" color="gray.400">No Ledgers</Text>}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td>
+                                                        <Badge colorScheme={s.status === 'Active' ? 'green' : 'red'} variant="subtle" borderRadius="full" px={2}>
+                                                            {s.status}
+                                                        </Badge>
+                                                    </Td>
                                                     <Td>
                                                         <VStack align="start" spacing={0}>
                                                             {s.contactPersons?.slice(0, 1).map((cp, idx) => (
@@ -2442,9 +2509,9 @@ const SiteMasterForm = () => {
                                                                     siteName: s.siteName || '',
                                                                     siteAddress: s.siteAddress || '',
                                                                     siteLocation: s.siteLocation || '',
-                                                                    ledger: s.ledger || '',
-                                                                    amount: s.amount || ''
+                                                                    status: s.status || 'Active'
                                                                 });
+                                                                setLedgerItems(s.ledgerItems?.length ? s.ledgerItems.map(li => ({ ...li, isNew: false })) : [{ ledger: '', amount: '', isNew: false }]);
                                                                 setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
                                                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                                             }} />
@@ -2467,10 +2534,21 @@ const SiteMasterForm = () => {
                                                         <Text fontWeight="bold" fontSize="md" noOfLines={1}>{s.siteName}</Text>
                                                         <Text fontSize="xs" color="gray.500">{s.client?.clientName}</Text>
                                                     </Box>
+                                                    <Badge colorScheme={s.status === 'Active' ? 'green' : 'red'} variant="subtle" borderRadius="full">
+                                                        {s.status}
+                                                    </Badge>
                                                 </HStack>
                                                 <VStack align="stretch" spacing={2} mb={4}>
                                                     <HStack fontSize="xs" justify="space-between"><Text color="gray.500">Contacts:</Text><Text fontWeight="bold">{s.contactPersons?.length || 0}</Text></HStack>
-                                                    <HStack fontSize="xs" justify="space-between"><Text color="gray.500">Ledger:</Text><Text noOfLines={1}>{s.ledger || 'N/A'}</Text></HStack>
+                                                    <HStack fontSize="xs" justify="space-between" align="start">
+                                                        <Text color="gray.500">Ledgers:</Text>
+                                                        <VStack align="end" spacing={1}>
+                                                            {s.ledgerItems?.filter(li => li.ledger && li.amount).slice(0, 2).map((li, i) => (
+                                                                <Text key={i} fontWeight="bold" fontSize="10px">{li.ledger} (₹{li.amount})</Text>
+                                                            ))}
+                                                            {s.ledgerItems?.filter(li => li.ledger && li.amount).length > 2 && <Text fontSize="9px" color="teal.500">+{s.ledgerItems.filter(li => li.ledger && li.amount).length - 2} more</Text>}
+                                                        </VStack>
+                                                    </HStack>
                                                 </VStack>
                                                 <HStack justify="flex-end" spacing={2} pt={2} borderTop="1px solid" borderColor="gray.50">
                                                     <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<FaEye />} onClick={() => setViewSite(s)}>View</Button>
@@ -2481,9 +2559,9 @@ const SiteMasterForm = () => {
                                                             siteName: s.siteName || '',
                                                             siteAddress: s.siteAddress || '',
                                                             siteLocation: s.siteLocation || '',
-                                                            ledger: s.ledger || '',
-                                                            amount: s.amount || ''
+                                                            status: s.status || 'Active'
                                                         });
+                                                        setLedgerItems(s.ledgerItems?.length ? s.ledgerItems.map(li => ({ ...li, isNew: false })) : [{ ledger: '', amount: '', isNew: false }]);
                                                         setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
                                                         window.scrollTo({ top: 0, behavior: 'smooth' });
                                                     }}>Edit</Button>
@@ -2536,22 +2614,37 @@ const SiteMasterForm = () => {
                                                         <Box>
                                                             <Text fontSize="9px" color="teal.600" fontWeight="bold">LOCATION LINK</Text>
                                                             {viewSite.siteLocation ? (
-                                                                <Button as="a" target="_blank" href={viewSite.siteLocation} size="xs" colorScheme="blue" variant="link" leftIcon={<Icon as={FaMapMarkedAlt} />}>View on Google Maps</Button>
+                                                                <Button 
+                                                                    as="a" 
+                                                                    target="_blank" 
+                                                                    href={viewSite.siteLocation.startsWith('http') ? viewSite.siteLocation : `https://www.google.com/maps?q=${viewSite.siteLocation}`} 
+                                                                    size="xs" 
+                                                                    colorScheme="blue" 
+                                                                    variant="link" 
+                                                                    leftIcon={<Icon as={FaMapMarkedAlt} />}
+                                                                >
+                                                                    View on Google Maps
+                                                                </Button>
                                                             ) : 'N/A'}
                                                         </Box>
                                                     </VStack>
                                                 </Box>
                                                 <Box w="full">
-                                                    <Text fontSize="10px" fontWeight="black" color="orange.500" textTransform="uppercase" mb={3}>Financials</Text>
-                                                    <VStack align="start" spacing={4} p={4} bg="orange.50" borderRadius="2xl" w="full">
-                                                        <Box>
-                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">LEDGER ACCOUNT</Text>
-                                                            <Text fontSize="sm" fontWeight="bold">{viewSite.ledger || 'N/A'}</Text>
-                                                        </Box>
-                                                        <Box>
-                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">CONTRACT AMOUNT</Text>
-                                                            <Text fontSize="sm" fontWeight="bold">₹{viewSite.amount || '0'}</Text>
-                                                        </Box>
+                                                    <Text fontSize="10px" fontWeight="black" color="orange.500" textTransform="uppercase" mb={3}>Financials & Ledgers</Text>
+                                                    <VStack align="stretch" spacing={3} p={4} bg="orange.50" borderRadius="2xl" w="full">
+                                                        {viewSite.ledgerItems?.filter(li => li.ledger && li.amount).map((li, idx) => (
+                                                            <HStack key={idx} justify="space-between" borderBottom="1px dashed" borderColor="orange.200" pb={1}>
+                                                                <Text fontSize="xs" color="gray.700">{li.ledger}</Text>
+                                                                <Text fontSize="xs" fontWeight="bold">₹{li.amount?.toLocaleString()}</Text>
+                                                            </HStack>
+                                                        ))}
+                                                        <HStack justify="space-between" pt={1}>
+                                                            <Text fontSize="xs" fontWeight="black">TOTAL BUDGET</Text>
+                                                            <Text fontSize="sm" fontWeight="black" color="orange.700">
+                                                                ₹{viewSite.ledgerItems?.filter(li => li.ledger && li.amount).reduce((sum, li) => sum + (li.amount || 0), 0).toLocaleString()}
+                                                            </Text>
+                                                        </HStack>
+                                                        {(!viewSite.ledgerItems || viewSite.ledgerItems.filter(li => li.ledger && li.amount).length === 0) && <Text fontSize="xs" color="gray.500">No ledgers assigned</Text>}
                                                     </VStack>
                                                 </Box>
                                             </VStack>
@@ -2572,12 +2665,35 @@ const SiteMasterForm = () => {
                                                     </VStack>
                                                 </Box>
                                                 <Box w="full">
-                                                    <Text fontSize="10px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={3}>Documents</Text>
-                                                    <Wrap spacing={2}>
-                                                        {viewSite.documents?.map((doc, i) => (
-                                                            <Button key={i} as="a" target="_blank" href={`${API_BASE_URL}${doc.url}`} size="xs" colorScheme="blue" variant="subtle" leftIcon={<Icon as={FaFileAlt} />}>{doc.name}</Button>
-                                                        ))}
-                                                    </Wrap>
+                                                    <VStack align="stretch" spacing={4}>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="black" color="pink.500" textTransform="uppercase" mb={2}>Site Photos</Text>
+                                                            <Wrap spacing={2}>
+                                                                {viewSite.documents?.filter(doc => doc.url.includes('/photos/')).map((doc, i) => (
+                                                                    <Button key={i} as="a" target="_blank" href={`${API_BASE_URL}${doc.url}`} size="xs" colorScheme="pink" variant="subtle" leftIcon={<Icon as={FaCamera} />}>{doc.name}</Button>
+                                                                ))}
+                                                                {viewSite.documents?.filter(doc => doc.url.includes('/photos/')).length === 0 && <Text fontSize="xs" color="gray.400 italic">No photos uploaded</Text>}
+                                                            </Wrap>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={2}>Daily Reports</Text>
+                                                            <Wrap spacing={2}>
+                                                                {viewSite.documents?.filter(doc => doc.url.includes('/Daily_report/')).map((doc, i) => (
+                                                                    <Button key={i} as="a" target="_blank" href={`${API_BASE_URL}${doc.url}`} size="xs" colorScheme="blue" variant="subtle" leftIcon={<Icon as={FaFilePdf} />}>{doc.name}</Button>
+                                                                ))}
+                                                                {viewSite.documents?.filter(doc => doc.url.includes('/Daily_report/')).length === 0 && <Text fontSize="xs" color="gray.400 italic">No reports uploaded</Text>}
+                                                            </Wrap>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="black" color="teal.500" textTransform="uppercase" mb={2}>Project Data</Text>
+                                                            <Wrap spacing={2}>
+                                                                {viewSite.documents?.filter(doc => doc.url.includes('/data/')).map((doc, i) => (
+                                                                    <Button key={i} as="a" target="_blank" href={`${API_BASE_URL}${doc.url}`} size="xs" colorScheme="teal" variant="subtle" leftIcon={<Icon as={FaFileAlt} />}>{doc.name}</Button>
+                                                                ))}
+                                                                {viewSite.documents?.filter(doc => doc.url.includes('/data/')).length === 0 && <Text fontSize="xs" color="gray.400 italic">No data files uploaded</Text>}
+                                                            </Wrap>
+                                                        </Box>
+                                                    </VStack>
                                                 </Box>
                                             </VStack>
                                         </SimpleGrid>
@@ -2616,8 +2732,14 @@ const ScheduleMasterForm = () => {
 
     const [formData, setFormData] = useState({
         client: '', site: '', scheduleDate: '', workForAppley: '',
-        operativeNames: [], helpers: [], notes: '', status: 'scheduled'
+        operative: '', helpers: [], notes: '', dayStatus: 'Scheduled',
+        ledger: '', amount: 0
     });
+    const [selectedSiteLedgers, setSelectedSiteLedgers] = useState([]);
+    const { isOpen: isCompOpen, onOpen: onCompOpen, onClose: onCompClose } = useDisclosure();
+    const [compFiles, setCompFiles] = useState({ photos: [], dailyReports: [], data: [] });
+    const [compTarget, setCompTarget] = useState(null);
+    const [isCompLoading, setIsCompLoading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -2669,8 +2791,9 @@ const ScheduleMasterForm = () => {
     };
 
     const selectSite = (s) => {
-        setFormData(prev => ({ ...prev, site: s._id }));
+        setFormData(prev => ({ ...prev, site: s._id, ledger: '', amount: 0 }));
         setSelectedSiteName(s.siteName);
+        setSelectedSiteLedgers(s.ledgerItems || []);
         setSiteSearch('');
         setShowSiteList(false);
     };
@@ -2682,39 +2805,74 @@ const ScheduleMasterForm = () => {
         });
     };
 
-    const handleOperativeToggle = (empId) => {
-        setFormData(prev => {
-            const exists = prev.operativeNames.includes(empId);
-            return { ...prev, operativeNames: exists ? prev.operativeNames.filter(h => h !== empId) : [...prev.operativeNames, empId] };
-        });
-    };
+
 
     const handleEdit = (schedule) => {
         setEditId(schedule._id);
         setSelectedClientName(schedule.client?.clientName || '');
         setSelectedSiteName(schedule.site?.siteName || '');
-        const loadedOperatives = schedule.operativeNames?.map(op => op._id) || [];
-        if (loadedOperatives.length === 0 && schedule.operativeName) {
-            loadedOperatives.push(schedule.operativeName._id || schedule.operativeName);
-        }
+        const loadedOperative = schedule.operative?._id || schedule.operative || '';
 
         setFormData({
             client: schedule.client?._id || '',
             site: schedule.site?._id || '',
             scheduleDate: schedule.scheduleDate ? new Date(schedule.scheduleDate).toISOString().split('T')[0] : '',
-            workForAppley: schedule.workForAppley || schedule.contactPerson || '',
-            operativeNames: loadedOperatives,
+            workForAppley: schedule.workForAppley || '',
+            operative: schedule.operative?._id || schedule.operative || '',
             helpers: schedule.helpers?.map(h => h._id) || [],
             notes: schedule.notes || '',
-            status: schedule.status || 'scheduled'
+            dayStatus: schedule.dayStatus || 'Scheduled',
+            ledger: schedule.ledger || '',
+            amount: schedule.amount || 0
         });
+        if (schedule.site) setSelectedSiteLedgers(schedule.site.ledgerItems || []);
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleComplete = async (files) => {
+        if (!compTarget) return;
+        setIsCompLoading(true);
+        try {
+            const formData = new FormData();
+            const siteName = compTarget.site?.siteName || '';
+            const siteSub = siteName.trim().replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const cShort = compTarget.client?.clientId || 'unknown';
+
+            formData.append('clientShortId', cShort);
+            formData.append('siteSubfolder', siteSub);
+            
+            files.photos.forEach(f => formData.append('photos', f));
+            files.dailyReports.forEach(f => formData.append('dailyReports', f));
+            files.data.forEach(f => formData.append('data', f));
+
+            const res = await api.post(`/schedule-master/complete/${compTarget._id}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            if (res.data.success) {
+                toast({ title: 'Success', description: 'Site visit completed!', status: 'success' });
+                onCompClose();
+                const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                if (sRes.data.success) setSchedules(sRes.data.data);
+            }
+        } catch (err) {
+            console.error(err);
+            toast({ title: 'Error', description: err.response?.data?.message || 'Completion failed', status: 'error' });
+        } finally {
+            setIsCompLoading(false);
+        }
     };
 
     const handleClear = () => {
         setEditId(null);
-        setSelectedClientName(''); setSelectedSiteName('');
-        setFormData({ client: '', site: '', scheduleDate: '', workForAppley: '', operativeNames: [], helpers: [], notes: '', status: 'scheduled' });
+        setSelectedClientName('');
+        setSelectedSiteName('');
+        setSelectedSiteLedgers([]);
+        setFormData({
+            client: '', site: '', scheduleDate: '', workForAppley: '',
+            operative: '', helpers: [], notes: '', dayStatus: 'Scheduled',
+            ledger: '', amount: 0
+        });
     };
 
     const handleSubmit = async (e) => {
@@ -2729,334 +2887,390 @@ const ScheduleMasterForm = () => {
                 response = await api.post('/schedule-master', payload);
             }
             if (response.data.success) {
-                toast({ title: editId ? 'Updated!' : 'Scheduled!', description: response.data.message, status: 'success', duration: 3000 });
+                toast({
+                    title: editId ? 'Updated!' : 'Scheduled!',
+                    description: response.data.message,
+                    status: 'success',
+                    duration: 3000
+                });
                 handleClear();
                 const res = await api.get(`/schedule-master?date=${viewDate}`);
                 if (res.data.success) setSchedules(res.data.data);
             }
         } catch (error) {
-            toast({ title: 'Error', description: error.response?.data?.message || 'Operation failed', status: 'error', duration: 3000 });
-        } finally { setIsLoading(false); }
+            console.error('Scheduler Error:', error);
+            toast({
+                title: 'Error',
+                description: error.response?.data?.message || 'Operation failed',
+                status: 'error',
+                duration: 3000
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const filteredClients = clients.filter(c => c.clientName.toLowerCase().includes(clientSearch.toLowerCase()));
     const filteredSites = sites.filter(s => s.siteName.toLowerCase().includes(siteSearch.toLowerCase()));
-    const filteredEmployees = employees.filter(e => e.name.toLowerCase().includes(empSearch.toLowerCase()));
-    const statusColors = { scheduled: 'blue', 'in-progress': 'orange', completed: 'green', cancelled: 'red' };
-    const statusIcons = { scheduled: '📅', 'in-progress': '⚙️', completed: '✅', cancelled: '❌' };
+    const statusColors = { Scheduled: 'blue', Completed: 'green' };
 
     return (
         <Box py={5} bg="gray.100" minH="100vh">
             <Container maxW="container.xl">
-                <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6} alignItems="start">
+                <VStack spacing={8} align="stretch">
 
-                    {/* ── LEFT: Form ── */}
+                    {/* ── TOP: Form ── */}
                     <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
-                        <Box bg={editId ? 'purple.600' : 'green.600'} px={7} py={5} color="white">
-                            <HStack>
-                                <Icon as={editId ? FaEdit : FaCalendarAlt} w={5} h={5} />
-                                <Heading size="md">{editId ? 'Edit Schedule' : 'Schedule a Site Visit'}</Heading>
+                        <Box bg={editId ? 'purple.600' : 'teal.600'} px={7} py={5} color="white">
+                            <HStack justify="space-between">
+                                <HStack>
+                                    <Icon as={editId ? FaEdit : FaCalendarAlt} w={5} h={5} />
+                                    <Heading size="md">{editId ? 'Edit Schedule' : 'Schedule Site Visit'}</Heading>
+                                </HStack>
+                                {editId && <Button size="xs" colorScheme="whiteAlpha" onClick={handleClear}>New Schedule</Button>}
                             </HStack>
-                            <Text opacity={0.75} mt={1} fontSize="xs">Only Client, Site & Date are mandatory. Fill others anytime via Edit.</Text>
                         </Box>
                         <CardBody px={7} py={6}>
                             <form onSubmit={handleSubmit}>
-                                <VStack spacing={5} align="stretch">
-
-                                    {/* --- Client Search --- */}
-                                    <FormControl isRequired>
-                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                            <Icon as={FaBuilding} mr={1} color="orange.400" /> Client
-                                        </FormLabel>
-                                        {selectedClientName && !showClientList ? (
-                                            <HStack bg="orange.50" border="1px solid" borderColor="orange.200" px={4} py={2} borderRadius="xl" justify="space-between">
-                                                <Text fontWeight="bold" fontSize="sm" color="orange.700">{selectedClientName}</Text>
-                                                <Button type="button" size="xs" variant="ghost" colorScheme="orange" onClick={() => { setShowClientList(true); setClientSearch(''); }}>Change</Button>
-                                            </HStack>
-                                        ) : (
-                                            <Box position="relative">
-                                                <Input
-                                                    placeholder="🔍 Search client by name..."
-                                                    value={clientSearch}
-                                                    onChange={e => { setClientSearch(e.target.value); setShowClientList(true); }}
-                                                    onFocus={() => setShowClientList(true)}
-                                                    borderRadius="xl" bg="gray.50"
-                                                />
-                                                {showClientList && (
-                                                    <Box position="absolute" zIndex={10} w="100%" bg="white" border="1px solid" borderColor="gray.200" borderRadius="xl" boxShadow="lg" maxH="200px" overflowY="auto" mt={1}>
-                                                        {filteredClients.length === 0 ? (
-                                                            <Text p={3} fontSize="sm" color="gray.400">No clients found</Text>
-                                                        ) : filteredClients.map(c => (
-                                                            <Box key={c._id} px={4} py={2} cursor="pointer" _hover={{ bg: 'orange.50' }} onClick={() => selectClient(c)}>
-                                                                <Text fontSize="sm" fontWeight="bold">{c.clientName}</Text>
-                                                                {c.email && <Text fontSize="xs" color="gray.400">{c.email}</Text>}
-                                                            </Box>
-                                                        ))}
-                                                    </Box>
-                                                )}
-                                            </Box>
-                                        )}
-                                    </FormControl>
-
-                                    {/* --- Site Search --- */}
-                                    <FormControl isRequired>
-                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                            <Icon as={FaMap} mr={1} color="teal.400" /> Site
-                                        </FormLabel>
-                                        {!formData.client ? (
-                                            <Box bg="gray.50" border="1px dashed" borderColor="gray.300" px={4} py={3} borderRadius="xl">
-                                                <Text fontSize="sm" color="gray.400">Select a client first to view sites</Text>
-                                            </Box>
-                                        ) : selectedSiteName && !showSiteList ? (
-                                            <HStack bg="teal.50" border="1px solid" borderColor="teal.200" px={4} py={2} borderRadius="xl" justify="space-between">
-                                                <Text fontWeight="bold" fontSize="sm" color="teal.700">{selectedSiteName}</Text>
-                                                <Button size="xs" variant="ghost" colorScheme="teal" onClick={() => { setShowSiteList(true); setSiteSearch(''); }}>Change</Button>
-                                            </HStack>
-                                        ) : (
-                                            <Box position="relative">
-                                                <Input
-                                                    placeholder="🔍 Search site by name..."
-                                                    value={siteSearch}
-                                                    onChange={e => { setSiteSearch(e.target.value); setShowSiteList(true); }}
-                                                    onFocus={() => setShowSiteList(true)}
-                                                    borderRadius="xl" bg="gray.50"
-                                                    isDisabled={!formData.client}
-                                                />
-                                                {showSiteList && (
-                                                    <Box position="absolute" zIndex={10} w="100%" bg="white" border="1px solid" borderColor="gray.200" borderRadius="xl" boxShadow="lg" maxH="200px" overflowY="auto" mt={1}>
-                                                        {filteredSites.length === 0 ? (
-                                                            <Text p={3} fontSize="sm" color="gray.400">No sites found for this client</Text>
-                                                        ) : filteredSites.map(s => (
-                                                            <Box key={s._id} px={4} py={2} cursor="pointer" _hover={{ bg: 'teal.50' }} onClick={() => selectSite(s)}>
-                                                                <Text fontSize="sm" fontWeight="bold">{s.siteName}</Text>
-                                                                {s.siteAddress && <Text fontSize="xs" color="gray.400">{s.siteAddress}</Text>}
-                                                            </Box>
-                                                        ))}
-                                                    </Box>
-                                                )}
-                                            </Box>
-                                        )}
-                                    </FormControl>
-
-                                    <SimpleGrid columns={2} spacing={4}>
+                                <VStack spacing={6} align="stretch">
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
+                                        {/* Client Select */}
                                         <FormControl isRequired>
-                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">📅 Date</FormLabel>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Client</FormLabel>
+                                            {selectedClientName && !showClientList ? (
+                                                <HStack bg="orange.50" border="1px solid" borderColor="orange.200" px={4} py={3} borderRadius="xl" justify="space-between">
+                                                    <Text fontWeight="bold" color="orange.700">{selectedClientName}</Text>
+                                                    <Button size="xs" variant="ghost" colorScheme="orange" onClick={() => setShowClientList(true)}>Change</Button>
+                                                </HStack>
+                                            ) : (
+                                                <Box position="relative">
+                                                    <Input placeholder="🔍 Search client..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} onFocus={() => setShowClientList(true)} borderRadius="xl" bg="gray.50" />
+                                                    {showClientList && (
+                                                        <Box position="absolute" zIndex={10} w="100%" bg="white" border="1px solid" borderColor="gray.200" borderRadius="xl" boxShadow="lg" maxH="200px" overflowY="auto" mt={1}>
+                                                            {filteredClients.map(c => (
+                                                                <Box key={c._id} px={4} py={2} cursor="pointer" _hover={{ bg: 'orange.50' }} onClick={() => selectClient(c)}>
+                                                                    <Text fontSize="sm" fontWeight="bold">{c.clientName}</Text>
+                                                                </Box>
+                                                            ))}
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            )}
+                                        </FormControl>
+
+                                        {/* Site Select */}
+                                        <FormControl isRequired>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Site (Active Only)</FormLabel>
+                                            {!formData.client ? (
+                                                <Box bg="gray.50" border="1px dashed" borderColor="gray.300" px={4} py={3} borderRadius="xl">
+                                                    <Text fontSize="sm" color="gray.400">Select a client first</Text>
+                                                </Box>
+                                            ) : selectedSiteName && !showSiteList ? (
+                                                <HStack bg="teal.50" border="1px solid" borderColor="teal.200" px={4} py={3} borderRadius="xl" justify="space-between">
+                                                    <Text fontWeight="bold" color="teal.700">{selectedSiteName}</Text>
+                                                    <Button size="xs" variant="ghost" colorScheme="teal" onClick={() => setShowSiteList(true)}>Change</Button>
+                                                </HStack>
+                                            ) : (
+                                                <Box position="relative">
+                                                    <Input placeholder="🔍 Search site..." value={siteSearch} onChange={e => setSiteSearch(e.target.value)} onFocus={() => setShowSiteList(true)} borderRadius="xl" bg="gray.50" />
+                                                    {showSiteList && (
+                                                        <Box position="absolute" zIndex={10} w="100%" bg="white" border="1px solid" borderColor="gray.200" borderRadius="xl" boxShadow="lg" maxH="200px" overflowY="auto" mt={1}>
+                                                            {filteredSites.map(s => (
+                                                                <Box key={s._id} px={4} py={2} cursor="pointer" _hover={{ bg: 'teal.50' }} onClick={() => selectSite(s)}>
+                                                                    <Text fontSize="sm" fontWeight="bold">{s.siteName}</Text>
+                                                                    <Text fontSize="xs" color="gray.400">{s.siteAddress}</Text>
+                                                                </Box>
+                                                            ))}
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            )}
+                                        </FormControl>
+                                    </SimpleGrid>
+
+                                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
+                                        <FormControl isRequired>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Date</FormLabel>
                                             <Input type="date" name="scheduleDate" value={formData.scheduleDate} onChange={handleChange} borderRadius="xl" bg="gray.50" />
                                         </FormControl>
+                                        <FormControl isRequired>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Scheduler Status</FormLabel>
+                                            <Select name="dayStatus" value={formData.dayStatus} onChange={handleChange} borderRadius="xl" bg="gray.50">
+                                                <option value="Scheduled">Scheduled</option>
+                                                <option value="Completed">Completed</option>
+                                            </Select>
+                                        </FormControl>
                                         <FormControl>
-                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">🔄 Status</FormLabel>
-                                            <Select name="status" value={formData.status} onChange={handleChange} borderRadius="xl" bg="gray.50">
-                                                <option value="scheduled">Scheduled</option>
-                                                <option value="in-progress">In Progress</option>
-                                                <option value="completed">Completed</option>
-                                                <option value="cancelled">Cancelled</option>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Site Ledger</FormLabel>
+                                            <Select 
+                                                name="ledger" 
+                                                value={formData.ledger} 
+                                                onChange={(e) => {
+                                                    const selected = selectedSiteLedgers.find(l => l.ledger === e.target.value);
+                                                    setFormData(prev => ({ ...prev, ledger: e.target.value, amount: selected ? selected.amount : 0 }));
+                                                }} 
+                                                borderRadius="xl" 
+                                                bg="gray.50"
+                                                placeholder={selectedSiteLedgers.length > 0 ? "Select Ledger" : "No Ledgers Available"}
+                                            >
+                                                {selectedSiteLedgers.map((l, i) => (
+                                                    <option key={i} value={l.ledger}>{l.ledger} (₹{l.amount.toLocaleString()})</option>
+                                                ))}
                                             </Select>
                                         </FormControl>
                                     </SimpleGrid>
 
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">📞 work for Apply</FormLabel>
-                                        <Input name="workForAppley" placeholder="On-site contact name" value={formData.workForAppley} onChange={handleChange} borderRadius="xl" bg="gray.50" />
-                                    </FormControl>
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                                        <FormControl isRequired>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
+                                                <Icon as={FaStar} color="yellow.400" mr={1} /> Main Operative
+                                            </FormLabel>
+                                            <Select name="operative" value={formData.operative} onChange={handleChange} borderRadius="xl" bg="gray.50" placeholder="Select Operative">
+                                                {employees.map(e => <option key={e._id} value={e._id}>{e.name} ({e.phone})</option>)}
+                                            </Select>
+                                        </FormControl>
 
-                                    <Divider />
+                                        <FormControl>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
+                                                <Icon as={FaUsers} color="blue.400" mr={1} /> Helpers ({formData.helpers.length})
+                                            </FormLabel>
+                                            <Box maxH="120px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="xl" p={2} bg="gray.50">
+                                                <SimpleGrid columns={2} spacing={2}>
+                                                    {employees.map(e => (
+                                                        <HStack key={e._id} py={1} px={2} cursor="pointer" borderRadius="lg" _hover={{ bg: 'blue.50' }} onClick={() => handleHelperToggle(e._id)}>
+                                                            <Checkbox isChecked={formData.helpers.includes(e._id)} onChange={() => handleHelperToggle(e._id)} colorScheme="blue" size="sm" pointerEvents="none" />
+                                                            <Text fontSize="xs">{e.name}</Text>
+                                                        </HStack>
+                                                    ))}
+                                                </SimpleGrid>
+                                            </Box>
+                                        </FormControl>
+                                    </SimpleGrid>
 
-                                    {/* operativeNames with search (combo with Helpers maybe?) */}
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                            <Icon as={FaStar} color="yellow.400" mr={1} /> Operative Names
-                                            {formData.operativeNames.length > 0 && <Tag ml={2} size="sm" colorScheme="purple">{formData.operativeNames.length} selected</Tag>}
-                                        </FormLabel>
-                                        <Input
-                                            placeholder="🔍 Filter operatives..."
-                                            value={empSearch}
-                                            onChange={e => setEmpSearch(e.target.value)}
-                                            borderRadius="xl" bg="gray.50" mb={2} size="sm"
-                                        />
-                                        <Box maxH="150px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="xl" p={2} bg="gray.50">
-                                            {filteredEmployees.length === 0 && <Text fontSize="xs" color="gray.400" p={2}>No employees match</Text>}
-                                            {filteredEmployees.map(e => (
-                                                <HStack key={e._id} py={1} px={2} cursor="pointer" borderRadius="lg" _hover={{ bg: 'purple.50' }} onClick={() => handleOperativeToggle(e._id)}>
-                                                    <Checkbox isChecked={formData.operativeNames.includes(e._id)} onChange={() => handleOperativeToggle(e._id)} colorScheme="purple" pointerEvents="none" />
-                                                    <Text fontSize="sm">{e.name} <Text as="span" color="gray.400" fontSize="xs">({e.phone})</Text></Text>
-                                                </HStack>
-                                            ))}
-                                        </Box>
-                                    </FormControl>
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                                        <FormControl>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Contact / Apply Details</FormLabel>
+                                            <Input name="workForAppley" placeholder="e.g. John Doe / Project Manager" value={formData.workForAppley} onChange={handleChange} borderRadius="xl" bg="gray.50" />
+                                        </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Notes</FormLabel>
+                                            <Input name="notes" placeholder="Optional notes..." value={formData.notes} onChange={handleChange} borderRadius="xl" bg="gray.50" />
+                                        </FormControl>
+                                    </SimpleGrid>
 
-                                    {/* Helpers with search */}
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                            <Icon as={FaUsers} color="blue.400" mr={1} /> Helpers
-                                            {formData.helpers.length > 0 && <Tag ml={2} size="sm" colorScheme="blue">{formData.helpers.length} selected</Tag>}
-                                        </FormLabel>
-                                        <Input
-                                            placeholder="🔍 Filter helpers..."
-                                            value={empSearch}
-                                            onChange={e => setEmpSearch(e.target.value)}
-                                            borderRadius="xl" bg="gray.50" mb={2} size="sm"
-                                        />
-                                        <Box maxH="150px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="xl" p={2} bg="gray.50">
-                                            {filteredEmployees.length === 0 && <Text fontSize="xs" color="gray.400" p={2}>No employees match</Text>}
-                                            {filteredEmployees.map(e => (
-                                                <HStack key={e._id} py={1} px={2} cursor="pointer" borderRadius="lg" _hover={{ bg: 'blue.50' }} onClick={() => handleHelperToggle(e._id)}>
-                                                    <Checkbox isChecked={formData.helpers.includes(e._id)} onChange={() => handleHelperToggle(e._id)} colorScheme="blue" pointerEvents="none" />
-                                                    <Text fontSize="sm">{e.name} <Text as="span" color="gray.400" fontSize="xs">({e.phone})</Text></Text>
-                                                </HStack>
-                                            ))}
-                                        </Box>
-                                    </FormControl>
-
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">📝 Notes</FormLabel>
-                                        <Input name="notes" placeholder="Any additional notes..." value={formData.notes} onChange={handleChange} borderRadius="xl" bg="gray.50" />
-                                    </FormControl>
-
-                                    <HStack spacing={3} pt={1}>
-                                        <Button type="submit" colorScheme={editId ? 'purple' : 'green'} flex={1} borderRadius="xl" h="48px"
-                                            leftIcon={<Icon as={editId ? FaEdit : FaCalendarAlt} />} isLoading={isLoading}>
-                                            {editId ? 'Update Schedule' : 'Create Schedule'}
-                                        </Button>
-                                        {editId && (
-                                            <Button variant="outline" colorScheme="gray" borderRadius="xl" h="48px" onClick={handleClear}>Cancel</Button>
-                                        )}
-                                    </HStack>
+                                    <Button type="submit" colorScheme={editId ? 'purple' : 'teal'} h="56px" borderRadius="xl" leftIcon={<Icon as={FaCheckCircle} />} isLoading={isLoading} isDisabled={formData.dayStatus === 'Completed' && !editId}>
+                                        {editId ? 'Update Schedule' : 'Confirm Schedule'}
+                                    </Button>
                                 </VStack>
                             </form>
                         </CardBody>
                     </Card>
 
-                    {/* ── RIGHT: Date Viewer ── */}
+                    {/* ── BOTTOM: Schedule Viewer ── */}
                     <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
                         <Box bg="gray.800" px={7} py={5} color="white">
                             <HStack justify="space-between">
                                 <HStack>
-                                    <Icon as={FaEye} w={5} h={5} />
-                                    <Heading size="md">Schedule Viewer</Heading>
+                                    <Icon as={FaListUl} w={5} h={5} />
+                                    <Heading size="md">Scheduler Dashboard</Heading>
                                 </HStack>
-                                <Tag colorScheme="whiteAlpha" borderRadius="full" size="sm">{schedules.length} records</Tag>
+                                <Input type="date" value={viewDate} onChange={e => setViewDate(e.target.value)} borderRadius="full" bg="whiteAlpha.200" border="none" size="sm" w="150px" color="white" />
                             </HStack>
-                            <Text opacity={0.6} mt={1} fontSize="xs">Browse schedules by date — click Edit to load into the form</Text>
                         </Box>
 
-                        <Box px={7} py={4} bg="gray.50" borderBottom="1px solid" borderColor="gray.100">
-                            <FormControl>
-                                <FormLabel fontWeight="bold" fontSize="xs" color="gray.500" mb={1}>SELECT DATE</FormLabel>
-                                <Input type="date" value={viewDate} onChange={e => setViewDate(e.target.value)} borderRadius="xl" bg="white" size="sm" />
-                            </FormControl>
-                        </Box>
-
-                        <CardBody px={5} py={4} maxH="700px" overflowY="auto">
+                        <CardBody p={6}>
                             {schedules.length === 0 ? (
-                                <Box textAlign="center" py={14}>
-                                    <Icon as={FaCalendarAlt} w={12} h={12} color="gray.200" />
-                                    <Text color="gray.300" mt={4} fontWeight="bold">No schedules for this date</Text>
+                                <Box textAlign="center" py={10}>
+                                    <Text color="gray.400">No schedules found for {viewDate}</Text>
                                 </Box>
                             ) : (
-                                <VStack spacing={4} align="stretch">
-                                    {schedules.map((s, idx) => (
-                                        <Box key={s._id} borderRadius="xl" border="1px solid" borderColor="gray.100" overflow="hidden" boxShadow="sm" _hover={{ boxShadow: 'md', transform: 'translateY(-1px)' }} transition="all 0.2s">
-
-                                            {/* Card Header */}
-                                            <Box bg={`${statusColors[s.status] || 'gray'}.50`} px={4} py={3} borderBottom="1px solid" borderColor={`${statusColors[s.status] || 'gray'}.100`}>
-                                                <HStack justify="space-between">
-                                                    <HStack spacing={2}>
-                                                        <Text fontSize="lg">{statusIcons[s.status] || '📅'}</Text>
-                                                        <VStack align="start" spacing={0}>
-                                                            <Text fontWeight="bold" fontSize="sm" lineHeight={1.2}>#{idx + 1} — {s.site?.siteName || '—'}</Text>
-                                                            <Text fontSize="xs" color="gray.500">{s.site?.siteAddress || ''}</Text>
-                                                        </VStack>
-                                                    </HStack>
-                                                    <HStack>
-                                                        <Tag size="sm" colorScheme={statusColors[s.status] || 'gray'} borderRadius="full" fontWeight="bold">
-                                                            <TagLabel textTransform="capitalize">{s.status}</TagLabel>
-                                                        </Tag>
-                                                        <Button size="xs" colorScheme="purple" borderRadius="lg" leftIcon={<FaEdit />} onClick={() => handleEdit(s)}>Edit</Button>
-                                                    </HStack>
+                                <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
+                                    {schedules.map((s) => (
+                                        <Box key={s._id} p={4} borderRadius="2xl" border="1px solid" borderColor="gray.100" bg="gray.50" _hover={{ shadow: 'md', bg: 'white' }} transition="all 0.2s">
+                                            <HStack justify="space-between" mb={3}>
+                                                <Badge colorScheme={statusColors[s.dayStatus]} variant="solid" borderRadius="full" px={3}>
+                                                    {s.dayStatus}
+                                                </Badge>
+                                                <HStack>
+                                                    {s.dayStatus === 'Scheduled' && (
+                                                        <Button 
+                                                            size="xs" 
+                                                            colorScheme="green" 
+                                                            leftIcon={<Icon as={FaCheckCircle} />}
+                                                            onClick={() => { setCompTarget(s); onCompOpen(); }}
+                                                        >
+                                                            Complete
+                                                        </Button>
+                                                    )}
+                                                    <IconButton size="xs" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(s)} />
                                                 </HStack>
-                                            </Box>
-
-                                            {/* Card Body */}
-                                            <Box px={4} py={3} bg="white">
-                                                <SimpleGrid columns={2} spacing={3}>
-
-                                                    {/* Client */}
-                                                    <Box>
-                                                        <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" letterSpacing="wide" mb={0.5}>Client</Text>
-                                                        <HStack spacing={1}>
-                                                            <Icon as={FaBuilding} color="orange.400" w={3} h={3} />
-                                                            <Text fontSize="sm" fontWeight="semibold" color="gray.700">{s.client?.clientName || '—'}</Text>
-                                                        </HStack>
-                                                    </Box>
-
-                                                    {/* Contact */}
-                                                    {(s.workForAppley || s.contactPerson) && (
-                                                        <Box>
-                                                            <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" letterSpacing="wide" mb={0.5}>work for Apply</Text>
-                                                            <HStack spacing={1}>
-                                                                <Icon as={FaPhoneAlt} color="green.400" w={3} h={3} />
-                                                                <Text fontSize="sm" fontWeight="semibold" color="gray.700">{s.workForAppley || s.contactPerson}</Text>
-                                                            </HStack>
-                                                        </Box>
-                                                    )}
-
-                                                    {/* operativeNames */}
-                                                    {(s.operativeNames?.length > 0 || s.operativeName) && (
-                                                        <Box mt={3} gridColumn="span 2">
-                                                            <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" letterSpacing="wide" mb={1.5}>
-                                                                ⭐ Operative Names ({[...(s.operativeNames || []), ...(s.operativeName ? [s.operativeName] : [])].length})
-                                                            </Text>
-                                                            <Wrap spacing={2}>
-                                                                {[...(s.operativeNames || []), ...(s.operativeName ? [s.operativeName] : [])].map(op => (
-                                                                    <WrapItem key={op._id}>
-                                                                        <HStack spacing={1} bg="yellow.50" px={2} py={1} borderRadius="lg" display="inline-flex" border="1px solid" borderColor="yellow.200">
-                                                                            <Icon as={FaStar} color="yellow.500" w={3} h={3} />
-                                                                            <Text fontSize="sm" fontWeight="bold" color="yellow.700">{op.name}</Text>
-                                                                            <Text fontSize="xs" color="gray.500">· {op.phone}</Text>
-                                                                        </HStack>
-                                                                    </WrapItem>
-                                                                ))}
-                                                            </Wrap>
-                                                        </Box>
-                                                    )}
-                                                </SimpleGrid>
-
-                                                {/* Helpers */}
-                                                {s.helpers?.length > 0 && (
-                                                    <Box mt={3}>
-                                                        <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" letterSpacing="wide" mb={1.5}>
-                                                            👷 Helpers ({s.helpers.length})
+                                            </HStack>
+                                            
+                                            <VStack align="start" spacing={1} mb={3}>
+                                                <Text fontWeight="black" fontSize="sm" color="gray.800" noOfLines={1}>{s.site?.siteName}</Text>
+                                                <Text fontSize="xs" color="gray.500" noOfLines={1}>{s.client?.clientName}</Text>
+                                                
+                                                {/* On-Site Contacts */}
+                                                {s.site?.contactPersons?.length > 0 && (
+                                                    <HStack spacing={2} mt={1}>
+                                                        <Icon as={FaPhoneAlt} w={2} h={2} color="green.500" />
+                                                        <Text fontSize="10px" color="gray.600" fontWeight="bold">
+                                                            {s.site.contactPersons[0].name}: {s.site.contactPersons[0].phone}
                                                         </Text>
-                                                        <Wrap spacing={1}>
-                                                            {s.helpers.map(h => (
-                                                                <WrapItem key={h._id}>
-                                                                    <Tag size="sm" colorScheme="blue" borderRadius="full" variant="subtle">
-                                                                        <TagLabel fontWeight="semibold">{h.name}</TagLabel>
-                                                                    </Tag>
-                                                                </WrapItem>
-                                                            ))}
-                                                        </Wrap>
-                                                    </Box>
+                                                    </HStack>
                                                 )}
 
-                                                {/* Notes */}
-                                                {s.notes && (
-                                                    <Box mt={3} bg="gray.50" px={3} py={2} borderRadius="lg" borderLeft="3px solid" borderColor="gray.300">
-                                                        <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" mb={0.5}>Notes</Text>
-                                                        <Text fontSize="xs" color="gray.600">{s.notes}</Text>
-                                                    </Box>
+                                                {/* Apply Details */}
+                                                {s.workForAppley && (
+                                                    <HStack spacing={2}>
+                                                        <Icon as={FaIdBadge} w={2} h={2} color="purple.500" />
+                                                        <Text fontSize="10px" color="purple.600" fontWeight="bold">
+                                                            Work For Apply: {s.workForAppley}
+                                                        </Text>
+                                                    </HStack>
                                                 )}
-                                            </Box>
+                                            </VStack>
+
+                                            <SimpleGrid columns={2} spacing={2} mb={3}>
+                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">OPERATIVE</Text>
+                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>{s.operative?.name}</Text>
+                                                </Box>
+                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">HELPERS</Text>
+                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
+                                                        {s.helpers?.length > 0 ? s.helpers.map(h => h.name).join(', ') : 'None'}
+                                                    </Text>
+                                                </Box>
+                                            </SimpleGrid>
+
+                                            {s.ledger && (
+                                                <Box bg="teal.50" p={2} borderRadius="xl" mb={2}>
+                                                    <HStack justify="space-between">
+                                                        <Text fontSize="xs" fontWeight="bold" color="teal.700">{s.ledger}</Text>
+                                                        <Text fontSize="xs" fontWeight="black" color="teal.800">₹{s.amount?.toLocaleString()}</Text>
+                                                    </HStack>
+                                                </Box>
+                                            )}
+
+                                            {s.notes && <Text fontSize="10px" color="gray.500" fontStyle="italic">Note: {s.notes}</Text>}
                                         </Box>
                                     ))}
-                                </VStack>
+                                </SimpleGrid>
                             )}
                         </CardBody>
                     </Card>
-
-                </SimpleGrid>
+                </VStack>
             </Container>
+
+            <CompletionModal 
+                isOpen={isCompOpen} 
+                onClose={onCompClose} 
+                schedule={compTarget} 
+                onComplete={handleComplete} 
+                isLoading={isCompLoading} 
+            />
         </Box>
+    );
+};
+
+const CompletionModal = ({ isOpen, onClose, schedule, onComplete, isLoading }) => {
+    const [files, setFiles] = useState({ photos: [], dailyReports: [], data: [] });
+    
+    const handleFileChange = (e, type) => {
+        const selectedFiles = Array.from(e.target.files);
+        setFiles(prev => ({ ...prev, [type]: [...prev[type], ...selectedFiles] }));
+    };
+
+    const removeFile = (type, index) => {
+        setFiles(prev => ({
+            ...prev,
+            [type]: prev[type].filter((_, i) => i !== index)
+        }));
+    };
+
+    const handleSubmit = () => {
+        onComplete(files);
+        setFiles({ photos: [], dailyReports: [], data: [] });
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} size="xl">
+            <ModalOverlay backdropFilter="blur(10px)" />
+            <ModalContent borderRadius="2xl" mx={4}>
+                <ModalHeader bg="green.600" color="white" borderTopRadius="2xl" py={4}>
+                    <HStack>
+                        <Icon as={FaCheckCircle} />
+                        <Text fontSize="md">Mark Completion: {schedule?.site?.siteName}</Text>
+                    </HStack>
+                </ModalHeader>
+                <ModalCloseButton color="white" />
+                <ModalBody p={6}>
+                    <VStack spacing={6} align="stretch">
+                        <Box bg="gray.50" p={3} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                            <Text fontSize="xs" color="gray.500" fontWeight="bold" mb={1}>CLIENT / SITE</Text>
+                            <Text fontWeight="bold" fontSize="sm">{schedule?.client?.clientName}</Text>
+                            <Text fontSize="xs" color="gray.600">{schedule?.site?.siteAddress}</Text>
+                        </Box>
+
+                        <SimpleGrid columns={1} spacing={5}>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="black" color="blue.600">📸 SITE PHOTOS (Photos Folder)</FormLabel>
+                                <Input type="file" multiple accept="image/*" onChange={(e) => handleFileChange(e, 'photos')} size="sm" p={1} h="auto" variant="filled" />
+                                <Wrap mt={2}>
+                                    {files.photos.map((f, i) => (
+                                        <Tag key={i} size="sm" colorScheme="blue" borderRadius="full">
+                                            <TagLabel noOfLines={1} maxW="150px">{f.name}</TagLabel>
+                                            <IconButton size="xs" variant="ghost" icon={<FaTimes />} onClick={() => removeFile('photos', i)} />
+                                        </Tag>
+                                    ))}
+                                </Wrap>
+                            </FormControl>
+
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="black" color="orange.600">📝 DAILY REPORTS (Daily_report Folder)</FormLabel>
+                                <Input type="file" multiple accept="image/*,application/pdf" onChange={(e) => handleFileChange(e, 'dailyReports')} size="sm" p={1} h="auto" variant="filled" />
+                                <Wrap mt={2}>
+                                    {files.dailyReports.map((f, i) => (
+                                        <Tag key={i} size="sm" colorScheme="orange" borderRadius="full">
+                                            <TagLabel noOfLines={1} maxW="150px">{f.name}</TagLabel>
+                                            <IconButton size="xs" variant="ghost" icon={<FaTimes />} onClick={() => removeFile('dailyReports', i)} />
+                                        </Tag>
+                                    ))}
+                                </Wrap>
+                            </FormControl>
+
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="black" color="purple.600">📁 DATA FILES (Data Folder)</FormLabel>
+                                <Text fontSize="10px" color="gray.400" mb={1}>Excel, Word, PDF, CSV</Text>
+                                <Input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv" onChange={(e) => handleFileChange(e, 'data')} size="sm" p={1} h="auto" variant="filled" />
+                                <Wrap mt={2}>
+                                    {files.data.map((f, i) => (
+                                        <Tag key={i} size="sm" colorScheme="purple" borderRadius="full">
+                                            <TagLabel noOfLines={1} maxW="150px">{f.name}</TagLabel>
+                                            <IconButton size="xs" variant="ghost" icon={<FaTimes />} onClick={() => removeFile('data', i)} />
+                                        </Tag>
+                                    ))}
+                                </Wrap>
+                            </FormControl>
+                        </SimpleGrid>
+                    </VStack>
+                </ModalBody>
+                <ModalFooter bg="gray.50" borderBottomRadius="2xl">
+                    <Button variant="ghost" mr={3} onClick={onClose} size="sm">Cancel</Button>
+                    <Button 
+                        colorScheme="green" 
+                        onClick={handleSubmit} 
+                        isLoading={isLoading}
+                        size="sm"
+                        leftIcon={<Icon as={FaCheckCircle} />}
+                        px={8}
+                    >
+                        Mark Completed
+                    </Button>
+                </ModalFooter>
+            </ModalContent>
+        </Modal>
     );
 };
 
@@ -3070,7 +3284,7 @@ const InstrumentMasterForm = () => {
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
 
-    const [formData, setFormData] = useState({ refNo: '', instrumentName: '', notes: '' });
+    const [formData, setFormData] = useState({ model: '', serialNo: '', instrumentName: '', notes: '' });
 
     const fetchInstruments = async () => {
         try {
@@ -3102,7 +3316,12 @@ const InstrumentMasterForm = () => {
 
     const handleEdit = (inst) => {
         setEditId(inst._id);
-        setFormData({ refNo: inst.refNo, instrumentName: inst.instrumentName, notes: inst.notes || '' });
+        setFormData({ 
+            model: inst.model || '', 
+            serialNo: inst.serialNo || '', 
+            instrumentName: inst.instrumentName || '', 
+            notes: inst.notes || '' 
+        });
         setPhotoPreviews(inst.photos?.map(p => `${API_BASE_URL}${p.url}`) || (inst.photo?.url ? [`${API_BASE_URL}${inst.photo.url}`] : []));
         setPhotoFiles([]);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3110,7 +3329,7 @@ const InstrumentMasterForm = () => {
 
     const handleClear = () => {
         setEditId(null);
-        setFormData({ refNo: '', instrumentName: '', notes: '' });
+        setFormData({ model: '', serialNo: '', instrumentName: '', notes: '' });
         setPhotoFiles([]);
         setPhotoPreviews([]);
         document.getElementById('instr-photo-upload').value = '';
@@ -3128,7 +3347,8 @@ const InstrumentMasterForm = () => {
         setIsLoading(true);
         try {
             const uploadData = new FormData();
-            uploadData.append('refNo', formData.refNo);
+            uploadData.append('model', formData.model);
+            uploadData.append('serialNo', formData.serialNo);
             uploadData.append('instrumentName', formData.instrumentName);
             if (formData.notes) uploadData.append('notes', formData.notes);
             photoFiles.forEach(file => uploadData.append('photos', file));
@@ -3179,21 +3399,27 @@ const InstrumentMasterForm = () => {
                             <Icon as={FaWrench} w={5} h={5} />
                             <Heading size="md">{editId ? 'Edit Instrument' : 'Add Instrument'}</Heading>
                         </HStack>
-                        <Text opacity={0.75} mt={1} fontSize="xs">Instrument Name is required. Ref No is optional.</Text>
+                        <Text opacity={0.75} mt={1} fontSize="xs">Serial No is required. Instrument Name and Model are optional.</Text>
                     </Box>
 
                     <CardBody px={8} py={7}>
                         <form onSubmit={handleSubmit}>
                             <VStack spacing={6} align="stretch">
 
-                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={5}>
+                                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={5}>
                                     <FormControl>
                                         <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                            <Icon as={FaTag} mr={1} color="blue.400" /> Reference No
+                                            <Icon as={FaTag} mr={1} color="blue.400" /> Model
                                         </FormLabel>
-                                        <Input name="refNo" placeholder="e.g. INST-2024-001" value={formData.refNo} onChange={handleChange} borderRadius="xl" bg="gray.50" />
+                                        <Input name="model" placeholder="e.g. TS-12" value={formData.model} onChange={handleChange} borderRadius="xl" bg="gray.50" />
                                     </FormControl>
                                     <FormControl isRequired>
+                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
+                                            <Icon as={FaTag} mr={1} color="orange.400" /> Serial No
+                                        </FormLabel>
+                                        <Input name="serialNo" placeholder="e.g. SN-12345" value={formData.serialNo} onChange={handleChange} borderRadius="xl" bg="gray.50" />
+                                    </FormControl>
+                                    <FormControl>
                                         <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
                                             <Icon as={FaWrench} mr={1} color="blue.400" /> Instrument Name
                                         </FormLabel>
@@ -3493,6 +3719,9 @@ const Services = () => {
                                 <Tab _selected={{ color: 'white', bg: 'teal.700' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
                                     <Icon as={FaMapMarkedAlt} mr={2} /> Site Allocation
                                 </Tab>
+                                <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                    <Icon as={FaMoneyBillWave} mr={2} /> Employee Ledger
+                                </Tab>
                             </TabList>
 
                             <TabPanels flex={1}>
@@ -3519,6 +3748,9 @@ const Services = () => {
                                 </TabPanel>
                                 <TabPanel p={0} overflowX="auto">
                                     <AdminSiteAllocation />
+                                </TabPanel>
+                                <TabPanel p={0}>
+                                    <EmployeeExpensesModule />
                                 </TabPanel>
                             </TabPanels>
                         </Tabs>

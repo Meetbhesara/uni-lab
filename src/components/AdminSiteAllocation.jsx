@@ -72,9 +72,7 @@ const AdminSiteAllocation = () => {
                 const innerSrNo = innerIdx + 1;
                 const desc = `"${(sch.site?.siteName || '').toUpperCase()} (${(sch.site?.siteAddress || '').toUpperCase()})"`;
                 const contact = sch.workForAppley || sch.contactPerson || '';
-                const legacyOperative = sch.operativeName ? [sch.operativeName] : [];
-                const allOperatives = [...(sch.operativeNames || []), ...legacyOperative];
-                const operative = allOperatives.map(o => o.name).join(' | ');
+                const operative = sch.operative?.name || '—';
                 const helpers = (sch.helpers || []).map(h => h.name).join(' | ');
 
                 // CSV: SR. NO.,DATE,sr. no.,DESCRIPASAN,work For Appley,Oprative Name,Helper name
@@ -200,15 +198,10 @@ const AdminSiteAllocation = () => {
                                             </Td>
                                             <Td fontSize="sm">{sch.workForAppley || sch.contactPerson || '—'}</Td>
                                             <Td>
-                                                <VStack align="start" spacing={1}>
-                                                    {[...(sch.operativeNames || []), ...(sch.operativeName ? [sch.operativeName] : [])].map((o) => (
-                                                        <HStack key={o._id} spacing={1}>
-                                                            <Icon as={FaStar} color="orange.400" w={2} h={2} />
-                                                            <Text fontSize="xs" color="blue.700" fontWeight="bold">{o.name}</Text>
-                                                        </HStack>
-                                                    ))}
-                                                    {(sch.operativeNames?.length === 0 && !sch.operativeName) && <Text fontSize="xs" color="gray.400">—</Text>}
-                                                </VStack>
+                                                <HStack spacing={1}>
+                                                    <Icon as={FaStar} color="orange.400" w={2} h={2} />
+                                                    <Text fontSize="xs" color="blue.700" fontWeight="bold">{sch.operative?.name || '—'}</Text>
+                                                </HStack>
                                             </Td>
                                             <Td>
                                                 <VStack align="start" spacing={0}>
