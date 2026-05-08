@@ -2108,6 +2108,7 @@ const SiteMasterForm = () => {
             Object.keys(formData).forEach(key => {
                 if (formData[key]) uploadData.append(key, formData[key]);
             });
+            if (nextSiteId) uploadData.append('siteId', nextSiteId);
             const cleanedLedgers = ledgerItems.filter(li => li.ledger && li.ledger.trim() !== '' && li.amount);
             uploadData.append('ledgerItems', JSON.stringify(cleanedLedgers.map(item => ({ ledger: item.ledger, amount: item.amount }))));
             const cleanedContacts = contactPersons.filter(cp => cp.name.trim() || cp.phone.trim());
@@ -2155,6 +2156,7 @@ const SiteMasterForm = () => {
     };
 
     const handleDeleteSite = async (id) => {
+        console.log('handleDeleteSite triggered for ID:', id);
         if (!window.confirm('Delete this site record?')) return;
         try {
             await api.delete(`/site-master/${id}`);
@@ -2284,9 +2286,9 @@ const SiteMasterForm = () => {
                                             <SimpleGrid key={idx} columns={{ base: 1, md: 3 }} spacing={4} bg="white" p={3} borderRadius="xl" shadow="sm">
                                                 <FormControl>
                                                     {!item.isNew ? (
-                                                        <Select 
-                                                            placeholder="Select Ledger" 
-                                                            value={item.ledger} 
+                                                        <Select
+                                                            placeholder="Select Ledger"
+                                                            value={item.ledger}
                                                             onChange={(e) => {
                                                                 if (e.target.value === 'NEW_LEDGER_TRIGGER') {
                                                                     handleArrayChange(setLedgerItems, idx, 'isNew', true);
@@ -2302,17 +2304,17 @@ const SiteMasterForm = () => {
                                                         </Select>
                                                     ) : (
                                                         <HStack>
-                                                            <Input 
-                                                                placeholder="Enter Ledger Name" 
+                                                            <Input
+                                                                placeholder="Enter Ledger Name"
                                                                 value={item.ledger}
-                                                                onChange={(e) => handleArrayChange(setLedgerItems, idx, 'ledger', e.target.value)} 
-                                                                borderRadius="lg" 
+                                                                onChange={(e) => handleArrayChange(setLedgerItems, idx, 'ledger', e.target.value)}
+                                                                borderRadius="lg"
                                                                 autoFocus
                                                             />
-                                                            <IconButton 
-                                                                icon={<FaUndo />} 
-                                                                size="sm" 
-                                                                variant="ghost" 
+                                                            <IconButton
+                                                                icon={<FaUndo />}
+                                                                size="sm"
+                                                                variant="ghost"
                                                                 onClick={() => handleArrayChange(setLedgerItems, idx, 'isNew', false)}
                                                                 title="Switch back to list"
                                                             />
@@ -2320,20 +2322,20 @@ const SiteMasterForm = () => {
                                                     )}
                                                 </FormControl>
                                                 <FormControl>
-                                                    <Input 
-                                                        type="number" 
-                                                        placeholder="Amount" 
-                                                        value={item.amount} 
-                                                        onChange={(e) => handleArrayChange(setLedgerItems, idx, 'amount', e.target.value)} 
-                                                        borderRadius="lg" 
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Amount"
+                                                        value={item.amount}
+                                                        onChange={(e) => handleArrayChange(setLedgerItems, idx, 'amount', e.target.value)}
+                                                        borderRadius="lg"
                                                     />
                                                 </FormControl>
                                                 <HStack justify="flex-end">
-                                                    <IconButton 
-                                                        icon={<FaTrash />} 
-                                                        colorScheme="red" 
-                                                        variant="ghost" 
-                                                        size="sm" 
+                                                    <IconButton
+                                                        icon={<FaTrash />}
+                                                        colorScheme="red"
+                                                        variant="ghost"
+                                                        size="sm"
                                                         onClick={() => removeArrayItem(setLedgerItems, idx)}
                                                         isDisabled={ledgerItems.length === 1}
                                                     />
@@ -2515,7 +2517,7 @@ const SiteMasterForm = () => {
                                                                 setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
                                                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                                             }} />
-                                                            <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(s._id)} />
+                                                            <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDeleteSite(s._id)} />
                                                         </HStack>
                                                     </Td>
                                                 </Tr>
@@ -2565,6 +2567,7 @@ const SiteMasterForm = () => {
                                                         setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
                                                         window.scrollTo({ top: 0, behavior: 'smooth' });
                                                     }}>Edit</Button>
+                                                    <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDeleteSite(s._id)} />
                                                 </HStack>
                                             </CardBody>
                                         </Card>
@@ -2614,13 +2617,13 @@ const SiteMasterForm = () => {
                                                         <Box>
                                                             <Text fontSize="9px" color="teal.600" fontWeight="bold">LOCATION LINK</Text>
                                                             {viewSite.siteLocation ? (
-                                                                <Button 
-                                                                    as="a" 
-                                                                    target="_blank" 
-                                                                    href={viewSite.siteLocation.startsWith('http') ? viewSite.siteLocation : `https://www.google.com/maps?q=${viewSite.siteLocation}`} 
-                                                                    size="xs" 
-                                                                    colorScheme="blue" 
-                                                                    variant="link" 
+                                                                <Button
+                                                                    as="a"
+                                                                    target="_blank"
+                                                                    href={viewSite.siteLocation.startsWith('http') ? viewSite.siteLocation : `https://www.google.com/maps?q=${viewSite.siteLocation}`}
+                                                                    size="xs"
+                                                                    colorScheme="blue"
+                                                                    variant="link"
                                                                     leftIcon={<Icon as={FaMapMarkedAlt} />}
                                                                 >
                                                                     View on Google Maps
@@ -2840,7 +2843,7 @@ const ScheduleMasterForm = () => {
 
             formData.append('clientShortId', cShort);
             formData.append('siteSubfolder', siteSub);
-            
+
             files.photos.forEach(f => formData.append('photos', f));
             files.dailyReports.forEach(f => formData.append('dailyReports', f));
             files.data.forEach(f => formData.append('data', f));
@@ -3002,14 +3005,14 @@ const ScheduleMasterForm = () => {
                                         </FormControl>
                                         <FormControl>
                                             <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Site Ledger</FormLabel>
-                                            <Select 
-                                                name="ledger" 
-                                                value={formData.ledger} 
+                                            <Select
+                                                name="ledger"
+                                                value={formData.ledger}
                                                 onChange={(e) => {
                                                     const selected = selectedSiteLedgers.find(l => l.ledger === e.target.value);
                                                     setFormData(prev => ({ ...prev, ledger: e.target.value, amount: selected ? selected.amount : 0 }));
-                                                }} 
-                                                borderRadius="xl" 
+                                                }}
+                                                borderRadius="xl"
                                                 bg="gray.50"
                                                 placeholder={selectedSiteLedgers.length > 0 ? "Select Ledger" : "No Ledgers Available"}
                                             >
@@ -3093,9 +3096,9 @@ const ScheduleMasterForm = () => {
                                                 </Badge>
                                                 <HStack>
                                                     {s.dayStatus === 'Scheduled' && (
-                                                        <Button 
-                                                            size="xs" 
-                                                            colorScheme="green" 
+                                                        <Button
+                                                            size="xs"
+                                                            colorScheme="green"
                                                             leftIcon={<Icon as={FaCheckCircle} />}
                                                             onClick={() => { setCompTarget(s); onCompOpen(); }}
                                                         >
@@ -3105,11 +3108,11 @@ const ScheduleMasterForm = () => {
                                                     <IconButton size="xs" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(s)} />
                                                 </HStack>
                                             </HStack>
-                                            
+
                                             <VStack align="start" spacing={1} mb={3}>
                                                 <Text fontWeight="black" fontSize="sm" color="gray.800" noOfLines={1}>{s.site?.siteName}</Text>
                                                 <Text fontSize="xs" color="gray.500" noOfLines={1}>{s.client?.clientName}</Text>
-                                                
+
                                                 {/* On-Site Contacts */}
                                                 {s.site?.contactPersons?.length > 0 && (
                                                     <HStack spacing={2} mt={1}>
@@ -3163,12 +3166,12 @@ const ScheduleMasterForm = () => {
                 </VStack>
             </Container>
 
-            <CompletionModal 
-                isOpen={isCompOpen} 
-                onClose={onCompClose} 
-                schedule={compTarget} 
-                onComplete={handleComplete} 
-                isLoading={isCompLoading} 
+            <CompletionModal
+                isOpen={isCompOpen}
+                onClose={onCompClose}
+                schedule={compTarget}
+                onComplete={handleComplete}
+                isLoading={isCompLoading}
             />
         </Box>
     );
@@ -3176,7 +3179,7 @@ const ScheduleMasterForm = () => {
 
 const CompletionModal = ({ isOpen, onClose, schedule, onComplete, isLoading }) => {
     const [files, setFiles] = useState({ photos: [], dailyReports: [], data: [] });
-    
+
     const handleFileChange = (e, type) => {
         const selectedFiles = Array.from(e.target.files);
         setFiles(prev => ({ ...prev, [type]: [...prev[type], ...selectedFiles] }));
@@ -3258,9 +3261,9 @@ const CompletionModal = ({ isOpen, onClose, schedule, onComplete, isLoading }) =
                 </ModalBody>
                 <ModalFooter bg="gray.50" borderBottomRadius="2xl">
                     <Button variant="ghost" mr={3} onClick={onClose} size="sm">Cancel</Button>
-                    <Button 
-                        colorScheme="green" 
-                        onClick={handleSubmit} 
+                    <Button
+                        colorScheme="green"
+                        onClick={handleSubmit}
                         isLoading={isLoading}
                         size="sm"
                         leftIcon={<Icon as={FaCheckCircle} />}
@@ -3316,11 +3319,11 @@ const InstrumentMasterForm = () => {
 
     const handleEdit = (inst) => {
         setEditId(inst._id);
-        setFormData({ 
-            model: inst.model || '', 
-            serialNo: inst.serialNo || '', 
-            instrumentName: inst.instrumentName || '', 
-            notes: inst.notes || '' 
+        setFormData({
+            model: inst.model || '',
+            serialNo: inst.serialNo || '',
+            instrumentName: inst.instrumentName || '',
+            notes: inst.notes || ''
         });
         setPhotoPreviews(inst.photos?.map(p => `${API_BASE_URL}${p.url}`) || (inst.photo?.url ? [`${API_BASE_URL}${inst.photo.url}`] : []));
         setPhotoFiles([]);
