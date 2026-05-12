@@ -4,7 +4,7 @@ import {
     Button, Spinner, Center, Text, HStack, VStack, Icon, useToast, Heading, Flex, IconButton,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
     FormControl, FormLabel, Input, Select as ChakraSelect, SimpleGrid, useDisclosure,
-    InputGroup, InputLeftElement, Divider, InputLeftAddon
+    InputGroup, InputLeftElement, Divider, InputLeftAddon, Badge
 } from '@chakra-ui/react';
 import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign } from 'react-icons/fa';
 import api from '../api/axios';
@@ -12,6 +12,7 @@ import api from '../api/axios';
 const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     const [expenses, setExpenses] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [employeeDetails, setEmployeeDetails] = useState(null);
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isFiltering, setIsFiltering] = useState(true); // Default to filter mode
@@ -27,22 +28,44 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     const [expenseForm, setExpenseForm] = useState({
         date: new Date().toISOString().slice(0, 10),
         attendance: 'Present',
-        siteId: '',
         breakfast: '',
         lunch: '',
         dinner: '',
         petrol: '',
         notes: ''
     });
+    const [clientSites, setClientSites] = useState([{ 
+        clientId: '', 
+        siteId: '', 
+        files: { photos: [], data: [], dailyReports: [] } 
+    }]);
+
+    const [otherExpenses, setOtherExpenses] = useState([]);
+    const [givenTo, setGivenTo] = useState([]);
+    const [receivedFrom, setReceivedFrom] = useState([]);
+
+    // Total Calculation
+    const totals = React.useMemo(() => {
+        const stdTotal = (Number(expenseForm.breakfast) || 0) + 
+                         (Number(expenseForm.lunch) || 0) + 
+                         (Number(expenseForm.dinner) || 0) + 
+                         (Number(expenseForm.petrol) || 0);
+        const otherTotal = otherExpenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        const total = stdTotal + otherTotal;
+        const remaining = (employeeDetails?.totalAmount || 0) - total;
+        return { stdTotal, otherTotal, total, remaining };
+    }, [expenseForm, otherExpenses, employeeDetails]);
 
     const fetchExpenses = async () => {
         if (!employeeId) return;
         setLoading(true);
         try {
-            const res = await api.get(`/employee-expense/admin/${employeeId}`);
-            if (res.data.success) {
-                setExpenses(res.data.data);
-            }
+            const [expRes, empRes] = await Promise.all([
+                api.get(`/employee-expense/admin/${employeeId}`),
+                api.get(`/employee-master/${employeeId}`)
+            ]);
+            if (expRes.data.success) setExpenses(expRes.data.data);
+            if (empRes.data.success) setEmployeeDetails(empRes.data.data);
         } catch (err) {
             console.error("Error fetching employee expenses", err);
             toast({ title: 'Error loading expenses', status: 'error' });
@@ -76,9 +99,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         fetchEmployees();
     }, [employeeId, toast]);
 
-    const [otherExpenses, setOtherExpenses] = useState([]);
-    const [givenTo, setGivenTo] = useState([]);
-    const [receivedFrom, setReceivedFrom] = useState([]);
+
 
     const handleFormChange = (e) => {
         setExpenseForm({ ...expenseForm, [e.target.name]: e.target.value });
@@ -108,33 +129,90 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     };
     const removeReceivedFromRow = (idx) => setReceivedFrom(receivedFrom.filter((_, i) => i !== idx));
 
+    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
+    const removeClientSite = (idx) => setClientSites(clientSites.filter((_, i) => i !== idx));
+    const updateClientSite = (idx, field, val) => {
+        const updated = [...clientSites];
+        updated[idx][field] = val;
+        if (field === 'clientId') updated[idx].siteId = ''; 
+        setClientSites(updated);
+    };
+
+    const handleSiteFileChange = (idx, e, category) => {
+        const selectedFiles = Array.from(e.target.files);
+        const updated = [...clientSites];
+        updated[idx].files[category] = [...updated[idx].files[category], ...selectedFiles];
+        setClientSites(updated);
+    };
+
+    const removeSiteFile = (siteIdx, category, fileIdx) => {
+        const updated = [...clientSites];
+        updated[siteIdx].files[category] = updated[siteIdx].files[category].filter((_, i) => i !== fileIdx);
+        setClientSites(updated);
+    };
+
     const handleAddExpense = async () => {
+        if (!employeeId) return;
         setSubmitting(true);
         try {
-            const payload = {
-                employeeId,
-                date: expenseForm.date,
-                attendance: expenseForm.attendance,
-                siteId: expenseForm.siteId || null,
-                expenses: {
-                    breakfast: Number(expenseForm.breakfast) || 0,
-                    lunch: Number(expenseForm.lunch) || 0,
-                    dinner: Number(expenseForm.dinner) || 0,
-                    petrol: Number(expenseForm.petrol) || 0
-                },
-                otherExpensesList: otherExpenses.map(o => ({ expenseName: o.expenseName, amount: Number(o.amount) })).filter(o => o.expenseName && o.amount),
-                creditDebit: {
-                    givenTo: givenTo.map(g => ({ employeeRef: g.employeeRef, amount: Number(g.amount) })).filter(g => g.employeeRef && g.amount),
-                    receivedFrom: receivedFrom.map(r => ({ employeeRef: r.employeeRef, amount: Number(r.amount) })).filter(r => r.employeeRef && r.amount)
-                },
-                notes: expenseForm.notes
-            };
-            const res = await api.post('/employee-expense/admin/add-expense', payload);
+            const formData = new FormData();
+            formData.append('employeeId', employeeId);
+            formData.append('date', expenseForm.date);
+            formData.append('attendance', expenseForm.attendance);
+            formData.append('notes', expenseForm.notes);
+            formData.append('expenses', JSON.stringify({
+                breakfast: Number(expenseForm.breakfast) || 0,
+                lunch: Number(expenseForm.lunch) || 0,
+                dinner: Number(expenseForm.dinner) || 0,
+                petrol: Number(expenseForm.petrol) || 0
+            }));
+            formData.append('otherExpensesList', JSON.stringify(otherExpenses.map(o => ({ expenseName: o.expenseName, amount: Number(o.amount) })).filter(o => o.expenseName && o.amount)));
+            
+            // Format allocations for backend
+            const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
+            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId }))));
+
+            // Add Files site-wise
+            allocations.forEach((site, idx) => {
+                const fullSite = sites.find(s => s._id === site.siteId);
+                const fullClient = fullSite?.client;
+                if (fullSite) {
+                    const cShortId = (fullClient?.clientId || 'unknown').toLowerCase();
+                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    const sId = fullSite?.siteId || '0000';
+                    formData.append(`site_${idx}_clientShortId`, cShortId);
+                    formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
+                }
+                
+                site.files.photos.forEach(f => formData.append(`site_${idx}_photos`, f));
+                site.files.dailyReports.forEach(f => formData.append(`site_${idx}_dailyReports`, f));
+                site.files.data.forEach(f => formData.append(`site_${idx}_data`, f));
+            });
+
+            // Send metadata about the first site as fallback
+            if (allocations[0]) {
+                const fullSite = sites.find(s => s._id === allocations[0].siteId);
+                const fullClient = fullSite?.client;
+                formData.append('clientShortId', (fullClient?.clientId || 'unknown').toLowerCase());
+                formData.append('siteSubfolder', `${fullSite?.siteId || '0000'}-${(fullSite?.siteName || 'unknown').trim().replace(/[^a-z0-9]/gi, '_').toLowerCase()}`);
+            }
+
+            const res = await api.post('/employee-expense/admin/add-expense', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
             if (res.data.success) {
                 toast({ title: 'Success', description: 'Expense added!', status: 'success', duration: 2000 });
+                if (res.data.updatedEmployee) setEmployeeDetails(res.data.updatedEmployee);
+                
                 onClose();
-                fetchExpenses();
-                setExpenseForm({ date: new Date().toISOString().slice(0, 10), attendance: 'Present', siteId: '', breakfast: '', lunch: '', dinner: '', petrol: '', notes: '' });
+                
+                // Delay background refresh to prevent stale data race conditions
+                setTimeout(() => {
+                    fetchExpenses();
+                }, 1000);
+
+                setExpenseForm({ date: new Date().toISOString().slice(0, 10), attendance: 'Present', breakfast: '', lunch: '', dinner: '', petrol: '', notes: '' });
+                setClientSites([{ clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
                 setOtherExpenses([]);
                 setGivenTo([]);
                 setReceivedFrom([]);
@@ -326,15 +404,54 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                     </FormControl>
                                 </SimpleGrid>
                                 
-                                <FormControl mt={5}>
-                                    <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">Site (Optional)</FormLabel>
-                                    <InputGroup>
-                                        <InputLeftElement pointerEvents="none"><Icon as={FaMapMarkerAlt} color="purple.400" /></InputLeftElement>
-                                        <ChakraSelect pl={10} name="siteId" placeholder="-- Select Site --" value={expenseForm.siteId} onChange={handleFormChange} bg="gray.50" _focus={{ bg: "white", borderColor: "purple.400" }}>
-                                            {sites.map(s => <option key={s._id} value={s._id}>{s.siteName}</option>)}
-                                        </ChakraSelect>
-                                    </InputGroup>
-                                </FormControl>
+                                <Box w="full" bg="purple.50" p={5} borderRadius="xl" border="1px dashed" borderColor="purple.200">
+                                    <Flex justify="space-between" align="center" mb={4}>
+                                        <HStack><Icon as={FaMapMarkerAlt} color="purple.500" /><Heading size="xs" textTransform="uppercase" color="purple.700" letterSpacing="wider">Site Allocations & Files</Heading></HStack>
+                                        <Button size="xs" colorScheme="purple" variant="solid" shadow="sm" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
+                                    </Flex>
+                                    <VStack spacing={5}>
+                                        {clientSites.map((cs, idx) => (
+                                            <VStack key={idx} w="full" bg="white" p={3} borderRadius="md" shadow="sm" align="stretch" borderLeft="4px solid" borderColor="purple.400">
+                                                <HStack align="flex-end">
+                                                    <FormControl size="sm">
+                                                        <FormLabel fontSize="10px" fontWeight="bold">Client</FormLabel>
+                                                        <ChakraSelect placeholder="Select Client" value={cs.clientId} onChange={e => updateClientSite(idx, 'clientId', e.target.value)} size="sm" variant="filled">
+                                                            {Array.from(new Set(sites.map(s => s.client?._id || s.client))).map(cId => {
+                                                                const clientName = sites.find(s => (s.client?._id || s.client) === cId)?.client?.clientName || 'Client';
+                                                                return <option key={cId} value={cId}>{clientName}</option>
+                                                            })}
+                                                        </ChakraSelect>
+                                                    </FormControl>
+                                                    <FormControl size="sm">
+                                                        <FormLabel fontSize="10px" fontWeight="bold">Site</FormLabel>
+                                                        <ChakraSelect placeholder="Select Site" value={cs.siteId} onChange={e => updateClientSite(idx, 'siteId', e.target.value)} size="sm" variant="filled">
+                                                            {sites.filter(s => (s.client?._id || s.client) === cs.clientId).map(s => (
+                                                                <option key={s._id} value={s._id}>{s.siteName}</option>
+                                                            ))}
+                                                        </ChakraSelect>
+                                                    </FormControl>
+                                                    {clientSites.length > 1 && <IconButton icon={<FaTrash />} size="sm" colorScheme="red" variant="ghost" onClick={() => removeClientSite(idx)} />}
+                                                </HStack>
+                                                
+                                                {/* File Uploads per Site */}
+                                                <SimpleGrid columns={3} spacing={2} pt={2}>
+                                                    <VStack align="start" spacing={1}>
+                                                        <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({cs.files.photos.length})</Text>
+                                                        <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
+                                                    </VStack>
+                                                    <VStack align="start" spacing={1}>
+                                                        <Text fontSize="9px" fontWeight="black" color="orange.600">REPORTS ({cs.files.dailyReports.length})</Text>
+                                                        <Input type="file" multiple accept=".pdf,.doc,.docx" onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')} size="xs" p={0} variant="unstyled" />
+                                                    </VStack>
+                                                    <VStack align="start" spacing={1}>
+                                                        <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({cs.files.data.length})</Text>
+                                                        <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
+                                                    </VStack>
+                                                </SimpleGrid>
+                                            </VStack>
+                                        ))}
+                                    </VStack>
+                                </Box>
                             </Box>
 
                             {/* Food & Travel Section */}
@@ -434,6 +551,27 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                             </Box>
                             {/* Dynamic Array Fields End */}
 
+                             {/* Live Summary Footer */}
+                             <Box w="full" bg="blue.600" p={4} borderRadius="xl" shadow="inner" color="white" pos="relative">
+                                {loading && <Center pos="absolute" inset={0} bg="blue.600" borderRadius="xl"><Spinner size="xs" /></Center>}
+                                <HStack justify="space-between">
+                                    <VStack align="start" spacing={0}>
+                                        <Text fontSize="9px" opacity={0.8} fontWeight="bold">CURRENT: ₹{employeeDetails?.totalAmount?.toLocaleString() || 0}</Text>
+                                        <HStack spacing={1}>
+                                            <Icon as={FaRupeeSign} />
+                                            <Heading size="md">{totals.total.toLocaleString()}</Heading>
+                                        </HStack>
+                                        <Text fontSize="9px" opacity={0.8} fontWeight="bold" color={totals.remaining < 0 ? "red.200" : "green.200"}>
+                                            REMAINS: ₹{totals.remaining.toLocaleString()}
+                                        </Text>
+                                    </VStack>
+                                    <HStack spacing={4} fontSize="xs" opacity={0.9}>
+                                        <Text>Std: ₹{totals.stdTotal}</Text>
+                                        <Text>Other: ₹{totals.otherTotal}</Text>
+                                    </HStack>
+                                </HStack>
+                            </Box>
+
                             <FormControl bg="gray.100" p={4} borderRadius="xl">
                                 <FormLabel fontWeight="bold" fontSize="sm" color="gray.700"><Icon as={FaStickyNote} mr={2} color="gray.500"/>Notes</FormLabel>
                                 <Input name="notes" value={expenseForm.notes} onChange={handleFormChange} placeholder="Type any specific details or context here..." bg="white" _focus={{ borderColor: "purple.400" }} />
@@ -473,9 +611,8 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                             const attColor = attendance === 'P' ? 'green.400' : (attendance === 'HD' ? 'orange.400' : 'red.400');
                             
                             let sideWork = [];
-                            if (exp.siteId) sideWork.push(exp.siteId.siteName);
-                            if (exp.siteIds && exp.siteIds.length > 0) {
-                                sideWork = sideWork.concat(exp.siteIds.map(s => s.siteName));
+                            if (exp.clientSites && exp.clientSites.length > 0) {
+                                sideWork = exp.clientSites.map(cs => cs.siteId?.siteName).filter(Boolean);
                             }
 
                             let credits = [];

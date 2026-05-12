@@ -51,7 +51,7 @@ const AdminSiteAllocation = () => {
         }
 
         // Generate CSV manually 
-        let csvContent = "SR. NO.,DATE,sr. no.,DESCRIPASAN,work For Appley,Oprative Name,Helper name\n";
+        let csvContent = "SR. NO.,DATE,sr. no.,DESCRIPASAN,work For Appley,Oprative Name,Helper name,Vehicle,Instruments\n";
 
         // Group by date for SR. NO. logic
         const groupedByDate = schedules.reduce((acc, curr) => {
@@ -75,11 +75,14 @@ const AdminSiteAllocation = () => {
                 const operative = sch.operative?.name || '—';
                 const helpers = (sch.helpers || []).map(h => h.name).join(' | ');
 
-                // CSV: SR. NO.,DATE,sr. no.,DESCRIPASAN,work For Appley,Oprative Name,Helper name
+                const vehicle = sch.vehicle?.vehicleNumber || '—';
+                const instruments = (sch.instruments || []).map(i => i.serialNo).join(' | ');
+
+                // CSV: SR. NO.,DATE,sr. no.,DESCRIPASAN,work For Appley,Oprative Name,Helper name,Vehicle,Instruments
                 if (innerIdx === 0) {
-                    csvContent += `${srNo},${dateLabel},${innerSrNo},${desc},${contact},${operative},${helpers}\n`;
+                    csvContent += `${srNo},${dateLabel},${innerSrNo},${desc},${contact},${operative},${helpers},${vehicle},${instruments}\n`;
                 } else {
-                    csvContent += `,,${innerSrNo},${desc},${contact},${operative},${helpers}\n`;
+                    csvContent += `,,${innerSrNo},${desc},${contact},${operative},${helpers},${vehicle},${instruments}\n`;
                 }
             });
         });
@@ -173,6 +176,8 @@ const AdminSiteAllocation = () => {
                             <Th color="gray.700" py={5} w="180px" borderColor="gray.300">work For Appley</Th>
                             <Th color="gray.700" py={5} w="200px" borderColor="gray.300">Operative Name</Th>
                             <Th color="gray.700" py={5} w="200px" borderColor="gray.300">Helper name</Th>
+                            <Th color="gray.700" py={5} w="120px" borderColor="gray.300">Vehicle</Th>
+                            <Th color="gray.700" py={5} w="180px" borderColor="gray.300">Instruments</Th>
                         </Tr>
                     </Thead>
                     <Tbody>
@@ -209,6 +214,17 @@ const AdminSiteAllocation = () => {
                                                         <Text key={h._id} fontSize="xs" color="gray.600">• {h.name}</Text>
                                                     ))}
                                                     {sch.helpers?.length === 0 && <Text fontSize="xs" color="gray.400">—</Text>}
+                                                </VStack>
+                                            </Td>
+                                            <Td>
+                                                <Text fontSize="xs" fontWeight="bold" color="red.600">{sch.vehicle?.vehicleNumber || '—'}</Text>
+                                            </Td>
+                                            <Td>
+                                                <VStack align="start" spacing={0}>
+                                                    {(sch.instruments || []).map((inst) => (
+                                                        <Text key={inst._id} fontSize="10px" color="orange.600" fontWeight="bold">• {inst.serialNo}</Text>
+                                                    ))}
+                                                    {sch.instruments?.length === 0 && <Text fontSize="xs" color="gray.400">—</Text>}
                                                 </VStack>
                                             </Td>
                                         </Tr>

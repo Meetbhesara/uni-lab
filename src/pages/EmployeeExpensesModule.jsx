@@ -19,13 +19,17 @@ const EmployeeExpensesModule = () => {
     const [sites, setSites] = useState([]);
     const [loading, setLoading] = useState(false);
 
+    const updateSingleEmployee = (updatedEmp) => {
+        setEmployees(prev => prev.map(emp => emp._id === updatedEmp._id ? updatedEmp : emp));
+    };
+
     const fetchData = async () => {
         setLoading(true);
         try {
             const [eRes, cRes, sRes] = await Promise.all([
-                api.get('/employee-master'),
-                api.get('/client-master'),
-                api.get('/site-master')
+                api.get('/employee-master?t=' + Date.now()),
+                api.get('/client-master?t=' + Date.now()),
+                api.get('/site-master?t=' + Date.now())
             ]);
             if (eRes.data.success) setEmployees(eRes.data.data);
             if (cRes.data.success) setClients(cRes.data.data);
@@ -89,7 +93,9 @@ const EmployeeExpensesModule = () => {
                                     employees={employees} 
                                     clients={clients} 
                                     sites={sites} 
+                                    loading={loading}
                                     onRefresh={fetchData} 
+                                    onUpdateEmployee={updateSingleEmployee}
                                 />
                             </TabPanel>
                         </TabPanels>
@@ -101,7 +107,7 @@ const EmployeeExpensesModule = () => {
 };
 
 // ── Daily Expenses Module ──────────────────────────────────────────────
-const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
+const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, onUpdateEmployee }) => {
     const toast = useToast();
     const [isSaving, setIsSaving] = useState(false);
     
@@ -110,7 +116,11 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [standardExpenses, setStandardExpenses] = useState({ breakfast: '', lunch: '', dinner: '', petrol: '' });
     const [otherExpenses, setOtherExpenses] = useState([]);
-    const [clientSites, setClientSites] = useState([{ clientId: '', siteId: '' }]);
+    const [clientSites, setClientSites] = useState([{ 
+        clientId: '', 
+        siteId: '', 
+        files: { photos: [], data: [], dailyReports: [] } 
+    }]);
     const [notes, setNotes] = useState('');
 
     // Files State
@@ -137,12 +147,19 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
         setOtherExpenses(updated);
     };
 
-    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '' }]);
+    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
     const removeClientSite = (idx) => setClientSites(clientSites.filter((_, i) => i !== idx));
     const updateClientSite = (idx, field, val) => {
         const updated = [...clientSites];
         updated[idx][field] = val;
-        if (field === 'clientId') updated[idx].siteId = ''; // Reset site if client changes
+        if (field === 'clientId') updated[idx].siteId = ''; 
+        setClientSites(updated);
+    };
+
+    const handleSiteFileChange = (idx, e, category) => {
+        const selectedFiles = Array.from(e.target.files);
+        const updated = [...clientSites];
+        updated[idx].files[category] = [...updated[idx].files[category], ...selectedFiles];
         setClientSites(updated);
     };
 
@@ -178,19 +195,33 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
             formData.append('notes', notes);
             formData.append('expenses', JSON.stringify(standardExpenses));
             formData.append('otherExpensesList', JSON.stringify(otherExpenses.filter(e => e.expenseName && e.amount)));
-            formData.append('clientSites', JSON.stringify(clientSites.filter(cs => cs.clientId && cs.siteId)));
+            // Format allocations for backend
+            const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
+            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId }))));
 
-            // Add Files
-            files.photos.forEach(f => formData.append('photos', f));
-            files.data.forEach(f => formData.append('data', f));
-            files.dailyReports.forEach(f => formData.append('dailyReports', f));
+            // Add Files site-wise
+            allocations.forEach((site, idx) => {
+                const fullSite = sites.find(s => s._id === site.siteId);
+                const fullClient = clients.find(c => c._id === site.clientId);
+                if (fullSite) {
+                    const cShortId = (fullClient?.clientId || 'unknown').toLowerCase();
+                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/\s+/g, '_').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    const sId = fullSite?.siteId || '0000';
+                    formData.append(`site_${idx}_clientShortId`, cShortId);
+                    formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
+                }
+                
+                site.files.photos.forEach(f => formData.append(`site_${idx}_photos`, f));
+                site.files.dailyReports.forEach(f => formData.append(`site_${idx}_dailyReports`, f));
+                site.files.data.forEach(f => formData.append(`site_${idx}_data`, f));
+            });
 
-            // Help backend Multer with folder structure (using first client-site if available)
-            if (clientSites[0]?.clientId) {
-                const client = clients.find(c => c._id === clientSites[0].clientId);
-                const site = sites.find(s => s._id === clientSites[0].siteId);
-                formData.append('clientShortId', client?.clientId || 'unknown');
-                formData.append('siteSubfolder', site?.siteName?.replace(/\s+/g, '_').toLowerCase() || 'unknown');
+            // Fallback metadata
+            if (allocations[0]) {
+                const client = clients.find(c => c._id === allocations[0].clientId);
+                const site = sites.find(s => s._id === allocations[0].siteId);
+                formData.append('clientShortId', (client?.clientId || 'unknown').toLowerCase());
+                formData.append('siteSubfolder', `${site?.siteId || '0000'}-${(site?.siteName || 'unknown').trim().replace(/\s+/g, '_').replace(/[^a-z0-9]/gi, '_').toLowerCase()}`);
             }
 
             const res = await api.post('/employee-expense/admin/add-expense', formData, {
@@ -199,14 +230,23 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
 
             if (res.data.success) {
                 toast({ title: 'Expense Saved Successfully', status: 'success' });
-                // Reset form
+                
+                // 1. Update local state IMMEDIATELY for instant UI feedback
+                if (res.data.updatedEmployee && onUpdateEmployee) {
+                    onUpdateEmployee(res.data.updatedEmployee);
+                }
+                
+                // 2. Wait a bit for the DB to stabilize before a full refresh
+                // This prevents race conditions where the GET request might hit a stale read
+                setTimeout(() => {
+                    onRefresh();
+                }, 1000);
+                
+                // 3. Reset form
                 setStandardExpenses({ breakfast: '', lunch: '', dinner: '', petrol: '' });
                 setOtherExpenses([]);
-                setClientSites([{ clientId: '', siteId: '' }]);
-                setFiles({ photos: [], data: [], dailyReports: [] });
-                setPreviews({ photos: [], data: [], dailyReports: [] });
+                setClientSites([{ clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
                 setNotes('');
-                onRefresh();
             }
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Save failed', status: 'error' });
@@ -245,19 +285,37 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
                         </FormControl>
 
                         {selectedEmployee && (
-                            <Box bg="blue.50" p={4} borderRadius="xl" border="1px solid" borderColor="blue.100">
-                                <HStack justify="space-between">
-                                    <VStack align="start" spacing={0}>
-                                        <Text fontSize="xs" fontWeight="bold" color="blue.600">CURRENT BALANCE</Text>
-                                        <Heading size="md" color="blue.800">₹{selectedEmployee.totalAmount?.toLocaleString()}</Heading>
+                            <Box bg="white" p={6} borderRadius="2xl" border="1px solid" borderColor="blue.100" pos="relative" shadow="sm">
+                                {loading && (
+                                    <Center pos="absolute" inset={0} bg="whiteAlpha.800" borderRadius="2xl" zIndex={1}>
+                                        <Spinner size="md" color="blue.500" />
+                                    </Center>
+                                )}
+                                <SimpleGrid columns={3} spacing={4} textAlign="center">
+                                    <VStack align="center" spacing={1}>
+                                        <Text fontSize="10px" fontWeight="black" color="gray.400" textTransform="uppercase">Current Balance</Text>
+                                        <Heading size="md" color="blue.700">₹{selectedEmployee.totalAmount?.toLocaleString()}</Heading>
                                     </VStack>
-                                    <VStack align="end" spacing={0}>
-                                        <Text fontSize="xs" fontWeight="bold" color="red.600">PREVIEW REMAINS</Text>
+                                    
+                                    <VStack align="center" spacing={1} borderLeft="1px solid" borderRight="1px solid" borderColor="gray.100">
+                                        <Text fontSize="10px" fontWeight="black" color="red.400" textTransform="uppercase">Today's Total</Text>
+                                        <Heading size="md" color="red.600">- ₹{totals.total.toLocaleString()}</Heading>
+                                    </VStack>
+
+                                    <VStack align="center" spacing={1}>
+                                        <Text fontSize="10px" fontWeight="black" color="green.400" textTransform="uppercase">New Balance</Text>
                                         <Heading size="md" color={totals.remaining >= 0 ? "green.600" : "red.600"}>
                                             ₹{totals.remaining.toLocaleString()}
                                         </Heading>
                                     </VStack>
-                                </HStack>
+                                </SimpleGrid>
+                                
+                                <Divider my={3} />
+                                <Center>
+                                    <Text fontSize="xs" color="gray.500" fontStyle="italic">
+                                        Calculation: ₹{selectedEmployee.totalAmount?.toLocaleString()} (Current) - ₹{totals.total.toLocaleString()} (Expense) = ₹{totals.remaining.toLocaleString()} (Final)
+                                    </Text>
+                                </Center>
                             </Box>
                         )}
                     </SimpleGrid>
@@ -333,7 +391,6 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
                         </CardBody>
                     </Card>
 
-                    {/* Client & Site Management */}
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
                         <CardBody p={6}>
                             <HStack justify="space-between" mb={6}>
@@ -342,27 +399,45 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
                                 </Heading>
                                 <Button size="sm" colorScheme="purple" variant="ghost" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
                             </HStack>
-                            <VStack spacing={4}>
+                            <VStack spacing={6}>
                                 {clientSites.map((row, idx) => (
-                                    <HStack key={idx} w="full" align="flex-end">
-                                        <FormControl flex={1}>
-                                            <FormLabel fontSize="10px" fontWeight="bold">Client</FormLabel>
-                                            <Select size="sm" placeholder="Select Client" value={row.clientId} onChange={(e) => updateClientSite(idx, 'clientId', e.target.value)} borderRadius="lg">
-                                                {clients.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>)}
-                                            </Select>
-                                        </FormControl>
-                                        <FormControl flex={1}>
-                                            <FormLabel fontSize="10px" fontWeight="bold">Site</FormLabel>
-                                            <Select size="sm" placeholder="Select Site" value={row.siteId} onChange={(e) => updateClientSite(idx, 'siteId', e.target.value)} borderRadius="lg">
-                                                {sites.filter(s => s.client === row.clientId || s.client?._id === row.clientId).map(s => (
-                                                    <option key={s._id} value={s._id}>{s.siteName}</option>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                        {clientSites.length > 1 && (
-                                            <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => removeClientSite(idx)} mb={0.5} />
-                                        )}
-                                    </HStack>
+                                    <VStack key={idx} w="full" bg="gray.50" p={4} borderRadius="xl" align="stretch" borderLeft="4px solid" borderColor="purple.300">
+                                        <HStack align="flex-end">
+                                            <FormControl flex={1}>
+                                                <FormLabel fontSize="10px" fontWeight="bold">Client</FormLabel>
+                                                <Select size="sm" placeholder="Select Client" value={row.clientId} onChange={(e) => updateClientSite(idx, 'clientId', e.target.value)} bg="white" borderRadius="lg">
+                                                    {clients.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>)}
+                                                </Select>
+                                            </FormControl>
+                                            <FormControl flex={1}>
+                                                <FormLabel fontSize="10px" fontWeight="bold">Site</FormLabel>
+                                                <Select size="sm" placeholder="Select Site" value={row.siteId} onChange={(e) => updateClientSite(idx, 'siteId', e.target.value)} bg="white" borderRadius="lg">
+                                                    {sites.filter(s => s.client === row.clientId || s.client?._id === row.clientId).map(s => (
+                                                        <option key={s._id} value={s._id}>{s.siteName}</option>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                            {clientSites.length > 1 && (
+                                                <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => removeClientSite(idx)} />
+                                            )}
+                                        </HStack>
+                                        
+                                        {/* Site Specific Uploads */}
+                                        <SimpleGrid columns={3} spacing={3} pt={2}>
+                                            <VStack align="start" spacing={1}>
+                                                <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({row.files.photos.length})</Text>
+                                                <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
+                                            </VStack>
+                                            <VStack align="start" spacing={1}>
+                                                <Text fontSize="9px" fontWeight="black" color="orange.600">REPORTS ({row.files.dailyReports.length})</Text>
+                                                <Input type="file" multiple accept=".pdf,.doc,.docx" onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')} size="xs" p={0} variant="unstyled" />
+                                            </VStack>
+                                            <VStack align="start" spacing={1}>
+                                                <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({row.files.data.length})</Text>
+                                                <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
+                                            </VStack>
+                                        </SimpleGrid>
+                                    </VStack>
                                 ))}
                             </VStack>
                         </CardBody>
@@ -371,63 +446,14 @@ const DailyExpensesSection = ({ employees, clients, sites, onRefresh }) => {
 
                 {/* Right Side: File Uploads & Summary */}
                 <VStack spacing={8} align="stretch">
-                    {/* File Uploads */}
-                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" bg="blue.50">
                         <CardBody p={6}>
-                            <Heading size="sm" mb={6} color="gray.700">Attachments & Documents</Heading>
-                            
-                            <SimpleGrid columns={1} spacing={6}>
-                                {/* Photos Section */}
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="xs" fontWeight="bold" color="gray.500">📸 PHOTOS (JPG, PNG, WEBP)</Text>
-                                        <Button size="xs" colorScheme="blue" variant="outline" onClick={() => document.getElementById('photo-up').click()}>Upload</Button>
-                                    </HStack>
-                                    <input type="file" id="photo-up" multiple hidden accept="image/*" onChange={(e) => handleFileChange(e, 'photos')} />
-                                    <HStack overflowX="auto" py={2} spacing={3}>
-                                        {previews.photos.map((src, i) => (
-                                            <Box key={i} pos="relative" minW="80px" h="80px" borderRadius="lg" overflow="hidden" border="1px solid" borderColor="gray.200">
-                                                <Image src={src} objectFit="cover" w="full" h="full" />
-                                                <IconButton pos="absolute" top={0} right={0} size="xs" colorScheme="red" icon={<FaPlus style={{transform: 'rotate(45deg)'}} />} onClick={() => removeFile('photos', i)} />
-                                            </Box>
-                                        ))}
-                                    </HStack>
-                                </Box>
-
-                                {/* Data Files Section */}
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="xs" fontWeight="bold" color="gray.500">📁 DATA FILES (EXCEL, PDF, CSV)</Text>
-                                        <Button size="xs" colorScheme="blue" variant="outline" onClick={() => document.getElementById('data-up').click()}>Upload</Button>
-                                    </HStack>
-                                    <input type="file" id="data-up" multiple hidden accept=".xls,.xlsx,.csv,.pdf,.doc,.docx" onChange={(e) => handleFileChange(e, 'data')} />
-                                    <VStack align="stretch" spacing={1}>
-                                        {previews.data.map((name, i) => (
-                                            <HStack key={i} justify="space-between" bg="gray.50" px={3} py={1} borderRadius="md" border="1px solid" borderColor="gray.100">
-                                                <Text fontSize="xs" isTruncated>{name}</Text>
-                                                <CloseButton size="sm" color="red.400" onClick={() => removeFile('data', i)} />
-                                            </HStack>
-                                        ))}
-                                    </VStack>
-                                </Box>
-
-                                {/* Daily Reports Section */}
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="xs" fontWeight="bold" color="gray.500">📝 DAILY REPORTS (PDF, DOC)</Text>
-                                        <Button size="xs" colorScheme="blue" variant="outline" onClick={() => document.getElementById('report-up').click()}>Upload</Button>
-                                    </HStack>
-                                    <input type="file" id="report-up" multiple hidden accept=".pdf,.doc,.docx" onChange={(e) => handleFileChange(e, 'dailyReports')} />
-                                    <VStack align="stretch" spacing={1}>
-                                        {previews.dailyReports.map((name, i) => (
-                                            <HStack key={i} justify="space-between" bg="gray.50" px={3} py={1} borderRadius="md" border="1px solid" borderColor="gray.100">
-                                                <Text fontSize="xs" isTruncated>{name}</Text>
-                                                <CloseButton size="sm" color="red.400" onClick={() => removeFile('dailyReports', i)} />
-                                            </HStack>
-                                        ))}
-                                    </VStack>
-                                </Box>
-                            </SimpleGrid>
+                            <VStack align="stretch" spacing={4}>
+                                <Heading size="xs" color="blue.700">SUBMISSION NOTES</Heading>
+                                <FormControl>
+                                    <Input value={notes} onChange={(e) => setNotes(e.target.value)} bg="white" borderRadius="lg" placeholder="Enter remarks for today..." />
+                                </FormControl>
+                            </VStack>
                         </CardBody>
                     </Card>
 
@@ -485,6 +511,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
     const [isSaving, setIsSaving] = useState(false);
     const [editIndex, setEditIndex] = useState(-1);
     
+    const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
     const [formData, setFormData] = useState({
         employee1: '',
         employee2: '',
@@ -511,7 +538,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
         const { employee1, employee2, amount } = formData;
         const numAmount = Number(amount);
         
-        if (!employee1 || !employee2 || !amount) {
+        if (!employee1 || !employee2 || !amount || !transferDate) {
             toast({ title: 'Error', description: 'Please fill all fields', status: 'error', position: 'top-right' });
             return;
         }
@@ -534,7 +561,8 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
             employee2,
             employee1Name: e1?.name,
             employee2Name: e2?.name,
-            amount: numAmount
+            amount: numAmount,
+            date: transferDate
         };
 
         if (editIndex > -1) {
@@ -558,6 +586,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
             employee2: entry.employee2,
             amount: entry.amount.toString()
         });
+        setTransferDate(entry.date);
         setEditIndex(index);
     };
 
@@ -574,14 +603,16 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                 giver: e.employee1,
                 taker: e.employee2,
                 amount: e.amount,
-                date: new Date().toISOString()
+                date: e.date
             }));
 
             const res = await api.post('/employee-transfer/bulk', { transfers });
             if (res.data.success) {
                 toast({ title: 'Success', description: `${stagedEntries.length} transfers saved`, status: 'success', isClosable: true });
+                // Refresh first
+                await onRefresh();
+                // Then clear
                 setStagedEntries([]);
-                onRefresh();
             }
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Save failed', status: 'error' });
@@ -595,7 +626,19 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
             {/* Entry Form - One Row Layout */}
             <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="gray.100" overflow="hidden">
                 <CardBody p={6} bg="white">
-                    <HStack spacing={4} align="flex-end" w="full">
+                    <VStack spacing={6} align="stretch">
+                        <FormControl isRequired maxW="300px">
+                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">Transaction Date (Applies to all entries below)</FormLabel>
+                            <InputGroup size="lg">
+                                <InputLeftElement><Icon as={FaCalendarAlt} color="blue.400" /></InputLeftElement>
+                                <Input type="date" value={transferDate} onChange={(e) => setTransferDate(e.target.value)} borderRadius="xl" bg="gray.50" border="1px solid" borderColor="gray.200" />
+                            </InputGroup>
+                        </FormControl>
+
+                        <Divider />
+
+                        <HStack spacing={4} align="flex-end" w="full" flexWrap="wrap">
+
                         <FormControl isRequired flex={2}>
                             <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">
                                 Sender {formData.employee1 && <Badge ml={2} colorScheme="red">Avail: ₹{tempBalances[formData.employee1]?.toLocaleString()}</Badge>}
@@ -654,8 +697,9 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                             {editIndex > -1 ? 'Update' : 'Add'}
                         </Button>
                     </HStack>
-                </CardBody>
-            </Card>
+                </VStack>
+            </CardBody>
+        </Card>
 
             {/* Entry Table */}
             {stagedEntries.length > 0 && (
@@ -673,6 +717,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                             <Table variant="simple">
                                 <Thead bg="gray.50">
                                     <Tr>
+                                        <Th color="gray.500">Date</Th>
                                         <Th color="gray.500">Employee From (Sender)</Th>
                                         <Th color="gray.500">Employee To (Receiver)</Th>
                                         <Th isNumeric color="gray.500">Amount</Th>
@@ -682,6 +727,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                                 <Tbody>
                                     {stagedEntries.map((entry, idx) => (
                                         <Tr key={idx} _hover={{ bg: "blue.50" }} transition="background 0.2s" opacity={editIndex === idx ? 0.5 : 1}>
+                                            <Td fontSize="sm" fontWeight="medium">{new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</Td>
                                             <Td fontWeight="bold" color="red.500"><HStack><Icon as={FaUserTie} /><Text>{entry.employee1Name}</Text></HStack></Td>
                                             <Td fontWeight="bold" color="green.500"><HStack><Icon as={FaUserTie} /><Text>{entry.employee2Name}</Text></HStack></Td>
                                             <Td isNumeric fontWeight="black" fontSize="lg">₹{entry.amount.toLocaleString()}</Td>

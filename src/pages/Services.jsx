@@ -12,7 +12,8 @@ import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
     FaUserTie, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope, FaIdCard, FaCamera,
     FaHandshake, FaFingerprint, FaIdBadge, FaMap,
-    FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt, FaUndo, FaListUl
+    FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt, FaUndo, FaListUl,
+    FaSearch, FaCar
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -2006,6 +2007,7 @@ const SiteMasterForm = () => {
     const [editId, setEditId] = useState('');
     const [viewSite, setViewSite] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [tableSearch, setTableSearch] = useState('');
     const [viewMode, setViewMode] = useState('table');
 
     const [formData, setFormData] = useState({
@@ -2022,28 +2024,43 @@ const SiteMasterForm = () => {
     const [nextSiteId, setNextSiteId] = useState('');
     const [isNewLedger, setIsNewLedger] = useState(false);
 
+    const fetchSites = async (q = '') => {
+        try {
+            const res = await api.get(`/site-master?search=${encodeURIComponent(q)}`);
+            if (res.data.success) setAllSites(res.data.data);
+        } catch (error) { console.error("Error fetching sites:", error); }
+    };
+
     const fetchInitial = async () => {
         try {
-            const [cRes, eRes, lRes, sRes] = await Promise.all([
+            const [cRes, eRes, lRes] = await Promise.all([
                 api.get('/client-master'),
                 api.get('/employee-master'),
-                api.get('/site-master/ledgers'),
-                api.get('/site-master')
+                api.get('/site-master/ledgers')
             ]);
             if (cRes.data.success) {
                 const clientList = cRes.data.data;
                 setClients(clientList);
-                // Default filter to 00001
                 const defaultClient = clientList.find(c => c.clientId === '00001') || clientList[0];
                 if (defaultClient && !filterClientId) setFilterClientId(defaultClient._id);
             }
             if (eRes.data.success) setEmployees(eRes.data.data);
             if (lRes.data.success) setLedgers(lRes.data.data);
-            if (sRes.data.success) setAllSites(sRes.data.data);
+            
+            // Initial site fetch
+            await fetchSites(searchQuery);
         } catch (error) {
             console.error("Error fetching dependencies:", error);
         }
     };
+
+    // Debounced API search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            fetchSites(searchQuery);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
 
     const handleChange = async (e) => {
         const { name, value } = e.target;
@@ -2169,14 +2186,19 @@ const SiteMasterForm = () => {
     };
 
     const filteredSites = allSites.filter(s => {
-        const matchesSearch = s.siteName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            s.client?.clientName?.toLowerCase().includes(searchQuery.toLowerCase());
+        const q = tableSearch.toLowerCase();
+        const matchesTableSearch = 
+            !tableSearch ||
+            s.siteName?.toLowerCase().includes(q) ||
+            s.siteId?.toLowerCase().includes(q) ||
+            s.siteAddress?.toLowerCase().includes(q) ||
+            s.client?.clientName?.toLowerCase().includes(q);
 
         if (filterClientId) {
             const cId = s.client?._id || s.client;
-            return cId === filterClientId && matchesSearch;
+            return cId === filterClientId && matchesTableSearch;
         }
-        return matchesSearch;
+        return matchesTableSearch;
     });
 
     useEffect(() => { fetchInitial(); }, []);
@@ -2206,12 +2228,40 @@ const SiteMasterForm = () => {
                                 <Text opacity={0.8} mt={1}>Admin Panel: Link project sites to clients and manage location details</Text>
                             </Box>
                             <HStack w={{ base: "full", md: "auto" }} spacing={2}>
-                                <Input
-                                    bg="white" color="gray.800" placeholder="Search Site, Client..." size="md" borderRadius="xl"
-                                    w={{ base: "full", md: "250px" }} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                                />
+                                <Box position="relative" w={{ base: "full", md: "300px" }}>
+                                    <Input
+                                        bg="white" 
+                                        color="gray.800" 
+                                        placeholder="Search by Name, ID, Address..." 
+                                        size="md" 
+                                        borderRadius="xl"
+                                        pl={10}
+                                        pr={searchQuery ? 10 : 4}
+                                        value={searchQuery} 
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        boxShadow="inner"
+                                    />
+                                    <Box position="absolute" left={3} top="50%" transform="translateY(-50%)" color="gray.400">
+                                        <Icon as={FaSearch} />
+                                    </Box>
+                                    {searchQuery && (
+                                        <IconButton
+                                            aria-label="Clear search"
+                                            icon={<FaTimes />}
+                                            size="xs"
+                                            variant="ghost"
+                                            position="absolute"
+                                            right={2}
+                                            top="50%"
+                                            transform="translateY(-50%)"
+                                            color="gray.400"
+                                            _hover={{ color: 'red.500' }}
+                                            onClick={() => setSearchQuery('')}
+                                        />
+                                    )}
+                                </Box>
                                 <IconButton
-                                    icon={<Icon as={viewMode === 'table' ? FaMapMarkerAlt : FaMapMarkerAlt} />}
+                                    icon={<Icon as={viewMode === 'table' ? FaListUl : FaMapMarkerAlt} />}
                                     onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')}
                                     borderRadius="xl" colorScheme="whiteAlpha" variant="solid" aria-label="Toggle View"
                                 />
@@ -2449,6 +2499,16 @@ const SiteMasterForm = () => {
                                     <Icon as={FaMapMarkerAlt} mr={2} /> Registered Sites ({filteredSites.length})
                                 </Heading>
                                 <HStack spacing={3} bg="teal.50" p={2} borderRadius="2xl" border="1px solid" borderColor="teal.100">
+                                    <Input
+                                        size="sm"
+                                        placeholder="Quick Search Table..."
+                                        bg="white"
+                                        borderRadius="xl"
+                                        w="200px"
+                                        value={tableSearch}
+                                        onChange={(e) => setTableSearch(e.target.value)}
+                                    />
+                                    <Divider orientation="vertical" h="20px" borderColor="teal.200" />
                                     <Text fontSize="xs" fontWeight="bold" color="teal.700" whiteSpace="nowrap">Client Wise:</Text>
                                     <Select
                                         size="sm" borderRadius="xl" bg="white" w="200px"
@@ -2720,6 +2780,8 @@ const ScheduleMasterForm = () => {
     const [clients, setClients] = useState([]);
     const [sites, setSites] = useState([]);
     const [employees, setEmployees] = useState([]);
+    const [vehicles, setVehicles] = useState([]);
+    const [instrList, setInstrList] = useState([]);
     const [schedules, setSchedules] = useState([]);
     const [viewDate, setViewDate] = useState(new Date().toISOString().split('T')[0]);
     const [editId, setEditId] = useState(null);
@@ -2735,7 +2797,8 @@ const ScheduleMasterForm = () => {
 
     const [formData, setFormData] = useState({
         client: '', site: '', scheduleDate: '', workForAppley: '',
-        operative: '', helpers: [], notes: '', dayStatus: 'Scheduled',
+        operative: '', helpers: [], vehicle: '', instruments: [],
+        notes: '', dayStatus: 'Scheduled',
         ledger: '', amount: 0
     });
     const [selectedSiteLedgers, setSelectedSiteLedgers] = useState([]);
@@ -2747,12 +2810,16 @@ const ScheduleMasterForm = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [cRes, eRes] = await Promise.all([
+                const [cRes, eRes, vRes, iRes] = await Promise.all([
                     api.get('/client-master'),
-                    api.get('/employee-master')
+                    api.get('/employee-master'),
+                    api.get('/vehicle-master'),
+                    api.get('/instrument-master')
                 ]);
                 if (cRes.data.success) setClients(cRes.data.data);
                 if (eRes.data.success) setEmployees(eRes.data.data);
+                if (vRes.data.success) setVehicles(vRes.data.data);
+                if (iRes.data.success) setInstrList(iRes.data.data);
             } catch (err) { console.error(err); }
         };
         fetchData();
@@ -2807,6 +2874,13 @@ const ScheduleMasterForm = () => {
             return { ...prev, helpers: exists ? prev.helpers.filter(h => h !== empId) : [...prev.helpers, empId] };
         });
     };
+    
+    const handleInstrumentToggle = (id) => {
+        setFormData(prev => {
+            const exists = (prev.instruments || []).includes(id);
+            return { ...prev, instruments: exists ? prev.instruments.filter(i => i !== id) : [...(prev.instruments || []), id] };
+        });
+    };
 
 
 
@@ -2822,7 +2896,9 @@ const ScheduleMasterForm = () => {
             scheduleDate: schedule.scheduleDate ? new Date(schedule.scheduleDate).toISOString().split('T')[0] : '',
             workForAppley: schedule.workForAppley || '',
             operative: schedule.operative?._id || schedule.operative || '',
-            helpers: schedule.helpers?.map(h => h._id) || [],
+            helpers: schedule.helpers?.map(h => h._id || h) || [],
+            vehicle: schedule.vehicle?._id || schedule.vehicle || '',
+            instruments: schedule.instruments?.map(i => i._id || i) || [],
             notes: schedule.notes || '',
             dayStatus: schedule.dayStatus || 'Scheduled',
             ledger: schedule.ledger || '',
@@ -2873,7 +2949,8 @@ const ScheduleMasterForm = () => {
         setSelectedSiteLedgers([]);
         setFormData({
             client: '', site: '', scheduleDate: '', workForAppley: '',
-            operative: '', helpers: [], notes: '', dayStatus: 'Scheduled',
+            operative: '', helpers: [], vehicle: '', instruments: [],
+            notes: '', dayStatus: 'Scheduled',
             ledger: '', amount: 0
         });
     };
@@ -3052,6 +3129,36 @@ const ScheduleMasterForm = () => {
 
                                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                                         <FormControl>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
+                                                <Icon as={FaCar} color="red.400" mr={1} /> Assigned Vehicle
+                                            </FormLabel>
+                                            <Select name="vehicle" value={formData.vehicle} onChange={handleChange} borderRadius="xl" bg="gray.50" placeholder="Select Vehicle">
+                                                {vehicles.map(v => <option key={v._id} value={v._id}>{v.vehicleNumber} - {v.vehicleName}</option>)}
+                                            </Select>
+                                        </FormControl>
+
+                                        <FormControl>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
+                                                <Icon as={FaWrench} color="orange.400" mr={1} /> Instruments ({formData.instruments?.length || 0})
+                                            </FormLabel>
+                                            <Box maxH="120px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="xl" p={2} bg="gray.50">
+                                                <SimpleGrid columns={2} spacing={2}>
+                                                    {instrList.map(inst => (
+                                                        <HStack key={inst._id} py={1} px={2} cursor="pointer" borderRadius="lg" _hover={{ bg: 'orange.50' }} onClick={() => handleInstrumentToggle(inst._id)}>
+                                                            <Checkbox isChecked={(formData.instruments || []).includes(inst._id)} onChange={() => handleInstrumentToggle(inst._id)} colorScheme="orange" size="sm" pointerEvents="none" />
+                                                            <VStack align="start" spacing={0}>
+                                                                <Text fontSize="xs" fontWeight="bold">{inst.serialNo}</Text>
+                                                                <Text fontSize="10px" color="gray.500">{inst.instrumentName}</Text>
+                                                            </VStack>
+                                                        </HStack>
+                                                    ))}
+                                                </SimpleGrid>
+                                            </Box>
+                                        </FormControl>
+                                    </SimpleGrid>
+
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                                        <FormControl>
                                             <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Contact / Apply Details</FormLabel>
                                             <Input name="workForAppley" placeholder="e.g. John Doe / Project Manager" value={formData.workForAppley} onChange={handleChange} borderRadius="xl" bg="gray.50" />
                                         </FormControl>
@@ -3143,6 +3250,21 @@ const ScheduleMasterForm = () => {
                                                     <Text fontSize="9px" fontWeight="bold" color="gray.400">HELPERS</Text>
                                                     <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
                                                         {s.helpers?.length > 0 ? s.helpers.map(h => h.name).join(', ') : 'None'}
+                                                    </Text>
+                                                </Box>
+                                            </SimpleGrid>
+
+                                            <SimpleGrid columns={2} spacing={2} mb={3}>
+                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">VEHICLE</Text>
+                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
+                                                        {s.vehicle ? `${s.vehicle.vehicleNumber}` : 'N/A'}
+                                                    </Text>
+                                                </Box>
+                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">INSTRUMENTS</Text>
+                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
+                                                        {s.instruments?.length > 0 ? s.instruments.map(i => i.serialNo).join(', ') : 'None'}
                                                     </Text>
                                                 </Box>
                                             </SimpleGrid>
