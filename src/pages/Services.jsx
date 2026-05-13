@@ -2803,9 +2803,12 @@ const ScheduleMasterForm = () => {
     });
     const [selectedSiteLedgers, setSelectedSiteLedgers] = useState([]);
     const { isOpen: isCompOpen, onOpen: onCompOpen, onClose: onCompClose } = useDisclosure();
+    const { isOpen: isAssignOpen, onOpen: onAssignOpen, onClose: onAssignClose } = useDisclosure();
+    const [assignTarget, setAssignTarget] = useState(null);
     const [compFiles, setCompFiles] = useState({ photos: [], dailyReports: [], data: [] });
     const [compTarget, setCompTarget] = useState(null);
     const [isCompLoading, setIsCompLoading] = useState(false);
+    const [isAssignLoading, setIsAssignLoading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -2826,12 +2829,24 @@ const ScheduleMasterForm = () => {
     }, []);
 
     useEffect(() => {
-        if (!formData.client) { setSites([]); setSelectedSiteName(''); return; }
+        if (!formData.client) { 
+            setSites([]); 
+            setSelectedSiteName(''); 
+            setSiteSearch('');
+            return; 
+        }
         const fetchSites = async () => {
             try {
                 const res = await api.get(`/schedule-master/sites-by-client/${formData.client}`);
-                if (res.data.success) setSites(res.data.data);
-            } catch (err) { console.error(err); }
+                if (res.data.success) {
+                    setSites(res.data.data);
+                } else {
+                    setSites([]);
+                }
+            } catch (err) { 
+                console.error('Fetch Sites Error:', err);
+                setSites([]);
+            }
         };
         fetchSites();
     }, [formData.client]);
@@ -2856,6 +2871,7 @@ const ScheduleMasterForm = () => {
         setFormData(prev => ({ ...prev, client: c._id, site: '' }));
         setSelectedClientName(c.clientName);
         setClientSearch('');
+        setSiteSearch(''); // Important: Reset site search when client changes
         setShowClientList(false);
         setSelectedSiteName('');
     };
@@ -2908,25 +2924,33 @@ const ScheduleMasterForm = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const handleComplete = async (files) => {
+    const handleComplete = async (files = {}) => {
         if (!compTarget) return;
         setIsCompLoading(true);
         try {
-            const formData = new FormData();
-            const siteName = compTarget.site?.siteName || '';
-            const siteSub = siteName.trim().replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            const cShort = compTarget.client?.clientId || 'unknown';
+            const hasFiles = (files.photos?.length > 0) || (files.dailyReports?.length > 0) || (files.data?.length > 0);
+            
+            let res;
+            if (hasFiles) {
+                const formData = new FormData();
+                const siteName = compTarget.site?.siteName || '';
+                const siteSub = siteName.trim().replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                const cShort = compTarget.client?.clientId || 'unknown';
 
-            formData.append('clientShortId', cShort);
-            formData.append('siteSubfolder', siteSub);
+                formData.append('clientShortId', cShort);
+                formData.append('siteSubfolder', siteSub);
 
-            files.photos.forEach(f => formData.append('photos', f));
-            files.dailyReports.forEach(f => formData.append('dailyReports', f));
-            files.data.forEach(f => formData.append('data', f));
+                if (files.photos) files.photos.forEach(f => formData.append('photos', f));
+                if (files.dailyReports) files.dailyReports.forEach(f => formData.append('dailyReports', f));
+                if (files.data) files.data.forEach(f => formData.append('data', f));
 
-            const res = await api.post(`/schedule-master/complete/${compTarget._id}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+                res = await api.post(`/schedule-master/complete/${compTarget._id}`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+            } else {
+                // Regular POST for simple completion
+                res = await api.post(`/schedule-master/complete/${compTarget._id}`, {});
+            }
 
             if (res.data.success) {
                 toast({ title: 'Success', description: 'Site visit completed!', status: 'success' });
@@ -3055,12 +3079,20 @@ const ScheduleMasterForm = () => {
                                                     <Input placeholder="🔍 Search site..." value={siteSearch} onChange={e => setSiteSearch(e.target.value)} onFocus={() => setShowSiteList(true)} borderRadius="xl" bg="gray.50" />
                                                     {showSiteList && (
                                                         <Box position="absolute" zIndex={10} w="100%" bg="white" border="1px solid" borderColor="gray.200" borderRadius="xl" boxShadow="lg" maxH="200px" overflowY="auto" mt={1}>
-                                                            {filteredSites.map(s => (
-                                                                <Box key={s._id} px={4} py={2} cursor="pointer" _hover={{ bg: 'teal.50' }} onClick={() => selectSite(s)}>
-                                                                    <Text fontSize="sm" fontWeight="bold">{s.siteName}</Text>
-                                                                    <Text fontSize="xs" color="gray.400">{s.siteAddress}</Text>
+                                                            {filteredSites.length > 0 ? (
+                                                                filteredSites.map(s => (
+                                                                    <Box key={s._id} px={4} py={2} cursor="pointer" _hover={{ bg: 'teal.50' }} onClick={() => selectSite(s)}>
+                                                                        <Text fontSize="sm" fontWeight="bold">{s.siteName}</Text>
+                                                                        <Text fontSize="xs" color="gray.400">{s.siteAddress}</Text>
+                                                                    </Box>
+                                                                ))
+                                                            ) : (
+                                                                <Box px={4} py={4} textAlign="center">
+                                                                    <Text fontSize="sm" color="gray.500">
+                                                                        {sites.length === 0 ? "No active sites found for this client" : "No sites match your search"}
+                                                                    </Text>
                                                                 </Box>
-                                                            ))}
+                                                            )}
                                                         </Box>
                                                     )}
                                                 </Box>
@@ -3097,63 +3129,6 @@ const ScheduleMasterForm = () => {
                                                     <option key={i} value={l.ledger}>{l.ledger} (₹{l.amount.toLocaleString()})</option>
                                                 ))}
                                             </Select>
-                                        </FormControl>
-                                    </SimpleGrid>
-
-                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                                        <FormControl isRequired>
-                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                                <Icon as={FaStar} color="yellow.400" mr={1} /> Main Operative
-                                            </FormLabel>
-                                            <Select name="operative" value={formData.operative} onChange={handleChange} borderRadius="xl" bg="gray.50" placeholder="Select Operative">
-                                                {employees.map(e => <option key={e._id} value={e._id}>{e.name} ({e.phone})</option>)}
-                                            </Select>
-                                        </FormControl>
-
-                                        <FormControl>
-                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                                <Icon as={FaUsers} color="blue.400" mr={1} /> Helpers ({formData.helpers.length})
-                                            </FormLabel>
-                                            <Box maxH="120px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="xl" p={2} bg="gray.50">
-                                                <SimpleGrid columns={2} spacing={2}>
-                                                    {employees.map(e => (
-                                                        <HStack key={e._id} py={1} px={2} cursor="pointer" borderRadius="lg" _hover={{ bg: 'blue.50' }} onClick={() => handleHelperToggle(e._id)}>
-                                                            <Checkbox isChecked={formData.helpers.includes(e._id)} onChange={() => handleHelperToggle(e._id)} colorScheme="blue" size="sm" pointerEvents="none" />
-                                                            <Text fontSize="xs">{e.name}</Text>
-                                                        </HStack>
-                                                    ))}
-                                                </SimpleGrid>
-                                            </Box>
-                                        </FormControl>
-                                    </SimpleGrid>
-
-                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                                        <FormControl>
-                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                                <Icon as={FaCar} color="red.400" mr={1} /> Assigned Vehicle
-                                            </FormLabel>
-                                            <Select name="vehicle" value={formData.vehicle} onChange={handleChange} borderRadius="xl" bg="gray.50" placeholder="Select Vehicle">
-                                                {vehicles.map(v => <option key={v._id} value={v._id}>{v.vehicleNumber} - {v.vehicleName}</option>)}
-                                            </Select>
-                                        </FormControl>
-
-                                        <FormControl>
-                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
-                                                <Icon as={FaWrench} color="orange.400" mr={1} /> Instruments ({formData.instruments?.length || 0})
-                                            </FormLabel>
-                                            <Box maxH="120px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="xl" p={2} bg="gray.50">
-                                                <SimpleGrid columns={2} spacing={2}>
-                                                    {instrList.map(inst => (
-                                                        <HStack key={inst._id} py={1} px={2} cursor="pointer" borderRadius="lg" _hover={{ bg: 'orange.50' }} onClick={() => handleInstrumentToggle(inst._id)}>
-                                                            <Checkbox isChecked={(formData.instruments || []).includes(inst._id)} onChange={() => handleInstrumentToggle(inst._id)} colorScheme="orange" size="sm" pointerEvents="none" />
-                                                            <VStack align="start" spacing={0}>
-                                                                <Text fontSize="xs" fontWeight="bold">{inst.serialNo}</Text>
-                                                                <Text fontSize="10px" color="gray.500">{inst.instrumentName}</Text>
-                                                            </VStack>
-                                                        </HStack>
-                                                    ))}
-                                                </SimpleGrid>
-                                            </Box>
                                         </FormControl>
                                     </SimpleGrid>
 
@@ -3196,12 +3171,12 @@ const ScheduleMasterForm = () => {
                             ) : (
                                 <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
                                     {schedules.map((s) => (
-                                        <Box key={s._id} p={4} borderRadius="2xl" border="1px solid" borderColor="gray.100" bg="gray.50" _hover={{ shadow: 'md', bg: 'white' }} transition="all 0.2s">
+                                        <Box key={s._id} p={4} borderRadius="2xl" border="1px solid" borderColor="gray.100" bg="gray.50" _hover={{ shadow: 'lg', bg: 'white', borderColor: 'blue.200', transform: 'translateY(-2px)' }} transition="all 0.2s" cursor="pointer" onClick={() => { setAssignTarget(s); onAssignOpen(); }}>
                                             <HStack justify="space-between" mb={3}>
                                                 <Badge colorScheme={statusColors[s.dayStatus]} variant="solid" borderRadius="full" px={3}>
                                                     {s.dayStatus}
                                                 </Badge>
-                                                <HStack>
+                                                <HStack onClick={(e) => e.stopPropagation()}>
                                                     {s.dayStatus === 'Scheduled' && (
                                                         <Button
                                                             size="xs"
@@ -3244,7 +3219,7 @@ const ScheduleMasterForm = () => {
                                             <SimpleGrid columns={2} spacing={2} mb={3}>
                                                 <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
                                                     <Text fontSize="9px" fontWeight="bold" color="gray.400">OPERATIVE</Text>
-                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>{s.operative?.name}</Text>
+                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>{s.operative?.name || 'Unassigned'}</Text>
                                                 </Box>
                                                 <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
                                                     <Text fontSize="9px" fontWeight="bold" color="gray.400">HELPERS</Text>
@@ -3288,6 +3263,32 @@ const ScheduleMasterForm = () => {
                 </VStack>
             </Container>
 
+            <ResourceAssignmentModal
+                isOpen={isAssignOpen}
+                onClose={onAssignClose}
+                schedule={assignTarget}
+                employees={employees}
+                vehicles={vehicles}
+                instruments={instrList}
+                onUpdate={async (payload) => {
+                    setIsAssignLoading(true);
+                    try {
+                        const res = await api.put(`/schedule-master/${assignTarget._id}`, payload);
+                        if (res.data.success) {
+                            toast({ title: 'Resources Updated', status: 'success' });
+                            onAssignClose();
+                            const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                            if (sRes.data.success) setSchedules(sRes.data.data);
+                        }
+                    } catch (err) {
+                        toast({ title: 'Update Failed', description: err.response?.data?.message, status: 'error' });
+                    } finally {
+                        setIsAssignLoading(false);
+                    }
+                }}
+                isLoading={isAssignLoading}
+            />
+
             <CompletionModal
                 isOpen={isCompOpen}
                 onClose={onCompClose}
@@ -3299,97 +3300,249 @@ const ScheduleMasterForm = () => {
     );
 };
 
-const CompletionModal = ({ isOpen, onClose, schedule, onComplete, isLoading }) => {
-    const [files, setFiles] = useState({ photos: [], dailyReports: [], data: [] });
+const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading }) => {
+    const [formData, setFormData] = useState({
+        operative: '',
+        helpers: [],
+        vehicle: '',
+        instruments: []
+    });
 
-    const handleFileChange = (e, type) => {
-        const selectedFiles = Array.from(e.target.files);
-        setFiles(prev => ({ ...prev, [type]: [...prev[type], ...selectedFiles] }));
-    };
+    useEffect(() => {
+        if (schedule) {
+            setFormData({
+                operative: schedule.operative?._id || schedule.operative || '',
+                helpers: schedule.helpers?.map(h => h._id || h) || [],
+                vehicle: schedule.vehicle?._id || schedule.vehicle || '',
+                instruments: schedule.instruments?.map(i => i._id || i) || []
+            });
+        }
+    }, [schedule, isOpen]);
 
-    const removeFile = (type, index) => {
-        setFiles(prev => ({
+    const handleHelperToggle = (id) => {
+        setFormData(prev => ({
             ...prev,
-            [type]: prev[type].filter((_, i) => i !== index)
+            helpers: prev.helpers.includes(id) ? prev.helpers.filter(h => h !== id) : [...prev.helpers, id]
         }));
     };
 
-    const handleSubmit = () => {
-        onComplete(files);
-        setFiles({ photos: [], dailyReports: [], data: [] });
+    const handleInstrumentToggle = (id) => {
+        setFormData(prev => ({
+            ...prev,
+            instruments: prev.instruments.includes(id) ? prev.instruments.filter(i => i !== id) : [...prev.instruments, id]
+        }));
     };
+
+    const isCompleted = schedule?.dayStatus === 'Completed';
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} size="xl">
-            <ModalOverlay backdropFilter="blur(10px)" />
-            <ModalContent borderRadius="2xl" mx={4}>
-                <ModalHeader bg="green.600" color="white" borderTopRadius="2xl" py={4}>
-                    <HStack>
-                        <Icon as={FaCheckCircle} />
-                        <Text fontSize="md">Mark Completion: {schedule?.site?.siteName}</Text>
+            <ModalOverlay backdropFilter="blur(12px)" bg="blackAlpha.700" />
+            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
+                <ModalHeader bgGradient={isCompleted ? "linear(to-r, gray.700, gray.500)" : "linear(to-r, blue.700, blue.500)"} color="white" py={5}>
+                    <HStack spacing={4}>
+                        <Box p={2} bg="whiteAlpha.300" borderRadius="xl">
+                            <Icon as={FaUsers} w={6} h={6} />
+                        </Box>
+                        <VStack align="start" spacing={0}>
+                            <Text fontSize="lg" fontWeight="black">{isCompleted ? 'View Assigned Resources' : 'Assign Resources'}</Text>
+                            <Text fontSize="xs" fontWeight="medium" opacity={0.9}>
+                                {schedule?.client?.clientName} • {schedule?.site?.siteName}
+                            </Text>
+                        </VStack>
                     </HStack>
                 </ModalHeader>
-                <ModalCloseButton color="white" />
-                <ModalBody p={6}>
-                    <VStack spacing={6} align="stretch">
-                        <Box bg="gray.50" p={3} borderRadius="xl" border="1px solid" borderColor="gray.100">
-                            <Text fontSize="xs" color="gray.500" fontWeight="bold" mb={1}>CLIENT / SITE</Text>
-                            <Text fontWeight="bold" fontSize="sm">{schedule?.client?.clientName}</Text>
-                            <Text fontSize="xs" color="gray.600">{schedule?.site?.siteAddress}</Text>
-                        </Box>
+                <ModalCloseButton color="white" borderRadius="full" mt={2} />
+                <ModalBody p={8} bg="gray.50">
+                    <VStack spacing={8} align="stretch">
+                        <FormControl isDisabled={isCompleted}>
+                            <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                <Icon as={FaStar} mr={2} color="yellow.500" /> Main Operative
+                            </FormLabel>
+                            <Select 
+                                value={formData.operative} 
+                                onChange={(e) => {
+                                    const newOp = e.target.value;
+                                    setFormData(prev => ({ 
+                                        ...prev, 
+                                        operative: newOp,
+                                        helpers: prev.helpers.filter(h => h !== newOp)
+                                    }));
+                                }}
+                                borderRadius="2xl" 
+                                bg="white" 
+                                border="2px solid"
+                                borderColor="gray.100"
+                                _focus={{ borderColor: 'blue.400', boxShadow: 'none' }}
+                                placeholder="Select Primary Operative"
+                                fontWeight="bold"
+                                h="50px"
+                            >
+                                {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+                            </Select>
+                        </FormControl>
 
-                        <SimpleGrid columns={1} spacing={5}>
-                            <FormControl>
-                                <FormLabel fontSize="xs" fontWeight="black" color="blue.600">📸 SITE PHOTOS (Photos Folder)</FormLabel>
-                                <Input type="file" multiple accept="image/*" onChange={(e) => handleFileChange(e, 'photos')} size="sm" p={1} h="auto" variant="filled" />
-                                <Wrap mt={2}>
-                                    {files.photos.map((f, i) => (
-                                        <Tag key={i} size="sm" colorScheme="blue" borderRadius="full">
-                                            <TagLabel noOfLines={1} maxW="150px">{f.name}</TagLabel>
-                                            <IconButton size="xs" variant="ghost" icon={<FaTimes />} onClick={() => removeFile('photos', i)} />
-                                        </Tag>
-                                    ))}
-                                </Wrap>
+                        <FormControl isDisabled={isCompleted}>
+                            <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                <Icon as={FaUsers} mr={2} /> Helpers ({formData.helpers.length})
+                            </FormLabel>
+                            <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg="white">
+                                <SimpleGrid columns={2} spacing={3}>
+                                    {employees.filter(e => e._id !== formData.operative).map(e => {
+                                        const isSelected = formData.helpers.includes(e._id);
+                                        return (
+                                            <HStack 
+                                                key={e._id} 
+                                                py={2} 
+                                                px={3} 
+                                                cursor="pointer" 
+                                                borderRadius="xl" 
+                                                bg={isSelected ? 'blue.50' : 'gray.50'}
+                                                border="1px solid"
+                                                borderColor={isSelected ? 'blue.200' : 'transparent'}
+                                                _hover={isCompleted ? {} : { bg: isSelected ? 'blue.100' : 'blue.50', borderColor: 'blue.200' }} 
+                                                onClick={() => !isCompleted && handleHelperToggle(e._id)}
+                                                transition="all 0.2s"
+                                            >
+                                                <Checkbox 
+                                                    isChecked={isSelected} 
+                                                    colorScheme="blue" 
+                                                    size="md" 
+                                                    pointerEvents="none"
+                                                    borderColor="gray.300" 
+                                                />
+                                                <Text fontSize="xs" fontWeight="bold" color={isSelected ? 'blue.800' : 'gray.700'}>{e.name}</Text>
+                                            </HStack>
+                                        );
+                                    })}
+                                </SimpleGrid>
+                            </Box>
+                        </FormControl>
+
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                            <FormControl isDisabled={isCompleted}>
+                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                    <Icon as={FaCar} mr={2} color="red.500" /> Assigned Vehicle
+                                </FormLabel>
+                                <Select 
+                                    value={formData.vehicle} 
+                                    onChange={(e) => setFormData(prev => ({ ...prev, vehicle: e.target.value }))}
+                                    borderRadius="2xl" 
+                                    bg="white" 
+                                    border="2px solid"
+                                    borderColor="gray.100"
+                                    _focus={{ borderColor: 'blue.400', boxShadow: 'none' }}
+                                    placeholder="Select Vehicle"
+                                    fontWeight="bold"
+                                    h="50px"
+                                >
+                                    {vehicles.map(v => <option key={v._id} value={v._id}>{v.vehicleNumber} - {v.vehicleName}</option>)}
+                                </Select>
                             </FormControl>
 
-                            <FormControl>
-                                <FormLabel fontSize="xs" fontWeight="black" color="orange.600">📝 DAILY REPORTS (Daily_report Folder)</FormLabel>
-                                <Input type="file" multiple accept="image/*,application/pdf" onChange={(e) => handleFileChange(e, 'dailyReports')} size="sm" p={1} h="auto" variant="filled" />
-                                <Wrap mt={2}>
-                                    {files.dailyReports.map((f, i) => (
-                                        <Tag key={i} size="sm" colorScheme="orange" borderRadius="full">
-                                            <TagLabel noOfLines={1} maxW="150px">{f.name}</TagLabel>
-                                            <IconButton size="xs" variant="ghost" icon={<FaTimes />} onClick={() => removeFile('dailyReports', i)} />
-                                        </Tag>
-                                    ))}
-                                </Wrap>
-                            </FormControl>
-
-                            <FormControl>
-                                <FormLabel fontSize="xs" fontWeight="black" color="purple.600">📁 DATA FILES (Data Folder)</FormLabel>
-                                <Text fontSize="10px" color="gray.400" mb={1}>Excel, Word, PDF, CSV</Text>
-                                <Input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv" onChange={(e) => handleFileChange(e, 'data')} size="sm" p={1} h="auto" variant="filled" />
-                                <Wrap mt={2}>
-                                    {files.data.map((f, i) => (
-                                        <Tag key={i} size="sm" colorScheme="purple" borderRadius="full">
-                                            <TagLabel noOfLines={1} maxW="150px">{f.name}</TagLabel>
-                                            <IconButton size="xs" variant="ghost" icon={<FaTimes />} onClick={() => removeFile('data', i)} />
-                                        </Tag>
-                                    ))}
-                                </Wrap>
+                            <FormControl isDisabled={isCompleted}>
+                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                    <Icon as={FaWrench} mr={2} color="orange.500" /> Instruments ({formData.instruments.length})
+                                </FormLabel>
+                                <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg="white">
+                                    <VStack spacing={2} align="stretch">
+                                        {instruments.map(inst => {
+                                            const isSelected = formData.instruments.includes(inst._id);
+                                            return (
+                                                <HStack 
+                                                    key={inst._id} 
+                                                    py={2} 
+                                                    px={3} 
+                                                    cursor="pointer" 
+                                                    borderRadius="xl" 
+                                                    bg={isSelected ? 'orange.50' : 'gray.50'}
+                                                    border="1px solid"
+                                                    borderColor={isSelected ? 'orange.200' : 'transparent'}
+                                                    _hover={isCompleted ? {} : { bg: isSelected ? 'orange.100' : 'orange.50', borderColor: 'orange.200' }} 
+                                                    onClick={() => !isCompleted && handleInstrumentToggle(inst._id)}
+                                                    transition="all 0.2s"
+                                                >
+                                                    <Checkbox 
+                                                        isChecked={isSelected} 
+                                                        colorScheme="orange" 
+                                                        size="md" 
+                                                        pointerEvents="none"
+                                                        borderColor="gray.300" 
+                                                    />
+                                                    <VStack align="start" spacing={0}>
+                                                        <Text fontSize="xs" fontWeight="bold" color={isSelected ? 'orange.800' : 'gray.700'}>
+                                                            {inst.serialNo}
+                                                        </Text>
+                                                        <Text fontSize="10px" color="gray.500" fontWeight="bold">
+                                                            {inst.instrumentName} ({inst.model || 'N/A'})
+                                                        </Text>
+                                                    </VStack>
+                                                </HStack>
+                                            );
+                                        })}
+                                    </VStack>
+                                </Box>
                             </FormControl>
                         </SimpleGrid>
                     </VStack>
                 </ModalBody>
-                <ModalFooter bg="gray.50" borderBottomRadius="2xl">
-                    <Button variant="ghost" mr={3} onClick={onClose} size="sm">Cancel</Button>
+                <ModalFooter bg="white" py={6} borderTop="1px solid" borderColor="gray.100">
+                    <Button variant="ghost" mr={3} onClick={onClose} borderRadius="full" px={6}>Close</Button>
+                    {!isCompleted && (
+                        <Button 
+                            bgGradient="linear(to-r, blue.600, blue.400)" 
+                            color="white" 
+                            _hover={{ bgGradient: 'linear(to-r, blue.700, blue.500)', transform: 'translateY(-1px)', shadow: 'xl' }}
+                            _active={{ transform: 'translateY(0)' }}
+                            isLoading={isLoading} 
+                            onClick={() => onUpdate(formData)} 
+                            px={10} 
+                            h="50px"
+                            borderRadius="full"
+                            shadow="lg"
+                            transition="all 0.2s"
+                        >
+                            Update Resources
+                        </Button>
+                    )}
+                </ModalFooter>
+            </ModalContent>
+        </Modal>
+    );
+};
+
+const CompletionModal = ({ isOpen, onClose, schedule, onComplete, isLoading }) => {
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} size="md">
+            <ModalOverlay backdropFilter="blur(10px)" bg="blackAlpha.700" />
+            <ModalContent borderRadius="3xl" overflow="hidden">
+                <ModalHeader bg="green.600" color="white" py={5}>
+                    <HStack>
+                        <Icon as={FaCheckCircle} />
+                        <Text fontSize="lg">Mark Completion</Text>
+                    </HStack>
+                </ModalHeader>
+                <ModalCloseButton color="white" mt={1} />
+                <ModalBody p={8} textAlign="center">
+                    <VStack spacing={4}>
+                        <Box bg="green.50" p={5} borderRadius="2xl" w="full" border="1px solid" borderColor="green.100">
+                            <Text fontSize="xs" color="green.600" fontWeight="black" textTransform="uppercase" mb={1}>Current Site Visit</Text>
+                            <Text fontWeight="black" fontSize="lg" color="gray.800">{schedule?.client?.clientName}</Text>
+                            <Text fontSize="md" fontWeight="bold" color="green.700">{schedule?.site?.siteName}</Text>
+                        </Box>
+                        <Text fontSize="sm" color="gray.500">Are you sure you want to mark this visit as completed?</Text>
+                    </VStack>
+                </ModalBody>
+                <ModalFooter bg="gray.50" p={6}>
+                    <Button variant="ghost" mr={3} onClick={onClose} borderRadius="full">Cancel</Button>
                     <Button
                         colorScheme="green"
-                        onClick={handleSubmit}
+                        onClick={() => onComplete({})}
                         isLoading={isLoading}
-                        size="sm"
-                        leftIcon={<Icon as={FaCheckCircle} />}
+                        borderRadius="full"
                         px={8}
+                        leftIcon={<Icon as={FaCheckCircle} />}
+                        shadow="lg"
                     >
                         Mark Completed
                     </Button>
