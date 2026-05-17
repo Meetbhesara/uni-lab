@@ -4,18 +4,20 @@ import {
     Button, Spinner, Center, Text, HStack, VStack, Icon, useToast, Heading, Flex, IconButton,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
     FormControl, FormLabel, Input, Select as ChakraSelect, SimpleGrid, useDisclosure,
-    InputGroup, InputLeftElement, Divider, InputLeftAddon, Badge
+    InputGroup, InputLeftElement, Divider, InputLeftAddon, Badge,
+    Popover, PopoverTrigger, PopoverContent, PopoverBody
 } from '@chakra-ui/react';
-import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign } from 'react-icons/fa';
+import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign, FaPaperclip, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import api from '../api/axios';
 
 const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     const [expenses, setExpenses] = useState([]);
+    const [transfers, setTransfers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [employeeDetails, setEmployeeDetails] = useState(null);
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [isFiltering, setIsFiltering] = useState(true); // Default to filter mode
+    const [yearPageStart, setYearPageStart] = useState(Math.floor(new Date().getFullYear() / 20) * 20);
     const toast = useToast();
 
     // Configuration flag for local vs NAS saving
@@ -32,7 +34,8 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         lunch: '',
         dinner: '',
         petrol: '',
-        notes: ''
+        notes: '',
+        attendanceRemark: ''
     });
     const [clientSites, setClientSites] = useState([{ 
         clientId: '', 
@@ -60,12 +63,21 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         if (!employeeId) return;
         setLoading(true);
         try {
-            const [expRes, empRes] = await Promise.all([
+            const [expRes, empRes, trRes] = await Promise.all([
                 api.get(`/employee-expense/admin/${employeeId}`),
-                api.get(`/employee-master/${employeeId}`)
+                api.get(`/employee-master/${employeeId}`),
+                api.get(`/employee-transfer`)
             ]);
             if (expRes.data.success) setExpenses(expRes.data.data);
             if (empRes.data.success) setEmployeeDetails(empRes.data.data);
+            if (trRes.data.success) {
+                // Filter only transfers involving this employee
+                const myTransfers = trRes.data.data.filter(
+                    t => (t.giver?._id || t.giver) === employeeId ||
+                         (t.taker?._id || t.taker) === employeeId
+                );
+                setTransfers(myTransfers);
+            }
         } catch (err) {
             console.error("Error fetching employee expenses", err);
             toast({ title: 'Error loading expenses', status: 'error' });
@@ -159,7 +171,10 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
             formData.append('employeeId', employeeId);
             formData.append('date', expenseForm.date);
             formData.append('attendance', expenseForm.attendance);
+            formData.append('attendanceRemark', expenseForm.attendanceRemark);
             formData.append('notes', expenseForm.notes);
+            formData.append('givenTo', JSON.stringify(givenTo.filter(g => g.employeeRef && g.amount)));
+            formData.append('receivedFrom', JSON.stringify(receivedFrom.filter(r => r.employeeRef && r.amount)));
             formData.append('expenses', JSON.stringify({
                 breakfast: Number(expenseForm.breakfast) || 0,
                 lunch: Number(expenseForm.lunch) || 0,
@@ -232,7 +247,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         }
 
         // Generate CSV manually based on filtered expenses
-        let csvContent = "SR. NO.,DATE,DESCRIPTION,CREDIT,DEBIT,TOTAL,ATENDES,SIDE WORK\n";
+        let csvContent = "SR. NO.,DATE,DESCRIPTION,CREDIT,DEBIT,TOTAL,ATENDES,REMARK,SIDE WORK\n";
 
         filteredExpenses.forEach((exp, sNum) => {
             const dateStr = new Date(exp.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -286,9 +301,9 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
             // Map rows to CSV
             allItems.forEach((item, index) => {
                 if (index === 0) {
-                    csvContent += `${sNum + 1},${dateStr},${item.desc},${item.cr},${item.dr},,${attendance},${sideWorkStr}\n`;
+                    csvContent += `${sNum + 1},${dateStr},${item.desc},${item.cr},${item.dr},,${attendance},"${exp.attendanceRemark || ''}",${sideWorkStr}\n`;
                 } else {
-                    csvContent += `,,${item.desc},${item.cr},${item.dr},,,\n`;
+                    csvContent += `,,${item.desc},${item.cr},${item.dr},,,, \n`;
                 }
             });
 
@@ -319,16 +334,35 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         "July", "August", "September", "October", "November", "December"
     ];
 
-    // Simple year range (current - 2 to current + 1)
-    const currentYear = new Date().getFullYear();
-    const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+    // Calculate the 20 years to display based on the current page
+    const displayYears = Array.from({ length: 20 }, (_, i) => yearPageStart + i);
 
-    const filteredExpenses = !isFiltering 
-        ? expenses 
-        : expenses.filter(e => {
-            const d = new Date(e.date);
-            return (d.getMonth() + 1) === Number(selectedMonth) && d.getFullYear() === Number(selectedYear);
-        });
+    // Always filter by month and year
+    const filteredExpenses = expenses.filter(e => {
+        const d = new Date(e.date);
+        return (d.getMonth() + 1) === Number(selectedMonth) && d.getFullYear() === Number(selectedYear);
+    });
+
+    const filteredTransfers = transfers.filter(t => {
+        const d = new Date(t.date);
+        return (d.getMonth() + 1) === Number(selectedMonth) && d.getFullYear() === Number(selectedYear);
+    });
+
+    // Group all records by calendar date (YYYY-MM-DD key)
+    const toDateKey = (d) => new Date(d).toISOString().slice(0, 10);
+
+    const dateMap = {};
+    [...filteredExpenses.map(e => ({ ...e, _rowType: 'expense' })),
+     ...filteredTransfers.map(t => ({ ...t, _rowType: 'transfer' }))
+    ].forEach(row => {
+        const key = toDateKey(row.date);
+        if (!dateMap[key]) dateMap[key] = { dateKey: key, expense: null, transfers: [] };
+        if (row._rowType === 'expense') dateMap[key].expense = row;
+        else dateMap[key].transfers.push(row);
+    });
+
+    // Sort date groups chronologically
+    const groupedByDate = Object.values(dateMap).sort((a, b) => new Date(a.dateKey) - new Date(b.dateKey));
 
     return (
         <Box bg="white" p={6} borderRadius="xl" shadow="md">
@@ -338,27 +372,61 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 <HStack spacing={4} flexWrap="wrap">
                     <HStack>
                         <Text fontSize="sm" fontWeight="bold" color="gray.600">Period:</Text>
-                        <select 
-                            style={{ padding: '4px 8px', borderRadius: '8px', border: '1px solid #ccc', background: 'white' }}
+                        <ChakraSelect 
+                            w="130px"
+                            bg="white"
+                            borderRadius="xl"
+                            shadow="sm"
+                            size="sm"
+                            fontWeight="bold"
                             value={selectedMonth} 
-                            onChange={(e) => { setSelectedMonth(e.target.value); setIsFiltering(true); }}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
                         >
                             {months.map((m, i) => (
                                 <option key={i} value={i + 1}>{m}</option>
                             ))}
-                        </select>
-                        <select 
-                            style={{ padding: '4px 8px', borderRadius: '8px', border: '1px solid #ccc', background: 'white' }}
-                            value={selectedYear} 
-                            onChange={(e) => { setSelectedYear(e.target.value); setIsFiltering(true); }}
-                        >
-                            {years.map(y => (
-                                <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
-                        <Button size="xs" colorScheme="blue" variant="outline" onClick={() => setIsFiltering(!isFiltering)}>
-                            {isFiltering ? "Show All History" : "Enable Month Filter"}
-                        </Button>
+                        </ChakraSelect>
+                        
+                        <Popover placement="bottom-start" matchWidth={false}>
+                            <PopoverTrigger>
+                                <Button 
+                                    w="110px"
+                                    bg="white"
+                                    borderRadius="xl"
+                                    shadow="sm"
+                                    size="sm"
+                                    fontWeight="bold"
+                                    rightIcon={<Icon as={FaCalendarAlt} color="blue.500" />}
+                                >
+                                    {selectedYear}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100">
+                                <PopoverBody p={4} maxH="350px" overflowY="auto" className="hide-scrollbar">
+                                    <HStack justify="space-between" mb={4} px={2}>
+                                        <IconButton size="sm" variant="ghost" icon={<FaChevronLeft />} onClick={() => setYearPageStart(prev => prev - 20)} />
+                                        <Text fontWeight="bold" fontSize="sm" color="gray.700">
+                                            {yearPageStart} - {yearPageStart + 19}
+                                        </Text>
+                                        <IconButton size="sm" variant="ghost" icon={<FaChevronRight />} onClick={() => setYearPageStart(prev => prev + 20)} />
+                                    </HStack>
+                                    <SimpleGrid columns={4} spacing={2}>
+                                        {displayYears.map(y => (
+                                            <Button 
+                                                key={y} 
+                                                size="sm" 
+                                                borderRadius="lg"
+                                                colorScheme={Number(selectedYear) === y ? "blue" : "gray"} 
+                                                variant={Number(selectedYear) === y ? "solid" : "ghost"} 
+                                                onClick={() => setSelectedYear(y)}
+                                            >
+                                                {y}
+                                            </Button>
+                                        ))}
+                                    </SimpleGrid>
+                                </PopoverBody>
+                            </PopoverContent>
+                        </Popover>
                     </HStack>
 
                     <Button colorScheme="purple" leftIcon={<FaPlus />} onClick={onOpen} size="sm">
@@ -403,8 +471,21 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                         </InputGroup>
                                     </FormControl>
                                 </SimpleGrid>
+
+                                {expenseForm.attendance === 'Absent' && (
+                                     <FormControl mt={4}>
+                                         <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">Reason for Absence</FormLabel>
+                                         <Input 
+                                             name="attendanceRemark" 
+                                             value={expenseForm.attendanceRemark} 
+                                             onChange={handleFormChange} 
+                                             placeholder="Enter reason for absence..." 
+                                             bg="gray.50"
+                                         />
+                                     </FormControl>
+                                 )}
                                 
-                                <Box w="full" bg="purple.50" p={5} borderRadius="xl" border="1px dashed" borderColor="purple.200">
+                                <Box w="full" mt={4} bg="purple.50" p={5} borderRadius="xl" border="1px dashed" borderColor="purple.200">
                                     <Flex justify="space-between" align="center" mb={4}>
                                         <HStack><Icon as={FaMapMarkerAlt} color="purple.500" /><Heading size="xs" textTransform="uppercase" color="purple.700" letterSpacing="wider">Site Allocations & Files</Heading></HStack>
                                         <Button size="xs" colorScheme="purple" variant="solid" shadow="sm" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
@@ -585,10 +666,8 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 </ModalContent>
             </Modal>
 
-            {expenses.length === 0 ? (
-                <Center p={10}><Text color="gray.500">No expenses recorded for this employee.</Text></Center>
-            ) : filteredExpenses.length === 0 ? (
-                <Center p={10}><Text color="gray.500">No expenses found for this month.</Text></Center>
+            {groupedByDate.length === 0 ? (
+                <Center p={10}><Text color="gray.500">No records found for this period.</Text></Center>
             ) : (
                 <TableContainer border="1px" borderColor="gray.300" borderRadius="md">
                 <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid black' } }}>
@@ -596,120 +675,157 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                         <Tr>
                             <Th textAlign="center" border="1px solid black" fontSize="xs">SR. NO.</Th>
                             <Th textAlign="center" border="1px solid black" fontSize="xs">DATE</Th>
-                            <Th border="1px solid black" fontSize="xs">DESCRIPASAN</Th>
+                            <Th border="1px solid black" fontSize="xs">DESCRIPTION</Th>
                             <Th textAlign="center" border="1px solid black" fontSize="xs">CREDIT</Th>
                             <Th textAlign="center" border="1px solid black" fontSize="xs">DEBIT</Th>
                             <Th textAlign="center" border="1px solid black" fontSize="xs">TOTAL</Th>
                             <Th textAlign="center" border="1px solid black" fontSize="xs">ATENDES</Th>
+                            <Th border="1px solid black" fontSize="xs">REMARK</Th>
                             <Th border="1px solid black" fontSize="xs">SIDE WORK</Th>
                         </Tr>
                     </Thead>
                     <Tbody>
-                        {filteredExpenses.map((exp, expIdx) => {
-                            const dateStr = new Date(exp.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-                            const attendance = exp.attendance === 'Present' ? 'P' : (exp.attendance === 'Half Day' ? 'HD' : 'A');
-                            const attColor = attendance === 'P' ? 'green.400' : (attendance === 'HD' ? 'orange.400' : 'red.400');
-                            
-                            let sideWork = [];
-                            if (exp.clientSites && exp.clientSites.length > 0) {
-                                sideWork = exp.clientSites.map(cs => cs.siteId?.siteName).filter(Boolean);
-                            }
+                        {groupedByDate.map((group, groupIdx) => {
+                            const dateStr = new Date(group.dateKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+                            const exp = group.expense;
 
-                            let credits = [];
+                            // Attendance info (from expense record if exists)
+                            const attendance = exp
+                                ? (exp.attendance === 'Present' ? 'P' : exp.attendance === 'Half Day' ? 'HD' : 'A')
+                                : '-';
+                            const attColor = attendance === 'P' ? 'green.400' : attendance === 'HD' ? 'orange.400' : attendance === 'A' ? 'red.400' : 'gray.400';
+                            const attRemark = exp?.attendanceRemark || '-';
+                            const sideWork = exp?.clientSites?.map(cs => cs.siteId?.siteName).filter(Boolean) || [];
+
+                            // Build combined line items for this date
+                            const allItems = [];
                             let totalCr = 0;
-                            if (exp.creditDebit?.receivedFrom) {
-                                exp.creditDebit.receivedFrom.forEach(r => {
-                                    credits.push({ desc: r.employeeRef?.name ? r.employeeRef.name.toUpperCase() : 'ADVANCE', cr: r.amount, dr: '' });
-                                    totalCr += r.amount;
-                                });
-                            }
-
-                            let debits = [];
                             let totalDr = 0;
-                            const fixed = exp.expenses || {};
-                            if (fixed.breakfast) { debits.push({ desc: 'BREAK FAST', cr: '', dr: fixed.breakfast }); totalDr += Number(fixed.breakfast); }
-                            if (fixed.lunch) { debits.push({ desc: 'LUNCH', cr: '', dr: fixed.lunch }); totalDr += Number(fixed.lunch); }
-                            if (fixed.dinner) { debits.push({ desc: 'DINNER', cr: '', dr: fixed.dinner }); totalDr += Number(fixed.dinner); }
-                            if (fixed.petrol) { debits.push({ desc: 'PETROL', cr: '', dr: fixed.petrol }); totalDr += Number(fixed.petrol); }
-                            
-                            if (exp.otherExpensesList) {
-                                exp.otherExpensesList.forEach(o => {
-                                    debits.push({ desc: o.expenseName.toUpperCase(), cr: '', dr: o.amount });
-                                    totalDr += Number(o.amount);
-                                });
-                            }
-                            if (exp.creditDebit?.givenTo) {
-                                exp.creditDebit.givenTo.forEach(g => {
-                                    debits.push({ desc: g.employeeRef?.name ? g.employeeRef.name.toUpperCase() : 'UNKNOWN', cr: '', dr: g.amount });
-                                    totalDr += Number(g.amount);
+
+                            // 1. Credits from expense receivedFrom
+                            if (exp?.creditDebit?.receivedFrom) {
+                                exp.creditDebit.receivedFrom.forEach(r => {
+                                    allItems.push({ desc: `RECEIVED FROM ${r.employeeRef?.name?.toUpperCase() || 'EMPLOYEE'}`, cr: Number(r.amount) || 0, dr: 0, type: 'transfer-in' });
+                                    totalCr += Number(r.amount) || 0;
                                 });
                             }
 
-                            const allItems = [...credits, ...debits];
-                            if (allItems.length === 0) allItems.push({ desc: '', cr: '', dr: '' });
+                            // 2. Standard expense debits
+                            const fixed = exp?.expenses || {};
+                            const files = exp?.expenseFiles || {};
+                            if (fixed.breakfast) { allItems.push({ desc: 'BREAK FAST', cr: 0, dr: Number(fixed.breakfast), type: 'expense', files: files.breakfast }); totalDr += Number(fixed.breakfast); }
+                            if (fixed.lunch)     { allItems.push({ desc: 'LUNCH', cr: 0, dr: Number(fixed.lunch), type: 'expense', files: files.lunch }); totalDr += Number(fixed.lunch); }
+                            if (fixed.dinner)    { allItems.push({ desc: 'DINNER', cr: 0, dr: Number(fixed.dinner), type: 'expense', files: files.dinner }); totalDr += Number(fixed.dinner); }
+                            if (fixed.petrol)    { allItems.push({ desc: 'PETROL', cr: 0, dr: Number(fixed.petrol), type: 'expense', files: files.petrol }); totalDr += Number(fixed.petrol); }
 
-                            // We need exactly enough rowSpans to cover allItems + length of 3 summary rows
-                            const totalSpan = allItems.length + 3;
+                            // 3. Other expenses
+                            exp?.otherExpensesList?.forEach(o => {
+                                allItems.push({ desc: o.expenseName.toUpperCase(), cr: 0, dr: Number(o.amount), type: 'expense', files: o.files });
+                                totalDr += Number(o.amount);
+                            });
+
+                            // 4. Debits from expense givenTo
+                            exp?.creditDebit?.givenTo?.forEach(g => {
+                                allItems.push({ desc: `GIVEN TO ${g.employeeRef?.name?.toUpperCase() || 'EMPLOYEE'}`, cr: 0, dr: Number(g.amount), type: 'transfer-out' });
+                                totalDr += Number(g.amount);
+                            });
+
+                            // 5. Transfer records (from EmployeeTransfer collection)
+                            group.transfers.forEach(t => {
+                                const isGiver = (t.giver?._id || t.giver) === employeeId;
+                                const otherPerson = isGiver ? (t.taker?.name || 'Employee') : (t.giver?.name || 'Employee');
+                                if (isGiver) {
+                                    allItems.push({ desc: `Given To → ${otherPerson}`, cr: 0, dr: Number(t.amount), type: 'transfer-out', note: t.notes });
+                                    totalDr += Number(t.amount);
+                                } else {
+                                    allItems.push({ desc: `← Received From ${otherPerson}`, cr: Number(t.amount), dr: 0, type: 'transfer-in', note: t.notes });
+                                    totalCr += Number(t.amount);
+                                }
+                            });
+
+                            if (allItems.length === 0) allItems.push({ desc: '-', cr: 0, dr: 0, type: 'expense' });
+
+                            const totalSpan = allItems.length + 3; // items + CR + DR + NET
 
                             return (
-                                <React.Fragment key={exp._id}>
-                                    {allItems.map((item, rowIdx) => (
-                                        <Tr key={`${exp._id}-${rowIdx}`}>
-                                            {rowIdx === 0 && (
+                                <React.Fragment key={group.dateKey}>
+                                    {allItems.map((item, itemIdx) => (
+                                        <Tr key={`${group.dateKey}-${itemIdx}`}
+                                            bg={item.type === 'transfer-out' ? 'orange.50' : item.type === 'transfer-in' ? 'teal.50' : 'white'}
+                                        >
+                                            {itemIdx === 0 && (
                                                 <>
-                                                    <Td rowSpan={totalSpan} textAlign="center" fontWeight="bold">{expIdx + 1}</Td>
+                                                    <Td rowSpan={totalSpan} textAlign="center" fontWeight="bold">{groupIdx + 1}</Td>
                                                     <Td rowSpan={totalSpan} textAlign="center">{dateStr}</Td>
                                                 </>
                                             )}
-                                            
-                                            <Td fontSize="xs" fontWeight="500">{item.desc}</Td>
-                                            <Td textAlign="center">{item.cr}</Td>
-                                            <Td textAlign="center">{item.dr}</Td>
-                                            
-                                            {rowIdx === 0 && <Td rowSpan={allItems.length} border="0px"></Td>}
 
-                                            {rowIdx === 0 && (
+                                            <Td fontSize="xs" fontWeight={item.type !== 'expense' ? 'bold' : '500'}
+                                                color={item.type === 'transfer-out' ? 'orange.700' : item.type === 'transfer-in' ? 'teal.700' : 'gray.800'}
+                                            >
+                                                <HStack spacing={2}>
+                                                    <Text>{item.desc}</Text>
+                                                    {item.files && item.files.length > 0 && (
+                                                        <HStack spacing={1}>
+                                                            {item.files.map((f, i) => (
+                                                                <a key={i} href={`${api.defaults.baseURL.replace('/api', '')}${f.url}`} target="_blank" rel="noreferrer" title={f.name}>
+                                                                    <Icon as={FaPaperclip} color="blue.500" w={3} h={3} _hover={{ color: "blue.700" }} cursor="pointer" />
+                                                                </a>
+                                                            ))}
+                                                        </HStack>
+                                                    )}
+                                                </HStack>
+                                                {item.note && <Text fontSize="9px" color="gray.400" fontWeight="normal" mt={1}>({item.note})</Text>}
+                                            </Td>
+                                            <Td textAlign="center" color="teal.700" fontWeight={item.cr ? 'bold' : 'normal'}>{item.cr || ''}</Td>
+                                            <Td textAlign="center" color={item.type === 'transfer-out' ? 'orange.700' : 'red.700'} fontWeight={item.dr ? 'bold' : 'normal'}>{item.dr || ''}</Td>
+
+                                            {itemIdx === 0 && <Td rowSpan={allItems.length} border="0px"></Td>}
+
+                                            {itemIdx === 0 && (
                                                 <>
                                                     <Td rowSpan={totalSpan} textAlign="center">
-                                                        <Box as="span" bg={attColor} color="white" px={3} py={1} display="inline-block" fontWeight="bold">
+                                                        <Box as="span" bg={attColor} color="white" px={3} py={1} display="inline-block" fontWeight="bold" fontSize="xs">
                                                             {attendance}
                                                         </Box>
                                                     </Td>
+                                                    <Td rowSpan={totalSpan} textAlign="center" fontSize="xs" color="red.600" fontWeight="bold">
+                                                        {attRemark}
+                                                    </Td>
                                                     <Td rowSpan={totalSpan} verticalAlign="top" fontSize="xs">
                                                         <VStack align="start" spacing={1}>
-                                                            {sideWork.map((s, i) => (
-                                                                <Text key={i}>{i+1} {s.toUpperCase()}</Text>
-                                                            ))}
+                                                            {sideWork.map((s, i) => <Text key={i}>{i+1} {s.toUpperCase()}</Text>)}
                                                         </VStack>
                                                     </Td>
                                                 </>
                                             )}
                                         </Tr>
                                     ))}
-                                    
-                                    {/* CR Summary Row */}
-                                    <Tr>
-                                        <Td borderRight="0px"></Td>
-                                        <Td textAlign="center" bg="gray.100" fontWeight="bold" fontSize="xs">CR</Td>
-                                        <Td textAlign="center" borderLeft="0px"></Td>
-                                        <Td textAlign="center" bg="#00b050" color="white" fontWeight="bold">{totalCr}</Td>
-                                    </Tr>
-                                    
-                                    {/* DR Summary Row */}
-                                    <Tr>
-                                        <Td borderRight="0px"></Td>
-                                        <Td textAlign="center" bg="gray.100" fontWeight="bold" fontSize="xs">DR</Td>
-                                        <Td textAlign="center" borderLeft="0px"></Td>
-                                        <Td textAlign="center" bg="#ff0000" color="white" fontWeight="bold">{totalDr}</Td>
-                                    </Tr>
 
-                                    {/* Net Balance Row */}
-                                    <Tr>
-                                        <Td borderRight="0px"></Td>
-                                        <Td textAlign="center" borderRight="0px"></Td>
-                                        <Td textAlign="center" borderLeft="0px"></Td>
+                                    <Tr bg="green.50">
+                                        <Td></Td>
+                                        <Td textAlign="center" bg="gray.100" fontWeight="bold" fontSize="xs">CR</Td>
+                                        <Td></Td>
+                                        <Td textAlign="center" bg="#00b050" color="white" fontWeight="bold">{totalCr || 0}</Td>
+                                    </Tr>
+                                    <Tr bg="red.50">
+                                        <Td></Td>
+                                        <Td textAlign="center" bg="gray.100" fontWeight="bold" fontSize="xs">DR</Td>
+                                        <Td></Td>
+                                        <Td textAlign="center" bg="#ff0000" color="white" fontWeight="bold">{totalDr || 0}</Td>
+                                    </Tr>
+                                    <Tr bg="blue.50">
+                                        <Td></Td>
+                                        <Td textAlign="center" fontWeight="bold" fontSize="xs">NET</Td>
+                                        <Td></Td>
                                         <Td textAlign="center" bg="#00b0f0" color="white" fontWeight="bold">{totalCr - totalDr}</Td>
                                     </Tr>
+                                    {/* Bold separator row between date groups */}
+                                    {groupIdx < groupedByDate.length - 1 && (
+                                        <Tr>
+                                            <Td colSpan={9} p={0} borderTop="3px solid" borderColor="gray.700" bg="gray.700" height="3px"></Td>
+                                        </Tr>
+                                    )}
                                 </React.Fragment>
                             );
                         })}
@@ -722,3 +838,5 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
 };
 
 export default AdminEmployeeExpenses;
+
+

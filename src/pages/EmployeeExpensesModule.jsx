@@ -9,9 +9,10 @@ import {
 import { 
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, 
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
-    FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen
+    FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt
 } from 'react-icons/fa';
 import api from '../api/axios';
+import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
 
 const EmployeeExpensesModule = () => {
     const [employees, setEmployees] = useState([]);
@@ -39,6 +40,8 @@ const EmployeeExpensesModule = () => {
     };
 
     useEffect(() => { fetchData(); }, []);
+
+    const [selectedExpenseEmployee, setSelectedExpenseEmployee] = useState({ id: '', name: '' });
 
     return (
         <Box py={10} bg="gray.50" minH="100vh">
@@ -82,6 +85,17 @@ const EmployeeExpensesModule = () => {
                             >
                                 <Icon as={FaPlus} mr={2} /> Daily Expenses
                             </Tab>
+                            <Tab 
+                                _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
+                                borderRadius="xl" 
+                                px={8} 
+                                py={3} 
+                                fontWeight="bold" 
+                                color="gray.500"
+                                transition="all 0.3s"
+                            >
+                                <Icon as={FaChartBar} mr={2} /> Expenses Report
+                            </Tab>
                         </TabList>
 
                         <TabPanels mt={8}>
@@ -97,6 +111,38 @@ const EmployeeExpensesModule = () => {
                                     onRefresh={fetchData} 
                                     onUpdateEmployee={updateSingleEmployee}
                                 />
+                            </TabPanel>
+                            <TabPanel p={0}>
+                                <Box bg="white" p={6} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                                    <Heading size="sm" mb={5} color="gray.700">Select Employee to View Report</Heading>
+                                    <Select
+                                        placeholder="-- Select Employee --"
+                                        value={selectedExpenseEmployee.id}
+                                        onChange={e => {
+                                            const emp = employees.find(emp => emp._id === e.target.value);
+                                            setSelectedExpenseEmployee({ id: emp?._id || '', name: emp?.name || '' });
+                                        }}
+                                        maxW="400px"
+                                        mb={6}
+                                    >
+                                        {employees.map(emp => (
+                                            <option key={emp._id} value={emp._id}>{emp.name}</option>
+                                        ))}
+                                    </Select>
+                                    {selectedExpenseEmployee.id ? (
+                                        <AdminEmployeeExpenses
+                                            employeeId={selectedExpenseEmployee.id}
+                                            employeeName={selectedExpenseEmployee.name}
+                                        />
+                                    ) : (
+                                        <Center py={16}>
+                                            <VStack spacing={3}>
+                                                <Icon as={FaChartBar} w={10} h={10} color="gray.300" />
+                                                <Text color="gray.400" fontSize="md">Select an employee to view their expense report</Text>
+                                            </VStack>
+                                        </Center>
+                                    )}
+                                </Box>
                             </TabPanel>
                         </TabPanels>
                     </Tabs>
@@ -122,10 +168,14 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         files: { photos: [], data: [], dailyReports: [] } 
     }]);
     const [notes, setNotes] = useState('');
+    const [attendance, setAttendance] = useState('Present');
+    const [attendanceRemark, setAttendanceRemark] = useState('');
 
     // Files State
     const [files, setFiles] = useState({ photos: [], data: [], dailyReports: [] });
     const [previews, setPreviews] = useState({ photos: [], data: [], dailyReports: [] });
+    const [expenseFiles, setExpenseFiles] = useState({ breakfast: [], lunch: [], dinner: [], petrol: [] });
+    const [expensePreviews, setExpensePreviews] = useState({ breakfast: [], lunch: [], dinner: [], petrol: [] });
 
     // Computed Logic
     const selectedEmployee = employees.find(e => e._id === selectedEmployeeId);
@@ -139,7 +189,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     }, [standardExpenses, otherExpenses, selectedEmployee]);
 
     // Handlers
-    const addOtherExpense = () => setOtherExpenses([...otherExpenses, { expenseName: '', amount: '' }]);
+    const addOtherExpense = () => setOtherExpenses([...otherExpenses, { expenseName: '', amount: '', files: [], previews: [] }]);
     const removeOtherExpense = (idx) => setOtherExpenses(otherExpenses.filter((_, i) => i !== idx));
     const updateOtherExpense = (idx, field, val) => {
         const updated = [...otherExpenses];
@@ -181,9 +231,53 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         setPreviews(prev => ({ ...prev, [category]: prev[category].filter((_, i) => i !== idx) }));
     };
 
+    const handleExpenseFileChange = (e, category) => {
+        const selectedFiles = Array.from(e.target.files);
+        setExpenseFiles(prev => ({ ...prev, [category]: [...prev[category], ...selectedFiles] }));
+
+        const newPreviews = selectedFiles.map(file => {
+            if (file.type.startsWith('image/')) return { type: 'image', url: URL.createObjectURL(file), name: file.name };
+            return { type: 'doc', name: file.name };
+        });
+        setExpensePreviews(prev => ({ ...prev, [category]: [...prev[category], ...newPreviews] }));
+    };
+
+    const removeExpenseFile = (category, idx) => {
+        setExpenseFiles(prev => ({ ...prev, [category]: prev[category].filter((_, i) => i !== idx) }));
+        setExpensePreviews(prev => ({ ...prev, [category]: prev[category].filter((_, i) => i !== idx) }));
+    };
+
+    const handleOtherExpenseFileChange = (idx, e) => {
+        const selectedFiles = Array.from(e.target.files);
+        const updated = [...otherExpenses];
+        if (!updated[idx].files) updated[idx].files = [];
+        if (!updated[idx].previews) updated[idx].previews = [];
+        
+        updated[idx].files = [...updated[idx].files, ...selectedFiles];
+        
+        const newPreviews = selectedFiles.map(file => {
+            if (file.type.startsWith('image/')) return { type: 'image', url: URL.createObjectURL(file), name: file.name };
+            return { type: 'doc', name: file.name };
+        });
+        updated[idx].previews = [...updated[idx].previews, ...newPreviews];
+        setOtherExpenses(updated);
+    };
+
+    const removeOtherExpenseFile = (rowIdx, fileIdx) => {
+        const updated = [...otherExpenses];
+        updated[rowIdx].files = updated[rowIdx].files.filter((_, i) => i !== fileIdx);
+        updated[rowIdx].previews = updated[rowIdx].previews.filter((_, i) => i !== fileIdx);
+        setOtherExpenses(updated);
+    };
+
     const handleSubmit = async () => {
         if (!selectedEmployeeId) {
             toast({ title: 'Select Employee', status: 'warning', position: 'top' });
+            return;
+        }
+
+        if (attendance === 'Absent' && !attendanceRemark) {
+            toast({ title: 'Remark Required', description: 'Please explain the reason for absence', status: 'warning', position: 'top' });
             return;
         }
 
@@ -191,10 +285,29 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         try {
             const formData = new FormData();
             formData.append('employeeId', selectedEmployeeId);
+            formData.append('empId', selectedEmployee.empId);
             formData.append('date', date);
             formData.append('notes', notes);
+            formData.append('attendance', attendance);
+            formData.append('attendanceRemark', attendanceRemark);
             formData.append('expenses', JSON.stringify(standardExpenses));
-            formData.append('otherExpensesList', JSON.stringify(otherExpenses.filter(e => e.expenseName && e.amount)));
+            
+            const otherExpsToSend = [];
+            otherExpenses.forEach((exp, idx) => {
+                if (exp.expenseName && exp.amount) {
+                    const mappedIdx = otherExpsToSend.length;
+                    otherExpsToSend.push({ expenseName: exp.expenseName, amount: exp.amount });
+                    if (exp.files) {
+                        exp.files.forEach(f => formData.append(`otherExpense_${mappedIdx}`, f));
+                    }
+                }
+            });
+            formData.append('otherExpensesList', JSON.stringify(otherExpsToSend));
+
+            // Standard Expense Files
+            Object.keys(expenseFiles).forEach(key => {
+                expenseFiles[key].forEach(f => formData.append(`expense_${key}`, f));
+            });
             // Format allocations for backend
             const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
             formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId }))));
@@ -247,6 +360,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 setOtherExpenses([]);
                 setClientSites([{ clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
                 setNotes('');
+                setAttendance('Present');
+                setAttendanceRemark('');
             }
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Save failed', status: 'error' });
@@ -332,36 +447,62 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                 <Icon as={FaUtensils} mr={2} color="blue.500" /> Standard Meals & Travel
                             </Heading>
                             <VStack spacing={4}>
-                                <SimpleGrid columns={2} spacing={4} w="full">
-                                    <FormControl>
-                                        <FormLabel fontSize="xs" fontWeight="bold">Breakfast</FormLabel>
-                                        <InputGroup>
-                                            <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" fontSize="xs" /></InputLeftElement>
-                                            <Input type="number" value={standardExpenses.breakfast} onChange={(e) => setStandardExpenses({...standardExpenses, breakfast: e.target.value})} borderRadius="lg" placeholder="0" />
-                                        </InputGroup>
-                                    </FormControl>
-                                    <FormControl>
-                                        <FormLabel fontSize="xs" fontWeight="bold">Lunch</FormLabel>
-                                        <InputGroup>
-                                            <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" fontSize="xs" /></InputLeftElement>
-                                            <Input type="number" value={standardExpenses.lunch} onChange={(e) => setStandardExpenses({...standardExpenses, lunch: e.target.value})} borderRadius="lg" placeholder="0" />
-                                        </InputGroup>
-                                    </FormControl>
-                                    <FormControl>
-                                        <FormLabel fontSize="xs" fontWeight="bold">Dinner</FormLabel>
-                                        <InputGroup>
-                                            <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" fontSize="xs" /></InputLeftElement>
-                                            <Input type="number" value={standardExpenses.dinner} onChange={(e) => setStandardExpenses({...standardExpenses, dinner: e.target.value})} borderRadius="lg" placeholder="0" />
-                                        </InputGroup>
-                                    </FormControl>
-                                    <FormControl>
-                                        <FormLabel fontSize="xs" fontWeight="bold">Petrol</FormLabel>
-                                        <InputGroup>
-                                            <InputLeftElement><Icon as={FaGasPump} color="gray.400" fontSize="xs" /></InputLeftElement>
-                                            <Input type="number" value={standardExpenses.petrol} onChange={(e) => setStandardExpenses({...standardExpenses, petrol: e.target.value})} borderRadius="lg" placeholder="0" />
-                                        </InputGroup>
-                                    </FormControl>
-                                </SimpleGrid>
+                                <VStack spacing={4} w="full" align="stretch">
+                                    {['breakfast', 'lunch', 'dinner', 'petrol'].map((expName) => (
+                                        <VStack key={expName} align="stretch" spacing={2} bg="gray.50" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                            <HStack align="center" w="full" justify="space-between">
+                                                <FormLabel fontSize="sm" fontWeight="bold" textTransform="capitalize" m={0} minW="80px">
+                                                    {expName}
+                                                </FormLabel>
+                                                
+                                                <HStack flex={1} maxW="200px">
+                                                    <InputGroup size="sm">
+                                                        <InputLeftElement><Icon as={expName === 'petrol' ? FaGasPump : FaRupeeSign} color="gray.400" fontSize="xs" /></InputLeftElement>
+                                                        <Input type="number" value={standardExpenses[expName]} onChange={(e) => setStandardExpenses({...standardExpenses, [expName]: e.target.value})} borderRadius="lg" placeholder="0" bg="white" />
+                                                    </InputGroup>
+                                                </HStack>
+
+                                                <Tooltip label={`Upload ${expName} bills/photos`}>
+                                                    <IconButton
+                                                        icon={<Icon as={FaCloudUploadAlt} />}
+                                                        colorScheme="blue"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        borderRadius="lg"
+                                                        onClick={() => document.getElementById(`upload-${expName}`).click()}
+                                                    />
+                                                </Tooltip>
+                                                <input
+                                                    type="file"
+                                                    id={`upload-${expName}`}
+                                                    hidden
+                                                    multiple
+                                                    onChange={(e) => handleExpenseFileChange(e, expName)}
+                                                    accept="image/*,.pdf,.doc,.docx"
+                                                />
+                                            </HStack>
+                                            {expensePreviews[expName] && expensePreviews[expName].length > 0 && (
+                                                <HStack overflowX="auto" py={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
+                                                    {expensePreviews[expName].map((file, i) => (
+                                                        <Box key={i} position="relative" minW="40px" h="40px" borderRadius="md" overflow="hidden" border="1px solid" borderColor="gray.200" flexShrink={0}>
+                                                            {file.type === 'image' ? (
+                                                                <Image src={file.url} w="full" h="full" objectFit="cover" />
+                                                            ) : (
+                                                                <Center w="full" h="full" bg="gray.100"><Icon as={FaFileAlt} color="blue.500" /></Center>
+                                                            )}
+                                                            <IconButton
+                                                                aria-label="remove file"
+                                                                icon={<Icon as={FaTrash} />} size="xs" colorScheme="red"
+                                                                position="absolute" top={0} right={0} opacity={0.8}
+                                                                onClick={() => removeExpenseFile(expName, i)}
+                                                            />
+                                                        </Box>
+                                                    ))}
+                                                </HStack>
+                                            )}
+                                        </VStack>
+                                    ))}
+                                </VStack>
                             </VStack>
                         </CardBody>
                     </Card>
@@ -377,14 +518,53 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                             </HStack>
                             <VStack spacing={3}>
                                 {otherExpenses.map((row, idx) => (
-                                    <HStack key={idx} w="full" bg="gray.50" p={2} borderRadius="xl">
-                                        <Input placeholder="Expense Name" value={row.expenseName} onChange={(e) => updateOtherExpense(idx, 'expenseName', e.target.value)} bg="white" size="sm" borderRadius="lg" />
-                                        <InputGroup size="sm" maxW="150px">
-                                            <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
-                                            <Input type="number" placeholder="Amount" value={row.amount} onChange={(e) => updateOtherExpense(idx, 'amount', e.target.value)} bg="white" borderRadius="lg" />
-                                        </InputGroup>
-                                        <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => removeOtherExpense(idx)} />
-                                    </HStack>
+                                    <VStack key={idx} w="full" bg="gray.50" p={3} borderRadius="xl" align="stretch" border="1px solid" borderColor="gray.100">
+                                        <HStack>
+                                            <Input placeholder="Expense Name" value={row.expenseName} onChange={(e) => updateOtherExpense(idx, 'expenseName', e.target.value)} bg="white" size="sm" borderRadius="lg" />
+                                            <InputGroup size="sm" maxW="150px">
+                                                <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
+                                                <Input type="number" placeholder="Amount" value={row.amount} onChange={(e) => updateOtherExpense(idx, 'amount', e.target.value)} bg="white" borderRadius="lg" />
+                                            </InputGroup>
+                                            <Tooltip label="Upload bills">
+                                                <IconButton
+                                                    size="sm"
+                                                    aria-label="Upload file"
+                                                    icon={<Icon as={FaCloudUploadAlt} />}
+                                                    colorScheme="blue"
+                                                    variant="outline"
+                                                    onClick={() => document.getElementById(`upload-other-${idx}`).click()}
+                                                />
+                                            </Tooltip>
+                                            <input
+                                                type="file"
+                                                id={`upload-other-${idx}`}
+                                                hidden
+                                                multiple
+                                                onChange={(e) => handleOtherExpenseFileChange(idx, e)}
+                                                accept="image/*,.pdf,.doc,.docx"
+                                            />
+                                            <IconButton size="sm" aria-label="remove row" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => removeOtherExpense(idx)} />
+                                        </HStack>
+                                        {row.previews && row.previews.length > 0 && (
+                                            <HStack overflowX="auto" pt={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
+                                                {row.previews.map((file, i) => (
+                                                    <Box key={i} position="relative" minW="40px" h="40px" borderRadius="md" overflow="hidden" border="1px solid" borderColor="gray.200" flexShrink={0}>
+                                                        {file.type === 'image' ? (
+                                                            <Image src={file.url} w="full" h="full" objectFit="cover" />
+                                                        ) : (
+                                                            <Center w="full" h="full" bg="gray.100"><Icon as={FaFileAlt} color="blue.500" /></Center>
+                                                        )}
+                                                        <IconButton
+                                                            aria-label="remove file"
+                                                            icon={<Icon as={FaTrash} />} size="xs" colorScheme="red"
+                                                            position="absolute" top={0} right={0} opacity={0.8}
+                                                            onClick={() => removeOtherExpenseFile(idx, i)}
+                                                        />
+                                                    </Box>
+                                                ))}
+                                            </HStack>
+                                        )}
+                                    </VStack>
                                 ))}
                                 {otherExpenses.length === 0 && <Text fontSize="xs" color="gray.400" fontStyle="italic">No custom expenses added.</Text>}
                             </VStack>
@@ -446,6 +626,40 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 
                 {/* Right Side: File Uploads & Summary */}
                 <VStack spacing={8} align="stretch">
+                    {/* Attendance Tracking */}
+                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                        <CardBody p={6}>
+                            <VStack align="stretch" spacing={4}>
+                                <Heading size="xs" color="blue.700" textTransform="uppercase">Attendance Status</Heading>
+                                <FormControl>
+                                    <Select 
+                                        value={attendance} 
+                                        onChange={(e) => setAttendance(e.target.value)}
+                                        borderRadius="lg"
+                                        bg="white"
+                                    >
+                                        <option value="Present">Present</option>
+                                        <option value="Half Day">Half Day</option>
+                                        <option value="Absent">Absent</option>
+                                    </Select>
+                                </FormControl>
+                                
+                                {attendance === 'Absent' && (
+                                    <FormControl isRequired>
+                                        <FormLabel fontSize="xs" fontWeight="bold">Reason for Absence</FormLabel>
+                                        <Input 
+                                            value={attendanceRemark} 
+                                            onChange={(e) => setAttendanceRemark(e.target.value)} 
+                                            bg="white" 
+                                            borderRadius="lg" 
+                                            placeholder="Why were you absent?" 
+                                        />
+                                    </FormControl>
+                                )}
+                            </VStack>
+                        </CardBody>
+                    </Card>
+
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" bg="blue.50">
                         <CardBody p={6}>
                             <VStack align="stretch" spacing={4}>

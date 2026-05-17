@@ -35,7 +35,8 @@ const EmployeeExpenses = () => {
             givenTo: [],
             receivedFrom: []
         },
-        notes: ''
+        notes: '',
+        attendanceRemark: ''
     });
 
     useEffect(() => {
@@ -212,7 +213,8 @@ const EmployeeExpenses = () => {
                 expenses: { breakfast: '', lunch: '', dinner: '', petrol: '' },
                 otherExpensesList: [],
                 creditDebit: { givenTo: [], receivedFrom: [] },
-                notes: ''
+                notes: '',
+                attendanceRemark: ''
             });
         } catch (err) {
             console.error(err);
@@ -258,6 +260,17 @@ const EmployeeExpenses = () => {
                                     </Select>
                                 </FormControl>
                             </SimpleGrid>
+
+                            {formData.attendance === 'Absent' && (
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="sm">Reason for Absence</FormLabel>
+                                    <Input 
+                                        placeholder="Enter reason..." 
+                                        value={formData.attendanceRemark} 
+                                        onChange={(e) => setFormData({...formData, attendanceRemark: e.target.value})} 
+                                    />
+                                </FormControl>
+                            )}
 
                             <Box bg="orange.50" p={4} borderRadius="xl" borderWidth="1px" borderColor="orange.100">
                                 <HStack justify="space-between" mb={2}>
@@ -424,28 +437,53 @@ const EmployeeExpenses = () => {
                                 filteredExpenses.map(exp => (
                                     <Box key={exp._id} p={4} bg="white" borderRadius="xl" boxShadow="sm" borderWidth="1px" borderColor="gray.100">
                                         <HStack justify="space-between" mb={2}>
-                                            <Tag colorScheme={exp.attendance === 'Present' ? 'green' : exp.attendance === 'Half Day' ? 'orange' : 'red'}>
-                                                {exp.attendance}
-                                            </Tag>
+                                            <VStack align="start" spacing={0}>
+                                                <Tag colorScheme={exp.attendance === 'Present' ? 'green' : exp.attendance === 'Half Day' ? 'orange' : 'red'}>
+                                                    {exp.attendance}
+                                                </Tag>
+                                                {exp.attendance === 'Absent' && exp.attendanceRemark && (
+                                                    <Text fontSize="10px" color="red.500" fontWeight="bold" mt={1}>Reason: {exp.attendanceRemark}</Text>
+                                                )}
+                                            </VStack>
                                             <Text fontWeight="bold" fontSize="sm" color="gray.600">
                                                 {new Date(exp.date).toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
                                             </Text>
                                         </HStack>
-                                        {/* Backwards Compatibility for single site */
-                                        exp.siteId && (
+
+                                        {/* Backwards Compatibility for single site */}
+                                        {exp.siteId && (
                                             <HStack mb={2}>
                                                 <Icon as={FaBuilding} color="gray.400" w={3} h={3} />
                                                 <Text fontSize="xs" color="gray.600" fontWeight="bold">{exp.siteId.siteName} ({exp.siteId.siteAddress || 'Unknown'})</Text>
                                             </HStack>
                                         )}
-                                        {/* New multi site rendering */
-                                        exp.siteIds && exp.siteIds.map((s, i) => (
+                                        {/* New multi site rendering */}
+                                        {exp.siteIds && exp.siteIds.map((s, i) => (
                                             <HStack mb={2} key={i}>
                                                 <Icon as={FaBuilding} color="gray.400" w={3} h={3} />
                                                 <Text fontSize="xs" color="gray.600" fontWeight="bold">{s.siteName} ({s.siteAddress || 'Unknown'})</Text>
                                             </HStack>
                                         ))}
-                                        
+
+                                        {/* Money Transfers */}
+                                        {(exp.creditDebit?.givenTo?.length > 0 || exp.creditDebit?.receivedFrom?.length > 0) && (
+                                            <Box mt={2} mb={2} p={3} bg="gray.50" borderRadius="lg" borderWidth="1px" borderColor="gray.100">
+                                                <Text fontSize="10px" fontWeight="bold" color="gray.500" textTransform="uppercase" mb={1}>Money Transfers</Text>
+                                                {exp.creditDebit?.givenTo?.map((g, i) => (
+                                                    <HStack key={i} justify="space-between">
+                                                        <Text fontSize="xs" color="blue.700">↑ Given to {g.employeeRef?.name || 'Employee'}</Text>
+                                                        <Text fontSize="xs" fontWeight="bold" color="blue.700">₹{g.amount}</Text>
+                                                    </HStack>
+                                                ))}
+                                                {exp.creditDebit?.receivedFrom?.map((r, i) => (
+                                                    <HStack key={i} justify="space-between">
+                                                        <Text fontSize="xs" color="green.700">↓ Received from {r.employeeRef?.name || 'Employee'}</Text>
+                                                        <Text fontSize="xs" fontWeight="bold" color="green.700">₹{r.amount}</Text>
+                                                    </HStack>
+                                                ))}
+                                            </Box>
+                                        )}
+
                                         <HStack justify="space-between" mt={3} pt={3} borderTop="1px" borderColor="gray.50">
                                             <VStack align="start" spacing={0}>
                                                 <Text fontSize="10px" color="gray.400" textTransform="uppercase">Total Expenses</Text>

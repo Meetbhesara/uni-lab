@@ -2809,6 +2809,12 @@ const ScheduleMasterForm = () => {
     const [compTarget, setCompTarget] = useState(null);
     const [isCompLoading, setIsCompLoading] = useState(false);
     const [isAssignLoading, setIsAssignLoading] = useState(false);
+    
+    // Reject Modal state
+    const { isOpen: isRejectOpen, onOpen: onRejectOpen, onClose: onRejectClose } = useDisclosure();
+    const cancelRejectRef = React.useRef();
+    const [rejectTargetId, setRejectTargetId] = useState(null);
+    const [isRejectLoading, setIsRejectLoading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -2966,6 +2972,29 @@ const ScheduleMasterForm = () => {
         }
     };
 
+    const handleRejectClick = (id) => {
+        setRejectTargetId(id);
+        onRejectOpen();
+    };
+
+    const handleRejectConfirm = async () => {
+        if (!rejectTargetId) return;
+        setIsRejectLoading(true);
+        try {
+            const res = await api.put(`/schedule-master/reject/${rejectTargetId}`);
+            if (res.data.success) {
+                toast({ title: 'Schedule Rejected', status: 'info' });
+                onRejectClose();
+                const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                if (sRes.data.success) setSchedules(sRes.data.data);
+            }
+        } catch (error) {
+            toast({ title: 'Reject Failed', description: error.response?.data?.message, status: 'error' });
+        } finally {
+            setIsRejectLoading(false);
+        }
+    };
+
     const handleClear = () => {
         setEditId(null);
         setSelectedClientName('');
@@ -3016,15 +3045,21 @@ const ScheduleMasterForm = () => {
 
     const filteredClients = clients.filter(c => c.clientName.toLowerCase().includes(clientSearch.toLowerCase()));
     const filteredSites = sites.filter(s => s.siteName.toLowerCase().includes(siteSearch.toLowerCase()));
-    const statusColors = { Scheduled: 'blue', Completed: 'green' };
+    const statusColors = { Scheduled: 'blue', Completed: 'green', Rejected: 'red' };
 
     return (
         <Box py={5} bg="gray.100" minH="100vh">
             <Container maxW="container.xl">
-                <VStack spacing={8} align="stretch">
-
-                    {/* ── TOP: Form ── */}
-                    <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
+                <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
+                    <TabList mb={6} bg="white" p={2} borderRadius="2xl" boxShadow="sm" overflowX="auto">
+                        <Tab _selected={{ color: 'white', bg: 'teal.600' }} px={6} borderRadius="xl" fontWeight="bold" whiteSpace="nowrap"><Icon as={FaCalendarAlt} mr={2} /> Schedule Site Visit Form</Tab>
+                        <Tab _selected={{ color: 'white', bg: 'gray.800' }} px={6} borderRadius="xl" fontWeight="bold" whiteSpace="nowrap"><Icon as={FaListUl} mr={2} /> Scheduler View</Tab>
+                        <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} borderRadius="xl" fontWeight="bold" whiteSpace="nowrap"><Icon as={FaMapMarkedAlt} mr={2} /> Site Allocation Report</Tab>
+                    </TabList>
+                    <TabPanels>
+                        {/* ── TAB 1: Form ── */}
+                        <TabPanel p={0}>
+                            <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
                         <Box bg={editId ? 'purple.600' : 'teal.600'} px={7} py={5} color="white">
                             <HStack justify="space-between">
                                 <HStack>
@@ -3150,8 +3185,10 @@ const ScheduleMasterForm = () => {
                             </form>
                         </CardBody>
                     </Card>
+                </TabPanel>
 
-                    {/* ── BOTTOM: Schedule Viewer ── */}
+                {/* ── TAB 2: Schedule Viewer ── */}
+                <TabPanel p={0}>
                     <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
                         <Box bg="gray.800" px={7} py={5} color="white">
                             <HStack justify="space-between">
@@ -3178,14 +3215,24 @@ const ScheduleMasterForm = () => {
                                                 </Badge>
                                                 <HStack onClick={(e) => e.stopPropagation()}>
                                                     {s.dayStatus === 'Scheduled' && (
-                                                        <Button
-                                                            size="xs"
-                                                            colorScheme="green"
-                                                            leftIcon={<Icon as={FaCheckCircle} />}
-                                                            onClick={() => { setCompTarget(s); onCompOpen(); }}
-                                                        >
-                                                            Complete
-                                                        </Button>
+                                                        <>
+                                                            <Button
+                                                                size="xs"
+                                                                colorScheme="green"
+                                                                leftIcon={<Icon as={FaCheckCircle} />}
+                                                                onClick={() => { setCompTarget(s); onCompOpen(); }}
+                                                            >
+                                                                Complete
+                                                            </Button>
+                                                            <Button
+                                                                size="xs"
+                                                                colorScheme="red"
+                                                                leftIcon={<Icon as={FaTimes} />}
+                                                                onClick={() => handleRejectClick(s._id)}
+                                                            >
+                                                                Reject
+                                                            </Button>
+                                                        </>
                                                     )}
                                                     <IconButton size="xs" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(s)} />
                                                 </HStack>
@@ -3260,8 +3307,15 @@ const ScheduleMasterForm = () => {
                             )}
                         </CardBody>
                     </Card>
-                </VStack>
-            </Container>
+                </TabPanel>
+
+                {/* ── TAB 3: Site Allocation Report ── */}
+                <TabPanel p={0}>
+                    <AdminSiteAllocation />
+                </TabPanel>
+            </TabPanels>
+        </Tabs>
+    </Container>
 
             <ResourceAssignmentModal
                 isOpen={isAssignOpen}
@@ -3296,6 +3350,28 @@ const ScheduleMasterForm = () => {
                 onComplete={handleComplete}
                 isLoading={isCompLoading}
             />
+
+            {/* Reject Confirmation AlertDialog */}
+            <AlertDialog isOpen={isRejectOpen} leastDestructiveRef={cancelRejectRef} onClose={onRejectClose} isCentered>
+                <AlertDialogOverlay backdropFilter="blur(5px)" bg="blackAlpha.600">
+                    <AlertDialogContent borderRadius="2xl">
+                        <AlertDialogHeader fontSize="lg" fontWeight="black" color="red.600">
+                            Reject Schedule
+                        </AlertDialogHeader>
+                        <AlertDialogBody color="gray.600">
+                            Are you sure you want to reject this schedule? This will mark the visit as rejected and cancel it from the active pipeline.
+                        </AlertDialogBody>
+                        <AlertDialogFooter>
+                            <Button ref={cancelRejectRef} onClick={onRejectClose} borderRadius="full" variant="ghost">
+                                Cancel
+                            </Button>
+                            <Button colorScheme="red" onClick={handleRejectConfirm} ml={3} isLoading={isRejectLoading} borderRadius="full" shadow="md">
+                                Reject Schedule
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </Box>
     );
 };
@@ -3986,17 +4062,12 @@ const Services = () => {
                                     <Icon as={FaMap} mr={2} /> Site Master
                                 </Tab>
                                 <Tab _selected={{ color: 'white', bg: 'green.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaCalendarAlt} mr={2} /> Schedule
+                                    <Icon as={FaCalendarAlt} mr={2} /> Scheduler
                                 </Tab>
                                 <Tab _selected={{ color: 'white', bg: 'blue.700' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
                                     <Icon as={FaWrench} mr={2} /> Instruments
                                 </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'purple.800' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaFileInvoiceDollar} mr={2} /> Expense Reports
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'teal.700' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaMapMarkedAlt} mr={2} /> Site Allocation
-                                </Tab>
+
                                 <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
                                     <Icon as={FaMoneyBillWave} mr={2} /> Employee Ledger
                                 </Tab>
@@ -4021,12 +4092,7 @@ const Services = () => {
                                 <TabPanel p={0}>
                                     <InstrumentMasterForm />
                                 </TabPanel>
-                                <TabPanel p={0}>
-                                    <ExpenseReportsTab />
-                                </TabPanel>
-                                <TabPanel p={0} overflowX="auto">
-                                    <AdminSiteAllocation />
-                                </TabPanel>
+
                                 <TabPanel p={0}>
                                     <EmployeeExpensesModule />
                                 </TabPanel>

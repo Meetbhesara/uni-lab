@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
     Box, Table, Thead, Tbody, Tr, Th, Td, TableContainer,
-    Button, Spinner, Center, Text, HStack, VStack, Icon, useToast, Heading, Flex
+    Button, Spinner, Center, Text, HStack, VStack, Icon, useToast, Heading, Flex,
+    Select, Popover, PopoverTrigger, PopoverContent, PopoverBody, SimpleGrid, IconButton
 } from '@chakra-ui/react';
-import { FaDownload, FaFileExcel, FaCalendarAlt, FaStar } from 'react-icons/fa';
+import { FaDownload, FaFileExcel, FaCalendarAlt, FaStar, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import api from '../api/axios';
 
 const AdminSiteAllocation = () => {
@@ -11,7 +12,7 @@ const AdminSiteAllocation = () => {
     const [loading, setLoading] = useState(true);
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [isFiltering, setIsFiltering] = useState(true);
+    const [yearPageStart, setYearPageStart] = useState(Math.floor(new Date().getFullYear() / 20) * 20);
     const toast = useToast();
 
     // Configuration flag for local vs NAS saving
@@ -19,19 +20,17 @@ const AdminSiteAllocation = () => {
 
     useEffect(() => {
         fetchSchedules();
-    }, [selectedMonth, selectedYear, isFiltering]);
+    }, [selectedMonth, selectedYear]);
 
     const fetchSchedules = async () => {
         setLoading(true);
         try {
-            let url = '/schedule-master';
-            if (isFiltering) {
-                // We need to construct a range for the month
-                const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
-                const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
-                const endDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${lastDay}`;
-                url += `?startDate=${startDate}&endDate=${endDate}`;
-            }
+            // Force month-wise filtering
+            const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+            const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+            const endDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${lastDay}`;
+            const url = `/schedule-master?startDate=${startDate}&endDate=${endDate}`;
+            
             const res = await api.get(url);
             if (res.data.success) {
                 setSchedules(res.data.data);
@@ -101,8 +100,8 @@ const AdminSiteAllocation = () => {
         "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
     ];
-    const currentYear = new Date().getFullYear();
-    const years = [currentYear - 1, currentYear, currentYear + 1];
+    // Calculate the 20 years to display based on the current page
+    const displayYears = Array.from({ length: 20 }, (_, i) => yearPageStart + i);
 
     if (loading) return <Center p={20}><Spinner size="xl" /></Center>;
 
@@ -128,27 +127,61 @@ const AdminSiteAllocation = () => {
                 <HStack spacing={4} flexWrap="wrap">
                     <HStack>
                         <Text fontSize="sm" fontWeight="bold" color="gray.600">Period:</Text>
-                        <select 
-                            style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #ccc', background: 'white' }}
+                        <Select 
+                            w="130px"
+                            bg="white"
+                            borderRadius="xl"
+                            shadow="sm"
+                            size="sm"
+                            fontWeight="bold"
                             value={selectedMonth} 
-                            onChange={(e) => { setSelectedMonth(e.target.value); setIsFiltering(true); }}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
                         >
                             {months.map((m, i) => (
                                 <option key={i} value={i + 1}>{m}</option>
                             ))}
-                        </select>
-                        <select 
-                            style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #ccc', background: 'white' }}
-                            value={selectedYear} 
-                            onChange={(e) => { setSelectedYear(e.target.value); setIsFiltering(true); }}
-                        >
-                            {years.map(y => (
-                                <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
-                        <Button colorScheme="blue" size="sm" variant={isFiltering ? "solid" : "outline"} onClick={() => setIsFiltering(!isFiltering)}>
-                            {isFiltering ? "Filtered" : "All Records"}
-                        </Button>
+                        </Select>
+                        
+                        <Popover placement="bottom-start" matchWidth={false}>
+                            <PopoverTrigger>
+                                <Button 
+                                    w="110px"
+                                    bg="white"
+                                    borderRadius="xl"
+                                    shadow="sm"
+                                    size="sm"
+                                    fontWeight="bold"
+                                    rightIcon={<Icon as={FaCalendarAlt} color="blue.500" />}
+                                >
+                                    {selectedYear}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100">
+                                <PopoverBody p={4} maxH="350px" overflowY="auto" className="hide-scrollbar">
+                                    <HStack justify="space-between" mb={4} px={2}>
+                                        <IconButton size="sm" variant="ghost" icon={<FaChevronLeft />} onClick={() => setYearPageStart(prev => prev - 20)} />
+                                        <Text fontWeight="bold" fontSize="sm" color="gray.700">
+                                            {yearPageStart} - {yearPageStart + 19}
+                                        </Text>
+                                        <IconButton size="sm" variant="ghost" icon={<FaChevronRight />} onClick={() => setYearPageStart(prev => prev + 20)} />
+                                    </HStack>
+                                    <SimpleGrid columns={4} spacing={2}>
+                                        {displayYears.map(y => (
+                                            <Button 
+                                                key={y} 
+                                                size="sm" 
+                                                borderRadius="lg"
+                                                colorScheme={Number(selectedYear) === y ? "blue" : "gray"} 
+                                                variant={Number(selectedYear) === y ? "solid" : "ghost"} 
+                                                onClick={() => setSelectedYear(y)}
+                                            >
+                                                {y}
+                                            </Button>
+                                        ))}
+                                    </SimpleGrid>
+                                </PopoverBody>
+                            </PopoverContent>
+                        </Popover>
                     </HStack>
 
                     <Button colorScheme="green" leftIcon={<FaFileExcel />} onClick={handleDownload} size="sm">
@@ -186,12 +219,16 @@ const AdminSiteAllocation = () => {
                             const dateLabel = new Date(dKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
                             return (
                                 <React.Fragment key={dKey}>
-                                    {dateSchs.map((sch, iIdx) => (
-                                        <Tr key={sch._id}>
+                                    {dateSchs.map((sch, iIdx) => {
+                                        const isNewDateBlock = iIdx === 0 && dIdx !== 0;
+                                        const borderTopVal = isNewDateBlock ? '4px solid #2D3748 !important' : undefined;
+                                        
+                                        return (
+                                        <Tr key={sch._id} sx={{ 'td': { borderTop: borderTopVal } }}>
                                             {iIdx === 0 && (
                                                 <>
                                                     <Td rowSpan={dateSchs.length} textAlign="center" fontWeight="bold">{dIdx + 1}</Td>
-                                                    <Td rowSpan={dateSchs.length} textAlign="center" fontWeight="500">{dateLabel}</Td>
+                                                    <Td rowSpan={dateSchs.length} textAlign="center" fontWeight="500" bg="gray.50">{dateLabel}</Td>
                                                 </>
                                             )}
                                             <Td textAlign="center">{iIdx + 1}</Td>
@@ -228,7 +265,8 @@ const AdminSiteAllocation = () => {
                                                 </VStack>
                                             </Td>
                                         </Tr>
-                                    ))}
+                                        );
+                                    })}
                                 </React.Fragment>
                             );
                         })}
