@@ -7,7 +7,7 @@ import {
     Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, Select
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch } from 'react-icons/fi';
-import { FaWhatsapp } from 'react-icons/fa';
+import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
 
@@ -23,6 +23,7 @@ const PRODUCT_CATEGORIES = [
 const AdminProducts = () => {
     const location = useLocation();
     const [products, setProducts] = useState([]);
+    const [searchVal, setSearchVal] = useState('');
 
     // Disable Input Spinners via CSS Check
     useEffect(() => {
@@ -69,7 +70,7 @@ const AdminProducts = () => {
     const isSuperAdmin = user.email === 'iatulkanak@gmail.com';
 
     const getImageUrl = (path) => {
-        if (!path) return 'https://via.placeholder.com/150';
+        if (!path) return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150"><rect width="150" height="150" fill="%23f7fafc"/><path d="M55,85 L75,60 L95,85" stroke="%23cbd5e0" stroke-width="4" fill="none"/><circle cx="95" cy="55" r="8" fill="%23cbd5e0"/><rect x="40" y="40" width="70" height="70" rx="8" stroke="%23cbd5e0" stroke-width="4" fill="none"/></svg>';
         if (path.startsWith('http')) return path;
         const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
         return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
@@ -103,6 +104,7 @@ const AdminProducts = () => {
 
     const fetchProducts = async (search = '') => {
         try {
+            setSearchVal(search);
             const res = await api.get(`/products${search ? `?search=${search}` : ''}`);
             setProducts(Array.isArray(res.data) ? res.data : (res.data.data || []));
         } catch (error) {
@@ -304,8 +306,9 @@ const AdminProducts = () => {
             setNewPhotos([]);
             fetchProducts();
         } catch (error) {
-            console.error(error);
-            toast({ title: "Operation Failed", description: error.response?.data?.message || "Unknown error", status: "error" });
+            console.error('Submission error:', error);
+            const errMsg = error.response?.data?.message || error.response?.data?.msg || error.message || "Unknown error";
+            toast({ title: "Operation Failed", description: errMsg, status: "error", duration: 5000, isClosable: true });
         } finally {
             setIsSubmitting(false);
         }
@@ -388,21 +391,23 @@ const AdminProducts = () => {
                     </Text>
                     <Text fontSize="sm" color="gray.500">Manage your industrial product catalog with ease.</Text>
                 </Stack>
-                <Flex gap={4} direction={{ base: 'column', sm: 'row' }}>
-                    <InputGroup maxW={{ md: '300px' }}>
+                <Flex gap={4} direction={{ base: 'column', sm: 'row' }} w={{ base: 'full', sm: 'auto' }} align={{ base: 'stretch', sm: 'center' }}>
+                    <InputGroup maxW={{ base: 'full', sm: '300px' }} w="full">
                         <InputLeftElement pointerEvents='none' children={<FiSearch color='gray.300' />} />
                         <Input
                             placeholder='Search products...'
+                            value={searchVal}
                             onChange={(e) => fetchProducts(e.target.value)}
                         />
                     </InputGroup>
+
                     <Button
                         leftIcon={<FiPlus />}
                         size="md"
                         borderRadius="xl"
                         boxShadow="lg"
                         px={8}
-                        minW="fit-content"
+                        w={{ base: 'full', sm: 'auto' }}
                         onClick={() => {
                             setEditingProduct(null);
                             setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [] });
@@ -439,7 +444,7 @@ const AdminProducts = () => {
                                             borderRadius="md"
                                             bg="white"
                                             boxShadow="sm"
-                                            fallbackSrc="https://via.placeholder.com/60?text=No+Img"
+                                            fallbackSrc='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60"><rect width="60" height="60" fill="%23f7fafc"/><path d="M20,38 L30,28 L40,38" stroke="%23cbd5e0" stroke-width="3" fill="none"/><circle cx="38" cy="24" r="3" fill="%23cbd5e0"/><rect x="15" y="15" width="30" height="30" rx="4" stroke="%23cbd5e0" stroke-width="3" fill="none"/></svg>'
                                         />
                                         <Stack spacing={0}>
                                             <Text fontWeight="700" color="gray.800">{product.name}</Text>

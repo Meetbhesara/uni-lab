@@ -10,6 +10,8 @@ import {
 import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign, FaPaperclip, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import api from '../api/axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+
 const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     const [expenses, setExpenses] = useState([]);
     const [transfers, setTransfers] = useState([]);
@@ -768,7 +770,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                                     {item.files && item.files.length > 0 && (
                                                         <HStack spacing={1}>
                                                             {item.files.map((f, i) => (
-                                                                <a key={i} href={`${api.defaults.baseURL.replace('/api', '')}${f.url}`} target="_blank" rel="noreferrer" title={f.name}>
+                                                                <a key={i} href={`${API_BASE_URL}${f.url}`} target="_blank" rel="noreferrer" title={f.name}>
                                                                     <Icon as={FaPaperclip} color="blue.500" w={3} h={3} _hover={{ color: "blue.700" }} cursor="pointer" />
                                                                 </a>
                                                             ))}

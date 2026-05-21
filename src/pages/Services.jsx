@@ -715,6 +715,12 @@ const EmployeeMasterForm = () => {
         drivingLicense: null
     });
     const [photoPreview, setPhotoPreview] = useState(null);
+    const [existingDocs, setExistingDocs] = useState({
+        aadharCard: null,
+        panCard: null,
+        voterId: null,
+        drivingLicense: null
+    });
     const [sameAsAddress, setSameAsAddress] = useState(false);
     const [bankVerified, setBankVerified] = useState(false);
     const [bankVerifying, setBankVerifying] = useState(false);
@@ -768,6 +774,7 @@ const EmployeeMasterForm = () => {
                 designation: ''
             });
             setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
+            setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
             setPhotoPreview(null);
             setSameAsAddress(false);
             setBankVerified(false);
@@ -793,8 +800,14 @@ const EmployeeMasterForm = () => {
                 salary: emp.salary || '',
                 designation: emp.designation || '',
             });
-            setPhotoPreview(emp.photo?.url ? `http://localhost:5001${emp.photo.url}` : null);
+            setPhotoPreview(emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : null);
             setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
+            setExistingDocs({
+                aadharCard: emp.aadharCard || null,
+                panCard: emp.panCard || null,
+                voterId: emp.voterId || null,
+                drivingLicense: emp.drivingLicense || null
+            });
             if (emp.bankDetails?.ifscCode) setBankVerified(true);
         }
     };
@@ -973,6 +986,7 @@ const EmployeeMasterForm = () => {
                     designation: ''
                 });
                 setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
+                setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
                 setPhotoPreview(null);
                 setSameAsAddress(false);
                 setBankVerified(false);
@@ -987,29 +1001,68 @@ const EmployeeMasterForm = () => {
         }
     };
 
-    const FileUploadInput = ({ label, field, icon }) => (
-        <FormControl>
-            <FormLabel fontWeight="bold" fontSize="sm">{label}</FormLabel>
-            <Box
-                p={4}
-                border="2px dashed"
-                borderColor={files[field] ? "green.200" : "blue.100"}
-                borderRadius="xl"
-                bg={files[field] ? "green.50" : "blue.50"}
-                textAlign="center"
-                cursor="pointer"
-                onClick={() => document.getElementById(`${field}-upload`).click()}
-                _hover={{ bg: files[field] ? "green.100" : "blue.100", borderColor: "blue.300" }}
-                transition="all 0.2s"
-            >
-                <input type="file" id={`${field}-upload`} hidden onChange={(e) => handleFileChange(e, field)} accept="image/*,.pdf" />
-                <Icon as={icon || FaCloudUploadAlt} w={6} h={6} color={files[field] ? "green.500" : "blue.500"} mb={2} />
-                <Text fontSize="xs" fontWeight="bold" color={files[field] ? "green.700" : "blue.700"} noOfLines={1}>
-                    {files[field] ? `✓ ${files[field].name}` : `Upload ${label}`}
-                </Text>
-            </Box>
-        </FormControl>
-    );
+    const FileUploadInput = ({ label, field, icon }) => {
+        const hasExisting = existingDocs && existingDocs[field] && existingDocs[field].url;
+        const isPdf = hasExisting && existingDocs[field].name?.toLowerCase().endsWith('.pdf');
+
+        return (
+            <FormControl>
+                <FormLabel fontWeight="bold" fontSize="sm">{label}</FormLabel>
+                <VStack align="stretch" spacing={2}>
+                    <Box
+                        p={4}
+                        border="2px dashed"
+                        borderColor={files[field] ? "green.200" : hasExisting ? "purple.200" : "blue.100"}
+                        borderRadius="xl"
+                        bg={files[field] ? "green.50" : hasExisting ? "purple.50" : "blue.50"}
+                        textAlign="center"
+                        cursor="pointer"
+                        onClick={() => document.getElementById(`${field}-upload`).click()}
+                        _hover={{ bg: files[field] ? "green.100" : hasExisting ? "purple.100" : "blue.100", borderColor: "blue.300" }}
+                        transition="all 0.2s"
+                    >
+                        <input type="file" id={`${field}-upload`} hidden onChange={(e) => handleFileChange(e, field)} accept="image/*,.pdf" />
+                        <Icon as={icon || FaCloudUploadAlt} w={6} h={6} color={files[field] ? "green.500" : hasExisting ? "purple.500" : "blue.500"} mb={2} />
+                        <Text fontSize="xs" fontWeight="bold" color={files[field] ? "green.700" : hasExisting ? "purple.700" : "blue.700"} noOfLines={1}>
+                            {files[field] ? `✓ ${files[field].name}` : hasExisting ? `Replace ${label}` : `Upload ${label}`}
+                        </Text>
+                    </Box>
+
+                    {hasExisting && !files[field] && (
+                        <Box 
+                            p={2} 
+                            bg="white" 
+                            borderRadius="xl" 
+                            border="1px solid" 
+                            borderColor="purple.100" 
+                            boxShadow="xs"
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="space-between"
+                        >
+                            <HStack spacing={2} minW={0}>
+                                <Icon as={isPdf ? FaFilePdf : FaFileImage} color={isPdf ? "red.400" : "purple.400"} />
+                                <Text fontSize="10px" fontWeight="bold" color="gray.600" isTruncated maxW="120px">
+                                    {existingDocs[field].name || `Current ${label}`}
+                                </Text>
+                            </HStack>
+                            <Button 
+                                size="xs" 
+                                colorScheme="purple" 
+                                variant="outline" 
+                                h="24px"
+                                borderRadius="lg"
+                                leftIcon={<Icon as={FaEye} />}
+                                onClick={(e) => { e.stopPropagation(); window.open(`${API_BASE_URL}${existingDocs[field].url}`, '_blank'); }}
+                            >
+                                View
+                            </Button>
+                        </Box>
+                    )}
+                </VStack>
+            </FormControl>
+        );
+    };
 
     return (
         <Box py={5} bg="gray.100" minH="100vh">
@@ -3873,37 +3926,59 @@ const InstrumentMasterForm = () => {
                         <Table variant="simple">
                             <Thead bg="blue.50">
                                 <Tr>
-                                    <Th color="blue.700" py={4}>Ref No</Th>
+                                    <Th color="blue.700" py={4}>Photo</Th>
+                                    <Th color="blue.700" py={4}>Serial No</Th>
                                     <Th color="blue.700" py={4}>Instrument Name</Th>
+                                    <Th color="blue.700" py={4}>Model</Th>
                                     <Th color="blue.700" py={4} textAlign="center">Actions</Th>
                                 </Tr>
                             </Thead>
                             <Tbody>
-                                {instruments.map(inst => (
-                                    <Tr key={inst._id} _hover={{ bg: "blue.50" }} transition="all 0.2s">
-                                        <Td fontWeight="bold" color="blue.600">{inst.refNo || 'N/A'}</Td>
-                                        <Td fontWeight="medium">{inst.instrumentName}</Td>
-                                        <Td textAlign="center">
-                                            <HStack justify="center" spacing={2}>
-                                                <IconButton
-                                                    aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />}
-                                                    onClick={() => setViewInstrument(inst)}
-                                                />
-                                                <IconButton
-                                                    aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />}
-                                                    onClick={() => handleEdit(inst)}
-                                                />
-                                                <IconButton
-                                                    aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />}
-                                                    onClick={() => handleDelete(inst._id)}
-                                                />
-                                            </HStack>
-                                        </Td>
-                                    </Tr>
-                                ))}
+                                {instruments.map(inst => {
+                                    const mainPhoto = inst.photos?.[0]?.url || inst.photo?.url;
+                                    return (
+                                        <Tr key={inst._id} _hover={{ bg: "blue.50" }} transition="all 0.2s">
+                                            <Td py={2}>
+                                                {mainPhoto ? (
+                                                    <Image 
+                                                        src={`${API_BASE_URL}${mainPhoto}`} 
+                                                        alt={inst.instrumentName} 
+                                                        boxSize="40px" 
+                                                        objectFit="cover" 
+                                                        borderRadius="lg" 
+                                                        fallback={<Center boxSize="40px" bg="gray.100" borderRadius="lg"><Icon as={FaWrench} color="gray.400" /></Center>}
+                                                    />
+                                                ) : (
+                                                    <Center boxSize="40px" bg="gray.100" borderRadius="lg">
+                                                        <Icon as={FaWrench} color="gray.400" />
+                                                    </Center>
+                                                )}
+                                            </Td>
+                                            <Td fontWeight="bold" color="blue.600">{inst.serialNo || 'N/A'}</Td>
+                                            <Td fontWeight="medium">{inst.instrumentName}</Td>
+                                            <Td fontWeight="medium" color="gray.500">{inst.model || 'N/A'}</Td>
+                                            <Td textAlign="center">
+                                                <HStack justify="center" spacing={2}>
+                                                    <IconButton
+                                                        aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />}
+                                                        onClick={() => setViewInstrument(inst)}
+                                                    />
+                                                    <IconButton
+                                                        aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />}
+                                                        onClick={() => handleEdit(inst)}
+                                                    />
+                                                    <IconButton
+                                                        aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />}
+                                                        onClick={() => handleDelete(inst._id)}
+                                                    />
+                                                </HStack>
+                                            </Td>
+                                        </Tr>
+                                    );
+                                })}
                                 {instruments.length === 0 && (
                                     <Tr>
-                                        <Td colSpan={3} textAlign="center" py={10} color="gray.400">
+                                        <Td colSpan={5} textAlign="center" py={10} color="gray.400">
                                             <VStack spacing={2}>
                                                 <Icon as={FaWrench} w={8} h={8} opacity={0.2} />
                                                 <Text>No instruments found.</Text>
@@ -3937,7 +4012,7 @@ const InstrumentMasterForm = () => {
                                         <Icon as={FaWrench} w={8} h={8} />
                                         <VStack align="start" spacing={0}>
                                             <Heading size="md">{viewInstrument.instrumentName}</Heading>
-                                            <Text fontSize="xs" opacity={0.8}>{viewInstrument.refNo || 'No Ref No'} • Technical Asset</Text>
+                                            <Text fontSize="xs" opacity={0.8}>{viewInstrument.serialNo || 'No Serial No'} • Model: {viewInstrument.model || 'N/A'}</Text>
                                         </VStack>
                                     </HStack>
                                     <IconButton aria-label="Close" icon={<Icon as={FaTimes} />} size="md" variant="ghost" color="white" onClick={() => setViewInstrument(null)} />
