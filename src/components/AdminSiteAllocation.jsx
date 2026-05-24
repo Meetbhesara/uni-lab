@@ -233,7 +233,7 @@ const AdminSiteAllocation = () => {
                                             )}
                                             <Td textAlign="center">{iIdx + 1}</Td>
                                             <Td fontWeight="bold" fontSize="xs">
-                                                {(sch.site?.siteName || '').toUpperCase()} 
+                                                {(sch.site?.siteName || '').toUpperCase()}
                                                 <Text as="span" display="block" color="gray.500" fontWeight="normal" fontSize="10px">
                                                     {(sch.site?.siteAddress || '').toUpperCase()}
                                                 </Text>

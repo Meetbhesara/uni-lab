@@ -11,7 +11,7 @@ const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard' },
     { name: 'Products (Admin)', icon: FiBox, path: '/admin/products' },
     { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries' },
-    { name: 'Employee Expenses', icon: FiDollarSign, path: '/admin/employee-expenses' },
+    { name: 'Daily Report', icon: FiDollarSign, path: '/admin/employee-expenses' },
 ];
 
 const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {

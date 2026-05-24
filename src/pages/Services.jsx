@@ -941,6 +941,16 @@ const EmployeeMasterForm = () => {
         onConfirmClose();
         setIsLoading(true);
         try {
+            let currentEmpId = nextEmpId;
+            if (!editId && !currentEmpId) {
+                // Fetch next ID on the fly if it is empty to prevent sending empty empId
+                const res = await api.get('/employee-master/next-id');
+                if (res.data.success) {
+                    currentEmpId = res.data.nextEmpId;
+                    setNextEmpId(currentEmpId);
+                }
+            }
+
             const uploadData = new FormData();
             uploadData.append('name', formData.name);
             uploadData.append('email', formData.email);
@@ -948,7 +958,7 @@ const EmployeeMasterForm = () => {
             uploadData.append('addressLine1', JSON.stringify(formData.addressLine1));
             uploadData.append('addressLine2', JSON.stringify(formData.addressLine2));
             uploadData.append('emergencyContact', JSON.stringify(formData.emergencyContact));
-            uploadData.append('empId', nextEmpId);
+            uploadData.append('empId', currentEmpId);
             uploadData.append('bankDetails', JSON.stringify({
                 bankName: formData.bankName,
                 accountName: formData.accountName,
@@ -2836,6 +2846,7 @@ const ScheduleMasterForm = () => {
     const [vehicles, setVehicles] = useState([]);
     const [instrList, setInstrList] = useState([]);
     const [schedules, setSchedules] = useState([]);
+    const [ledgers, setLedgers] = useState([]);
     const [viewDate, setViewDate] = useState(new Date().toISOString().split('T')[0]);
     const [editId, setEditId] = useState(null);
 
@@ -2872,16 +2883,18 @@ const ScheduleMasterForm = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [cRes, eRes, vRes, iRes] = await Promise.all([
+                const [cRes, eRes, vRes, iRes, lRes] = await Promise.all([
                     api.get('/client-master'),
                     api.get('/employee-master'),
                     api.get('/vehicle-master'),
-                    api.get('/instrument-master')
+                    api.get('/instrument-master'),
+                    api.get('/site-master/ledgers')
                 ]);
                 if (cRes.data.success) setClients(cRes.data.data);
                 if (eRes.data.success) setEmployees(eRes.data.data);
                 if (vRes.data.success) setVehicles(vRes.data.data);
                 if (iRes.data.success) setInstrList(iRes.data.data);
+                if (lRes.data.success) setLedgers(lRes.data.data);
             } catch (err) { console.error(err); }
         };
         fetchData();
@@ -2909,6 +2922,16 @@ const ScheduleMasterForm = () => {
         };
         fetchSites();
     }, [formData.client]);
+
+    // Automatically sync selected site's ledgers whenever the site or sites list updates
+    useEffect(() => {
+        if (formData.site && sites.length > 0) {
+            const currentSite = sites.find(s => s._id === formData.site);
+            if (currentSite) {
+                setSelectedSiteLedgers(currentSite.ledgerItems || []);
+            }
+        }
+    }, [formData.site, sites]);
 
     useEffect(() => {
         if (!viewDate) return;
@@ -3211,10 +3234,10 @@ const ScheduleMasterForm = () => {
                                                 }}
                                                 borderRadius="xl"
                                                 bg="gray.50"
-                                                placeholder={selectedSiteLedgers.length > 0 ? "Select Ledger" : "No Ledgers Available"}
+                                                placeholder="Select Ledger"
                                             >
-                                                {selectedSiteLedgers.map((l, i) => (
-                                                    <option key={i} value={l.ledger}>{l.ledger} (₹{l.amount.toLocaleString()})</option>
+                                                {ledgers.map((l, i) => (
+                                                    <option key={i} value={l}>{l}</option>
                                                 ))}
                                             </Select>
                                         </FormControl>
@@ -3346,10 +3369,7 @@ const ScheduleMasterForm = () => {
 
                                             {s.ledger && (
                                                 <Box bg="teal.50" p={2} borderRadius="xl" mb={2}>
-                                                    <HStack justify="space-between">
-                                                        <Text fontSize="xs" fontWeight="bold" color="teal.700">{s.ledger}</Text>
-                                                        <Text fontSize="xs" fontWeight="black" color="teal.800">₹{s.amount?.toLocaleString()}</Text>
-                                                    </HStack>
+                                                    <Text fontSize="xs" fontWeight="bold" color="teal.700">{s.ledger}</Text>
                                                 </Box>
                                             )}
 

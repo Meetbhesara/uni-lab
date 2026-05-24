@@ -4,10 +4,12 @@ import {
     Button, IconButton, Icon, Badge, Select, Input, InputGroup, InputLeftElement, 
     Table, Thead, Tbody, Tr, Th, Td, TableContainer, Divider, useToast, 
     Tabs, TabList, TabPanels, Tab, TabPanel, FormControl, FormLabel,
-    Flex, Spinner, Center, Tooltip, CloseButton, Image, List, ListItem, ListIcon
+    Flex, Spinner, Center, Tooltip, CloseButton, Image, List, ListItem, ListIcon,
+    Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverArrow, Portal,
+    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton
 } from '@chakra-ui/react';
 import { 
-    FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, 
+    FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt
 } from 'react-icons/fa';
@@ -94,7 +96,7 @@ const EmployeeExpensesModule = () => {
                                 color="gray.500"
                                 transition="all 0.3s"
                             >
-                                <Icon as={FaChartBar} mr={2} /> Expenses Report
+                                <Icon as={FaChartBar} mr={2} /> Daily Report
                             </Tab>
                         </TabList>
 
@@ -114,7 +116,7 @@ const EmployeeExpensesModule = () => {
                             </TabPanel>
                             <TabPanel p={0}>
                                 <Box bg="white" p={6} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                                    <Heading size="sm" mb={5} color="gray.700">Select Employee to View Report</Heading>
+                                    <Heading size="sm" mb={5} color="gray.700">Select Employee to View Daily Report</Heading>
                                     <Select
                                         placeholder="-- Select Employee --"
                                         value={selectedExpenseEmployee.id}
@@ -138,7 +140,7 @@ const EmployeeExpensesModule = () => {
                                         <Center py={16}>
                                             <VStack spacing={3}>
                                                 <Icon as={FaChartBar} w={10} h={10} color="gray.300" />
-                                                <Text color="gray.400" fontSize="md">Select an employee to view their expense report</Text>
+                                                <Text color="gray.400" fontSize="md">Select an employee to view their daily report</Text>
                                             </VStack>
                                         </Center>
                                     )}
@@ -165,11 +167,103 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     const [clientSites, setClientSites] = useState([{ 
         clientId: '', 
         siteId: '', 
-        files: { photos: [], data: [], dailyReports: [] } 
+        files: { photos: [], data: [], dailyReports: [], drawing: [] } 
     }]);
     const [notes, setNotes] = useState('');
     const [attendance, setAttendance] = useState('Present');
     const [attendanceRemark, setAttendanceRemark] = useState('');
+
+    // New Fuel & Day Schedules State
+    const [fuelType, setFuelType] = useState('Petrol');
+    const [daySchedules, setDaySchedules] = useState([]);
+
+    // Fetch Day Schedules on Date change
+    const [committedExpenses, setCommittedExpenses] = useState([]);
+    const [selectedExpenseForView, setSelectedExpenseForView] = useState(null);
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+
+    const fetchCommittedExpenses = async () => {
+        if (!selectedEmployeeId || !date) {
+            setCommittedExpenses([]);
+            return;
+        }
+        try {
+            const res = await api.get(`/employee-expense/admin/${selectedEmployeeId}`);
+            if (res.data.success) {
+                const matched = res.data.data.filter(e => {
+                    const eDate = e.date ? new Date(e.date).toISOString().split('T')[0] : '';
+                    return eDate === date;
+                });
+                setCommittedExpenses(matched);
+            }
+        } catch (err) {
+            console.error("Failed to fetch committed expenses", err);
+            setCommittedExpenses([]);
+        }
+    };
+
+    useEffect(() => {
+        if (!date) return;
+        const fetchDaySchedules = async () => {
+            try {
+                const res = await api.get(`/schedule-master?date=${date}`);
+                if (res.data.success) {
+                    setDaySchedules(res.data.data);
+                } else {
+                    setDaySchedules([]);
+                }
+            } catch (err) {
+                console.error("Failed to fetch day schedules", err);
+                setDaySchedules([]);
+            }
+        };
+        fetchDaySchedules();
+    }, [date]);
+
+    useEffect(() => {
+        fetchCommittedExpenses();
+    }, [selectedEmployeeId, date]);
+
+    // Filter employees down to scheduled operatives/helpers on this date
+    const scheduledEmployees = useMemo(() => {
+        const ids = new Set();
+        daySchedules.forEach(s => {
+            if (s.operative?._id) ids.add(s.operative._id);
+            else if (s.operative) ids.add(s.operative);
+        });
+        return employees.filter(e => ids.has(e._id));
+    }, [daySchedules, employees]);
+
+    // All schedules for the selected employee on this day
+    const employeeSchedules = useMemo(() => {
+        if (!selectedEmployeeId) return [];
+        return daySchedules.filter(s => {
+            const opId = s.operative?._id || s.operative;
+            return opId === selectedEmployeeId;
+        });
+    }, [daySchedules, selectedEmployeeId]);
+
+    // Active schedule fallback for headers and non-multiple logic
+    const activeSchedule = employeeSchedules.length > 0 ? employeeSchedules[0] : null;
+
+    // Prefill Client & Site when employeeSchedules changes
+    useEffect(() => {
+        if (employeeSchedules.length > 0) {
+            setClientSites(employeeSchedules.map(sch => ({
+                clientId: sch.client?._id || sch.client,
+                siteId: sch.site?._id || sch.site,
+                ledger: sch.ledger || '',
+                files: { photos: [], data: [], dailyReports: [], drawing: [] }
+            })));
+        } else {
+            setClientSites([{
+                clientId: '',
+                siteId: '',
+                ledger: '',
+                files: { photos: [], data: [], dailyReports: [], drawing: [] }
+            }]);
+        }
+    }, [employeeSchedules]);
 
     // Files State
     const [files, setFiles] = useState({ photos: [], data: [], dailyReports: [] });
@@ -197,12 +291,26 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         setOtherExpenses(updated);
     };
 
-    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
+    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
     const removeClientSite = (idx) => setClientSites(clientSites.filter((_, i) => i !== idx));
     const updateClientSite = (idx, field, val) => {
         const updated = [...clientSites];
         updated[idx][field] = val;
-        if (field === 'clientId') updated[idx].siteId = ''; 
+        if (field === 'clientId') {
+            updated[idx].siteId = ''; 
+            updated[idx].ledger = '';
+        }
+        if (field === 'siteId') {
+            const matchingSchedules = employeeSchedules.filter(s => {
+                const sSiteId = s.site?._id || s.site;
+                return sSiteId === val;
+            });
+            if (matchingSchedules.length > 0) {
+                updated[idx].ledger = matchingSchedules[0].ledger || '';
+            } else {
+                updated[idx].ledger = '';
+            }
+        }
         setClientSites(updated);
     };
 
@@ -291,6 +399,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             formData.append('attendance', attendance);
             formData.append('attendanceRemark', attendanceRemark);
             formData.append('expenses', JSON.stringify(standardExpenses));
+            formData.append('fuelType', fuelType);
             
             const otherExpsToSend = [];
             otherExpenses.forEach((exp, idx) => {
@@ -310,7 +419,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             });
             // Format allocations for backend
             const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
-            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId }))));
+            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '' }))));
 
             // Add Files site-wise
             allocations.forEach((site, idx) => {
@@ -324,9 +433,10 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
                 }
                 
-                site.files.photos.forEach(f => formData.append(`site_${idx}_photos`, f));
-                site.files.dailyReports.forEach(f => formData.append(`site_${idx}_dailyReports`, f));
-                site.files.data.forEach(f => formData.append(`site_${idx}_data`, f));
+                if (site.files.photos) site.files.photos.forEach(f => formData.append(`site_${idx}_photos`, f));
+                if (site.files.dailyReports) site.files.dailyReports.forEach(f => formData.append(`site_${idx}_dailyReports`, f));
+                if (site.files.data) site.files.data.forEach(f => formData.append(`site_${idx}_data`, f));
+                if (site.files.drawing) site.files.drawing.forEach(f => formData.append(`site_${idx}_drawing`, f));
             });
 
             // Fallback metadata
@@ -353,12 +463,13 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 // This prevents race conditions where the GET request might hit a stale read
                 setTimeout(() => {
                     onRefresh();
+                    fetchCommittedExpenses();
                 }, 1000);
                 
                 // 3. Reset form
                 setStandardExpenses({ breakfast: '', lunch: '', dinner: '', petrol: '' });
                 setOtherExpenses([]);
-                setClientSites([{ clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
+                setClientSites([{ clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
                 setNotes('');
                 setAttendance('Present');
                 setAttendanceRemark('');
@@ -388,12 +499,13 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                             <FormLabel fontSize="sm" fontWeight="bold" color="gray.600">Select Employee</FormLabel>
                             <Select 
                                 size="lg" 
-                                placeholder="Choose Employee" 
+                                placeholder={scheduledEmployees.length > 0 ? "Choose Employee" : "No Employees Scheduled"} 
                                 value={selectedEmployeeId} 
                                 onChange={(e) => setSelectedEmployeeId(e.target.value)}
                                 borderRadius="xl"
+                                isDisabled={scheduledEmployees.length === 0}
                             >
-                                {employees.map(e => (
+                                {scheduledEmployees.map(e => (
                                     <option key={e._id} value={e._id}>{e.name} ({e.empId})</option>
                                 ))}
                             </Select>
@@ -452,8 +564,23 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                         <VStack key={expName} align="stretch" spacing={2} bg="gray.50" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
                                             <HStack align="center" w="full" justify="space-between">
                                                 <FormLabel fontSize="sm" fontWeight="bold" textTransform="capitalize" m={0} minW="80px">
-                                                    {expName}
+                                                    {expName === 'petrol' ? 'Fuel' : expName}
                                                 </FormLabel>
+                                                
+                                                {expName === 'petrol' && (
+                                                    <Select 
+                                                        size="sm" 
+                                                        w="100px" 
+                                                        value={fuelType} 
+                                                        onChange={(e) => setFuelType(e.target.value)} 
+                                                        borderRadius="lg" 
+                                                        bg="white"
+                                                    >
+                                                        <option value="Petrol">Petrol</option>
+                                                        <option value="CNG">CNG</option>
+                                                        <option value="Diesel">Diesel</option>
+                                                    </Select>
+                                                )}
                                                 
                                                 <HStack flex={1} maxW="200px">
                                                     <InputGroup size="sm">
@@ -580,21 +707,91 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                 <Button size="sm" colorScheme="purple" variant="ghost" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
                             </HStack>
                             <VStack spacing={6}>
+                                {activeSchedule && activeSchedule.ledger && (
+                                    <Box w="full" px={4} py={2} bg="teal.50" borderRadius="xl" border="1px solid" borderColor="teal.200">
+                                        <Text fontSize="xs" color="teal.800" fontWeight="bold">
+                                            📅 Scheduled Ledger for selected date: <span style={{ textDecoration: 'underline' }}>{activeSchedule.ledger}</span>
+                                        </Text>
+                                    </Box>
+                                )}
                                 {clientSites.map((row, idx) => (
                                     <VStack key={idx} w="full" bg="gray.50" p={4} borderRadius="xl" align="stretch" borderLeft="4px solid" borderColor="purple.300">
                                         <HStack align="flex-end">
                                             <FormControl flex={1}>
                                                 <FormLabel fontSize="10px" fontWeight="bold">Client</FormLabel>
                                                 <Select size="sm" placeholder="Select Client" value={row.clientId} onChange={(e) => updateClientSite(idx, 'clientId', e.target.value)} bg="white" borderRadius="lg">
-                                                    {clients.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>)}
+                                                    {(() => {
+                                                        const scheduledClients = new Set();
+                                                        employeeSchedules.forEach(s => {
+                                                            const c = s?.client;
+                                                            if (c) {
+                                                                const cid = c._id || c;
+                                                                if (cid) scheduledClients.add(String(cid));
+                                                            }
+                                                        });
+                                                        const filtered = clients.filter(c => c && c._id && scheduledClients.has(String(c._id)));
+                                                        return filtered.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>);
+                                                    })()}
                                                 </Select>
                                             </FormControl>
                                             <FormControl flex={1}>
                                                 <FormLabel fontSize="10px" fontWeight="bold">Site</FormLabel>
                                                 <Select size="sm" placeholder="Select Site" value={row.siteId} onChange={(e) => updateClientSite(idx, 'siteId', e.target.value)} bg="white" borderRadius="lg">
-                                                    {sites.filter(s => s.client === row.clientId || s.client?._id === row.clientId).map(s => (
-                                                        <option key={s._id} value={s._id}>{s.siteName}</option>
-                                                    ))}
+                                                    {(() => {
+                                                        const scheduledSites = new Set();
+                                                        employeeSchedules.forEach(s => {
+                                                            const site = s?.site;
+                                                            if (site) {
+                                                                const sid = site._id || site;
+                                                                if (sid) scheduledSites.add(String(sid));
+                                                            }
+                                                        });
+                                                        const baseSites = sites.filter(s => {
+                                                            const c = s?.client;
+                                                            const cid = c?._id || c;
+                                                            return cid && row.clientId && String(cid) === String(row.clientId);
+                                                        });
+                                                        const filtered = baseSites.filter(s => s && s._id && scheduledSites.has(String(s._id)));
+                                                        return filtered.map(s => (
+                                                            <option key={s._id} value={s._id}>{s.siteName}</option>
+                                                        ));
+                                                    })()}
+                                                </Select>
+                                            </FormControl>
+                                            <FormControl flex={1}>
+                                                <FormLabel fontSize="10px" fontWeight="bold">Ledger</FormLabel>
+                                                <Select 
+                                                    size="sm" 
+                                                    placeholder="Select Ledger" 
+                                                    value={row.ledger} 
+                                                    onChange={(e) => updateClientSite(idx, 'ledger', e.target.value)} 
+                                                    bg="white" 
+                                                    borderRadius="lg"
+                                                >
+                                                    {(() => {
+                                                        const options = new Set();
+                                                        const matchingSchedules = employeeSchedules.filter(s => {
+                                                            const sSiteId = s.site?._id || s.site;
+                                                            return sSiteId === row.siteId;
+                                                        });
+                                                        matchingSchedules.forEach(sch => {
+                                                            if (sch.ledger) options.add(sch.ledger);
+                                                        });
+                                                        if (options.size === 0) {
+                                                            const siteLedgerItems = sites.find(s => s._id === row.siteId)?.ledgerItems || [];
+                                                            siteLedgerItems.forEach(item => {
+                                                                if (item.ledger) options.add(item.ledger);
+                                                            });
+                                                        }
+                                                        return Array.from(options).map(opt => {
+                                                            const isScheduled = matchingSchedules.some(sch => sch.ledger === opt);
+                                                            return (
+                                                                <option key={opt} value={opt}>
+                                                                    {opt} {isScheduled ? '(Scheduled)' : ''}
+                                                                </option>
+                                                            );
+                                                        });
+                                                    })()}
                                                 </Select>
                                             </FormControl>
                                             {clientSites.length > 1 && (
@@ -603,7 +800,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                         </HStack>
                                         
                                         {/* Site Specific Uploads */}
-                                        <SimpleGrid columns={3} spacing={3} pt={2}>
+                                        <SimpleGrid columns={4} spacing={3} pt={2}>
                                             <VStack align="start" spacing={1}>
                                                 <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({row.files.photos.length})</Text>
                                                 <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
@@ -615,6 +812,10 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                             <VStack align="start" spacing={1}>
                                                 <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({row.files.data.length})</Text>
                                                 <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
+                                            </VStack>
+                                            <VStack align="start" spacing={1}>
+                                                <Text fontSize="9px" fontWeight="black" color="teal.600">DRAWING ({row.files.drawing?.length || 0})</Text>
+                                                <Input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" onChange={(e) => handleSiteFileChange(idx, e, 'drawing')} size="xs" p={0} variant="unstyled" />
                                             </VStack>
                                         </SimpleGrid>
                                     </VStack>
@@ -714,6 +915,332 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     </Card>
                 </VStack>
             </SimpleGrid>
+            {/* Committed Daily Expenses History */}
+            {selectedEmployeeId && (
+                <Box mt={8}>
+                    <HStack justify="space-between" mb={4} px={2}>
+                        <VStack align="start" spacing={0}>
+                            <Heading size="md" color="blue.700">Committed Daily Expenses</Heading>
+                            <Text fontSize="xs" color="gray.400">Expense records already saved & committed for this employee on this date.</Text>
+                        </VStack>
+                        <Badge colorScheme="blue" fontSize="md" px={4} py={1} borderRadius="full">Saved Items: {committedExpenses.length}</Badge>
+                    </HStack>
+
+                    {committedExpenses.length === 0 ? (
+                        <Center py={10} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
+                            <VStack spacing={2}>
+                                <Icon as={FaFileAlt} w={8} h={8} color="gray.300" />
+                                <Text color="gray.400" fontSize="sm">No saved expense records found for this date.</Text>
+                            </VStack>
+                        </Center>
+                    ) : (
+                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                            <TableContainer>
+                                <Table variant="simple">
+                                    <Thead bg="blue.50">
+                                        <Tr>
+                                            <Th color="blue.700">Client / Site Allocations</Th>
+                                            <Th color="blue.700">Attendance</Th>
+                                            <Th color="blue.700">Expenses Breakdown</Th>
+                                            <Th isNumeric color="blue.700">Total Expense</Th>
+                                            <Th textAlign="center" color="blue.700">View Details</Th>
+                                        </Tr>
+                                    </Thead>
+                                    <Tbody bg="white">
+                                        {committedExpenses.map((exp) => (
+                                            <Tr key={exp._id} _hover={{ bg: "blue.50" }} transition="background 0.2s">
+                                                <Td>
+                                                    <VStack align="start" spacing={1}>
+                                                        {exp.clientSites && exp.clientSites.map((cs, cIdx) => (
+                                                            <HStack key={cIdx}>
+                                                                <Badge colorScheme="teal" size="sm">Site {cIdx + 1}</Badge>
+                                                                <Text fontSize="xs" fontWeight="bold">
+                                                                    {cs.siteId?.siteName || cs.siteName || 'Unknown Site'} 
+                                                                </Text>
+                                                            </HStack>
+                                                        ))}
+                                                        {(!exp.clientSites || exp.clientSites.length === 0) && (
+                                                            <Text fontSize="xs" color="gray.400">No site assigned</Text>
+                                                        )}
+                                                    </VStack>
+                                                </Td>
+                                                <Td>
+                                                    <Badge colorScheme={exp.attendance === 'Present' ? 'green' : exp.attendance === 'Half Day' ? 'orange' : 'red'}>
+                                                        {exp.attendance || 'Present'}
+                                                    </Badge>
+                                                    {exp.attendanceRemark && (
+                                                        <Text fontSize="10px" color="gray.500" mt={1}>Reason: {exp.attendanceRemark}</Text>
+                                                    )}
+                                                </Td>
+                                                <Td fontSize="xs">
+                                                    <VStack align="start" spacing={0}>
+                                                        {exp.expenses && (
+                                                            <>
+                                                                {Number(exp.expenses.breakfast) > 0 && <Text>Breakfast: ₹{Number(exp.expenses.breakfast).toLocaleString()}</Text>}
+                                                                {Number(exp.expenses.lunch) > 0 && <Text>Lunch: ₹{Number(exp.expenses.lunch).toLocaleString()}</Text>}
+                                                                {Number(exp.expenses.dinner) > 0 && <Text>Dinner: ₹{Number(exp.expenses.dinner).toLocaleString()}</Text>}
+                                                                {Number(exp.expenses.petrol) > 0 && <Text>Fuel ({exp.expenses.fuelType || 'Petrol'}): ₹{Number(exp.expenses.petrol).toLocaleString()}</Text>}
+                                                            </>
+                                                        )}
+                                                        {exp.otherExpensesList && exp.otherExpensesList.map((oe, oeIdx) => (
+                                                            <Text key={oeIdx} color="purple.600">Other ({oe.particulars || 'Misc'}): ₹{Number(oe.amount).toLocaleString()}</Text>
+                                                        ))}
+                                                    </VStack>
+                                                </Td>
+                                                <Td isNumeric fontWeight="black" fontSize="lg" color="blue.600">₹{exp.totalExpense?.toLocaleString()}</Td>
+                                                <Td>
+                                                    <HStack justify="center">
+                                                        <IconButton 
+                                                            size="sm" 
+                                                            colorScheme="blue" 
+                                                            variant="ghost" 
+                                                            icon={<FaEye />} 
+                                                            borderRadius="lg"
+                                                            onClick={() => {
+                                                                setSelectedExpenseForView(exp);
+                                                                setIsViewModalOpen(true);
+                                                            }}
+                                                            aria-label="View Details"
+                                                        />
+                                                    </HStack>
+                                                </Td>
+                                            </Tr>
+                                        ))}
+                                    </Tbody>
+                                </Table>
+                            </TableContainer>
+                        </Card>
+                    )}
+                </Box>
+            )}
+            {/* Detailed Expense View Modal */}
+            <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} size="xl" scrollBehavior="inside">
+                <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(8px)" />
+                <ModalContent borderRadius="3xl" overflow="hidden" shadow="2xl" border="1px solid" borderColor="gray.100">
+                    <ModalHeader bg="blue.500" px={6} py={4}>
+                        <HStack justify="space-between" align="center" width="full">
+                            <VStack align="start" spacing={0}>
+                                <Heading size="md" color="white">Daily Expense Sheet</Heading>
+                                <Text fontSize="xs" color="whiteAlpha.800">
+                                    Date: {selectedExpenseForView?.date ? new Date(selectedExpenseForView.date).toLocaleDateString() : ''}
+                                </Text>
+                            </VStack>
+                            <Badge colorScheme="green" fontSize="sm" px={3} py={1} borderRadius="full">
+                                Total: ₹{selectedExpenseForView?.totalExpense?.toLocaleString()}
+                            </Badge>
+                        </HStack>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} />
+
+                    <ModalBody p={6} bg="gray.50">
+                        {selectedExpenseForView && (
+                            <VStack spacing={6} align="stretch">
+                                {/* Attendance Information Card */}
+                                <Card borderRadius="2xl" border="1px solid" borderColor="gray.100" shadow="sm">
+                                    <CardBody p={5}>
+                                        <Heading size="xs" color="gray.500" mb={3} textTransform="uppercase" letterSpacing="wider">Attendance Status</Heading>
+                                        <HStack justify="space-between">
+                                            <HStack>
+                                                <Icon as={FaCheckCircle} color="green.500" w={5} h={5} />
+                                                <Text fontWeight="bold" fontSize="md">{selectedExpenseForView.attendance || 'Present'}</Text>
+                                            </HStack>
+                                            {selectedExpenseForView.attendanceRemark && (
+                                                <Badge colorScheme="purple" px={3} py={1} borderRadius="lg">
+                                                    Remark: {selectedExpenseForView.attendanceRemark}
+                                                </Badge>
+                                            )}
+                                        </HStack>
+                                    </CardBody>
+                                </Card>
+
+                                {/* Client / Site Allocation details */}
+                                <Card borderRadius="2xl" border="1px solid" borderColor="gray.100" shadow="sm">
+                                    <CardBody p={5}>
+                                        <Heading size="xs" color="gray.500" mb={4} textTransform="uppercase" letterSpacing="wider">Client & Site Allocations</Heading>
+                                        <VStack align="stretch" spacing={4} divider={<Divider />}>
+                                            {selectedExpenseForView.clientSites && selectedExpenseForView.clientSites.map((cs, csIdx) => (
+                                                <VStack key={csIdx} align="stretch" spacing={3}>
+                                                    <HStack justify="space-between">
+                                                        <VStack align="start" spacing={0.5}>
+                                                            <Text fontSize="xs" fontWeight="bold" color="blue.500">Site {csIdx + 1}</Text>
+                                                            <Text fontWeight="extrabold" fontSize="md">
+                                                                {cs.siteId?.siteName || cs.siteName || 'Unknown Site'}
+                                                            </Text>
+                                                        </VStack>
+                                                        {cs.siteId?.siteId && (
+                                                            <Badge colorScheme="blue" variant="subtle" borderRadius="md">
+                                                                ID: {cs.siteId.siteId}
+                                                            </Badge>
+                                                        )}
+                                                    </HStack>
+
+                                                    {/* Uploaded files section for this site */}
+                                                    <VStack align="start" spacing={2} bg="gray.100" p={3} borderRadius="xl">
+                                                        <Text fontSize="xs" fontWeight="bold" color="gray.600">Attached Documents & Media:</Text>
+                                                        
+                                                        {/* Photos */}
+                                                        {cs.files?.photos && cs.files.photos.length > 0 ? (
+                                                            <VStack align="start" spacing={1} width="full">
+                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">📷 Photos ({cs.files.photos.length}):</Text>
+                                                                <HStack spacing={2} wrap="wrap">
+                                                                    {cs.files.photos.map((photo, pIdx) => (
+                                                                        <Button 
+                                                                            key={pIdx} 
+                                                                            size="xs" 
+                                                                            variant="outline" 
+                                                                            colorScheme="blue" 
+                                                                            leftIcon={<FaCamera />}
+                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${photo}`, '_blank')}
+                                                                        >
+                                                                            Photo {pIdx + 1}
+                                                                        </Button>
+                                                                    ))}
+                                                                </HStack>
+                                                            </VStack>
+                                                        ) : null}
+
+                                                        {/* Reports */}
+                                                        {cs.files?.dailyReports && cs.files.dailyReports.length > 0 ? (
+                                                            <VStack align="start" spacing={1} width="full" mt={1}>
+                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">📋 Daily Reports ({cs.files.dailyReports.length}):</Text>
+                                                                <HStack spacing={2} wrap="wrap">
+                                                                    {cs.files.dailyReports.map((report, rIdx) => (
+                                                                        <Button 
+                                                                            key={rIdx} 
+                                                                            size="xs" 
+                                                                            variant="outline" 
+                                                                            colorScheme="teal" 
+                                                                            leftIcon={<FaFileAlt />}
+                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${report}`, '_blank')}
+                                                                        >
+                                                                            Report {rIdx + 1}
+                                                                        </Button>
+                                                                    ))}
+                                                                </HStack>
+                                                            </VStack>
+                                                        ) : null}
+
+                                                        {/* Drawings */}
+                                                        {cs.files?.drawing && cs.files.drawing.length > 0 ? (
+                                                            <VStack align="start" spacing={1} width="full" mt={1}>
+                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">🎨 Drawings ({cs.files.drawing.length}):</Text>
+                                                                <HStack spacing={2} wrap="wrap">
+                                                                    {cs.files.drawing.map((dwg, dwgIdx) => (
+                                                                        <Button 
+                                                                            key={dwgIdx} 
+                                                                            size="xs" 
+                                                                            variant="outline" 
+                                                                            colorScheme="purple" 
+                                                                            leftIcon={<FaFileAlt />}
+                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${dwg}`, '_blank')}
+                                                                        >
+                                                                            Drawing {dwgIdx + 1}
+                                                                        </Button>
+                                                                    ))}
+                                                                </HStack>
+                                                            </VStack>
+                                                        ) : null}
+
+                                                        {/* Data files */}
+                                                        {cs.files?.data && cs.files.data.length > 0 ? (
+                                                            <VStack align="start" spacing={1} width="full" mt={1}>
+                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">💾 Data Files ({cs.files.data.length}):</Text>
+                                                                <HStack spacing={2} wrap="wrap">
+                                                                    {cs.files.data.map((dat, datIdx) => (
+                                                                        <Button 
+                                                                            key={datIdx} 
+                                                                            size="xs" 
+                                                                            variant="outline" 
+                                                                            colorScheme="orange" 
+                                                                            leftIcon={<FaFileAlt />}
+                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${dat}`, '_blank')}
+                                                                        >
+                                                                            Data File {datIdx + 1}
+                                                                        </Button>
+                                                                    ))}
+                                                                </HStack>
+                                                            </VStack>
+                                                        ) : null}
+
+                                                        {(!cs.files || 
+                                                          (!cs.files.photos?.length && 
+                                                           !cs.files.dailyReports?.length && 
+                                                           !cs.files.drawing?.length && 
+                                                           !cs.files.data?.length)) && (
+                                                            <Text fontSize="10px" color="gray.500" fontStyle="italic">No files uploaded for this site allocation.</Text>
+                                                        )}
+                                                    </VStack>
+                                                </VStack>
+                                            ))}
+                                            {(!selectedExpenseForView.clientSites || selectedExpenseForView.clientSites.length === 0) && (
+                                                <Text fontSize="xs" color="gray.400" fontStyle="italic">No client/site allocation recorded.</Text>
+                                            )}
+                                        </VStack>
+                                    </CardBody>
+                                </Card>
+
+                                {/* Expenses breakdown */}
+                                <Card borderRadius="2xl" border="1px solid" borderColor="gray.100" shadow="sm">
+                                    <CardBody p={5}>
+                                        <Heading size="xs" color="gray.500" mb={4} textTransform="uppercase" letterSpacing="wider">Standard Expenses</Heading>
+                                        <SimpleGrid columns={2} spacing={4}>
+                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
+                                                <Text fontSize="xs" color="gray.500">Breakfast</Text>
+                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.breakfast || 0).toLocaleString()}</Text>
+                                            </VStack>
+                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
+                                                <Text fontSize="xs" color="gray.500">Lunch</Text>
+                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.lunch || 0).toLocaleString()}</Text>
+                                            </VStack>
+                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
+                                                <Text fontSize="xs" color="gray.500">Dinner</Text>
+                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.dinner || 0).toLocaleString()}</Text>
+                                            </VStack>
+                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
+                                                <Text fontSize="xs" color="gray.500">Fuel ({selectedExpenseForView.expenses?.fuelType || 'Petrol'})</Text>
+                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.petrol || 0).toLocaleString()}</Text>
+                                            </VStack>
+                                        </SimpleGrid>
+
+                                        {selectedExpenseForView.otherExpensesList && selectedExpenseForView.otherExpensesList.length > 0 && (
+                                            <>
+                                                <Heading size="xs" color="gray.500" mt={6} mb={3} textTransform="uppercase" letterSpacing="wider">Other/Custom Expenses</Heading>
+                                                <VStack align="stretch" spacing={2}>
+                                                    {selectedExpenseForView.otherExpensesList.map((oe, oeIdx) => (
+                                                        <HStack key={oeIdx} justify="space-between" bg="purple.50" p={3} borderRadius="xl" border="1px solid" borderColor="purple.100">
+                                                            <VStack align="start" spacing={0}>
+                                                                <Text fontSize="xs" fontWeight="bold" color="purple.700">Particulars</Text>
+                                                                <Text fontWeight="semibold" fontSize="sm">{oe.particulars || 'Misc'}</Text>
+                                                            </VStack>
+                                                            <Text fontWeight="black" color="purple.700">₹{Number(oe.amount || 0).toLocaleString()}</Text>
+                                                        </HStack>
+                                                    ))}
+                                                </VStack>
+                                            </>
+                                        )}
+                                    </CardBody>
+                                </Card>
+
+                                {/* Notes and Remarks */}
+                                {selectedExpenseForView.notes && (
+                                    <Card borderRadius="2xl" border="1px solid" borderColor="gray.100" shadow="sm">
+                                        <CardBody p={5}>
+                                            <Heading size="xs" color="gray.500" mb={2} textTransform="uppercase" letterSpacing="wider">Notes / Remarks</Heading>
+                                            <Text fontSize="sm" color="gray.700" whiteSpace="pre-line">{selectedExpenseForView.notes}</Text>
+                                        </CardBody>
+                                    </Card>
+                                )}
+                            </VStack>
+                        )}
+                    </ModalBody>
+
+                    <ModalFooter bg="white" borderTop="1px solid" borderColor="gray.100">
+                        <Button colorScheme="blue" onClick={() => setIsViewModalOpen(false)} borderRadius="xl" px={6}>
+                            Close
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </VStack>
     );
 };
@@ -731,6 +1258,53 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
         employee2: '',
         amount: ''
     });
+
+    const [daySchedules, setDaySchedules] = useState([]);
+    const [committedTransfers, setCommittedTransfers] = useState([]);
+
+    const fetchCommittedTransfers = async () => {
+        try {
+            const res = await api.get('/employee-transfer');
+            if (res.data.success) {
+                const matched = res.data.data.filter(t => {
+                    const tDate = t.date ? new Date(t.date).toISOString().split('T')[0] : '';
+                    return tDate === transferDate;
+                });
+                setCommittedTransfers(matched);
+            }
+        } catch (err) {
+            console.error("Failed to fetch committed transfers", err);
+        }
+    };
+
+    useEffect(() => {
+        if (!transferDate) return;
+        const fetchDaySchedules = async () => {
+            try {
+                const res = await api.get(`/schedule-master?date=${transferDate}`);
+                if (res.data.success) {
+                    setDaySchedules(res.data.data);
+                } else {
+                    setDaySchedules([]);
+                }
+            } catch (err) {
+                console.error("Failed to fetch day schedules for transfer", err);
+                setDaySchedules([]);
+            }
+        };
+        fetchDaySchedules();
+        fetchCommittedTransfers();
+    }, [transferDate]);
+
+    // Filter employees down to scheduled operatives on this date (excluding helpers)
+    const scheduledEmployees = useMemo(() => {
+        const ids = new Set();
+        daySchedules.forEach(s => {
+            if (s.operative?._id) ids.add(s.operative._id);
+            else if (s.operative) ids.add(s.operative);
+        });
+        return employees.filter(e => ids.has(e._id));
+    }, [daySchedules, employees]);
 
     // Compute Temporary Balances in Real-time
     const tempBalances = useMemo(() => {
@@ -825,6 +1399,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                 toast({ title: 'Success', description: `${stagedEntries.length} transfers saved`, status: 'success', isClosable: true });
                 // Refresh first
                 await onRefresh();
+                await fetchCommittedTransfers();
                 // Then clear
                 setStagedEntries([]);
             }
@@ -963,6 +1538,53 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                     </Button>
                 </Box>
             )}
+
+            {/* Committed Transfers List */}
+            <Box mt={8} w="full">
+                <HStack justify="space-between" mb={4} px={2}>
+                    <VStack align="start" spacing={0}>
+                        <Heading size="md" color="teal.700">Committed Money Transfers</Heading>
+                        <Text fontSize="xs" color="gray.400">Transfers already saved & recorded in the database for this date.</Text>
+                    </VStack>
+                    <Badge colorScheme="teal" fontSize="md" px={4} py={1} borderRadius="full">Saved Items: {committedTransfers.length}</Badge>
+                </HStack>
+
+                {committedTransfers.length === 0 ? (
+                    <Center py={10} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
+                        <VStack spacing={2}>
+                            <Icon as={FaMoneyBillWave} w={8} h={8} color="gray.300" />
+                            <Text color="gray.400" fontSize="sm">No saved transfers found for this date.</Text>
+                        </VStack>
+                    </Center>
+                ) : (
+                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                        <TableContainer>
+                            <Table variant="simple">
+                                <Thead bg="teal.50">
+                                    <Tr>
+                                        <Th color="teal.700">Employee From (Sender)</Th>
+                                        <Th color="teal.700">Employee To (Receiver)</Th>
+                                        <Th isNumeric color="teal.700">Amount</Th>
+                                    </Tr>
+                                </Thead>
+                                <Tbody bg="white">
+                                    {committedTransfers.map((t) => (
+                                        <Tr key={t._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
+                                            <Td fontWeight="bold" color="red.500">
+                                                <HStack><Icon as={FaUserTie} /><Text>{t.giver?.name || 'Unknown'}</Text></HStack>
+                                            </Td>
+                                            <Td fontWeight="bold" color="green.500">
+                                                <HStack><Icon as={FaUserTie} /><Text>{t.taker?.name || 'Unknown'}</Text></HStack>
+                                            </Td>
+                                            <Td isNumeric fontWeight="black" fontSize="lg" color="teal.600">₹{t.amount?.toLocaleString()}</Td>
+                                        </Tr>
+                                    ))}
+                                </Tbody>
+                            </Table>
+                        </TableContainer>
+                    </Card>
+                )}
+            </Box>
         </VStack>
     );
 };

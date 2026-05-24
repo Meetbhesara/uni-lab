@@ -42,8 +42,61 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     const [clientSites, setClientSites] = useState([{ 
         clientId: '', 
         siteId: '', 
-        files: { photos: [], data: [], dailyReports: [] } 
+        ledger: '',
+        files: { photos: [], data: [], dailyReports: [], drawing: [] } 
     }]);
+
+    const [fuelType, setFuelType] = useState('Petrol');
+    const [daySchedules, setDaySchedules] = useState([]);
+
+    // Fetch Day Schedules on Date change inside modal
+    useEffect(() => {
+        if (!expenseForm.date || !isOpen) return;
+        const fetchDaySchedules = async () => {
+            try {
+                const res = await api.get(`/schedule-master?date=${expenseForm.date}`);
+                if (res.data.success) {
+                    setDaySchedules(res.data.data);
+                } else {
+                    setDaySchedules([]);
+                }
+            } catch (err) {
+                console.error("Failed to fetch day schedules inside admin modal", err);
+                setDaySchedules([]);
+            }
+        };
+        fetchDaySchedules();
+    }, [expenseForm.date, isOpen]);
+
+    const employeeSchedules = React.useMemo(() => {
+        if (!employeeId) return [];
+        return daySchedules.filter(s => {
+            const opId = s.operative?._id || s.operative;
+            return opId === employeeId;
+        });
+    }, [daySchedules, employeeId]);
+
+    // Active schedule fallback for non-multiple calculations
+    const activeSchedule = employeeSchedules.length > 0 ? employeeSchedules[0] : null;
+
+    // Prefill Client & Site when employeeSchedules changes
+    useEffect(() => {
+        if (employeeSchedules.length > 0) {
+            setClientSites(employeeSchedules.map(sch => ({
+                clientId: sch.client?._id || sch.client,
+                siteId: sch.site?._id || sch.site,
+                ledger: sch.ledger || '',
+                files: { photos: [], data: [], dailyReports: [], drawing: [] }
+            })));
+        } else {
+            setClientSites([{
+                clientId: '',
+                siteId: '',
+                ledger: '',
+                files: { photos: [], data: [], dailyReports: [], drawing: [] }
+            }]);
+        }
+    }, [employeeSchedules]);
 
     const [otherExpenses, setOtherExpenses] = useState([]);
     const [givenTo, setGivenTo] = useState([]);
@@ -143,12 +196,26 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     };
     const removeReceivedFromRow = (idx) => setReceivedFrom(receivedFrom.filter((_, i) => i !== idx));
 
-    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
+    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
     const removeClientSite = (idx) => setClientSites(clientSites.filter((_, i) => i !== idx));
     const updateClientSite = (idx, field, val) => {
         const updated = [...clientSites];
         updated[idx][field] = val;
-        if (field === 'clientId') updated[idx].siteId = ''; 
+        if (field === 'clientId') {
+            updated[idx].siteId = ''; 
+            updated[idx].ledger = '';
+        }
+        if (field === 'siteId') {
+            const matchingSchedules = employeeSchedules.filter(s => {
+                const sSiteId = s.site?._id || s.site;
+                return sSiteId === val;
+            });
+            if (matchingSchedules.length > 0) {
+                updated[idx].ledger = matchingSchedules[0].ledger || '';
+            } else {
+                updated[idx].ledger = '';
+            }
+        }
         setClientSites(updated);
     };
 
@@ -183,11 +250,12 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 dinner: Number(expenseForm.dinner) || 0,
                 petrol: Number(expenseForm.petrol) || 0
             }));
+            formData.append('fuelType', fuelType);
             formData.append('otherExpensesList', JSON.stringify(otherExpenses.map(o => ({ expenseName: o.expenseName, amount: Number(o.amount) })).filter(o => o.expenseName && o.amount)));
             
             // Format allocations for backend
             const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
-            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId }))));
+            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '' }))));
 
             // Add Files site-wise
             allocations.forEach((site, idx) => {
@@ -201,9 +269,10 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                     formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
                 }
                 
-                site.files.photos.forEach(f => formData.append(`site_${idx}_photos`, f));
-                site.files.dailyReports.forEach(f => formData.append(`site_${idx}_dailyReports`, f));
-                site.files.data.forEach(f => formData.append(`site_${idx}_data`, f));
+                if (site.files.photos) site.files.photos.forEach(f => formData.append(`site_${idx}_photos`, f));
+                if (site.files.dailyReports) site.files.dailyReports.forEach(f => formData.append(`site_${idx}_dailyReports`, f));
+                if (site.files.data) site.files.data.forEach(f => formData.append(`site_${idx}_data`, f));
+                if (site.files.drawing) site.files.drawing.forEach(f => formData.append(`site_${idx}_drawing`, f));
             });
 
             // Send metadata about the first site as fallback
@@ -229,7 +298,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 }, 1000);
 
                 setExpenseForm({ date: new Date().toISOString().slice(0, 10), attendance: 'Present', breakfast: '', lunch: '', dinner: '', petrol: '', notes: '' });
-                setClientSites([{ clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [] } }]);
+                setClientSites([{ clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
                 setOtherExpenses([]);
                 setGivenTo([]);
                 setReceivedFrom([]);
@@ -258,8 +327,12 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
             // Build Site list string
             let sideWork = [];
             if (exp.siteId) sideWork.push(exp.siteId.siteName);
-            if (exp.siteIds && exp.siteIds.length > 0) {
-                sideWork = sideWork.concat(exp.siteIds.map(s => s.siteName));
+            if (exp.clientSites && exp.clientSites.length > 0) {
+                sideWork = sideWork.concat(exp.clientSites.map(cs => {
+                    const sName = cs.siteId?.siteName || '';
+                    const ledg = cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : '';
+                    return `${sName}${ledg}`;
+                }));
             }
             const sideWorkStr = sideWork.map((s, i) => `${i+1} ${s}`).join(' | ') || '';
 
@@ -369,7 +442,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     return (
         <Box bg="white" p={6} borderRadius="xl" shadow="md">
             <Flex justify="space-between" mb={6} align="center" flexWrap="wrap" gap={4}>
-                <Heading size="md" color="gray.800">Expense Report: {employeeName}</Heading>
+                <Heading size="md" color="gray.800">Daily Report: {employeeName}</Heading>
                 
                 <HStack spacing={4} flexWrap="wrap">
                     <HStack>
@@ -493,31 +566,101 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                         <Button size="xs" colorScheme="purple" variant="solid" shadow="sm" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
                                     </Flex>
                                     <VStack spacing={5}>
+                                        {activeSchedule && activeSchedule.ledger && (
+                                            <Box w="full" px={4} py={2} bg="teal.50" borderRadius="md" border="1px solid" borderColor="teal.200">
+                                                <Text fontSize="xs" color="teal.800" fontWeight="bold">
+                                                    📅 Scheduled Ledger for selected date: <span style={{ textDecoration: 'underline' }}>{activeSchedule.ledger}</span>
+                                                </Text>
+                                            </Box>
+                                        )}
                                         {clientSites.map((cs, idx) => (
                                             <VStack key={idx} w="full" bg="white" p={3} borderRadius="md" shadow="sm" align="stretch" borderLeft="4px solid" borderColor="purple.400">
                                                 <HStack align="flex-end">
                                                     <FormControl size="sm">
                                                         <FormLabel fontSize="10px" fontWeight="bold">Client</FormLabel>
                                                         <ChakraSelect placeholder="Select Client" value={cs.clientId} onChange={e => updateClientSite(idx, 'clientId', e.target.value)} size="sm" variant="filled">
-                                                            {Array.from(new Set(sites.map(s => s.client?._id || s.client))).map(cId => {
-                                                                const clientName = sites.find(s => (s.client?._id || s.client) === cId)?.client?.clientName || 'Client';
-                                                                return <option key={cId} value={cId}>{clientName}</option>
-                                                            })}
+                                                            {(() => {
+                                                                const scheduledClients = new Set();
+                                                                employeeSchedules.forEach(s => {
+                                                                    const c = s.client;
+                                                                    if (c) {
+                                                                        const cid = c?._id || c;
+                                                                        if (cid) scheduledClients.add(String(cid));
+                                                                    }
+                                                                });
+                                                                const baseClients = Array.from(new Set(sites.map(s => s?.client?._id || s?.client).filter(Boolean))).map(cId => {
+                                                                    const cName = sites.find(s => (s.client?._id || s.client) === cId)?.client?.clientName || 'Client';
+                                                                    return { _id: cId, clientName: cName };
+                                                                });
+                                                                const filtered = baseClients.filter(c => c && c._id && scheduledClients.has(String(c._id)));
+                                                                return filtered.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>);
+                                                            })()}
                                                         </ChakraSelect>
                                                     </FormControl>
                                                     <FormControl size="sm">
                                                         <FormLabel fontSize="10px" fontWeight="bold">Site</FormLabel>
                                                         <ChakraSelect placeholder="Select Site" value={cs.siteId} onChange={e => updateClientSite(idx, 'siteId', e.target.value)} size="sm" variant="filled">
-                                                            {sites.filter(s => (s.client?._id || s.client) === cs.clientId).map(s => (
-                                                                <option key={s._id} value={s._id}>{s.siteName}</option>
-                                                            ))}
+                                                            {(() => {
+                                                                const scheduledSites = new Set();
+                                                                employeeSchedules.forEach(s => {
+                                                                    const site = s.site;
+                                                                    if (site) {
+                                                                        const sid = site?._id || site;
+                                                                        if (sid) scheduledSites.add(String(sid));
+                                                                    }
+                                                                });
+                                                                const baseSites = sites.filter(s => {
+                                                                    const c = s.client;
+                                                                    const cid = c?._id || c;
+                                                                    return cid && cs.clientId && String(cid) === String(cs.clientId);
+                                                                });
+                                                                const filtered = baseSites.filter(s => s && s._id && scheduledSites.has(String(s._id)));
+                                                                return filtered.map(s => (
+                                                                    <option key={s._id} value={s._id}>{s.siteName}</option>
+                                                                ));
+                                                            })()}
+                                                        </ChakraSelect>
+                                                    </FormControl>
+                                                    <FormControl size="sm">
+                                                        <FormLabel fontSize="10px" fontWeight="bold">Ledger</FormLabel>
+                                                        <ChakraSelect 
+                                                            placeholder="Select Ledger" 
+                                                            value={cs.ledger} 
+                                                            onChange={e => updateClientSite(idx, 'ledger', e.target.value)} 
+                                                            size="sm" 
+                                                            variant="filled"
+                                                        >
+                                                            {(() => {
+                                                                const options = new Set();
+                                                                const matchingSchedules = employeeSchedules.filter(s => {
+                                                                    const sSiteId = s.site?._id || s.site;
+                                                                    return sSiteId === cs.siteId;
+                                                                });
+                                                                matchingSchedules.forEach(sch => {
+                                                                    if (sch.ledger) options.add(sch.ledger);
+                                                                });
+                                                                if (options.size === 0) {
+                                                                    const siteLedgerItems = sites.find(s => s._id === cs.siteId)?.ledgerItems || [];
+                                                                    siteLedgerItems.forEach(item => {
+                                                                        if (item.ledger) options.add(item.ledger);
+                                                                    });
+                                                                }
+                                                                return Array.from(options).map(opt => {
+                                                                    const isScheduled = matchingSchedules.some(sch => sch.ledger === opt);
+                                                                    return (
+                                                                        <option key={opt} value={opt}>
+                                                                            {opt} {isScheduled ? '(Scheduled)' : ''}
+                                                                        </option>
+                                                                    );
+                                                                });
+                                                            })()}
                                                         </ChakraSelect>
                                                     </FormControl>
                                                     {clientSites.length > 1 && <IconButton icon={<FaTrash />} size="sm" colorScheme="red" variant="ghost" onClick={() => removeClientSite(idx)} />}
                                                 </HStack>
                                                 
                                                 {/* File Uploads per Site */}
-                                                <SimpleGrid columns={3} spacing={2} pt={2}>
+                                                <SimpleGrid columns={4} spacing={2} pt={2}>
                                                     <VStack align="start" spacing={1}>
                                                         <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({cs.files.photos.length})</Text>
                                                         <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
@@ -529,6 +672,10 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                                     <VStack align="start" spacing={1}>
                                                         <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({cs.files.data.length})</Text>
                                                         <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
+                                                    </VStack>
+                                                    <VStack align="start" spacing={1}>
+                                                        <Text fontSize="9px" fontWeight="black" color="teal.600">DRAWING ({cs.files.drawing?.length || 0})</Text>
+                                                        <Input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" onChange={(e) => handleSiteFileChange(idx, e, 'drawing')} size="xs" p={0} variant="unstyled" />
                                                     </VStack>
                                                 </SimpleGrid>
                                             </VStack>
@@ -560,10 +707,24 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                         </InputGroup>
                                     </FormControl>
                                     <FormControl>
-                                        <InputGroup size="sm">
-                                            <InputLeftAddon bg="red.50" color="red.600"><Icon as={FaGasPump} mr={2} /> Petrol</InputLeftAddon>
-                                            <Input type="number" name="petrol" value={expenseForm.petrol} onChange={handleFormChange} placeholder="0" />
-                                        </InputGroup>
+                                        <HStack spacing={1}>
+                                            <InputGroup size="sm">
+                                                <InputLeftAddon bg="red.50" color="red.600"><Icon as={FaGasPump} mr={2} /> Fuel</InputLeftAddon>
+                                                <Input type="number" name="petrol" value={expenseForm.petrol} onChange={handleFormChange} placeholder="0" />
+                                            </InputGroup>
+                                            <ChakraSelect 
+                                                size="sm" 
+                                                w="90px" 
+                                                value={fuelType} 
+                                                onChange={(e) => setFuelType(e.target.value)} 
+                                                borderRadius="md" 
+                                                bg="white"
+                                            >
+                                                <option value="Petrol">Petrol</option>
+                                                <option value="CNG">CNG</option>
+                                                <option value="Diesel">Diesel</option>
+                                            </ChakraSelect>
+                                        </HStack>
                                     </FormControl>
                                 </SimpleGrid>
                             </Box>
@@ -697,7 +858,11 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                 : '-';
                             const attColor = attendance === 'P' ? 'green.400' : attendance === 'HD' ? 'orange.400' : attendance === 'A' ? 'red.400' : 'gray.400';
                             const attRemark = exp?.attendanceRemark || '-';
-                            const sideWork = exp?.clientSites?.map(cs => cs.siteId?.siteName).filter(Boolean) || [];
+                            const sideWork = exp?.clientSites?.map(cs => {
+                                const siteName = cs.siteId?.siteName || '';
+                                const ledgerPart = cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : '';
+                                return `${siteName}${ledgerPart}`;
+                            }).filter(Boolean) || [];
 
                             // Build combined line items for this date
                             const allItems = [];
