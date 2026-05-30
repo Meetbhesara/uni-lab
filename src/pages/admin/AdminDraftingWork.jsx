@@ -9,6 +9,7 @@ import axios from 'axios';
 
 // Use environment variable for real NAS deployment
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+const API_URL = API_BASE_URL.endsWith('/api') ? API_BASE_URL : `${API_BASE_URL}/api`;
 
 const AdminDraftingWork = () => {
     const bgColor = useColorModeValue('gray.50', 'gray.900');
@@ -45,7 +46,7 @@ const AdminDraftingWork = () => {
             if (filterSite) queryParams.append('site', filterSite);
             if (filterScheduleDate) queryParams.append('scheduleDate', filterScheduleDate);
             
-            const res = await axios.get(`${API_BASE_URL}/api/site-master/all-documents?${queryParams.toString()}`);
+            const res = await axios.get(`${API_URL}/site-master/all-documents?${queryParams.toString()}`);
             if (res.data.success) {
                 setDocuments(res.data.data);
             }
@@ -58,7 +59,7 @@ const AdminDraftingWork = () => {
 
     const updateStatus = async (docId, source, expenseId, newStatus, linkedDocumentId) => {
         try {
-            const res = await axios.put(`${API_BASE_URL}/api/site-master/document-status`, {
+            const res = await axios.put(`${API_URL}/site-master/document-status`, {
                 documentId: docId,
                 source: source,
                 expenseId: expenseId,
@@ -127,7 +128,7 @@ const AdminDraftingWork = () => {
             
             formData.append('document', renamedFile);
 
-            const res = await axios.post(`${API_BASE_URL}/api/site-master/upload-revision`, formData, {
+            const res = await axios.post(`${API_URL}/site-master/upload-revision`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
@@ -149,7 +150,7 @@ const AdminDraftingWork = () => {
     const fetchOptions = async () => {
         try {
             if (filterScheduleDate) {
-                const res = await axios.get(`${API_BASE_URL}/api/schedule-master?date=${filterScheduleDate}`);
+                const res = await axios.get(`${API_URL}/schedule-master?date=${filterScheduleDate}`);
                 if (res.data.success) {
                     const uniqueClients = [];
                     const uniqueSites = [];
@@ -168,8 +169,8 @@ const AdminDraftingWork = () => {
                 }
             } else {
                 const [clientsRes, sitesRes] = await Promise.all([
-                    axios.get(`${API_BASE_URL}/api/client-master`),
-                    axios.get(`${API_BASE_URL}/api/site-master`)
+                    axios.get(`${API_URL}/client-master`),
+                    axios.get(`${API_URL}/site-master`)
                 ]);
                 if (clientsRes.data.success) setClientOptions(clientsRes.data.data);
                 if (sitesRes.data.success) setSiteOptions(sitesRes.data.data);
@@ -214,7 +215,7 @@ const AdminDraftingWork = () => {
     const handleDelete = async (id, source, expenseId) => {
         if (!window.confirm("Delete this document?")) return;
         try {
-            await axios.delete(`${API_BASE_URL}/api/site-master/delete-document/${id}?source=${source}&expenseId=${expenseId || ''}`);
+            await axios.delete(`${API_URL}/site-master/delete-document/${id}?source=${source}&expenseId=${expenseId || ''}`);
             toast({ title: 'Deleted successfully', status: 'success' });
             fetchDrafts();
         } catch(e) {
@@ -253,7 +254,7 @@ const AdminDraftingWork = () => {
         if (selectedDocsForMail.length === 0) return;
         setIsMovingToMail(true);
         try {
-            const res = await axios.post(`${API_BASE_URL}/api/site-master/move-to-mail`, { documentIds: selectedDocsForMail });
+            const res = await axios.post(`${API_URL}/site-master/move-to-mail`, { documentIds: selectedDocsForMail });
             if (res.data.success) {
                 toast({ title: 'Moved to Mail', status: 'success' });
                 setSelectedDocsForMail([]);
