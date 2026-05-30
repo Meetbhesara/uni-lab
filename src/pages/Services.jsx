@@ -13,12 +13,13 @@ import {
     FaUserTie, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope, FaIdCard, FaCamera,
     FaHandshake, FaFingerprint, FaIdBadge, FaMap,
     FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt, FaUndo, FaListUl,
-    FaSearch, FaCar
+    FaSearch, FaCar, FaFolderOpen
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
 import EmployeeExpensesModule from '../pages/EmployeeExpensesModule';
 import AdminSiteAllocation from '../components/AdminSiteAllocation';
+import AdminDraftingWork from './admin/AdminDraftingWork';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -4166,6 +4167,9 @@ const Services = () => {
                                 <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
                                     <Icon as={FaMoneyBillWave} mr={2} /> Employee Ledger
                                 </Tab>
+                                <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                    <Icon as={FaFolderOpen} mr={2} /> Drafting Work
+                                </Tab>
                             </TabList>
 
                             <TabPanels flex={1}>
@@ -4190,6 +4194,9 @@ const Services = () => {
 
                                 <TabPanel p={0}>
                                     <EmployeeExpensesModule />
+                                </TabPanel>
+                                <TabPanel p={0}>
+                                    <AdminDraftingWork />
                                 </TabPanel>
                             </TabPanels>
                         </Tabs>

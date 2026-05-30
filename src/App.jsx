@@ -13,6 +13,7 @@ import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminProducts from "./pages/admin/AdminProducts";
 import AdminEnquiries from "./pages/admin/AdminEnquiries";
+import AdminDraftingWork from "./pages/admin/AdminDraftingWork";
 import EmployeeExpensesModule from "./pages/EmployeeExpensesModule";
 import Login from "./pages/Login";
 
@@ -27,6 +28,7 @@ function App() {
           <Route path="products" element={<AdminProducts />} />
           <Route path="enquiries" element={<AdminEnquiries />} />
           <Route path="employee-expenses" element={<EmployeeExpensesModule />} />
+          <Route path="drafting-work" element={<AdminDraftingWork />} />
         </Route>
 
         {/* Employee Portal — standalone (no Layout) */}

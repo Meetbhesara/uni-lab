@@ -961,7 +961,15 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                                     </Td>
                                                     <Td rowSpan={totalSpan} verticalAlign="top" fontSize="xs">
                                                         <VStack align="start" spacing={1}>
-                                                            {sideWork.map((s, i) => <Text key={i}>{i+1} {s.toUpperCase()}</Text>)}
+                                                            {exp?.clientSites?.map((cs, i) => {
+                                                                const siteName = cs.siteId?.siteName || cs.siteName || 'Unknown Site';
+                                                                return (
+                                                                    <Text key={i} fontWeight="semibold" color="gray.700">
+                                                                        {i+1}. {siteName.toUpperCase()}
+                                                                    </Text>
+                                                                );
+                                                            })}
+                                                            {(!exp?.clientSites || exp.clientSites.length === 0) && <Text>-</Text>}
                                                         </VStack>
                                                     </Td>
                                                 </>

@@ -11,7 +11,8 @@ import {
 import { 
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
-    FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt
+    FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
+    FaPaperclip
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -318,6 +319,12 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         const selectedFiles = Array.from(e.target.files);
         const updated = [...clientSites];
         updated[idx].files[category] = [...updated[idx].files[category], ...selectedFiles];
+        setClientSites(updated);
+    };
+
+    const removeSiteFile = (siteIdx, category, fileIdx) => {
+        const updated = [...clientSites];
+        updated[siteIdx].files[category] = updated[siteIdx].files[category].filter((_, i) => i !== fileIdx);
         setClientSites(updated);
     };
 
@@ -801,21 +808,93 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                         
                                         {/* Site Specific Uploads */}
                                         <SimpleGrid columns={4} spacing={3} pt={2}>
-                                            <VStack align="start" spacing={1}>
+                                            <VStack align="start" spacing={1} width="full">
                                                 <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({row.files.photos.length})</Text>
                                                 <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
+                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                    {row.files.photos.map((file, fIdx) => (
+                                                        <HStack key={fIdx} justify="space-between" bg="blue.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="blue.100" spacing={1}>
+                                                            <Icon as={FaCamera} color="blue.500" w={2.5} h={2.5} />
+                                                            <Text fontSize="9px" fontWeight="medium" color="blue.800" isTruncated flex={1}>{file.name}</Text>
+                                                            <IconButton 
+                                                                size="2xs" 
+                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                colorScheme="red" 
+                                                                variant="ghost" 
+                                                                onClick={() => removeSiteFile(idx, 'photos', fIdx)}
+                                                                aria-label="Remove photo"
+                                                                minW="16px"
+                                                                h="16px"
+                                                            />
+                                                        </HStack>
+                                                    ))}
+                                                </VStack>
                                             </VStack>
-                                            <VStack align="start" spacing={1}>
+                                            <VStack align="start" spacing={1} width="full">
                                                 <Text fontSize="9px" fontWeight="black" color="orange.600">REPORTS ({row.files.dailyReports.length})</Text>
                                                 <Input type="file" multiple accept=".pdf,.doc,.docx" onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')} size="xs" p={0} variant="unstyled" />
+                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                    {row.files.dailyReports.map((file, fIdx) => (
+                                                        <HStack key={fIdx} justify="space-between" bg="orange.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="orange.100" spacing={1}>
+                                                            <Icon as={FaFileAlt} color="orange.500" w={2.5} h={2.5} />
+                                                            <Text fontSize="9px" fontWeight="medium" color="orange.800" isTruncated flex={1}>{file.name}</Text>
+                                                            <IconButton 
+                                                                size="2xs" 
+                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                colorScheme="red" 
+                                                                variant="ghost" 
+                                                                onClick={() => removeSiteFile(idx, 'dailyReports', fIdx)}
+                                                                aria-label="Remove report"
+                                                                minW="16px"
+                                                                h="16px"
+                                                            />
+                                                        </HStack>
+                                                    ))}
+                                                </VStack>
                                             </VStack>
-                                            <VStack align="start" spacing={1}>
+                                            <VStack align="start" spacing={1} width="full">
                                                 <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({row.files.data.length})</Text>
                                                 <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
+                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                    {row.files.data.map((file, fIdx) => (
+                                                        <HStack key={fIdx} justify="space-between" bg="purple.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="purple.100" spacing={1}>
+                                                            <Icon as={FaFileAlt} color="purple.500" w={2.5} h={2.5} />
+                                                            <Text fontSize="9px" fontWeight="medium" color="purple.800" isTruncated flex={1}>{file.name}</Text>
+                                                            <IconButton 
+                                                                size="2xs" 
+                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                colorScheme="red" 
+                                                                variant="ghost" 
+                                                                onClick={() => removeSiteFile(idx, 'data', fIdx)}
+                                                                aria-label="Remove data file"
+                                                                minW="16px"
+                                                                h="16px"
+                                                            />
+                                                        </HStack>
+                                                    ))}
+                                                </VStack>
                                             </VStack>
-                                            <VStack align="start" spacing={1}>
+                                            <VStack align="start" spacing={1} width="full">
                                                 <Text fontSize="9px" fontWeight="black" color="teal.600">DRAWING ({row.files.drawing?.length || 0})</Text>
                                                 <Input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" onChange={(e) => handleSiteFileChange(idx, e, 'drawing')} size="xs" p={0} variant="unstyled" />
+                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                    {(row.files.drawing || []).map((file, fIdx) => (
+                                                        <HStack key={fIdx} justify="space-between" bg="teal.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="teal.100" spacing={1}>
+                                                            <Icon as={FaPaperclip} color="teal.500" w={2.5} h={2.5} />
+                                                            <Text fontSize="9px" fontWeight="medium" color="teal.800" isTruncated flex={1}>{file.name}</Text>
+                                                            <IconButton 
+                                                                size="2xs" 
+                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                colorScheme="red" 
+                                                                variant="ghost" 
+                                                                onClick={() => removeSiteFile(idx, 'drawing', fIdx)}
+                                                                aria-label="Remove drawing"
+                                                                minW="16px"
+                                                                h="16px"
+                                                            />
+                                                        </HStack>
+                                                    ))}
+                                                </VStack>
                                             </VStack>
                                         </SimpleGrid>
                                     </VStack>
@@ -1081,85 +1160,101 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                         {/* Photos */}
                                                         {cs.files?.photos && cs.files.photos.length > 0 ? (
                                                             <VStack align="start" spacing={1} width="full">
-                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">📷 Photos ({cs.files.photos.length}):</Text>
-                                                                <HStack spacing={2} wrap="wrap">
-                                                                    {cs.files.photos.map((photo, pIdx) => (
-                                                                        <Button 
-                                                                            key={pIdx} 
-                                                                            size="xs" 
-                                                                            variant="outline" 
-                                                                            colorScheme="blue" 
-                                                                            leftIcon={<FaCamera />}
-                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${photo}`, '_blank')}
-                                                                        >
-                                                                            Photo {pIdx + 1}
-                                                                        </Button>
-                                                                    ))}
-                                                                </HStack>
-                                                            </VStack>
+                                                                 <Text fontSize="10px" fontWeight="bold" color="gray.500">📷 Photos ({cs.files.photos.length}):</Text>
+                                                                 <HStack spacing={2} wrap="wrap">
+                                                                     {cs.files.photos.map((photo, pIdx) => {
+                                                                         const fileUrl = photo?.url || photo;
+                                                                         const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                                         return (
+                                                                             <Button 
+                                                                                 key={pIdx} 
+                                                                                 size="xs" 
+                                                                                 variant="outline" 
+                                                                                 colorScheme="blue" 
+                                                                                 leftIcon={<FaCamera />}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                             >
+                                                                                 Photo {pIdx + 1}
+                                                                             </Button>
+                                                                         );
+                                                                     })}
+                                                                 </HStack>
+                                                             </VStack>
                                                         ) : null}
 
                                                         {/* Reports */}
                                                         {cs.files?.dailyReports && cs.files.dailyReports.length > 0 ? (
                                                             <VStack align="start" spacing={1} width="full" mt={1}>
-                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">📋 Daily Reports ({cs.files.dailyReports.length}):</Text>
-                                                                <HStack spacing={2} wrap="wrap">
-                                                                    {cs.files.dailyReports.map((report, rIdx) => (
-                                                                        <Button 
-                                                                            key={rIdx} 
-                                                                            size="xs" 
-                                                                            variant="outline" 
-                                                                            colorScheme="teal" 
-                                                                            leftIcon={<FaFileAlt />}
-                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${report}`, '_blank')}
-                                                                        >
-                                                                            Report {rIdx + 1}
-                                                                        </Button>
-                                                                    ))}
-                                                                </HStack>
-                                                            </VStack>
+                                                                 <Text fontSize="10px" fontWeight="bold" color="gray.500">📋 Daily Reports ({cs.files.dailyReports.length}):</Text>
+                                                                 <HStack spacing={2} wrap="wrap">
+                                                                     {cs.files.dailyReports.map((report, rIdx) => {
+                                                                         const fileUrl = report?.url || report;
+                                                                         const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                                         return (
+                                                                             <Button 
+                                                                                 key={rIdx} 
+                                                                                 size="xs" 
+                                                                                 variant="outline" 
+                                                                                 colorScheme="teal" 
+                                                                                 leftIcon={<FaFileAlt />}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                             >
+                                                                                 Report {rIdx + 1}
+                                                                             </Button>
+                                                                         );
+                                                                     })}
+                                                                 </HStack>
+                                                             </VStack>
                                                         ) : null}
 
                                                         {/* Drawings */}
                                                         {cs.files?.drawing && cs.files.drawing.length > 0 ? (
                                                             <VStack align="start" spacing={1} width="full" mt={1}>
-                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">🎨 Drawings ({cs.files.drawing.length}):</Text>
-                                                                <HStack spacing={2} wrap="wrap">
-                                                                    {cs.files.drawing.map((dwg, dwgIdx) => (
-                                                                        <Button 
-                                                                            key={dwgIdx} 
-                                                                            size="xs" 
-                                                                            variant="outline" 
-                                                                            colorScheme="purple" 
-                                                                            leftIcon={<FaFileAlt />}
-                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${dwg}`, '_blank')}
-                                                                        >
-                                                                            Drawing {dwgIdx + 1}
-                                                                        </Button>
-                                                                    ))}
-                                                                </HStack>
-                                                            </VStack>
+                                                                 <Text fontSize="10px" fontWeight="bold" color="gray.500">🎨 Drawings ({cs.files.drawing.length}):</Text>
+                                                                 <HStack spacing={2} wrap="wrap">
+                                                                     {cs.files.drawing.map((dwg, dwgIdx) => {
+                                                                         const fileUrl = dwg?.url || dwg;
+                                                                         const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                                         return (
+                                                                             <Button 
+                                                                                 key={dwgIdx} 
+                                                                                 size="xs" 
+                                                                                 variant="outline" 
+                                                                                 colorScheme="purple" 
+                                                                                 leftIcon={<FaFileAlt />}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                             >
+                                                                                 Drawing {dwgIdx + 1}
+                                                                             </Button>
+                                                                         );
+                                                                     })}
+                                                                 </HStack>
+                                                             </VStack>
                                                         ) : null}
 
                                                         {/* Data files */}
                                                         {cs.files?.data && cs.files.data.length > 0 ? (
                                                             <VStack align="start" spacing={1} width="full" mt={1}>
-                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500">💾 Data Files ({cs.files.data.length}):</Text>
-                                                                <HStack spacing={2} wrap="wrap">
-                                                                    {cs.files.data.map((dat, datIdx) => (
-                                                                        <Button 
-                                                                            key={datIdx} 
-                                                                            size="xs" 
-                                                                            variant="outline" 
-                                                                            colorScheme="orange" 
-                                                                            leftIcon={<FaFileAlt />}
-                                                                            onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}/${dat}`, '_blank')}
-                                                                        >
-                                                                            Data File {datIdx + 1}
-                                                                        </Button>
-                                                                    ))}
-                                                                </HStack>
-                                                            </VStack>
+                                                                 <Text fontSize="10px" fontWeight="bold" color="gray.500">💾 Data Files ({cs.files.data.length}):</Text>
+                                                                 <HStack spacing={2} wrap="wrap">
+                                                                     {cs.files.data.map((dat, datIdx) => {
+                                                                         const fileUrl = dat?.url || dat;
+                                                                         const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                                         return (
+                                                                             <Button 
+                                                                                 key={datIdx} 
+                                                                                 size="xs" 
+                                                                                 variant="outline" 
+                                                                                 colorScheme="orange" 
+                                                                                 leftIcon={<FaFileAlt />}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                             >
+                                                                                 Data File {datIdx + 1}
+                                                                             </Button>
+                                                                         );
+                                                                     })}
+                                                                 </HStack>
+                                                             </VStack>
                                                         ) : null}
 
                                                         {(!cs.files || 
@@ -1184,21 +1279,121 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                     <CardBody p={5}>
                                         <Heading size="xs" color="gray.500" mb={4} textTransform="uppercase" letterSpacing="wider">Standard Expenses</Heading>
                                         <SimpleGrid columns={2} spacing={4}>
-                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
-                                                <Text fontSize="xs" color="gray.500">Breakfast</Text>
-                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.breakfast || 0).toLocaleString()}</Text>
+                                            <VStack align="start" spacing={1} p={3} bg="gray.100" borderRadius="xl" justify="space-between" h="full" minH="70px">
+                                                <VStack align="start" spacing={0} w="full">
+                                                    <Text fontSize="xs" color="gray.500">Breakfast</Text>
+                                                    <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.breakfast || 0).toLocaleString()}</Text>
+                                                </VStack>
+                                                {selectedExpenseForView.expenseFiles?.breakfast && selectedExpenseForView.expenseFiles.breakfast.length > 0 && (
+                                                    <HStack spacing={1} wrap="wrap" mt={1}>
+                                                        {selectedExpenseForView.expenseFiles.breakfast.map((f, fIdx) => {
+                                                            const fileUrl = f?.url || f;
+                                                            const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                            return (
+                                                                <Button 
+                                                                    key={fIdx} 
+                                                                    size="xs" 
+                                                                    variant="solid" 
+                                                                    colorScheme="blue" 
+                                                                    fontSize="9px"
+                                                                    height="18px"
+                                                                    px={1.5}
+                                                                    leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                >
+                                                                    Bill {fIdx + 1}
+                                                                </Button>
+                                                            );
+                                                        })}
+                                                    </HStack>
+                                                )}
                                             </VStack>
-                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
-                                                <Text fontSize="xs" color="gray.500">Lunch</Text>
-                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.lunch || 0).toLocaleString()}</Text>
+                                            <VStack align="start" spacing={1} p={3} bg="gray.100" borderRadius="xl" justify="space-between" h="full" minH="70px">
+                                                <VStack align="start" spacing={0} w="full">
+                                                    <Text fontSize="xs" color="gray.500">Lunch</Text>
+                                                    <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.lunch || 0).toLocaleString()}</Text>
+                                                </VStack>
+                                                {selectedExpenseForView.expenseFiles?.lunch && selectedExpenseForView.expenseFiles.lunch.length > 0 && (
+                                                    <HStack spacing={1} wrap="wrap" mt={1}>
+                                                        {selectedExpenseForView.expenseFiles.lunch.map((f, fIdx) => {
+                                                            const fileUrl = f?.url || f;
+                                                            const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                            return (
+                                                                <Button 
+                                                                    key={fIdx} 
+                                                                    size="xs" 
+                                                                    variant="solid" 
+                                                                    colorScheme="blue" 
+                                                                    fontSize="9px"
+                                                                    height="18px"
+                                                                    px={1.5}
+                                                                    leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                >
+                                                                    Bill {fIdx + 1}
+                                                                </Button>
+                                                            );
+                                                        })}
+                                                    </HStack>
+                                                )}
                                             </VStack>
-                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
-                                                <Text fontSize="xs" color="gray.500">Dinner</Text>
-                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.dinner || 0).toLocaleString()}</Text>
+                                            <VStack align="start" spacing={1} p={3} bg="gray.100" borderRadius="xl" justify="space-between" h="full" minH="70px">
+                                                <VStack align="start" spacing={0} w="full">
+                                                    <Text fontSize="xs" color="gray.500">Dinner</Text>
+                                                    <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.dinner || 0).toLocaleString()}</Text>
+                                                </VStack>
+                                                {selectedExpenseForView.expenseFiles?.dinner && selectedExpenseForView.expenseFiles.dinner.length > 0 && (
+                                                    <HStack spacing={1} wrap="wrap" mt={1}>
+                                                        {selectedExpenseForView.expenseFiles.dinner.map((f, fIdx) => {
+                                                            const fileUrl = f?.url || f;
+                                                            const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                            return (
+                                                                <Button 
+                                                                    key={fIdx} 
+                                                                    size="xs" 
+                                                                    variant="solid" 
+                                                                    colorScheme="blue" 
+                                                                    fontSize="9px"
+                                                                    height="18px"
+                                                                    px={1.5}
+                                                                    leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                >
+                                                                    Bill {fIdx + 1}
+                                                                </Button>
+                                                            );
+                                                        })}
+                                                    </HStack>
+                                                )}
                                             </VStack>
-                                            <VStack align="start" spacing={0} p={3} bg="gray.100" borderRadius="xl">
-                                                <Text fontSize="xs" color="gray.500">Fuel ({selectedExpenseForView.expenses?.fuelType || 'Petrol'})</Text>
-                                                <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.petrol || 0).toLocaleString()}</Text>
+                                            <VStack align="start" spacing={1} p={3} bg="gray.100" borderRadius="xl" justify="space-between" h="full" minH="70px">
+                                                <VStack align="start" spacing={0} w="full">
+                                                    <Text fontSize="xs" color="gray.500">Fuel ({selectedExpenseForView.expenses?.fuelType || 'Petrol'})</Text>
+                                                    <Text fontWeight="black" fontSize="lg">₹{Number(selectedExpenseForView.expenses?.petrol || 0).toLocaleString()}</Text>
+                                                </VStack>
+                                                {selectedExpenseForView.expenseFiles?.petrol && selectedExpenseForView.expenseFiles.petrol.length > 0 && (
+                                                    <HStack spacing={1} wrap="wrap" mt={1}>
+                                                        {selectedExpenseForView.expenseFiles.petrol.map((f, fIdx) => {
+                                                            const fileUrl = f?.url || f;
+                                                            const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                            return (
+                                                                <Button 
+                                                                    key={fIdx} 
+                                                                    size="xs" 
+                                                                    variant="solid" 
+                                                                    colorScheme="blue" 
+                                                                    fontSize="9px"
+                                                                    height="18px"
+                                                                    px={1.5}
+                                                                    leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                >
+                                                                    Bill {fIdx + 1}
+                                                                </Button>
+                                                            );
+                                                        })}
+                                                    </HStack>
+                                                )}
                                             </VStack>
                                         </SimpleGrid>
 
