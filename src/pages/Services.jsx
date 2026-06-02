@@ -3299,108 +3299,79 @@ const ScheduleMasterForm = () => {
                                     <Text color="gray.400">No schedules found for {viewDate}</Text>
                                 </Box>
                             ) : (
-                                <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
-                                    {schedules.map((s) => (
-                                        <Box key={s._id} p={4} borderRadius="2xl" border="1px solid" borderColor="gray.100" bg="gray.50" _hover={{ shadow: 'lg', bg: 'white', borderColor: 'blue.200', transform: 'translateY(-2px)' }} transition="all 0.2s" cursor="pointer" onClick={() => { setAssignTarget(s); onAssignOpen(); }}>
-                                            <HStack justify="space-between" mb={3}>
-                                                <Badge colorScheme={statusColors[s.dayStatus]} variant="solid" borderRadius="full" px={3}>
-                                                    {s.dayStatus}
-                                                </Badge>
-                                                <HStack onClick={(e) => e.stopPropagation()}>
-                                                    {s.dayStatus === 'Scheduled' && (
-                                                        <>
-                                                            <Button
-                                                                size="xs"
-                                                                colorScheme="green"
-                                                                leftIcon={<Icon as={FaCheckCircle} />}
-                                                                onClick={() => { setCompTarget(s); onCompOpen(); }}
-                                                            >
-                                                                Complete
-                                                            </Button>
-                                                            <Button
-                                                                size="xs"
-                                                                colorScheme="red"
-                                                                leftIcon={<Icon as={FaTimes} />}
-                                                                onClick={() => handleRejectClick(s._id)}
-                                                            >
-                                                                Reject
-                                                            </Button>
-                                                        </>
-                                                    )}
-                                                    <IconButton size="xs" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(s)} />
-                                                </HStack>
-                                            </HStack>
-
-                                            <VStack align="start" spacing={1} mb={3}>
-                                                <Text fontWeight="black" fontSize="sm" color="gray.800" noOfLines={1}>{s.site?.siteName}</Text>
-                                                <Text fontSize="xs" color="gray.500" noOfLines={1}>{s.client?.clientName}</Text>
-
-                                                {/* On-Site Contacts */}
-                                                {s.site?.contactPersons?.length > 0 && (
-                                                    <HStack spacing={2} mt={1}>
-                                                        <Icon as={FaPhoneAlt} w={2} h={2} color="green.500" />
-                                                        <Text fontSize="10px" color="gray.600" fontWeight="bold">
-                                                            {s.site.contactPersons[0].name}: {s.site.contactPersons[0].phone}
+                                <TableContainer>
+                                    <Table variant="simple" size="sm">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th py={4} color="gray.500" fontSize="10px">DATE</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">CLIENT & SITE</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">OPERATIVE</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">RESOURCES</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">TYPE</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">STATUS</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">ACTIONS</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {schedules.map((s) => (
+                                                <Tr 
+                                                    key={s._id} 
+                                                    _hover={{ bg: 'blue.50', transition: 'background 0.2s' }} 
+                                                    cursor="pointer" 
+                                                    onClick={() => { setAssignTarget(s); onAssignOpen(); }}
+                                                >
+                                                    <Td py={3}>
+                                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">
+                                                            {new Date(s.scheduleDate).toLocaleDateString('en-GB')}
                                                         </Text>
-                                                    </HStack>
-                                                )}
-
-                                                {/* Apply Details */}
-                                                {s.workForAppley && (
-                                                    <HStack spacing={2}>
-                                                        <Icon as={FaIdBadge} w={2} h={2} color="purple.500" />
-                                                        <Text fontSize="10px" color="purple.600" fontWeight="bold">
-                                                            Work For Apply: {s.workForAppley}
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <VStack align="start" spacing={0}>
+                                                            <Text fontWeight="bold" fontSize="sm" color="gray.800">{s.site?.siteName}</Text>
+                                                            <Text fontSize="xs" color="gray.500">{s.client?.clientName}</Text>
+                                                            {s.workForAppley && <Text fontSize="xs" color="purple.600" mt={1}>Work For Apply: {s.workForAppley}</Text>}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Text fontSize="sm" fontWeight="bold">
+                                                            {s.operative?.name || <Text as="span" color="red.400">Unassigned</Text>}
                                                         </Text>
-                                                    </HStack>
-                                                )}
-                                            </VStack>
-
-                                            <SimpleGrid columns={2} spacing={2} mb={3}>
-                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">OPERATIVE</Text>
-                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>{s.operative?.name || 'Unassigned'}</Text>
-                                                </Box>
-                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">HELPERS</Text>
-                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
-                                                        {s.helpers?.length > 0 ? s.helpers.map(h => h.name).join(', ') : 'None'}
-                                                    </Text>
-                                                </Box>
-                                            </SimpleGrid>
-
-                                            <SimpleGrid columns={2} spacing={2} mb={3}>
-                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">VEHICLE</Text>
-                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
-                                                        {s.vehicle ? `${s.vehicle.vehicleNumber}` : 'N/A'}
-                                                    </Text>
-                                                </Box>
-                                                <Box bg="white" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                                    <Text fontSize="9px" fontWeight="bold" color="gray.400">INSTRUMENTS</Text>
-                                                    <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
-                                                        {s.instruments?.length > 0 ? s.instruments.map(i => i.serialNo).join(', ') : 'None'}
-                                                    </Text>
-                                                </Box>
-                                            </SimpleGrid>
-
-                                            {s.scheduleType && (
-                                                <HStack spacing={2} mb={3}>
-                                                    <Badge colorScheme="purple" variant="solid" borderRadius="full" px={2.5} py={0.5} fontSize="10px">
-                                                        {s.scheduleType}
-                                                    </Badge>
-                                                    {s.scheduleType === 'MONTH' && s.monthGroupId && (
-                                                        <Badge colorScheme="blue" variant="subtle" borderRadius="full" px={2.5} py={0.5} fontSize="10px">
-                                                            Grp ID: {s.monthGroupId}
-                                                        </Badge>
-                                                    )}
-                                                </HStack>
-                                            )}
-
-                                            {s.notes && <Text fontSize="10px" color="gray.500" fontStyle="italic">Note: {s.notes}</Text>}
-                                        </Box>
-                                    ))}
-                                </SimpleGrid>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <VStack align="start" spacing={0}>
+                                                            {s.helpers?.length > 0 && <Text fontSize="xs" color="gray.600">Helpers: {s.helpers.length}</Text>}
+                                                            {s.vehicle && <Text fontSize="xs" color="gray.600">Vehicle: {s.vehicle.vehicleNumber}</Text>}
+                                                            {s.instruments?.length > 0 && <Text fontSize="xs" color="gray.600">Instruments: {s.instruments.length}</Text>}
+                                                            {!s.helpers?.length && !s.vehicle && !s.instruments?.length && <Text fontSize="xs" color="gray.400">No extra resources</Text>}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <VStack align="start" spacing={1}>
+                                                            {s.scheduleType && <Badge colorScheme="purple" fontSize="9px">{s.scheduleType}</Badge>}
+                                                            {s.scheduleType === 'MONTH' && s.monthGroupId && (
+                                                                <Badge colorScheme="blue" fontSize="8px">Grp ID: {s.monthGroupId}</Badge>
+                                                            )}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Badge colorScheme={statusColors[s.dayStatus]} variant="solid">{s.dayStatus}</Badge>
+                                                    </Td>
+                                                    <Td py={3} onClick={(e) => e.stopPropagation()}>
+                                                        <HStack spacing={2}>
+                                                            {s.dayStatus === 'Scheduled' && (
+                                                                <>
+                                                                    <Button size="xs" colorScheme="green" leftIcon={<Icon as={FaCheckCircle} />} onClick={() => { setCompTarget(s); onCompOpen(); }}>Complete</Button>
+                                                                    <Button size="xs" colorScheme="red" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>Reject</Button>
+                                                                </>
+                                                            )}
+                                                            <IconButton size="xs" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(s)} />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </TableContainer>
                             )}
                         </CardBody>
                     </Card>
