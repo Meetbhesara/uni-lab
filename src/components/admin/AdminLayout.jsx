@@ -3,7 +3,7 @@ import {
     Box, Flex, VStack, Text, IconButton, useColorModeValue, Drawer, DrawerContent,
     useDisclosure, Icon, Link
 } from '@chakra-ui/react';
-import { FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut, FiGlobe, FiArrowLeft, FiDollarSign, FiEdit3 } from 'react-icons/fi'; // Using Fi icons as standard
+import { FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut, FiGlobe, FiArrowLeft, FiDollarSign, FiEdit3, FiFileText } from 'react-icons/fi'; // Using Fi icons as standard
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,6 +13,7 @@ const LinkItems = [
     { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries' },
     { name: 'Daily Report', icon: FiDollarSign, path: '/admin/employee-expenses' },
     { name: 'Drafting Work', icon: FiEdit3, path: '/admin/drafting-work' },
+    { name: 'Invoice Report', icon: FiFileText, path: '/admin/invoice-report' },
 ];
 
 const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {

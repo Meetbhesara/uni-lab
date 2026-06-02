@@ -173,6 +173,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     const [notes, setNotes] = useState('');
     const [attendance, setAttendance] = useState('Present');
     const [attendanceRemark, setAttendanceRemark] = useState('');
+    const [deletedExistingFiles, setDeletedExistingFiles] = useState([]);
 
     // New Fuel & Day Schedules State
     const [fuelType, setFuelType] = useState('Petrol');
@@ -247,24 +248,59 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     // Active schedule fallback for headers and non-multiple logic
     const activeSchedule = employeeSchedules.length > 0 ? employeeSchedules[0] : null;
 
-    // Prefill Client & Site when employeeSchedules changes
+    // Prefill Client & Site when employeeSchedules or committedExpenses changes
     useEffect(() => {
+        const getStrId = (val) => val?._id ? String(val._id) : String(val || '');
+        
         if (employeeSchedules.length > 0) {
-            setClientSites(employeeSchedules.map(sch => ({
-                clientId: sch.client?._id || sch.client,
-                siteId: sch.site?._id || sch.site,
-                ledger: sch.ledger || '',
-                files: { photos: [], data: [], dailyReports: [], drawing: [] }
-            })));
+            setClientSites(prevSites => {
+                return employeeSchedules.map((sch, idx) => {
+                    const scheduleId = sch._id || '';
+                    const clientId = sch.client?._id || sch.client;
+                    const siteId = sch.site?._id || sch.site;
+                    let ledger = sch.ledger || '';
+                    
+                    // Try to auto-prefill from committedExpenses
+                    if (!ledger && committedExpenses.length > 0) {
+                        const matchedCs = committedExpenses.flatMap(e => e.clientSites).find(cs => {
+                            if (scheduleId && cs.scheduleId && getStrId(cs.scheduleId) === String(scheduleId)) return true;
+                            return getStrId(cs.siteId) === String(siteId) && getStrId(cs.clientId) === String(clientId);
+                        });
+                        if (matchedCs && matchedCs.ledger) {
+                            ledger = matchedCs.ledger;
+                        }
+                    }
+                    
+                    // Fallback to "Full Day" for VISIT schedules if no ledger is previously set
+                    if (!ledger && sch.scheduleType === 'VISIT') {
+                        ledger = 'Full Day';
+                    }
+                    
+                    // Preserve existing files if the user is currently editing, otherwise start fresh
+                    const existingRow = prevSites[idx];
+                    const preserveFiles = existingRow && existingRow.scheduleId === scheduleId 
+                        ? existingRow.files 
+                        : { photos: [], data: [], dailyReports: [], drawing: [] };
+
+                    return {
+                        scheduleId,
+                        clientId,
+                        siteId,
+                        ledger: existingRow?.ledger && existingRow.ledger !== '' ? existingRow.ledger : ledger,
+                        files: preserveFiles
+                    };
+                });
+            });
         } else {
             setClientSites([{
+                scheduleId: '',
                 clientId: '',
                 siteId: '',
                 ledger: '',
                 files: { photos: [], data: [], dailyReports: [], drawing: [] }
             }]);
         }
-    }, [employeeSchedules]);
+    }, [employeeSchedules, committedExpenses]);
 
     // Files State
     const [files, setFiles] = useState({ photos: [], data: [], dailyReports: [] });
@@ -292,7 +328,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         setOtherExpenses(updated);
     };
 
-    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
+    const addClientSite = () => setClientSites([...clientSites, { scheduleId: '', clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
     const removeClientSite = (idx) => setClientSites(clientSites.filter((_, i) => i !== idx));
     const updateClientSite = (idx, field, val) => {
         const updated = [...clientSites];
@@ -419,6 +455,9 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 }
             });
             formData.append('otherExpensesList', JSON.stringify(otherExpsToSend));
+            
+            // Add deleted existing files
+            formData.append('deletedExistingFiles', JSON.stringify(deletedExistingFiles));
 
             // Standard Expense Files
             Object.keys(expenseFiles).forEach(key => {
@@ -426,7 +465,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             });
             // Format allocations for backend
             const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
-            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '' }))));
+            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ scheduleId: a.scheduleId || '', clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '' }))));
 
             // Add Files site-wise
             allocations.forEach((site, idx) => {
@@ -480,6 +519,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 setNotes('');
                 setAttendance('Present');
                 setAttendanceRemark('');
+                setDeletedExistingFiles([]);
             }
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Save failed', status: 'error' });
@@ -714,15 +754,28 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                 <Button size="sm" colorScheme="purple" variant="ghost" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
                             </HStack>
                             <VStack spacing={6}>
-                                {activeSchedule && activeSchedule.ledger && (
-                                    <Box w="full" px={4} py={2} bg="teal.50" borderRadius="xl" border="1px solid" borderColor="teal.200">
-                                        <Text fontSize="xs" color="teal.800" fontWeight="bold">
-                                            📅 Scheduled Ledger for selected date: <span style={{ textDecoration: 'underline' }}>{activeSchedule.ledger}</span>
+                                {activeSchedule && activeSchedule.scheduleType && (
+                                    <Box w="full" px={4} py={2} bg="purple.50" borderRadius="xl" border="1px solid" borderColor="purple.200">
+                                        <Text fontSize="xs" color="purple.800" fontWeight="bold">
+                                            🗓️ Schedule Type for selected date: <span style={{ textDecoration: 'underline' }}>{activeSchedule.scheduleType}</span>
                                         </Text>
                                     </Box>
                                 )}
                                 {clientSites.map((row, idx) => (
-                                    <VStack key={idx} w="full" bg="gray.50" p={4} borderRadius="xl" align="stretch" borderLeft="4px solid" borderColor="purple.300">
+                                    <VStack key={idx} w="full" bg="gray.50" p={4} borderRadius="xl" align="stretch" borderLeft="4px solid"
+                                        borderColor={
+                                            (() => {
+                                                const ms = row.scheduleId
+                                                    ? employeeSchedules.find(s => s._id === row.scheduleId)
+                                                    : employeeSchedules.find(s => (s.site?._id || s.site) === row.siteId);
+                                                if (!ms?.scheduleType) return 'purple.300';
+                                                if (ms.scheduleType === 'VISIT') return 'green.400';
+                                                if (ms.scheduleType === 'MONTH') return 'blue.400';
+                                                if (ms.scheduleType === 'TOPOGRAPHY SURVEY') return 'orange.400';
+                                                return 'purple.300';
+                                            })()
+                                        }
+                                    >
                                         <HStack align="flex-end">
                                             <FormControl flex={1}>
                                                 <FormLabel fontSize="10px" fontWeight="bold">Client</FormLabel>
@@ -766,137 +819,233 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                 </Select>
                                             </FormControl>
                                             <FormControl flex={1}>
-                                                <FormLabel fontSize="10px" fontWeight="bold">Ledger</FormLabel>
-                                                <Select 
-                                                    size="sm" 
-                                                    placeholder="Select Ledger" 
-                                                    value={row.ledger} 
-                                                    onChange={(e) => updateClientSite(idx, 'ledger', e.target.value)} 
-                                                    bg="white" 
-                                                    borderRadius="lg"
-                                                >
-                                                    {(() => {
-                                                        const options = new Set();
-                                                        const matchingSchedules = employeeSchedules.filter(s => {
-                                                            const sSiteId = s.site?._id || s.site;
-                                                            return sSiteId === row.siteId;
-                                                        });
-                                                        matchingSchedules.forEach(sch => {
-                                                            if (sch.ledger) options.add(sch.ledger);
-                                                        });
-                                                        if (options.size === 0) {
-                                                            const siteLedgerItems = sites.find(s => s._id === row.siteId)?.ledgerItems || [];
-                                                            siteLedgerItems.forEach(item => {
-                                                                if (item.ledger) options.add(item.ledger);
-                                                            });
-                                                        }
-                                                        return Array.from(options).map(opt => {
-                                                            const isScheduled = matchingSchedules.some(sch => sch.ledger === opt);
-                                                            return (
-                                                                <option key={opt} value={opt}>
-                                                                    {opt} {isScheduled ? '(Scheduled)' : ''}
-                                                                </option>
-                                                            );
-                                                        });
-                                                    })()}
-                                                </Select>
+                                                <FormLabel fontSize="10px" fontWeight="bold">Expenses Ledger</FormLabel>
+                                                {(() => {
+                                                    const matchingSchedule = row.scheduleId
+                                                        ? employeeSchedules.find(s => s._id === row.scheduleId)
+                                                        : employeeSchedules.find(s => (s.site?._id || s.site) === row.siteId);
+                                                    const isVisit = matchingSchedule?.scheduleType === 'VISIT';
+                                                    return isVisit ? (
+                                                        <Select
+                                                            size="sm"
+                                                            placeholder="Select Ledger"
+                                                            value={row.ledger}
+                                                            onChange={(e) => updateClientSite(idx, 'ledger', e.target.value)}
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                        >
+                                                            <option value="Full Day">Full Day</option>
+                                                            <option value="Half Day">Half Day</option>
+                                                        </Select>
+                                                    ) : (
+                                                        <Tooltip label={matchingSchedule ? `Schedule type is '${matchingSchedule.scheduleType}' — ledger selection is not applicable` : 'No schedule found for this site'} placement="top">
+                                                            <Select
+                                                                size="sm"
+                                                                placeholder="Not Applicable"
+                                                                isDisabled
+                                                                bg="gray.100"
+                                                                borderRadius="lg"
+                                                                opacity={0.6}
+                                                                cursor="not-allowed"
+                                                            />
+                                                        </Tooltip>
+                                                    );
+                                                })()}
                                             </FormControl>
                                             {clientSites.length > 1 && (
                                                 <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => removeClientSite(idx)} />
                                             )}
                                         </HStack>
-                                        
+
+                                        {/* Schedule Type Badge */}
+                                        {(() => {
+                                            const ms = row.scheduleId
+                                                ? employeeSchedules.find(s => s._id === row.scheduleId)
+                                                : employeeSchedules.find(s => (s.site?._id || s.site) === row.siteId);
+                                            const typeColors = { 'VISIT': 'green', 'MONTH': 'blue', 'TOPOGRAPHY SURVEY': 'orange' };
+                                            const color = typeColors[ms?.scheduleType] || 'gray';
+                                            return ms?.scheduleType ? (
+                                                <HStack spacing={2} mb={1}>
+                                                    <Badge colorScheme={color} variant="subtle" borderRadius="full" px={3} py={0.5} fontSize="10px" fontWeight="black">
+                                                        {ms.scheduleType}
+                                                    </Badge>
+                                                    <Text fontSize="10px" color="gray.500">schedule type for this site</Text>
+                                                </HStack>
+                                            ) : null;
+                                        })()}
+
                                         {/* Site Specific Uploads */}
-                                        <SimpleGrid columns={4} spacing={3} pt={2}>
-                                            <VStack align="start" spacing={1} width="full">
-                                                <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({row.files.photos.length})</Text>
-                                                <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
-                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
-                                                    {row.files.photos.map((file, fIdx) => (
-                                                        <HStack key={fIdx} justify="space-between" bg="blue.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="blue.100" spacing={1}>
-                                                            <Icon as={FaCamera} color="blue.500" w={2.5} h={2.5} />
-                                                            <Text fontSize="9px" fontWeight="medium" color="blue.800" isTruncated flex={1}>{file.name}</Text>
-                                                            <IconButton 
-                                                                size="2xs" 
-                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
-                                                                colorScheme="red" 
-                                                                variant="ghost" 
-                                                                onClick={() => removeSiteFile(idx, 'photos', fIdx)}
-                                                                aria-label="Remove photo"
-                                                                minW="16px"
-                                                                h="16px"
-                                                            />
-                                                        </HStack>
-                                                    ))}
-                                                </VStack>
-                                            </VStack>
-                                            <VStack align="start" spacing={1} width="full">
-                                                <Text fontSize="9px" fontWeight="black" color="orange.600">REPORTS ({row.files.dailyReports.length})</Text>
-                                                <Input type="file" multiple accept=".pdf,.doc,.docx" onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')} size="xs" p={0} variant="unstyled" />
-                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
-                                                    {row.files.dailyReports.map((file, fIdx) => (
-                                                        <HStack key={fIdx} justify="space-between" bg="orange.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="orange.100" spacing={1}>
-                                                            <Icon as={FaFileAlt} color="orange.500" w={2.5} h={2.5} />
-                                                            <Text fontSize="9px" fontWeight="medium" color="orange.800" isTruncated flex={1}>{file.name}</Text>
-                                                            <IconButton 
-                                                                size="2xs" 
-                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
-                                                                colorScheme="red" 
-                                                                variant="ghost" 
-                                                                onClick={() => removeSiteFile(idx, 'dailyReports', fIdx)}
-                                                                aria-label="Remove report"
-                                                                minW="16px"
-                                                                h="16px"
-                                                            />
-                                                        </HStack>
-                                                    ))}
-                                                </VStack>
-                                            </VStack>
-                                            <VStack align="start" spacing={1} width="full">
-                                                <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({row.files.data.length})</Text>
-                                                <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
-                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
-                                                    {row.files.data.map((file, fIdx) => (
-                                                        <HStack key={fIdx} justify="space-between" bg="purple.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="purple.100" spacing={1}>
-                                                            <Icon as={FaFileAlt} color="purple.500" w={2.5} h={2.5} />
-                                                            <Text fontSize="9px" fontWeight="medium" color="purple.800" isTruncated flex={1}>{file.name}</Text>
-                                                            <IconButton 
-                                                                size="2xs" 
-                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
-                                                                colorScheme="red" 
-                                                                variant="ghost" 
-                                                                onClick={() => removeSiteFile(idx, 'data', fIdx)}
-                                                                aria-label="Remove data file"
-                                                                minW="16px"
-                                                                h="16px"
-                                                            />
-                                                        </HStack>
-                                                    ))}
-                                                </VStack>
-                                            </VStack>
-                                            <VStack align="start" spacing={1} width="full">
-                                                <Text fontSize="9px" fontWeight="black" color="teal.600">DRAWING ({row.files.drawing?.length || 0})</Text>
-                                                <Input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" onChange={(e) => handleSiteFileChange(idx, e, 'drawing')} size="xs" p={0} variant="unstyled" />
-                                                <VStack align="stretch" spacing={1} width="full" mt={1}>
-                                                    {(row.files.drawing || []).map((file, fIdx) => (
-                                                        <HStack key={fIdx} justify="space-between" bg="teal.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="teal.100" spacing={1}>
-                                                            <Icon as={FaPaperclip} color="teal.500" w={2.5} h={2.5} />
-                                                            <Text fontSize="9px" fontWeight="medium" color="teal.800" isTruncated flex={1}>{file.name}</Text>
-                                                            <IconButton 
-                                                                size="2xs" 
-                                                                icon={<Icon as={FaTrash} w={2} h={2} />} 
-                                                                colorScheme="red" 
-                                                                variant="ghost" 
-                                                                onClick={() => removeSiteFile(idx, 'drawing', fIdx)}
-                                                                aria-label="Remove drawing"
-                                                                minW="16px"
-                                                                h="16px"
-                                                            />
-                                                        </HStack>
-                                                    ))}
-                                                </VStack>
-                                            </VStack>
-                                        </SimpleGrid>
+                                        {(() => {
+                                            const getStrId = (val) => val?._id ? String(val._id) : String(val || '');
+                                            const matchingClientSites = committedExpenses.flatMap(e => e.clientSites).filter(cs => {
+                                                if (row.scheduleId && cs.scheduleId && getStrId(cs.scheduleId) === String(row.scheduleId)) return true;
+                                                return getStrId(cs.siteId) === String(row.siteId) && getStrId(cs.clientId) === String(row.clientId);
+                                            });
+                                            
+                                            const filterDeleted = (f) => !deletedExistingFiles.includes(f.url);
+                                            
+                                            const existingPhotos = matchingClientSites.flatMap(cs => cs.files?.photos || []).filter(filterDeleted);
+                                            const existingReports = matchingClientSites.flatMap(cs => cs.files?.dailyReports || []).filter(filterDeleted);
+                                            const existingData = matchingClientSites.flatMap(cs => cs.files?.data || []).filter(filterDeleted);
+                                            const existingDrawing = matchingClientSites.flatMap(cs => cs.files?.drawing || []).filter(filterDeleted);
+                                            
+                                            return (
+                                                <SimpleGrid columns={4} spacing={3} pt={2}>
+                                                    <VStack align="start" spacing={1} width="full">
+                                                        <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({row.files.photos.length + existingPhotos.length})</Text>
+                                                        <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                            {row.files.photos.map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="blue.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="blue.100" spacing={1}>
+                                                                    <Icon as={FaCamera} color="blue.500" w={2.5} h={2.5} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="blue.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'photos', fIdx)}
+                                                                        aria-label="Remove photo"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                            {existingPhotos.map((file, fIdx) => (
+                                                                <HStack key={`ex-ph-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaCamera} color="gray.400" w={2.5} h={2.5} />
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => setDeletedExistingFiles(prev => [...prev, file.url])}
+                                                                        aria-label="Delete existing photo"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </VStack>
+                                                    <VStack align="start" spacing={1} width="full">
+                                                        <Text fontSize="9px" fontWeight="black" color="orange.600">REPORTS ({row.files.dailyReports.length + existingReports.length})</Text>
+                                                        <Input type="file" multiple accept=".pdf,.doc,.docx" onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')} size="xs" p={0} variant="unstyled" />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                            {row.files.dailyReports.map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="orange.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="orange.100" spacing={1}>
+                                                                    <Icon as={FaFileAlt} color="orange.500" w={2.5} h={2.5} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="orange.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'dailyReports', fIdx)}
+                                                                        aria-label="Remove report"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                            {existingReports.map((file, fIdx) => (
+                                                                <HStack key={`ex-rp-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} />
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => setDeletedExistingFiles(prev => [...prev, file.url])}
+                                                                        aria-label="Delete existing report"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </VStack>
+                                                    <VStack align="start" spacing={1} width="full">
+                                                        <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({row.files.data.length + existingData.length})</Text>
+                                                        <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                            {row.files.data.map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="purple.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="purple.100" spacing={1}>
+                                                                    <Icon as={FaFileAlt} color="purple.500" w={2.5} h={2.5} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="purple.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'data', fIdx)}
+                                                                        aria-label="Remove data file"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                            {existingData.map((file, fIdx) => (
+                                                                <HStack key={`ex-da-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} />
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => setDeletedExistingFiles(prev => [...prev, file.url])}
+                                                                        aria-label="Delete existing data file"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </VStack>
+                                                    <VStack align="start" spacing={1} width="full">
+                                                        <Text fontSize="9px" fontWeight="black" color="teal.600">DRAWING ({(row.files.drawing?.length || 0) + existingDrawing.length})</Text>
+                                                        <Input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" onChange={(e) => handleSiteFileChange(idx, e, 'drawing')} size="xs" p={0} variant="unstyled" />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                            {(row.files.drawing || []).map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="teal.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="teal.100" spacing={1}>
+                                                                    <Icon as={FaPaperclip} color="teal.500" w={2.5} h={2.5} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="teal.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'drawing', fIdx)}
+                                                                        aria-label="Remove drawing"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                            {existingDrawing.map((file, fIdx) => (
+                                                                <HStack key={`ex-dw-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaPaperclip} color="gray.400" w={2.5} h={2.5} />
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => setDeletedExistingFiles(prev => [...prev, file.url])}
+                                                                        aria-label="Delete existing drawing"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </VStack>
+                                                </SimpleGrid>
+                                            );
+                                        })()}
                                     </VStack>
                                 ))}
                             </VStack>
@@ -1036,6 +1185,11 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 <Text fontSize="xs" fontWeight="bold">
                                                                     {cs.siteId?.siteName || cs.siteName || 'Unknown Site'} 
                                                                 </Text>
+                                                                {cs.ledger && (
+                                                                    <Badge colorScheme={cs.ledger === 'Full Day' ? 'green' : 'orange'} size="xs" variant="outline" ml={1}>
+                                                                        {cs.ledger}
+                                                                    </Badge>
+                                                                )}
                                                             </HStack>
                                                         ))}
                                                         {(!exp.clientSites || exp.clientSites.length === 0) && (

@@ -20,6 +20,7 @@ import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
 import EmployeeExpensesModule from '../pages/EmployeeExpensesModule';
 import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import AdminDraftingWork from './admin/AdminDraftingWork';
+import InvoiceReport from './admin/InvoiceReport';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -2861,10 +2862,10 @@ const ScheduleMasterForm = () => {
     const [selectedSiteName, setSelectedSiteName] = useState('');
 
     const [formData, setFormData] = useState({
-        client: '', site: '', scheduleDate: '', workForAppley: '',
+        client: '', site: '', scheduleDate: '', endDate: '', includeSundays: false, workForAppley: '',
         operative: '', helpers: [], vehicle: '', instruments: [],
         notes: '', dayStatus: 'Scheduled',
-        ledger: '', amount: 0
+        ledger: '', amount: 0, scheduleType: ''
     });
     const [selectedSiteLedgers, setSelectedSiteLedgers] = useState([]);
     const { isOpen: isCompOpen, onOpen: onCompOpen, onClose: onCompClose } = useDisclosure();
@@ -3001,7 +3002,8 @@ const ScheduleMasterForm = () => {
             notes: schedule.notes || '',
             dayStatus: schedule.dayStatus || 'Scheduled',
             ledger: schedule.ledger || '',
-            amount: schedule.amount || 0
+            amount: schedule.amount || 0,
+            scheduleType: schedule.scheduleType || ''
         });
         if (schedule.site) setSelectedSiteLedgers(schedule.site.ledgerItems || []);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3078,10 +3080,10 @@ const ScheduleMasterForm = () => {
         setSelectedSiteName('');
         setSelectedSiteLedgers([]);
         setFormData({
-            client: '', site: '', scheduleDate: '', workForAppley: '',
+            client: '', site: '', scheduleDate: '', endDate: '', includeSundays: false, workForAppley: '',
             operative: '', helpers: [], vehicle: '', instruments: [],
             notes: '', dayStatus: 'Scheduled',
-            ledger: '', amount: 0
+            ledger: '', amount: 0, scheduleType: ''
         });
     };
 
@@ -3212,7 +3214,7 @@ const ScheduleMasterForm = () => {
                                         </FormControl>
                                     </SimpleGrid>
 
-                                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
+                                    <SimpleGrid columns={{ base: 1, md: 4 }} spacing={6}>
                                         <FormControl isRequired>
                                             <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Date</FormLabel>
                                             <Input type="date" name="scheduleDate" value={formData.scheduleDate} onChange={handleChange} borderRadius="xl" bg="gray.50" />
@@ -3224,6 +3226,20 @@ const ScheduleMasterForm = () => {
                                                 <option value="Completed">Completed</option>
                                             </Select>
                                         </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Schedule Type</FormLabel>
+                                            <Select name="scheduleType" value={formData.scheduleType} onChange={handleChange} borderRadius="xl" bg="gray.50" placeholder="Select Type">
+                                                <option value="VISIT">VISIT</option>
+                                                <option value="MONTH">MONTH</option>
+                                                <option value="TOPOGRAPHY SURVEY">TOPOGRAPHY SURVEY</option>
+                                            </Select>
+                                        </FormControl>
+                                        {formData.scheduleType === 'MONTH' && (
+                                            <FormControl isRequired>
+                                                <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">End Date</FormLabel>
+                                                <Input type="date" name="endDate" value={formData.endDate} onChange={handleChange} borderRadius="xl" bg="gray.50" />
+                                            </FormControl>
+                                        )}
                                         <FormControl>
                                             <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Site Ledger</FormLabel>
                                             <Select
@@ -3368,10 +3384,17 @@ const ScheduleMasterForm = () => {
                                                 </Box>
                                             </SimpleGrid>
 
-                                            {s.ledger && (
-                                                <Box bg="teal.50" p={2} borderRadius="xl" mb={2}>
-                                                    <Text fontSize="xs" fontWeight="bold" color="teal.700">{s.ledger}</Text>
-                                                </Box>
+                                            {s.scheduleType && (
+                                                <HStack spacing={2} mb={3}>
+                                                    <Badge colorScheme="purple" variant="solid" borderRadius="full" px={2.5} py={0.5} fontSize="10px">
+                                                        {s.scheduleType}
+                                                    </Badge>
+                                                    {s.scheduleType === 'MONTH' && s.monthGroupId && (
+                                                        <Badge colorScheme="blue" variant="subtle" borderRadius="full" px={2.5} py={0.5} fontSize="10px">
+                                                            Grp ID: {s.monthGroupId}
+                                                        </Badge>
+                                                    )}
+                                                </HStack>
                                             )}
 
                                             {s.notes && <Text fontSize="10px" color="gray.500" fontStyle="italic">Note: {s.notes}</Text>}
@@ -3415,6 +3438,42 @@ const ScheduleMasterForm = () => {
                     }
                 }}
                 isLoading={isAssignLoading}
+                onPauseMonth={async (target) => {
+                    try {
+                        const res = await api.delete(`/schedule-master/pause-month/${target.client?._id || target.client}/${target.site?._id || target.site}`);
+                        if (res.data.success) {
+                            toast({ title: 'Month Paused', description: res.data.message, status: 'success' });
+                            onAssignClose();
+                            const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                            if (sRes.data.success) setSchedules(sRes.data.data);
+                        }
+                    } catch (err) {
+                        toast({ title: 'Pause Failed', description: err.response?.data?.message || err.message, status: 'error' });
+                    }
+                }}
+                onResumeMonth={async (target, newEndDate, includeSundays) => {
+                    if (!newEndDate) return;
+                    try {
+                        const res = await api.post(`/schedule-master/resume-month`, {
+                            client: target.client?._id || target.client,
+                            site: target.site?._id || target.site,
+                            endDate: newEndDate,
+                            includeSundays: includeSundays,
+                            workForAppley: target.workForAppley,
+                            operative: target.operative?._id || target.operative,
+                            ledger: target.ledger,
+                            amount: target.amount
+                        });
+                        if (res.data.success) {
+                            toast({ title: 'Month Resumed', description: res.data.message, status: 'success' });
+                            onAssignClose();
+                            const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                            if (sRes.data.success) setSchedules(sRes.data.data);
+                        }
+                    } catch (err) {
+                        toast({ title: 'Resume Failed', description: err.response?.data?.message || err.message, status: 'error' });
+                    }
+                }}
             />
 
             <CompletionModal
@@ -3450,13 +3509,27 @@ const ScheduleMasterForm = () => {
     );
 };
 
-const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading }) => {
+const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading, onPauseMonth, onResumeMonth }) => {
     const [formData, setFormData] = useState({
         operative: '',
         helpers: [],
         vehicle: '',
-        instruments: []
+        instruments: [],
+        includeSunday: false
     });
+    const [showResumeInput, setShowResumeInput] = useState(false);
+    const [resumeDate, setResumeDate] = useState('');
+    const [resumeIncludeSundays, setResumeIncludeSundays] = useState(false);
+    const { isOpen: isPauseOpen, onOpen: onPauseOpen, onClose: onPauseClose } = useDisclosure();
+    const cancelPauseRef = React.useRef();
+
+    useEffect(() => {
+        if (!isOpen) {
+            setShowResumeInput(false);
+            setResumeDate('');
+            setResumeIncludeSundays(false);
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         if (schedule) {
@@ -3464,7 +3537,8 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                 operative: schedule.operative?._id || schedule.operative || '',
                 helpers: schedule.helpers?.map(h => h._id || h) || [],
                 vehicle: schedule.vehicle?._id || schedule.vehicle || '',
-                instruments: schedule.instruments?.map(i => i._id || i) || []
+                instruments: schedule.instruments?.map(i => i._id || i) || [],
+                includeSunday: false
             });
         }
     }, [schedule, isOpen]);
@@ -3484,8 +3558,12 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
     };
 
     const isCompleted = schedule?.dayStatus === 'Completed';
+    const isPaused = schedule?.dayStatus === 'Paused';
+    const isSaturday = schedule?.scheduleDate && new Date(schedule.scheduleDate).getDay() === 6;
+    const isMonthType = schedule?.scheduleType === 'MONTH';
 
     return (
+        <>
         <Modal isOpen={isOpen} onClose={onClose} size="xl">
             <ModalOverlay backdropFilter="blur(12px)" bg="blackAlpha.700" />
             <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
@@ -3634,30 +3712,112 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                 </Box>
                             </FormControl>
                         </SimpleGrid>
+                        
+                        {isSaturday && isMonthType && !isCompleted && !isPaused && (
+                            <Box bg="blue.50" p={4} borderRadius="xl" border="1px solid" borderColor="blue.100">
+                                <Checkbox 
+                                    colorScheme="blue" 
+                                    size="md"
+                                    isChecked={formData.includeSunday}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, includeSunday: e.target.checked }))}
+                                >
+                                    <Text fontWeight="bold" fontSize="sm" color="blue.800">
+                                        Schedule work for Tomorrow (Sunday)?
+                                    </Text>
+                                    <Text fontSize="xs" color="blue.600">
+                                        This will automatically generate a new schedule for this site tomorrow.
+                                    </Text>
+                                </Checkbox>
+                            </Box>
+                        )}
                     </VStack>
                 </ModalBody>
-                <ModalFooter bg="white" py={6} borderTop="1px solid" borderColor="gray.100">
-                    <Button variant="ghost" mr={3} onClick={onClose} borderRadius="full" px={6}>Close</Button>
-                    {!isCompleted && (
-                        <Button 
-                            bgGradient="linear(to-r, blue.600, blue.400)" 
-                            color="white" 
-                            _hover={{ bgGradient: 'linear(to-r, blue.700, blue.500)', transform: 'translateY(-1px)', shadow: 'xl' }}
-                            _active={{ transform: 'translateY(0)' }}
-                            isLoading={isLoading} 
-                            onClick={() => onUpdate(formData)} 
-                            px={10} 
-                            h="50px"
-                            borderRadius="full"
-                            shadow="lg"
-                            transition="all 0.2s"
-                        >
-                            Update Resources
-                        </Button>
-                    )}
+                <ModalFooter bg="white" py={4} borderTop="1px solid" borderColor="gray.100">
+                    <Flex w="full" justify="space-between" align="center" wrap="wrap" gap={3}>
+                        <Button variant="ghost" onClick={onClose} borderRadius="full" px={6}>Close</Button>
+                        
+                        <HStack spacing={3} flexWrap="wrap" justify="flex-end" flex={1}>
+                            {!isCompleted && schedule?.scheduleType === 'MONTH' && !isPaused && (
+                                    <Button 
+                                        colorScheme="red" 
+                                        variant="outline" 
+                                        borderRadius="full" 
+                                        px={5}
+                                        h="40px"
+                                        onClick={onPauseOpen}
+                                        isLoading={isLoading}
+                                    >
+                                        Pause
+                                    </Button>
+                            )}
+                            {!isCompleted && schedule?.scheduleType === 'MONTH' && isPaused && (
+                                showResumeInput ? (
+                                    <HStack bg="gray.50" p={2} borderRadius="xl" border="1px solid" borderColor="gray.200" flexWrap="wrap">
+                                        <Input type="date" size="sm" value={resumeDate} onChange={e => setResumeDate(e.target.value)} borderRadius="md" bg="white" w="auto" />
+                                        <Checkbox size="sm" colorScheme="green" isChecked={resumeIncludeSundays} onChange={e => setResumeIncludeSundays(e.target.checked)}>
+                                            <Text fontSize="xs" fontWeight="bold">Include Sundays?</Text>
+                                        </Checkbox>
+                                        <Button colorScheme="green" size="sm" borderRadius="md" px={4} onClick={() => { onResumeMonth(schedule, resumeDate, resumeIncludeSundays); setShowResumeInput(false); }}>Confirm</Button>
+                                        <Button size="sm" borderRadius="md" variant="ghost" onClick={() => setShowResumeInput(false)}>Cancel</Button>
+                                    </HStack>
+                                ) : (
+                                    <Button 
+                                        colorScheme="green" 
+                                        variant="outline" 
+                                        borderRadius="full" 
+                                        px={5}
+                                        h="40px"
+                                        onClick={() => setShowResumeInput(true)}
+                                        isLoading={isLoading}
+                                    >
+                                        Resume
+                                    </Button>
+                                )
+                            )}
+                            {!isCompleted && !isPaused && (
+                                <Button 
+                                    bgGradient="linear(to-r, blue.600, blue.400)" 
+                                    color="white" 
+                                    _hover={{ bgGradient: 'linear(to-r, blue.700, blue.500)', transform: 'translateY(-1px)', shadow: 'xl' }}
+                                    _active={{ transform: 'translateY(0)' }}
+                                    isLoading={isLoading} 
+                                    onClick={() => onUpdate(formData)} 
+                                    px={8} 
+                                    h="40px"
+                                    borderRadius="full"
+                                    shadow="lg"
+                                    transition="all 0.2s"
+                                >
+                                    Update
+                                </Button>
+                            )}
+                        </HStack>
+                    </Flex>
                 </ModalFooter>
             </ModalContent>
         </Modal>
+
+        <AlertDialog isOpen={isPauseOpen} leastDestructiveRef={cancelPauseRef} onClose={onPauseClose} isCentered>
+            <AlertDialogOverlay backdropFilter="blur(5px)" bg="blackAlpha.600">
+                <AlertDialogContent borderRadius="2xl">
+                    <AlertDialogHeader fontSize="lg" fontWeight="black" color="red.600">
+                        Pause Month Schedule
+                    </AlertDialogHeader>
+                    <AlertDialogBody color="gray.600">
+                        Are you sure you want to pause this month schedule? All future uncompleted daily schedules for this site will be paused.
+                    </AlertDialogBody>
+                    <AlertDialogFooter>
+                        <Button ref={cancelPauseRef} onClick={onPauseClose} borderRadius="full" variant="ghost">
+                            Cancel
+                        </Button>
+                        <Button colorScheme="red" onClick={() => { onPauseMonth(schedule); onPauseClose(); }} ml={3} isLoading={isLoading} borderRadius="full" shadow="md">
+                            Confirm Pause
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialogOverlay>
+        </AlertDialog>
+        </>
     );
 };
 
@@ -4170,6 +4330,9 @@ const Services = () => {
                                 <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
                                     <Icon as={FaFolderOpen} mr={2} /> Drafting Work
                                 </Tab>
+                                <Tab _selected={{ color: 'white', bg: 'blue.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                    <Icon as={FaFileInvoiceDollar} mr={2} /> Invoice Report
+                                </Tab>
                             </TabList>
 
                             <TabPanels flex={1}>
@@ -4197,6 +4360,9 @@ const Services = () => {
                                 </TabPanel>
                                 <TabPanel p={0}>
                                     <AdminDraftingWork />
+                                </TabPanel>
+                                <TabPanel p={0}>
+                                    <InvoiceReport />
                                 </TabPanel>
                             </TabPanels>
                         </Tabs>

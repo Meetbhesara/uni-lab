@@ -33,7 +33,8 @@ const AdminSiteAllocation = () => {
             
             const res = await api.get(url);
             if (res.data.success) {
-                setSchedules(res.data.data);
+                const validSchedules = res.data.data.filter(s => s.dayStatus !== 'Paused' && s.dayStatus !== 'Rejected');
+                setSchedules(validSchedules);
             }
         } catch (err) {
             console.error("Error fetching site allocations", err);
