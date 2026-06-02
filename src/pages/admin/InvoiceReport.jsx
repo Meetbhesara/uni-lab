@@ -68,37 +68,35 @@ const InvoiceReport = () => {
                 const monthGroups = {};
 
                 rawData.forEach(s => {
-                    if (s.scheduleType === 'MONTH') {
-                        if (!s.monthGroupId) return; // STRICT: Ignore legacy month schedules without a group ID to ensure accurate reporting
-                        
-                        const groupId = s.monthGroupId;
-                        const groupKey = `${s.client?._id}-${s.site?._id}-${groupId}`;
-                        
-                        if (!monthGroups[groupKey]) {
-                            // First occurrence of this contract
-                            monthGroups[groupKey] = { ...s };
-                            monthGroups[groupKey].isMonthGroup = true;
-                            monthGroups[groupKey].groupedDates = [s.scheduleDate];
-                            monthGroups[groupKey].allExpenses = s.employeeExpenses || [];
-                            monthGroups[groupKey].allDocuments = s.uploadedDocuments || [];
-                        } else {
-                            // Merge subsequent days into the group
-                            monthGroups[groupKey].groupedDates.push(s.scheduleDate);
-                            if (s.employeeExpenses) {
-                                monthGroups[groupKey].allExpenses = [
-                                    ...monthGroups[groupKey].allExpenses,
-                                    ...s.employeeExpenses
-                                ];
-                            }
-                            if (s.uploadedDocuments) {
-                                monthGroups[groupKey].allDocuments = [
-                                    ...monthGroups[groupKey].allDocuments,
-                                    ...s.uploadedDocuments
-                                ];
-                            }
+                    const isMonth = s.scheduleType === 'MONTH';
+                    const groupId = isMonth ? s.monthGroupId : s._id;
+                    
+                    if (isMonth && !groupId) return; // STRICT: Ignore legacy month schedules without a group ID
+                    
+                    const groupKey = `${s.client?._id}-${s.site?._id}-${groupId}`;
+                    
+                    if (!monthGroups[groupKey]) {
+                        // First occurrence of this contract or visit
+                        monthGroups[groupKey] = { ...s };
+                        monthGroups[groupKey].isMonthGroup = isMonth;
+                        monthGroups[groupKey].groupedDates = [s.scheduleDate];
+                        monthGroups[groupKey].allExpenses = s.employeeExpenses || [];
+                        monthGroups[groupKey].allDocuments = s.uploadedDocuments || [];
+                    } else {
+                        // Merge subsequent days into the group
+                        monthGroups[groupKey].groupedDates.push(s.scheduleDate);
+                        if (s.employeeExpenses) {
+                            monthGroups[groupKey].allExpenses = [
+                                ...monthGroups[groupKey].allExpenses,
+                                ...s.employeeExpenses
+                            ];
                         }
-                    } else if (s.scheduleType === 'VISIT' || !s.scheduleType) {
-                        groupedData.push(s);
+                        if (s.uploadedDocuments) {
+                            monthGroups[groupKey].allDocuments = [
+                                ...monthGroups[groupKey].allDocuments,
+                                ...s.uploadedDocuments
+                            ];
+                        }
                     }
                 });
 
@@ -140,20 +138,20 @@ const InvoiceReport = () => {
         }
     };
 
-    // Filter logic based on schedule type
+    // Filter logic based on documents
     const validSchedules = schedules.filter(s => {
-        if (s.isMonthGroup || s.scheduleType === 'MONTH') {
-            // For MONTH schedules: Show them immediately (Scheduled, Paused, Completed). Only hide if Rejected.
-            if (s.dayStatus === 'Rejected') return false;
-            return true;
-        } else {
-            // For VISIT schedules (or undefined):
-            // 1. MUST be Full Day or Half Day
-            if (s.ledger !== 'Full Day' && s.ledger !== 'Half Day') return false;
-            // 2. MUST be explicitly marked as Completed
-            if (s.dayStatus !== 'Completed') return false;
-            return true;
-        }
+        if (s.dayStatus === 'Rejected') return false;
+        
+        const hasCoreDocs = s.allDocuments && s.allDocuments.some(d => {
+            const isPhoto = d.url?.includes('/photos/') || d.name?.toLowerCase().includes('photo') || (d.url?.includes('site_') && d.url?.includes('photos')) || d.url?.includes('/uploads/photos-');
+            const isReport = d.url?.includes('/Daily_report/') || d.url?.includes('dailyReports') || d.name?.toLowerCase().includes('report');
+            const isData = d.url?.includes('/data/') || d.url?.includes('dataFiles') || (d.url?.includes('site_') && d.url?.includes('data'));
+            const isDrawing = d.url?.includes('/drawing/') || (d.url?.includes('site_') && d.url?.includes('drawing'));
+            
+            return isPhoto || isReport || isData || isDrawing;
+        });
+            
+        return hasCoreDocs;
     });
 
     // Filter client-side by search text and ledger
@@ -392,7 +390,7 @@ const InvoiceReport = () => {
                                                                         onClick={() => {
                                                                             setViewTarget({
                                                                                 ...s,
-                                                                                uploadedDocuments: s.isMonthGroup ? s.allDocuments : s.uploadedDocuments
+                                                                                uploadedDocuments: s.allDocuments
                                                                             });
                                                                             onOpen();
                                                                         }}
@@ -449,12 +447,11 @@ const InvoiceReport = () => {
                     <ModalBody p={6}>
                         {viewTarget && (() => {
                             const docs = viewTarget.uploadedDocuments || [];
-                            const photos = docs.filter(d => d.url?.includes('/photos/'));
-                            const reports = docs.filter(d => d.url?.includes('/Daily_report/'));
-                            const data = docs.filter(d => d.url?.includes('/data/'));
-                            
-                            // Combine drawing and others if any
-                            const drawing = docs.filter(d => d.url?.includes('/drawing/'));
+                            const photos = docs.filter(d => d.url?.includes('/photos/') || d.name?.toLowerCase().includes('photo') || d.url?.includes('site_') && d.url?.includes('photos') || d.url?.includes('/uploads/photos-'));
+                            const reports = docs.filter(d => d.url?.includes('/Daily_report/') || d.url?.includes('dailyReports') || d.name?.toLowerCase().includes('report'));
+                            const data = docs.filter(d => d.url?.includes('/data/') || d.url?.includes('dataFiles') || d.url?.includes('site_') && d.url?.includes('data'));
+                            const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('site_') && d.url?.includes('drawing'));
+                            const expenseReceipts = docs.filter(d => d.url?.includes('expense_') || d.url?.includes('otherExpense_') || d.category);
                             
                             // Function to format exact date and time as requested
                             const formatDateTime = (dateStr) => {
@@ -487,6 +484,7 @@ const InvoiceReport = () => {
                                         { label: 'Daily Reports', files: reports, color: 'blue', icon: FaFilePdf },
                                         { label: 'Data Files', files: data, color: 'teal', icon: FaFileAlt },
                                         { label: 'Drawings', files: drawing, color: 'orange', icon: FaFileAlt },
+                                        { label: 'Expense Receipts', files: expenseReceipts, color: 'green', icon: FaFileInvoiceDollar },
                                     ].map(({ label, files, color, icon }) => files && files.length > 0 && (
                                         <Box key={label}>
                                             <Text fontSize="10px" fontWeight="black" color={`${color}.500`} textTransform="uppercase" mb={2}>

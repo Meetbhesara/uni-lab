@@ -3306,7 +3306,9 @@ const ScheduleMasterForm = () => {
                                                 <Th py={4} color="gray.500" fontSize="10px">DATE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">CLIENT & SITE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">OPERATIVE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">RESOURCES</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">HELPER</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">VEHICLE</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px">INSTRUMENT</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">TYPE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">STATUS</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">ACTIONS</Th>
@@ -3337,13 +3339,40 @@ const ScheduleMasterForm = () => {
                                                             {s.operative?.name || <Text as="span" color="red.400">Unassigned</Text>}
                                                         </Text>
                                                     </Td>
-                                                    <Td py={3}>
-                                                        <VStack align="start" spacing={0}>
-                                                            {s.helpers?.length > 0 && <Text fontSize="xs" color="gray.600">Helpers: {s.helpers.length}</Text>}
-                                                            {s.vehicle && <Text fontSize="xs" color="gray.600">Vehicle: {s.vehicle.vehicleNumber}</Text>}
-                                                            {s.instruments?.length > 0 && <Text fontSize="xs" color="gray.600">Instruments: {s.instruments.length}</Text>}
-                                                            {!s.helpers?.length && !s.vehicle && !s.instruments?.length && <Text fontSize="xs" color="gray.400">No extra resources</Text>}
-                                                        </VStack>
+                                                    <Td py={3} maxW="150px">
+                                                        {s.helpers?.length > 0 ? (
+                                                            <VStack align="start" spacing={1}>
+                                                                {s.helpers.map((h, idx) => (
+                                                                    <Text key={idx} fontSize="xs" color="teal.600" fontWeight="bold">
+                                                                        {h.name}
+                                                                    </Text>
+                                                                ))}
+                                                            </VStack>
+                                                        ) : (
+                                                            <Text fontSize="xs" color="gray.400">--</Text>
+                                                        )}
+                                                    </Td>
+                                                    <Td py={3} maxW="150px">
+                                                        {s.vehicle ? (
+                                                            <Text fontSize="xs" color="orange.600" fontWeight="bold">
+                                                                {s.vehicle.vehicleName} ({s.vehicle.vehicleNumber})
+                                                            </Text>
+                                                        ) : (
+                                                            <Text fontSize="xs" color="gray.400">--</Text>
+                                                        )}
+                                                    </Td>
+                                                    <Td py={3} maxW="150px">
+                                                        {s.instruments?.length > 0 ? (
+                                                            <VStack align="start" spacing={1}>
+                                                                {s.instruments.map((i, idx) => (
+                                                                    <Text key={idx} fontSize="xs" color="purple.600" fontWeight="bold">
+                                                                        {i.instrumentName} ({i.serialNo})
+                                                                    </Text>
+                                                                ))}
+                                                            </VStack>
+                                                        ) : (
+                                                            <Text fontSize="xs" color="gray.400">--</Text>
+                                                        )}
                                                     </Td>
                                                     <Td py={3}>
                                                         <VStack align="start" spacing={1}>
@@ -3359,12 +3388,8 @@ const ScheduleMasterForm = () => {
                                                     <Td py={3} onClick={(e) => e.stopPropagation()}>
                                                         <HStack spacing={2}>
                                                             {s.dayStatus === 'Scheduled' && (
-                                                                <>
-                                                                    <Button size="xs" colorScheme="green" leftIcon={<Icon as={FaCheckCircle} />} onClick={() => { setCompTarget(s); onCompOpen(); }}>Complete</Button>
-                                                                    <Button size="xs" colorScheme="red" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>Reject</Button>
-                                                                </>
+                                                                <Button size="xs" colorScheme="red" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>Reject</Button>
                                                             )}
-                                                            <IconButton size="xs" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(s)} />
                                                         </HStack>
                                                     </Td>
                                                 </Tr>
@@ -3445,6 +3470,19 @@ const ScheduleMasterForm = () => {
                         toast({ title: 'Resume Failed', description: err.response?.data?.message || err.message, status: 'error' });
                     }
                 }}
+                onCompleteMonth={async (target) => {
+                    try {
+                        const res = await api.put(`/schedule-master/end-month/${target.client?._id || target.client}/${target.site?._id || target.site}`);
+                        if (res.data.success) {
+                            toast({ title: 'Contract Completed', description: res.data.message, status: 'success' });
+                            onAssignClose();
+                            const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                            if (sRes.data.success) setSchedules(sRes.data.data);
+                        }
+                    } catch (err) {
+                        toast({ title: 'Completion Failed', description: err.response?.data?.message || err.message, status: 'error' });
+                    }
+                }}
             />
 
             <CompletionModal
@@ -3480,7 +3518,7 @@ const ScheduleMasterForm = () => {
     );
 };
 
-const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading, onPauseMonth, onResumeMonth }) => {
+const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth }) => {
     const [formData, setFormData] = useState({
         operative: '',
         helpers: [],
@@ -3492,13 +3530,17 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
     const [resumeDate, setResumeDate] = useState('');
     const [resumeIncludeSundays, setResumeIncludeSundays] = useState(false);
     const { isOpen: isPauseOpen, onOpen: onPauseOpen, onClose: onPauseClose } = useDisclosure();
+    const { isOpen: isCompleteOpen, onOpen: onCompleteOpen, onClose: onCompleteClose } = useDisclosure();
+    const [completeText, setCompleteText] = useState('');
     const cancelPauseRef = React.useRef();
+    const cancelCompleteRef = React.useRef();
 
     useEffect(() => {
         if (!isOpen) {
             setShowResumeInput(false);
             setResumeDate('');
             setResumeIncludeSundays(false);
+            setCompleteText('');
         }
     }, [isOpen]);
 
@@ -3709,6 +3751,17 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                         
                         <HStack spacing={3} flexWrap="wrap" justify="flex-end" flex={1}>
                             {!isCompleted && schedule?.scheduleType === 'MONTH' && !isPaused && (
+                                <>
+                                    <Button 
+                                        colorScheme="green" 
+                                        variant="outline" 
+                                        borderRadius="full" 
+                                        px={5}
+                                        h="40px"
+                                        onClick={onCompleteOpen}
+                                    >
+                                        Complete Contract
+                                    </Button>
                                     <Button 
                                         colorScheme="red" 
                                         variant="outline" 
@@ -3720,6 +3773,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                     >
                                         Pause
                                     </Button>
+                                </>
                             )}
                             {!isCompleted && schedule?.scheduleType === 'MONTH' && isPaused && (
                                 showResumeInput ? (
@@ -3783,6 +3837,43 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                         </Button>
                         <Button colorScheme="red" onClick={() => { onPauseMonth(schedule); onPauseClose(); }} ml={3} isLoading={isLoading} borderRadius="full" shadow="md">
                             Confirm Pause
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialogOverlay>
+        </AlertDialog>
+
+        <AlertDialog isOpen={isCompleteOpen} leastDestructiveRef={cancelCompleteRef} onClose={onCompleteClose} isCentered>
+            <AlertDialogOverlay backdropFilter="blur(5px)" bg="blackAlpha.600">
+                <AlertDialogContent borderRadius="2xl">
+                    <AlertDialogHeader fontSize="lg" fontWeight="black" color="green.600">
+                        Complete Month Contract
+                    </AlertDialogHeader>
+                    <AlertDialogBody color="gray.600">
+                        <Text mb={4}>
+                            Are you absolutely sure you want to <strong>COMPLETE</strong> this contract? This will permanently end the automatic generation of future schedules for this contract.
+                        </Text>
+                        <Text mb={2} fontSize="sm" fontWeight="bold">Type "COMPLETE" to confirm:</Text>
+                        <Input 
+                            value={completeText} 
+                            onChange={(e) => setCompleteText(e.target.value)} 
+                            placeholder="COMPLETE"
+                            autoFocus
+                            borderRadius="lg"
+                        />
+                    </AlertDialogBody>
+                    <AlertDialogFooter>
+                        <Button ref={cancelCompleteRef} onClick={onCompleteClose} borderRadius="full" variant="ghost">Cancel</Button>
+                        <Button 
+                            colorScheme="green" 
+                            isDisabled={completeText !== 'COMPLETE'}
+                            onClick={() => { onCompleteMonth(schedule); onCompleteClose(); }} 
+                            ml={3} 
+                            borderRadius="full" 
+                            px={6}
+                            shadow="md"
+                        >
+                            Complete Contract
                         </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
