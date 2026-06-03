@@ -517,8 +517,8 @@ const VehicleMasterForm = () => {
                             </Flex>
 
                             {viewMode === 'table' ? (
-                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                    <Table variant="simple">
+                                <Box overflow="hidden" w="full" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
                                                 <Th>Vehicle No</Th>
@@ -1376,8 +1376,8 @@ const EmployeeMasterForm = () => {
                             </Flex>
 
                             {viewMode === 'table' ? (
-                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                    <Table variant="simple">
+                                <Box overflow="hidden" w="full" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
                                                 <Th>ID</Th>
@@ -1891,8 +1891,8 @@ const ClientMasterForm = () => {
                             </Flex>
 
                             {viewMode === 'table' ? (
-                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                    <Table variant="simple">
+                                <Box overflow="hidden" w="full" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
                                                 <Th>ID</Th>
@@ -2586,8 +2586,8 @@ const SiteMasterForm = () => {
                             </Flex>
 
                             {viewMode === 'table' ? (
-                                <Box overflowX="auto" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                    <Table variant="simple">
+                                <Box overflow="hidden" w="full" bg="white" borderRadius="xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                    <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
                                                 <Th>Site Name</Th>
@@ -4213,8 +4213,8 @@ const InstrumentMasterForm = () => {
                         </Heading>
                         <Tag colorScheme="blue" variant="subtle" borderRadius="full">{instruments.length} Total</Tag>
                     </HStack>
-                    <Box overflowX="auto" bg="white" borderRadius="2xl" boxShadow="xl" border="1px solid" borderColor="gray.100">
-                        <Table variant="simple">
+                    <Box overflow="hidden" w="full" bg="white" borderRadius="2xl" boxShadow="xl" border="1px solid" borderColor="gray.100">
+                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                             <Thead bg="blue.50">
                                 <Tr>
                                     <Th color="blue.700" py={4}>Photo</Th>
@@ -4462,7 +4462,7 @@ const Services = () => {
                                 </TabList>
                             )}
 
-                            <TabPanels flex={1} w={isSidebarOpen ? "calc(100% - 200px)" : "100%"}>
+                            <TabPanels flex={1} w="full">
                                 <TabPanel p={0}>
                                     <VehicleMasterForm />
                                 </TabPanel>

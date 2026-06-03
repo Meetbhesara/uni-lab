@@ -289,15 +289,15 @@ const InvoiceReport = () => {
                                     </VStack>
                                 </Center>
                             ) : (
-                                <TableContainer>
-                                    <Table variant="simple" size="sm">
+                                <TableContainer overflow="hidden" w="full">
+                                    <Table variant="simple" size="sm" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
                                                 <Th py={4} color="gray.500" fontSize="10px">#</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">CLIENT</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">SITE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">OPERATIVE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">SCHEDULE DATE</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px" whiteSpace="nowrap">SCHEDULE DATE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">LEDGER TYPE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">BILL STATUS</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">ACTIONS</Th>
@@ -334,7 +334,7 @@ const InvoiceReport = () => {
                                                                 <Text fontSize="sm" color="gray.700">{s.operative?.name || <Text as="span" color="gray.300">Unassigned</Text>}</Text>
                                                             </HStack>
                                                         </Td>
-                                                        <Td py={3}>
+                                                        <Td py={3} whiteSpace="nowrap">
                                                             <VStack align="start" spacing={1}>
                                                                 {s.isMonthGroup ? (
                                                                     <Badge colorScheme="blue" fontSize="8px" variant="solid">MONTH CONTRACT {s.monthGroupId ? `(ID:${s.monthGroupId})` : ''}</Badge>

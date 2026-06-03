@@ -498,13 +498,13 @@ const AdminDraftingWork = () => {
                             <TabPanel p={0}>
                                 {!selectedSurvey ? (
                                     <VStack spacing={6} align="stretch">
-                                        <Box overflowX="auto" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                            <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal' } }}>
+                                        <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                            <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                                 <Thead bg="gray.50">
                                                     <Tr>
                                                         <Th>Client</Th>
                                                         <Th>Site Name</Th>
-                                                        <Th>Schedule Date(s)</Th>
+                                                        <Th whiteSpace="nowrap">Schedule Date(s)</Th>
                                                         <Th>Operative Name</Th>
                                                         <Th>Drafting Status</Th>
                                                     </Tr>
@@ -522,7 +522,7 @@ const AdminDraftingWork = () => {
                                                                     <Text>{survey.site?.siteName || 'N/A'}</Text>
                                                                 </VStack>
                                                             </Td>
-                                                            <Td fontSize="sm" fontWeight="medium">
+                                                            <Td fontSize="sm" fontWeight="medium" whiteSpace="nowrap">
                                                                 <Text>{formatIST(survey.scheduleDate)}</Text>
                                                             </Td>
                                                             <Td>
@@ -703,8 +703,8 @@ const AdminDraftingWork = () => {
                             <TabPanel p={0}>
                                 <VStack spacing={6} align="stretch">
 
-                                    <Box overflowX="auto" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal' } }}>
+                                    <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                             <Thead bg="gray.50">
                                                 <Tr>
                                                     <Th>Document</Th>
@@ -822,8 +822,8 @@ const AdminDraftingWork = () => {
                                         )}
                                     </Box>
 
-                                    <Box overflowX="auto" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                        <Table variant="simple">
+                                    <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                             <Thead bg="gray.50">
                                                 <Tr>
                                                     <Th>Drafted Document</Th>
@@ -887,8 +887,8 @@ const AdminDraftingWork = () => {
                                             </Button>
                                         </Flex>
                                     )}
-                                    <Box overflowX="auto" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                        <Table variant="simple">
+                                    <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                             <Thead bg="gray.50">
                                                 <Tr>
                                                     <Th w="40px">Select</Th>
@@ -939,8 +939,8 @@ const AdminDraftingWork = () => {
                             {/* SECTION 4: MAIL */}
                             <TabPanel p={0}>
                                 <VStack spacing={6} align="stretch">
-                                    <Box overflowX="auto" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                        <Table variant="simple">
+                                    <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                             <Thead bg="gray.50">
                                                 <Tr>
                                                     <Th>Mailed Document</Th>
