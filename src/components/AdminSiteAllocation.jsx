@@ -199,8 +199,8 @@ const AdminSiteAllocation = () => {
                     </VStack>
                 </Center>
             ) : (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="xl" overflowX="auto" w="full">
-                <Table size="sm" variant="simple" minW="1100px" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #E2E8F0', py: 4, px: 4 } }}>
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="xl" w="full" whiteSpace="normal">
+                <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #E2E8F0', py: 4, px: 4, whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                     <Thead bg="gray.100">
                         <Tr>
                             <Th textAlign="center" color="gray.700" py={5} w="60px" borderColor="gray.300">SR. NO.</Th>

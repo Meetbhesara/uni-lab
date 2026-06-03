@@ -878,7 +878,15 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                         {(() => {
                                             const getStrId = (val) => val?._id ? String(val._id) : String(val || '');
                                             const matchingClientSites = committedExpenses.flatMap(e => e.clientSites).filter(cs => {
-                                                if (row.scheduleId && cs.scheduleId && getStrId(cs.scheduleId) === String(row.scheduleId)) return true;
+                                                // If both have a scheduleId, they MUST match exactly.
+                                                if (row.scheduleId && cs.scheduleId) {
+                                                    return getStrId(cs.scheduleId) === String(row.scheduleId);
+                                                }
+                                                // If one has a scheduleId and the other doesn't, they do NOT match.
+                                                if (row.scheduleId || cs.scheduleId) {
+                                                    return false;
+                                                }
+                                                // Fallback: match by site and client ONLY if neither has a scheduleId.
                                                 return getStrId(cs.siteId) === String(row.siteId) && getStrId(cs.clientId) === String(row.clientId);
                                             });
                                             

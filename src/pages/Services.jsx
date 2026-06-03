@@ -3299,8 +3299,8 @@ const ScheduleMasterForm = () => {
                                     <Text color="gray.400">No schedules found for {viewDate}</Text>
                                 </Box>
                             ) : (
-                                <TableContainer>
-                                    <Table variant="simple" size="sm">
+                                <TableContainer whiteSpace="normal">
+                                    <Table variant="simple" size="sm" sx={{ 'td, th': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
                                                 <Th py={4} color="gray.500" fontSize="10px">DATE</Th>
@@ -3524,7 +3524,9 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
         helpers: [],
         vehicle: '',
         instruments: [],
-        includeSunday: false
+        includeSunday: false,
+        scheduleType: '',
+        endDate: ''
     });
     const [showResumeInput, setShowResumeInput] = useState(false);
     const [resumeDate, setResumeDate] = useState('');
@@ -3551,7 +3553,9 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                 helpers: schedule.helpers?.map(h => h._id || h) || [],
                 vehicle: schedule.vehicle?._id || schedule.vehicle || '',
                 instruments: schedule.instruments?.map(i => i._id || i) || [],
-                includeSunday: false
+                includeSunday: false,
+                scheduleType: schedule.scheduleType || '',
+                endDate: schedule.endDate ? new Date(schedule.endDate).toISOString().split('T')[0] : ''
             });
         }
     }, [schedule, isOpen]);
@@ -3596,32 +3600,76 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                 <ModalCloseButton color="white" borderRadius="full" mt={2} />
                 <ModalBody p={8} bg="gray.50">
                     <VStack spacing={8} align="stretch">
-                        <FormControl isDisabled={isCompleted}>
-                            <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
-                                <Icon as={FaStar} mr={2} color="yellow.500" /> Main Operative
-                            </FormLabel>
-                            <Select 
-                                value={formData.operative} 
-                                onChange={(e) => {
-                                    const newOp = e.target.value;
-                                    setFormData(prev => ({ 
-                                        ...prev, 
-                                        operative: newOp,
-                                        helpers: prev.helpers.filter(h => h !== newOp)
-                                    }));
-                                }}
-                                borderRadius="2xl" 
-                                bg="white" 
-                                border="2px solid"
-                                borderColor="gray.100"
-                                _focus={{ borderColor: 'blue.400', boxShadow: 'none' }}
-                                placeholder="Select Primary Operative"
-                                fontWeight="bold"
-                                h="50px"
-                            >
-                                {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
-                            </Select>
-                        </FormControl>
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                            <FormControl isDisabled={isCompleted}>
+                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                    <Icon as={FaListUl} mr={2} color="purple.500" /> Schedule Type
+                                </FormLabel>
+                                <Select 
+                                    value={formData.scheduleType} 
+                                    onChange={(e) => setFormData(prev => ({ ...prev, scheduleType: e.target.value }))}
+                                    borderRadius="2xl" 
+                                    bg="white" 
+                                    border="2px solid"
+                                    borderColor="gray.100"
+                                    _focus={{ borderColor: 'purple.400', boxShadow: 'none' }}
+                                    fontWeight="bold"
+                                    h="50px"
+                                    placeholder="Select Schedule Type"
+                                >
+                                    <option value="VISIT">VISIT</option>
+                                    <option value="MONTH">MONTH</option>
+                                    <option value="TOPOGRAPHY SURVEY">TOPOGRAPHY SURVEY</option>
+                                </Select>
+                            </FormControl>
+
+                            <FormControl isDisabled={isCompleted}>
+                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                    <Icon as={FaStar} mr={2} color="yellow.500" /> Main Operative
+                                </FormLabel>
+                                <Select 
+                                    value={formData.operative} 
+                                    onChange={(e) => {
+                                        const newOp = e.target.value;
+                                        setFormData(prev => ({ 
+                                            ...prev, 
+                                            operative: newOp,
+                                            helpers: prev.helpers.filter(h => h !== newOp)
+                                        }));
+                                    }}
+                                    borderRadius="2xl" 
+                                    bg="white" 
+                                    border="2px solid"
+                                    borderColor="gray.100"
+                                    _focus={{ borderColor: 'blue.400', boxShadow: 'none' }}
+                                    placeholder="Select Primary Operative"
+                                    fontWeight="bold"
+                                    h="50px"
+                                >
+                                    {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+                                </Select>
+                            </FormControl>
+                        </SimpleGrid>
+
+                        {formData.scheduleType === 'MONTH' && (
+                            <FormControl isDisabled={isCompleted} isRequired>
+                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                    <Icon as={FaCalendarAlt} mr={2} color="red.500" /> Contract End Date
+                                </FormLabel>
+                                <Input 
+                                    type="date"
+                                    value={formData.endDate} 
+                                    onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                                    borderRadius="2xl" 
+                                    bg="white" 
+                                    border="2px solid"
+                                    borderColor="gray.100"
+                                    _focus={{ borderColor: 'red.400', boxShadow: 'none' }}
+                                    fontWeight="bold"
+                                    h="50px"
+                                />
+                            </FormControl>
+                        )}
 
                         <FormControl isDisabled={isCompleted}>
                             <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
