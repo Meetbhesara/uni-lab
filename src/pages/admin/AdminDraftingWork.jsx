@@ -66,7 +66,8 @@ const AdminDraftingWork = () => {
                         isGlobalDoc: true,
                         source: doc.source,
                         expenseId: doc.expenseId,
-                        status: doc.status
+                        status: doc.status,
+                        uploadedAt: doc.receivedDate
                     }));
                     setSurveyReceivedDocs(received);
                 }
@@ -498,7 +499,7 @@ const AdminDraftingWork = () => {
                                 {!selectedSurvey ? (
                                     <VStack spacing={6} align="stretch">
                                         <Box overflowX="auto" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                            <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                                            <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal' } }}>
                                                 <Thead bg="gray.50">
                                                     <Tr>
                                                         <Th>Client</Th>
@@ -659,14 +660,19 @@ const AdminDraftingWork = () => {
                                                                                     <>
                                                                                         {filesToRender.map((file, fIdx) => (
                                                                                             <Flex key={file._id || fIdx} bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200" align="center" justify="space-between" shadow="sm">
-                                                                                                <HStack overflow="hidden" spacing={4}>
-                                                                                                    <Icon as={FaFilePdf} color="red.500" w={5} h={5} />
-                                                                                                    <Text fontSize="sm" fontWeight="medium" isTruncated maxW={{base: "150px", md: "300px"}} title={file.name}>{file.name}</Text>
-                                                                                                    {step.key === 'collectedFiles' && (
-                                                                                                        <Badge colorScheme={file.status === 'Done' ? 'green' : 'blue'} variant="subtle" borderRadius="md">Status: {file.status || 'Received'}</Badge>
-                                                                                                    )}
+                                                                                                <HStack overflow="hidden" spacing={4} flex={1}>
+                                                                                                    <Icon as={FaFilePdf} color="red.500" w={6} h={6} />
+                                                                                                    <VStack align="start" spacing={0} flex={1} overflow="hidden">
+                                                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.700" isTruncated maxW="100%" title={file.name}>{file.name}</Text>
+                                                                                                        <HStack spacing={1} mt={0.5}>
+                                                                                                            <Icon as={FaClock} w={3} h={3} color="gray.400" />
+                                                                                                            <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                                                                                                                {file.uploadedAt ? formatDateTimeIST(file.uploadedAt) : 'N/A'}
+                                                                                                            </Text>
+                                                                                                        </HStack>
+                                                                                                    </VStack>
                                                                                                 </HStack>
-                                                                                                <HStack spacing={2}>
+                                                                                                <HStack spacing={2} ml={4}>
                                                                                                     <Button size="sm" leftIcon={<FaEye />} colorScheme="blue" variant="outline" onClick={() => window.open(`${API_BASE_URL}${file.url}`, '_blank')}>View</Button>
                                                                                                     {(file._id && step.key !== 'collectedFiles') && <IconButton icon={<FaTrash />} size="sm" colorScheme="red" variant="ghost" onClick={() => handleDraftingFileDelete(step.key, file._id)} />}
                                                                                                 </HStack>
@@ -698,7 +704,7 @@ const AdminDraftingWork = () => {
                                 <VStack spacing={6} align="stretch">
 
                                     <Box overflowX="auto" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                                        <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal' } }}>
                                             <Thead bg="gray.50">
                                                 <Tr>
                                                     <Th>Document</Th>

@@ -199,19 +199,19 @@ const AdminSiteAllocation = () => {
                     </VStack>
                 </Center>
             ) : (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="xl" w="full" whiteSpace="normal">
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="xl" overflow="hidden" w="full">
                 <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #E2E8F0', py: 4, px: 4, whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                     <Thead bg="gray.100">
                         <Tr>
-                            <Th textAlign="center" color="gray.700" py={5} w="60px" borderColor="gray.300">SR. NO.</Th>
-                            <Th textAlign="center" color="gray.700" py={5} w="150px" borderColor="gray.300">DATE</Th>
-                            <Th textAlign="center" color="gray.700" py={5} w="60px" borderColor="gray.300">sr. no.</Th>
-                            <Th color="gray.700" py={5} borderColor="gray.300">DESCRIPASAN</Th>
-                            <Th color="gray.700" py={5} w="180px" borderColor="gray.300">work For Appley</Th>
-                            <Th color="gray.700" py={5} w="200px" borderColor="gray.300">Operative Name</Th>
-                            <Th color="gray.700" py={5} w="200px" borderColor="gray.300">Helper name</Th>
-                            <Th color="gray.700" py={5} w="120px" borderColor="gray.300">Vehicle</Th>
-                            <Th color="gray.700" py={5} w="180px" borderColor="gray.300">Instruments</Th>
+                            <Th textAlign="center" color="gray.700" py={5} borderColor="gray.300">SR. NO.</Th>
+                            <Th textAlign="center" color="gray.700" py={5} borderColor="gray.300" whiteSpace="nowrap">DATE</Th>
+                            <Th textAlign="center" color="gray.700" py={5} borderColor="gray.300">sr. no.</Th>
+                            <Th color="gray.700" py={5} minW="150px" borderColor="gray.300">DESCRIPASAN</Th>
+                            <Th color="gray.700" py={5} borderColor="gray.300">work For Appley</Th>
+                            <Th color="gray.700" py={5} borderColor="gray.300">Operative Name</Th>
+                            <Th color="gray.700" py={5} borderColor="gray.300">Helper name</Th>
+                            <Th color="gray.700" py={5} borderColor="gray.300">Vehicle</Th>
+                            <Th color="gray.700" py={5} borderColor="gray.300">Instruments</Th>
                         </Tr>
                     </Thead>
                     <Tbody>
@@ -229,7 +229,7 @@ const AdminSiteAllocation = () => {
                                             {iIdx === 0 && (
                                                 <>
                                                     <Td rowSpan={dateSchs.length} textAlign="center" fontWeight="bold">{dIdx + 1}</Td>
-                                                    <Td rowSpan={dateSchs.length} textAlign="center" fontWeight="500" bg="gray.50">{dateLabel}</Td>
+                                                    <Td rowSpan={dateSchs.length} textAlign="center" fontWeight="500" bg="gray.50" whiteSpace="nowrap">{dateLabel}</Td>
                                                 </>
                                             )}
                                             <Td textAlign="center">{iIdx + 1}</Td>

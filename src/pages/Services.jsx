@@ -3299,11 +3299,11 @@ const ScheduleMasterForm = () => {
                                     <Text color="gray.400">No schedules found for {viewDate}</Text>
                                 </Box>
                             ) : (
-                                <TableContainer whiteSpace="normal">
+                                <TableContainer whiteSpace="normal" overflow="hidden" w="full">
                                     <Table variant="simple" size="sm" sx={{ 'td, th': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
-                                                <Th py={4} color="gray.500" fontSize="10px">DATE</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px" whiteSpace="nowrap">DATE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">CLIENT & SITE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">OPERATIVE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">HELPER</Th>
@@ -3322,7 +3322,7 @@ const ScheduleMasterForm = () => {
                                                     cursor="pointer" 
                                                     onClick={() => { setAssignTarget(s); onAssignOpen(); }}
                                                 >
-                                                    <Td py={3}>
+                                                    <Td py={3} whiteSpace="nowrap">
                                                         <Text fontSize="sm" fontWeight="bold" color="gray.700">
                                                             {new Date(s.scheduleDate).toLocaleDateString('en-GB')}
                                                         </Text>
@@ -4405,47 +4405,64 @@ const ExpenseReportsTab = () => {
     );
 };
 
+import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+
 const Services = () => {
     const { user } = useAuth();
     const isAdmin = user && user.isAdmin;
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
     return (
         <Box>
             {isAdmin ? (
                 <Box bg="gray.100" minH="100vh" pt={10}>
                     <Container maxW="full" px={{ base: 2, xl: 6 }}>
+                        <Flex mb={4} justify="flex-start">
+                            <Button 
+                                size="sm" 
+                                colorScheme="purple" 
+                                variant="outline" 
+                                leftIcon={<Icon as={isSidebarOpen ? FaChevronLeft : FaChevronRight} />}
+                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                bg="white"
+                            >
+                                {isSidebarOpen ? 'Hide Menu' : 'Show Menu'}
+                            </Button>
+                        </Flex>
                         <Tabs isLazy variant="soft-rounded" colorScheme="purple" orientation="vertical" w="full">
-                            <TabList bg="white" p={4} borderRadius="2xl" boxShadow="md" mr={4} minW="180px" gap={2}>
-                                <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaTruck} mr={2} /> Vehicle Master
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'blue.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaUserTie} mr={2} /> Employee Master
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'orange.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaHandshake} mr={2} /> Client Master
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'teal.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaMap} mr={2} /> Site Master
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'green.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaCalendarAlt} mr={2} /> Scheduler
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'blue.700' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaWrench} mr={2} /> Instruments
-                                </Tab>
+                            {isSidebarOpen && (
+                                <TabList bg="white" p={4} borderRadius="2xl" boxShadow="md" mr={4} minW="180px" gap={2}>
+                                    <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaTruck} mr={2} /> Vehicle Master
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'blue.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaUserTie} mr={2} /> Employee Master
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'orange.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaHandshake} mr={2} /> Client Master
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'teal.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaMap} mr={2} /> Site Master
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'green.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaCalendarAlt} mr={2} /> Scheduler
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'blue.700' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaWrench} mr={2} /> Instruments
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaMoneyBillWave} mr={2} /> Employee Ledger
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaFolderOpen} mr={2} /> Drafting Work
+                                    </Tab>
+                                    <Tab _selected={{ color: 'white', bg: 'blue.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                        <Icon as={FaFileInvoiceDollar} mr={2} /> Invoice Report
+                                    </Tab>
+                                </TabList>
+                            )}
 
-                                <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaMoneyBillWave} mr={2} /> Employee Ledger
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaFolderOpen} mr={2} /> Drafting Work
-                                </Tab>
-                                <Tab _selected={{ color: 'white', bg: 'blue.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                    <Icon as={FaFileInvoiceDollar} mr={2} /> Invoice Report
-                                </Tab>
-                            </TabList>
-
-                            <TabPanels flex={1}>
+                            <TabPanels flex={1} w={isSidebarOpen ? "calc(100% - 200px)" : "100%"}>
                                 <TabPanel p={0}>
                                     <VehicleMasterForm />
                                 </TabPanel>
