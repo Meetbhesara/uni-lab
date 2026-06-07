@@ -9,7 +9,7 @@ import {
 import {
     FaFileInvoiceDollar, FaEye, FaCheckCircle, FaClock, FaSearch,
     FaCalendarAlt, FaUser, FaBuilding, FaMapMarkerAlt, FaFilter,
-    FaFileAlt, FaCamera, FaFilePdf, FaSyncAlt, FaDownload
+    FaFileAlt, FaCamera, FaFilePdf, FaSyncAlt, FaDownload, FaEnvelope
 } from 'react-icons/fa';
 import api from '../../api/axios';
 
@@ -27,6 +27,9 @@ const formatDate = (dateStr) => {
 
 // Row color coding by ledger type and schedule type
 const rowStyle = (s) => {
+    if (s.scheduleType === 'TOPOGRAPHY SURVEY') {
+        return { bg: 'red.50', border: 'red.400', hoverBg: 'red.100' };
+    }
     if (s.isMonthGroup || s.scheduleType === 'MONTH') {
         return { bg: 'blue.50', border: 'blue.400', hoverBg: 'blue.100' };
     }
@@ -81,7 +84,12 @@ const InvoiceReport = () => {
                         monthGroups[groupKey].isMonthGroup = isMonth;
                         monthGroups[groupKey].groupedDates = [s.scheduleDate];
                         monthGroups[groupKey].allExpenses = s.employeeExpenses || [];
-                        monthGroups[groupKey].allDocuments = s.uploadedDocuments || [];
+                        
+                        let docs = s.uploadedDocuments || [];
+                        if (s.scheduleType === 'TOPOGRAPHY SURVEY') {
+                            docs = (s.draftingWorkFiles?.mailFiles || []).map(f => ({ ...f, isMail: true }));
+                        }
+                        monthGroups[groupKey].allDocuments = docs;
                     } else {
                         // Merge subsequent days into the group
                         monthGroups[groupKey].groupedDates.push(s.scheduleDate);
@@ -141,6 +149,10 @@ const InvoiceReport = () => {
     // Filter logic based on documents
     const validSchedules = schedules.filter(s => {
         if (s.dayStatus === 'Rejected') return false;
+        
+        if (s.scheduleType === 'TOPOGRAPHY SURVEY') {
+            return s.dayStatus === 'Completed';
+        }
         
         const hasCoreDocs = s.allDocuments && s.allDocuments.some(d => {
             const isPhoto = d.url?.includes('/photos/') || d.name?.toLowerCase().includes('photo') || (d.url?.includes('site_') && d.url?.includes('photos')) || d.url?.includes('/uploads/photos-');
@@ -270,6 +282,10 @@ const InvoiceReport = () => {
                                     <Text fontSize="xs" color="gray.600">Month Contract</Text>
                                 </HStack>
                                 <HStack spacing={1}>
+                                    <Box w={3} h={3} bg="red.400" borderRadius="sm" />
+                                    <Text fontSize="xs" color="gray.600">Topography Survey</Text>
+                                </HStack>
+                                <HStack spacing={1}>
                                     <Box w={3} h={3} bg="gray.200" borderRadius="sm" />
                                     <Text fontSize="xs" color="gray.600">No Ledger</Text>
                                 </HStack>
@@ -336,7 +352,9 @@ const InvoiceReport = () => {
                                                         </Td>
                                                         <Td py={3} whiteSpace="nowrap">
                                                             <VStack align="start" spacing={1}>
-                                                                {s.isMonthGroup ? (
+                                                                {s.scheduleType === 'TOPOGRAPHY SURVEY' ? (
+                                                                    <Badge colorScheme="red" fontSize="8px" variant="solid">TOPOGRAPHY SURVEY</Badge>
+                                                                ) : s.isMonthGroup ? (
                                                                     <Badge colorScheme="blue" fontSize="8px" variant="solid">MONTH CONTRACT {s.monthGroupId ? `(ID:${s.monthGroupId})` : ''}</Badge>
                                                                 ) : (
                                                                     <Badge colorScheme="purple" fontSize="8px" variant="solid">DAILY VISIT</Badge>
@@ -452,6 +470,7 @@ const InvoiceReport = () => {
                             const data = docs.filter(d => d.url?.includes('/data/') || d.url?.includes('dataFiles') || d.url?.includes('site_') && d.url?.includes('data'));
                             const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('site_') && d.url?.includes('drawing'));
                             const expenseReceipts = docs.filter(d => d.url?.includes('expense_') || d.url?.includes('otherExpense_') || d.category);
+                            const topographyMails = docs.filter(d => d.isMail);
                             
                             // Function to format exact date and time as requested
                             const formatDateTime = (dateStr) => {
@@ -480,6 +499,7 @@ const InvoiceReport = () => {
                             return (
                                 <VStack spacing={5} align="stretch">
                                     {[
+                                        { label: 'Topography Final Mails', files: topographyMails, color: 'red', icon: FaEnvelope },
                                         { label: 'Photos', files: photos, color: 'pink', icon: FaCamera },
                                         { label: 'Daily Reports', files: reports, color: 'blue', icon: FaFilePdf },
                                         { label: 'Data Files', files: data, color: 'teal', icon: FaFileAlt },
