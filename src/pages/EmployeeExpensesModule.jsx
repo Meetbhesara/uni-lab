@@ -12,7 +12,7 @@ import {
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
-    FaPaperclip
+    FaPaperclip, FaUsers
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -45,6 +45,7 @@ const EmployeeExpensesModule = () => {
     useEffect(() => { fetchData(); }, []);
 
     const [selectedExpenseEmployee, setSelectedExpenseEmployee] = useState({ id: '', name: '' });
+    const [reportType, setReportType] = useState('Ledger');
 
     return (
         <Box py={10} bg="gray.50" minH="100vh">
@@ -117,25 +118,44 @@ const EmployeeExpensesModule = () => {
                             </TabPanel>
                             <TabPanel p={0}>
                                 <Box bg="white" p={6} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                                    <Heading size="sm" mb={5} color="gray.700">Select Employee to View Daily Report</Heading>
-                                    <Select
-                                        placeholder="-- Select Employee --"
-                                        value={selectedExpenseEmployee.id}
-                                        onChange={e => {
-                                            const emp = employees.find(emp => emp._id === e.target.value);
-                                            setSelectedExpenseEmployee({ id: emp?._id || '', name: emp?.name || '' });
-                                        }}
-                                        maxW="400px"
-                                        mb={6}
-                                    >
-                                        {employees.map(emp => (
-                                            <option key={emp._id} value={emp._id}>{emp.name}</option>
-                                        ))}
-                                    </Select>
-                                    {selectedExpenseEmployee.id ? (
+                                    <Heading size="sm" mb={5} color="gray.700">Select Report Type & Employee to View Daily Report</Heading>
+                                    <HStack spacing={6} align="end" mb={6}>
+                                        <FormControl maxW="250px">
+                                            <FormLabel fontWeight="bold">Select Report Type</FormLabel>
+                                            <Select value={reportType} onChange={(e) => {
+                                                setReportType(e.target.value);
+                                                if (e.target.value === 'Food' || e.target.value === 'Fuel') setSelectedExpenseEmployee({ id: 'ALL', name: 'All Employees' });
+                                                else setSelectedExpenseEmployee({ id: '', name: '' });
+                                            }} bg="white">
+                                                <option value="Ledger">Employee Ledger</option>
+                                                <option value="Food">Global Food Report</option>
+                                                <option value="Fuel">Global Fuel Report</option>
+                                            </Select>
+                                        </FormControl>
+
+                                        <FormControl maxW="400px" isDisabled={reportType === 'Food' || reportType === 'Fuel'}>
+                                            <FormLabel fontWeight="bold">Select Employee</FormLabel>
+                                            <Select
+                                                placeholder={(reportType === 'Food' || reportType === 'Fuel') ? "All Employees Included" : "-- Select Employee --"}
+                                                value={(reportType === 'Food' || reportType === 'Fuel') ? 'ALL' : selectedExpenseEmployee.id}
+                                                onChange={e => {
+                                                    const emp = employees.find(emp => emp._id === e.target.value);
+                                                    setSelectedExpenseEmployee({ id: emp?._id || '', name: emp?.name || '' });
+                                                }}
+                                                bg={(reportType === 'Food' || reportType === 'Fuel') ? 'gray.100' : 'white'}
+                                            >
+                                                {(reportType === 'Food' || reportType === 'Fuel') && <option value="ALL" hidden>All Employees</option>}
+                                                {employees.map(emp => (
+                                                    <option key={emp._id} value={emp._id}>{emp.name}</option>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </HStack>
+                                    {((selectedExpenseEmployee.id && selectedExpenseEmployee.id !== 'ALL') || reportType === 'Food' || reportType === 'Fuel') ? (
                                         <AdminEmployeeExpenses
-                                            employeeId={selectedExpenseEmployee.id}
-                                            employeeName={selectedExpenseEmployee.name}
+                                            employeeId={(reportType === 'Food' || reportType === 'Fuel') ? 'ALL' : selectedExpenseEmployee.id}
+                                            employeeName={(reportType === 'Food' || reportType === 'Fuel') ? 'All Employees' : selectedExpenseEmployee.name}
+                                            externalReportType={reportType}
                                         />
                                     ) : (
                                         <Center py={16}>
@@ -168,6 +188,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     const [clientSites, setClientSites] = useState([{ 
         clientId: '', 
         siteId: '', 
+        ledger: '',
+        quantity: 0,
         files: { photos: [], data: [], dailyReports: [], drawing: [] } 
     }]);
     const [notes, setNotes] = useState('');
@@ -245,6 +267,32 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         });
     }, [daySchedules, selectedEmployeeId]);
 
+    // Auto-mark Attendance based on schedule status (for current and past dates only)
+    useEffect(() => {
+        if (!date || !selectedEmployeeId) return;
+
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (selectedDate <= today) {
+            if (employeeSchedules.length > 0) {
+                const hasActive = employeeSchedules.some(s => s.dayStatus !== 'Rejected' && s.dayStatus !== 'Skipped');
+                if (hasActive) {
+                    setAttendance('Present');
+                    setAttendanceRemark('');
+                } else {
+                    setAttendance('Absent');
+                    setAttendanceRemark('Schedule was rejected or skipped');
+                }
+            } else {
+                setAttendance('Absent');
+                setAttendanceRemark('No schedule assigned');
+            }
+        }
+    }, [employeeSchedules, date, selectedEmployeeId]);
+
     // Active schedule fallback for headers and non-multiple logic
     const activeSchedule = employeeSchedules.length > 0 ? employeeSchedules[0] : null;
 
@@ -259,15 +307,17 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     const clientId = sch.client?._id || sch.client;
                     const siteId = sch.site?._id || sch.site;
                     let ledger = sch.ledger || '';
+                    let quantity = sch.quantity || 0;
                     
                     // Try to auto-prefill from committedExpenses
-                    if (!ledger && committedExpenses.length > 0) {
+                    if (committedExpenses.length > 0) {
                         const matchedCs = committedExpenses.flatMap(e => e.clientSites).find(cs => {
                             if (scheduleId && cs.scheduleId && getStrId(cs.scheduleId) === String(scheduleId)) return true;
                             return getStrId(cs.siteId) === String(siteId) && getStrId(cs.clientId) === String(clientId);
                         });
-                        if (matchedCs && matchedCs.ledger) {
-                            ledger = matchedCs.ledger;
+                        if (matchedCs) {
+                            if (!ledger && matchedCs.ledger) ledger = matchedCs.ledger;
+                            if (matchedCs.quantity !== undefined) quantity = matchedCs.quantity;
                         }
                     }
                     
@@ -287,6 +337,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                         clientId,
                         siteId,
                         ledger: existingRow?.ledger && existingRow.ledger !== '' ? existingRow.ledger : ledger,
+                        quantity: existingRow?.quantity !== undefined ? existingRow.quantity : quantity,
                         files: preserveFiles
                     };
                 });
@@ -297,6 +348,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 clientId: '',
                 siteId: '',
                 ledger: '',
+                quantity: 0,
                 files: { photos: [], data: [], dailyReports: [], drawing: [] }
             }]);
         }
@@ -328,7 +380,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         setOtherExpenses(updated);
     };
 
-    const addClientSite = () => setClientSites([...clientSites, { scheduleId: '', clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
+    const addClientSite = () => setClientSites([...clientSites, { scheduleId: '', clientId: '', siteId: '', ledger: '', quantity: 0, files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
     const removeClientSite = (idx) => setClientSites(clientSites.filter((_, i) => i !== idx));
     const updateClientSite = (idx, field, val) => {
         const updated = [...clientSites];
@@ -336,6 +388,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         if (field === 'clientId') {
             updated[idx].siteId = ''; 
             updated[idx].ledger = '';
+            updated[idx].quantity = 0;
         }
         if (field === 'siteId') {
             const matchingSchedules = employeeSchedules.filter(s => {
@@ -344,8 +397,10 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             });
             if (matchingSchedules.length > 0) {
                 updated[idx].ledger = matchingSchedules[0].ledger || '';
+                updated[idx].quantity = matchingSchedules[0].quantity || 0;
             } else {
                 updated[idx].ledger = '';
+                updated[idx].quantity = 0;
             }
         }
         setClientSites(updated);
@@ -465,7 +520,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             });
             // Format allocations for backend
             const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
-            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ scheduleId: a.scheduleId || '', clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '' }))));
+            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ scheduleId: a.scheduleId || '', clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '', quantity: Number(a.quantity) || 0 }))));
 
             // Add Files site-wise
             allocations.forEach((site, idx) => {
@@ -515,7 +570,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 // 3. Reset form
                 setStandardExpenses({ breakfast: '', lunch: '', dinner: '', petrol: '' });
                 setOtherExpenses([]);
-                setClientSites([{ clientId: '', siteId: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
+                setClientSites([{ clientId: '', siteId: '', ledger: '', quantity: 0, files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
                 setNotes('');
                 setAttendance('Present');
                 setAttendanceRemark('');
@@ -772,6 +827,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                 if (ms.scheduleType === 'VISIT') return 'green.400';
                                                 if (ms.scheduleType === 'MONTH') return 'blue.400';
                                                 if (ms.scheduleType === 'TOPOGRAPHY SURVEY') return 'orange.400';
+                                                if (ms.scheduleType === 'POINT MARKING') return 'teal.400';
                                                 return 'purple.300';
                                             })()
                                         }
@@ -852,6 +908,26 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     );
                                                 })()}
                                             </FormControl>
+                                            {(() => {
+                                                const ms = row.scheduleId
+                                                    ? employeeSchedules.find(s => s._id === row.scheduleId)
+                                                    : employeeSchedules.find(s => (s.site?._id || s.site) === row.siteId);
+                                                return ms?.scheduleType === 'POINT MARKING' ? (
+                                                    <FormControl flex={0.5} maxW="100px">
+                                                        <FormLabel fontSize="10px" fontWeight="bold">Quantity</FormLabel>
+                                                        <Input
+                                                            size="sm"
+                                                            type="number"
+                                                            min="0"
+                                                            value={row.quantity || ''}
+                                                            onChange={(e) => updateClientSite(idx, 'quantity', Number(e.target.value) || 0)}
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            placeholder="Qty"
+                                                        />
+                                                    </FormControl>
+                                                ) : null;
+                                            })()}
                                             {clientSites.length > 1 && (
                                                 <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => removeClientSite(idx)} />
                                             )}
@@ -862,7 +938,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                             const ms = row.scheduleId
                                                 ? employeeSchedules.find(s => s._id === row.scheduleId)
                                                 : employeeSchedules.find(s => (s.site?._id || s.site) === row.siteId);
-                                            const typeColors = { 'VISIT': 'green', 'MONTH': 'blue', 'TOPOGRAPHY SURVEY': 'orange' };
+                                            const typeColors = { 'VISIT': 'green', 'MONTH': 'blue', 'TOPOGRAPHY SURVEY': 'orange', 'POINT MARKING': 'teal' };
                                             const color = typeColors[ms?.scheduleType] || 'gray';
                                             return ms?.scheduleType ? (
                                                 <HStack spacing={2} mb={1}>
@@ -870,6 +946,16 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                         {ms.scheduleType}
                                                     </Badge>
                                                     <Text fontSize="10px" color="gray.500">schedule type for this site</Text>
+                                                    {ms.helpers && ms.helpers.length > 0 && (
+                                                        <HStack ml={2} spacing={1} bg="pink.50" px={3} py={1} borderRadius="full" border="1px dashed" borderColor="pink.200">
+                                                            <Icon as={FaUsers} color="pink.600" w={3} h={3} />
+                                                            {ms.helpers.map((h, i) => (
+                                                                <Badge key={i} colorScheme="pink" variant="solid" borderRadius="full" px={2} fontSize="9px" shadow="sm">
+                                                                    {h.name || 'Helper'}
+                                                                </Badge>
+                                                            ))}
+                                                        </HStack>
+                                                    )}
                                                 </HStack>
                                             ) : null;
                                         })()}
@@ -1063,39 +1149,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 
                 {/* Right Side: File Uploads & Summary */}
                 <VStack spacing={8} align="stretch">
-                    {/* Attendance Tracking */}
-                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                        <CardBody p={6}>
-                            <VStack align="stretch" spacing={4}>
-                                <Heading size="xs" color="blue.700" textTransform="uppercase">Attendance Status</Heading>
-                                <FormControl>
-                                    <Select 
-                                        value={attendance} 
-                                        onChange={(e) => setAttendance(e.target.value)}
-                                        borderRadius="lg"
-                                        bg="white"
-                                    >
-                                        <option value="Present">Present</option>
-                                        <option value="Half Day">Half Day</option>
-                                        <option value="Absent">Absent</option>
-                                    </Select>
-                                </FormControl>
-                                
-                                {attendance === 'Absent' && (
-                                    <FormControl isRequired>
-                                        <FormLabel fontSize="xs" fontWeight="bold">Reason for Absence</FormLabel>
-                                        <Input 
-                                            value={attendanceRemark} 
-                                            onChange={(e) => setAttendanceRemark(e.target.value)} 
-                                            bg="white" 
-                                            borderRadius="lg" 
-                                            placeholder="Why were you absent?" 
-                                        />
-                                    </FormControl>
-                                )}
-                            </VStack>
-                        </CardBody>
-                    </Card>
+
 
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" bg="blue.50">
                         <CardBody p={6}>
@@ -1307,6 +1361,18 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                             <Text fontWeight="extrabold" fontSize="md">
                                                                 {cs.siteId?.siteName || cs.siteName || 'Unknown Site'}
                                                             </Text>
+                                                            <HStack spacing={2} mt={1}>
+                                                                {cs.ledger && (
+                                                                    <Badge colorScheme="purple" variant="subtle">
+                                                                        Ledger: {cs.ledger}
+                                                                    </Badge>
+                                                                )}
+                                                                {cs.quantity !== undefined && cs.quantity > 0 && (
+                                                                    <Badge colorScheme="teal" variant="solid">
+                                                                        Qty: {cs.quantity}
+                                                                    </Badge>
+                                                                )}
+                                                            </HStack>
                                                         </VStack>
                                                         {cs.siteId?.siteId && (
                                                             <Badge colorScheme="blue" variant="subtle" borderRadius="md">

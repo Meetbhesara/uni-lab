@@ -7,12 +7,12 @@ import {
     InputGroup, InputLeftElement, Divider, InputLeftAddon, Badge,
     Popover, PopoverTrigger, PopoverContent, PopoverBody
 } from '@chakra-ui/react';
-import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign, FaPaperclip, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign, FaPaperclip, FaChevronLeft, FaChevronRight, FaUsers } from 'react-icons/fa';
 import api from '../api/axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
-const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
+const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType }) => {
     const [expenses, setExpenses] = useState([]);
     const [transfers, setTransfers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -20,6 +20,9 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [yearPageStart, setYearPageStart] = useState(Math.floor(new Date().getFullYear() / 20) * 20);
+    const [localReportType, setLocalReportType] = useState('Ledger');
+    const [fuelFilter, setFuelFilter] = useState('ALL');
+    const reportType = externalReportType || localReportType;
     const toast = useToast();
 
     // Configuration flag for local vs NAS saving
@@ -43,6 +46,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         clientId: '', 
         siteId: '', 
         ledger: '',
+        quantity: 0,
         files: { photos: [], data: [], dailyReports: [], drawing: [] } 
     }]);
 
@@ -86,6 +90,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 clientId: sch.client?._id || sch.client,
                 siteId: sch.site?._id || sch.site,
                 ledger: sch.ledger || '',
+                quantity: sch.quantity || 0,
                 files: { photos: [], data: [], dailyReports: [], drawing: [] }
             })));
         } else {
@@ -93,6 +98,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 clientId: '',
                 siteId: '',
                 ledger: '',
+                quantity: 0,
                 files: { photos: [], data: [], dailyReports: [], drawing: [] }
             }]);
         }
@@ -118,20 +124,29 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         if (!employeeId) return;
         setLoading(true);
         try {
-            const [expRes, empRes, trRes] = await Promise.all([
-                api.get(`/employee-expense/admin/${employeeId}`),
-                api.get(`/employee-master/${employeeId}`),
-                api.get(`/employee-transfer`)
-            ]);
-            if (expRes.data.success) setExpenses(expRes.data.data);
-            if (empRes.data.success) setEmployeeDetails(empRes.data.data);
-            if (trRes.data.success) {
-                // Filter only transfers involving this employee
-                const myTransfers = trRes.data.data.filter(
-                    t => (t.giver?._id || t.giver) === employeeId ||
-                         (t.taker?._id || t.taker) === employeeId
-                );
-                setTransfers(myTransfers);
+            if (employeeId === 'ALL') {
+                const res = await api.get('/employee-expense/all');
+                if (res.data.success) {
+                    setExpenses(res.data.data);
+                }
+                setEmployeeDetails(null);
+                setTransfers([]);
+            } else {
+                const [expRes, empRes, trRes] = await Promise.all([
+                    api.get(`/employee-expense/admin/${employeeId}`),
+                    api.get(`/employee-master/${employeeId}`),
+                    api.get(`/employee-transfer`)
+                ]);
+                if (expRes.data.success) setExpenses(expRes.data.data);
+                if (empRes.data.success) setEmployeeDetails(empRes.data.data);
+                if (trRes.data.success) {
+                    // Filter only transfers involving this employee
+                    const myTransfers = trRes.data.data.filter(
+                        t => (t.giver?._id || t.giver) === employeeId ||
+                             (t.taker?._id || t.taker) === employeeId
+                    );
+                    setTransfers(myTransfers);
+                }
             }
         } catch (err) {
             console.error("Error fetching employee expenses", err);
@@ -196,7 +211,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     };
     const removeReceivedFromRow = (idx) => setReceivedFrom(receivedFrom.filter((_, i) => i !== idx));
 
-    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
+    const addClientSite = () => setClientSites([...clientSites, { clientId: '', siteId: '', ledger: '', quantity: 0, files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
     const removeClientSite = (idx) => setClientSites(clientSites.filter((_, i) => i !== idx));
     const updateClientSite = (idx, field, val) => {
         const updated = [...clientSites];
@@ -204,6 +219,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
         if (field === 'clientId') {
             updated[idx].siteId = ''; 
             updated[idx].ledger = '';
+            updated[idx].quantity = 0;
         }
         if (field === 'siteId') {
             const matchingSchedules = employeeSchedules.filter(s => {
@@ -212,8 +228,10 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
             });
             if (matchingSchedules.length > 0) {
                 updated[idx].ledger = matchingSchedules[0].ledger || '';
+                updated[idx].quantity = matchingSchedules[0].quantity || 0;
             } else {
                 updated[idx].ledger = '';
+                updated[idx].quantity = 0;
             }
         }
         setClientSites(updated);
@@ -244,18 +262,32 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
             formData.append('notes', expenseForm.notes);
             formData.append('givenTo', JSON.stringify(givenTo.filter(g => g.employeeRef && g.amount)));
             formData.append('receivedFrom', JSON.stringify(receivedFrom.filter(r => r.employeeRef && r.amount)));
+            
+            // MAGIC INTERCEPTION: Bypass schema limits!
+            let finalPetrol = 0;
+            let interceptedOtherExpenses = [...otherExpenses];
+            
+            if (Number(expenseForm.petrol) > 0) {
+                if (fuelType === 'Petrol') {
+                    finalPetrol = Number(expenseForm.petrol);
+                } else {
+                    // Inject CNG or Diesel directly into other expenses!
+                    interceptedOtherExpenses.push({ expenseName: fuelType, amount: Number(expenseForm.petrol) });
+                }
+            }
+
             formData.append('expenses', JSON.stringify({
                 breakfast: Number(expenseForm.breakfast) || 0,
                 lunch: Number(expenseForm.lunch) || 0,
                 dinner: Number(expenseForm.dinner) || 0,
-                petrol: Number(expenseForm.petrol) || 0
+                petrol: finalPetrol
             }));
             formData.append('fuelType', fuelType);
-            formData.append('otherExpensesList', JSON.stringify(otherExpenses.map(o => ({ expenseName: o.expenseName, amount: Number(o.amount) })).filter(o => o.expenseName && o.amount)));
+            formData.append('otherExpensesList', JSON.stringify(interceptedOtherExpenses.map(o => ({ expenseName: o.expenseName, amount: Number(o.amount) })).filter(o => o.expenseName && o.amount)));
             
             // Format allocations for backend
             const allocations = clientSites.filter(cs => cs.clientId && cs.siteId);
-            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '' }))));
+            formData.append('clientSites', JSON.stringify(allocations.map(a => ({ clientId: a.clientId, siteId: a.siteId, ledger: a.ledger || '', quantity: Number(a.quantity) || 0 }))));
 
             // Add Files site-wise
             allocations.forEach((site, idx) => {
@@ -298,7 +330,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 }, 1000);
 
                 setExpenseForm({ date: new Date().toISOString().slice(0, 10), attendance: 'Present', breakfast: '', lunch: '', dinner: '', petrol: '', notes: '' });
-                setClientSites([{ clientId: '', siteId: '', ledger: '', files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
+                setClientSites([{ clientId: '', siteId: '', ledger: '', quantity: 0, files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
                 setOtherExpenses([]);
                 setGivenTo([]);
                 setReceivedFrom([]);
@@ -430,8 +462,11 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
     [...filteredExpenses.map(e => ({ ...e, _rowType: 'expense' })),
      ...filteredTransfers.map(t => ({ ...t, _rowType: 'transfer' }))
     ].forEach(row => {
-        const key = toDateKey(row.date);
-        if (!dateMap[key]) dateMap[key] = { dateKey: key, expense: null, transfers: [] };
+        // If employeeId === 'ALL', group by both Date and Employee to prevent overwriting
+        const empIdentifier = (row.employeeId?._id || row.employeeId || 'unknown').toString();
+        const key = employeeId === 'ALL' ? `${toDateKey(row.date)}_${empIdentifier}` : toDateKey(row.date);
+        
+        if (!dateMap[key]) dateMap[key] = { dateKey: row.date, expense: null, transfers: [] };
         if (row._rowType === 'expense') dateMap[key].expense = row;
         else dateMap[key].transfers.push(row);
     });
@@ -445,6 +480,47 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                 <Heading size="md" color="gray.800">Daily Report: {employeeName}</Heading>
                 
                 <HStack spacing={4} flexWrap="wrap">
+                    {!externalReportType && (
+                        <HStack>
+                            <Text fontSize="sm" fontWeight="bold" color="gray.600">Report:</Text>
+                            <ChakraSelect 
+                                w="140px"
+                                bg="white"
+                                borderRadius="xl"
+                                shadow="sm"
+                                size="sm"
+                                fontWeight="bold"
+                                value={localReportType} 
+                                onChange={(e) => setLocalReportType(e.target.value)}
+                            >
+                                <option value="Ledger">Full Ledger</option>
+                                <option value="Food">Food Report</option>
+                                <option value="Fuel">Fuel Report</option>
+                            </ChakraSelect>
+                        </HStack>
+                    )}
+                    
+                    {reportType === 'Fuel' && (
+                        <HStack>
+                            <Text fontSize="sm" fontWeight="bold" color="gray.600">Fuel Type:</Text>
+                            <ChakraSelect 
+                                w="120px"
+                                bg="white"
+                                borderRadius="xl"
+                                shadow="sm"
+                                size="sm"
+                                fontWeight="bold"
+                                value={fuelFilter} 
+                                onChange={(e) => setFuelFilter(e.target.value)}
+                            >
+                                <option value="ALL">All Fuels</option>
+                                <option value="Petrol">Petrol</option>
+                                <option value="Diesel">Diesel</option>
+                                <option value="CNG">CNG</option>
+                            </ChakraSelect>
+                        </HStack>
+                    )}
+
                     <HStack>
                         <Text fontSize="sm" fontWeight="bold" color="gray.600">Period:</Text>
                         <ChakraSelect 
@@ -526,7 +602,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                             {/* General Details Section */}
                             <Box w="full" bg="white" p={5} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
                                 <Heading size="xs" textTransform="uppercase" color="purple.500" mb={4} letterSpacing="wider">Tracking Details</Heading>
-                                <SimpleGrid columns={2} spacing={5} w="full">
+                                <SimpleGrid columns={1} spacing={5} w="full">
                                     <FormControl>
                                         <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">Date</FormLabel>
                                         <InputGroup>
@@ -534,31 +610,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                             <Input type="date" name="date" value={expenseForm.date} onChange={handleFormChange} bg="gray.50" _focus={{ bg: "white", borderColor: "purple.400" }} />
                                         </InputGroup>
                                     </FormControl>
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">Attendance</FormLabel>
-                                        <InputGroup>
-                                            <InputLeftElement pointerEvents="none"><Icon as={FaClipboardCheck} color="purple.400" /></InputLeftElement>
-                                            <ChakraSelect pl={10} name="attendance" value={expenseForm.attendance} onChange={handleFormChange} bg="gray.50" _focus={{ bg: "white", borderColor: "purple.400" }}>
-                                                <option value="Present">Present</option>
-                                                <option value="Half Day">Half Day</option>
-                                                <option value="Absent">Absent</option>
-                                            </ChakraSelect>
-                                        </InputGroup>
-                                    </FormControl>
                                 </SimpleGrid>
-
-                                {expenseForm.attendance === 'Absent' && (
-                                     <FormControl mt={4}>
-                                         <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">Reason for Absence</FormLabel>
-                                         <Input 
-                                             name="attendanceRemark" 
-                                             value={expenseForm.attendanceRemark} 
-                                             onChange={handleFormChange} 
-                                             placeholder="Enter reason for absence..." 
-                                             bg="gray.50"
-                                         />
-                                     </FormControl>
-                                 )}
                                 
                                 <Box w="full" mt={4} bg="purple.50" p={5} borderRadius="xl" border="1px dashed" borderColor="purple.200">
                                     <Flex justify="space-between" align="center" mb={4}>
@@ -656,9 +708,48 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                                             })()}
                                                         </ChakraSelect>
                                                     </FormControl>
+                                                    {(() => {
+                                                        const ms = cs.scheduleId
+                                                            ? employeeSchedules.find(s => s._id === cs.scheduleId)
+                                                            : employeeSchedules.find(s => (s.site?._id || s.site) === cs.siteId);
+                                                        return ms?.scheduleType === 'POINT MARKING' ? (
+                                                            <FormControl size="sm" maxW="80px">
+                                                                <FormLabel fontSize="10px" fontWeight="bold">Quantity</FormLabel>
+                                                                <Input 
+                                                                    type="number"
+                                                                    min="0"
+                                                                    value={cs.quantity || ''}
+                                                                    onChange={e => updateClientSite(idx, 'quantity', Number(e.target.value) || 0)}
+                                                                    size="sm"
+                                                                    variant="filled"
+                                                                    placeholder="Qty"
+                                                                />
+                                                            </FormControl>
+                                                        ) : null;
+                                                    })()}
                                                     {clientSites.length > 1 && <IconButton icon={<FaTrash />} size="sm" colorScheme="red" variant="ghost" onClick={() => removeClientSite(idx)} />}
                                                 </HStack>
                                                 
+                                                {(() => {
+                                                    const ms = cs.scheduleId
+                                                        ? employeeSchedules.find(s => s._id === cs.scheduleId)
+                                                        : employeeSchedules.find(s => (s.site?._id || s.site) === cs.siteId);
+                                                    if (ms && ms.helpers && ms.helpers.length > 0) {
+                                                        return (
+                                                            <HStack mt={1} wrap="wrap" bg="pink.50" p={2} borderRadius="md" border="1px dashed" borderColor="pink.200">
+                                                                <Icon as={FaUsers} color="pink.600" w={3} h={3} />
+                                                                <Text fontSize="10px" fontWeight="bold" color="pink.700">Helpers Assigned:</Text>
+                                                                {ms.helpers.map((h, i) => (
+                                                                    <Badge key={i} colorScheme="pink" variant="solid" fontSize="10px" borderRadius="full" px={3} py={0.5} shadow="sm">
+                                                                        {h.name || 'Helper'}
+                                                                    </Badge>
+                                                                ))}
+                                                            </HStack>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+
                                                 {/* File Uploads per Site */}
                                                 <SimpleGrid columns={4} spacing={2} pt={2}>
                                                     <VStack align="start" spacing={1}>
@@ -831,7 +922,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
 
             {groupedByDate.length === 0 ? (
                 <Center p={10}><Text color="gray.500">No records found for this period.</Text></Center>
-            ) : (
+            ) : reportType === 'Ledger' ? (
                 <TableContainer border="1px" borderColor="gray.300" borderRadius="md">
                 <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid black' } }}>
                     <Thead bg="gray.100">
@@ -963,9 +1054,11 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                                                         <VStack align="start" spacing={1}>
                                                             {exp?.clientSites?.map((cs, i) => {
                                                                 const siteName = cs.siteId?.siteName || cs.siteName || 'Unknown Site';
+                                                                const ledgerText = cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : '';
+                                                                const qtyText = cs.quantity ? ` (Qty: ${cs.quantity})` : '';
                                                                 return (
                                                                     <Text key={i} fontWeight="semibold" color="gray.700">
-                                                                        {i+1}. {siteName.toUpperCase()}
+                                                                        {i+1}. {siteName.toUpperCase()}{ledgerText}{qtyText}
                                                                     </Text>
                                                                 );
                                                             })}
@@ -1007,7 +1100,228 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName }) => {
                     </Tbody>
                 </Table>
             </TableContainer>
-            )}
+            ) : reportType === 'Food' ? (
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white">
+                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
+                        <Thead bg="blue.50">
+                            <Tr>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">SR. NO.</Th>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">DATE</Th>
+                                <Th color="blue.900" fontSize="xs" fontWeight="bold">EMPLOYEE NAME</Th>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">BREAKFAST</Th>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">LUNCH</Th>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">DINNER</Th>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">TOTAL FOOD</Th>
+                            </Tr>
+                        </Thead>
+                        <Tbody>
+                            {(() => {
+                                const dateCounts = {};
+                                groupedByDate.forEach(g => {
+                                    dateCounts[g.dateKey] = (dateCounts[g.dateKey] || 0) + 1;
+                                });
+
+                                let currentSrNo = 0;
+                                let lastDateKey = null;
+
+                                return groupedByDate.map((group, groupIdx) => {
+                                    const dateStr = new Date(group.dateKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                                    
+                                    let isFirstOfDate = false;
+                                    if (group.dateKey !== lastDateKey) {
+                                        currentSrNo++;
+                                        lastDateKey = group.dateKey;
+                                        isFirstOfDate = true;
+                                    }
+
+                                    const span = dateCounts[group.dateKey];
+
+                                    const exp = group.expense;
+                                    const actualEmployeeName = exp?.employeeId?.name || employeeName;
+                                    const breakfast = exp?.expenses?.breakfast || 0;
+                                    const lunch = exp?.expenses?.lunch || 0;
+                                    const dinner = exp?.expenses?.dinner || 0;
+                                    const totalFood = Number(breakfast) + Number(lunch) + Number(dinner);
+
+                                    return (
+                                        <Tr key={groupIdx} _hover={{ bg: "gray.50" }}>
+                                            {isFirstOfDate && (
+                                                <Td rowSpan={span} textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" verticalAlign="middle" bg="gray.50">{currentSrNo}</Td>
+                                            )}
+                                            {isFirstOfDate && (
+                                                <Td rowSpan={span} textAlign="center" fontWeight="bold" color="blue.700" fontSize="md" verticalAlign="middle" bg="blue.50">{dateStr}</Td>
+                                            )}
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm">{actualEmployeeName}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{breakfast}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{lunch}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{dinner}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="green.600" fontSize="sm">₹{totalFood}</Td>
+                                        </Tr>
+                                    );
+                                });
+                            })()}
+                            <Tr bg="gray.100">
+                                <Td colSpan={3} textAlign="right" fontWeight="bold" fontSize="md">GRAND TOTAL:</Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{groupedByDate.reduce((sum, g) => sum + Number(g.expense?.expenses?.breakfast || 0), 0)}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{groupedByDate.reduce((sum, g) => sum + Number(g.expense?.expenses?.lunch || 0), 0)}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{groupedByDate.reduce((sum, g) => sum + Number(g.expense?.expenses?.dinner || 0), 0)}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="green.700">
+                                    ₹{groupedByDate.reduce((sum, g) => sum + Number(g.expense?.expenses?.breakfast || 0) + Number(g.expense?.expenses?.lunch || 0) + Number(g.expense?.expenses?.dinner || 0), 0)}
+                                </Td>
+                            </Tr>
+                        </Tbody>
+                    </Table>
+                </TableContainer>
+            ) : reportType === 'Fuel' ? (
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white">
+                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
+                        <Thead bg="red.50">
+                            <Tr>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">SR. NO.</Th>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">DATE</Th>
+                                <Th color="red.900" fontSize="xs" fontWeight="bold">EMPLOYEE NAME</Th>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">FUEL TYPE</Th>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">AMOUNT</Th>
+                            </Tr>
+                        </Thead>
+                        <Tbody>
+                            {(() => {
+                                const fuelGroups = [];
+                                groupedByDate.forEach(g => {
+                                    const exp = g.expense;
+                                    
+                                    // Check standard petrol field
+                                    const stdPetrol = Number(exp?.expenses?.petrol) || 0;
+                                    
+                                    // Check otherExpensesList for any mention of fuels
+                                    let otherFuelType = null;
+                                    let otherFuelAmt = 0;
+
+                                    if (exp?.otherExpensesList && exp.otherExpensesList.length > 0) {
+                                        exp.otherExpensesList.forEach(other => {
+                                            const name = (other.expenseName || '').toLowerCase().trim();
+                                            const amount = Number(other.amount) || 0;
+                                            
+                                            if (amount > 0 && (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel'))) {
+                                                if (name.includes('petrol')) otherFuelType = 'Petrol';
+                                                else if (name.includes('cng') || name === 'cng') otherFuelType = 'CNG';
+                                                else if (name.includes('diesel')) otherFuelType = 'Diesel';
+                                                else otherFuelType = 'Fuel';
+                                                otherFuelAmt += amount;
+                                            }
+                                        });
+                                    }
+
+                                    // Display Logic: Always show the row to match Food Report behavior!
+                                    if (fuelFilter === 'ALL') {
+                                        if (otherFuelAmt > 0 && stdPetrol === 0) {
+                                            fuelGroups.push({ ...g, displayFuelType: otherFuelType, displayFuelAmt: otherFuelAmt });
+                                        } else {
+                                            fuelGroups.push({ ...g, displayFuelType: 'Petrol', displayFuelAmt: stdPetrol });
+                                            if (otherFuelAmt > 0) {
+                                                fuelGroups.push({ ...g, displayFuelType: otherFuelType, displayFuelAmt: otherFuelAmt });
+                                            }
+                                        }
+                                    } else {
+                                        // If a specific filter is selected (e.g. CNG), show everyone but put 0 if they don't have it!
+                                        if (fuelFilter === 'Petrol') {
+                                            fuelGroups.push({ ...g, displayFuelType: 'Petrol', displayFuelAmt: stdPetrol });
+                                        } else {
+                                            let amtForFilter = 0;
+                                            if (otherFuelType === fuelFilter) amtForFilter = otherFuelAmt;
+                                            fuelGroups.push({ ...g, displayFuelType: fuelFilter, displayFuelAmt: amtForFilter });
+                                        }
+                                    }
+                                });
+
+                                if (fuelGroups.length === 0) {
+                                    return (
+                                        <Tr>
+                                            <Td colSpan={5} textAlign="center" py={8} color="gray.500" fontStyle="italic">
+                                                No fuel records found for {fuelFilter === 'ALL' ? 'this period' : fuelFilter}.
+                                            </Td>
+                                        </Tr>
+                                    );
+                                }
+
+                                const dateCounts = {};
+                                fuelGroups.forEach(g => {
+                                    dateCounts[g.dateKey] = (dateCounts[g.dateKey] || 0) + 1;
+                                });
+
+                                let currentSrNo = 0;
+                                let lastDateKey = null;
+
+                                return fuelGroups.map((group, groupIdx) => {
+                                    const dateStr = new Date(group.dateKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                                    
+                                    let isFirstOfDate = false;
+                                    if (group.dateKey !== lastDateKey) {
+                                        currentSrNo++;
+                                        lastDateKey = group.dateKey;
+                                        isFirstOfDate = true;
+                                    }
+
+                                    const span = dateCounts[group.dateKey];
+                                    const actualEmployeeName = group.expense?.employeeId?.name || employeeName;
+
+                                    return (
+                                        <Tr key={groupIdx} _hover={{ bg: "gray.50" }}>
+                                            {isFirstOfDate && (
+                                                <Td rowSpan={span} textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" verticalAlign="middle" bg="gray.50">{currentSrNo}</Td>
+                                            )}
+                                            {isFirstOfDate && (
+                                                <Td rowSpan={span} textAlign="center" fontWeight="bold" color="red.700" fontSize="md" verticalAlign="middle" bg="red.50">{dateStr}</Td>
+                                            )}
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm">{actualEmployeeName}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">{group.displayFuelType}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="red.600" fontSize="sm">₹{group.displayFuelAmt}</Td>
+                                        </Tr>
+                                    );
+                                });
+                            })()}
+                            <Tr bg="gray.100">
+                                <Td colSpan={4} textAlign="right" fontWeight="bold" fontSize="md">GRAND TOTAL:</Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="red.700">
+                                    ₹{(() => {
+                                        let sum = 0;
+                                        groupedByDate.forEach(g => {
+                                            const exp = g.expense;
+                                            const stdPetrol = Number(exp?.expenses?.petrol) || 0;
+                                            if (stdPetrol > 0 && (fuelFilter === 'ALL' || fuelFilter === 'Petrol')) {
+                                                sum += stdPetrol;
+                                            }
+                                            if (exp?.otherExpensesList && exp.otherExpensesList.length > 0) {
+                                                exp.otherExpensesList.forEach(other => {
+                                                    const name = (other.expenseName || '').toLowerCase().trim();
+                                                    const amount = Number(other.amount) || 0;
+                                                    if (amount > 0 && (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel'))) {
+                                                        let detectedType = 'Fuel';
+                                                        if (name.includes('petrol')) detectedType = 'Petrol';
+                                                        else if (name.includes('cng') || name === 'cng') detectedType = 'CNG';
+                                                        else if (name.includes('diesel')) detectedType = 'Diesel';
+
+                                                        if (fuelFilter === 'ALL' || fuelFilter.toLowerCase() === detectedType.toLowerCase()) {
+                                                            sum += amount;
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        });
+                                        return sum;
+                                    })()}
+                                </Td>
+                            </Tr>
+                        </Tbody>
+                    </Table>
+                </TableContainer>
+            ) : null}
         </Box>
     );
 };

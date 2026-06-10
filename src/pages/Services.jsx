@@ -2865,7 +2865,7 @@ const ScheduleMasterForm = () => {
         client: '', site: '', scheduleDate: '', endDate: '', includeSundays: false, workForAppley: '',
         operative: '', helpers: [], vehicle: '', instruments: [],
         notes: '', dayStatus: 'Scheduled',
-        ledger: '', amount: 0, scheduleType: ''
+        ledger: '', amount: 0, scheduleType: '', quantity: 0
     });
     const [selectedSiteLedgers, setSelectedSiteLedgers] = useState([]);
     const { isOpen: isCompOpen, onOpen: onCompOpen, onClose: onCompClose } = useDisclosure();
@@ -3003,7 +3003,8 @@ const ScheduleMasterForm = () => {
             dayStatus: schedule.dayStatus || 'Scheduled',
             ledger: schedule.ledger || '',
             amount: schedule.amount || 0,
-            scheduleType: schedule.scheduleType || ''
+            scheduleType: schedule.scheduleType || '',
+            quantity: schedule.quantity || 0
         });
         if (schedule.site) setSelectedSiteLedgers(schedule.site.ledgerItems || []);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3083,7 +3084,7 @@ const ScheduleMasterForm = () => {
             client: '', site: '', scheduleDate: '', endDate: '', includeSundays: false, workForAppley: '',
             operative: '', helpers: [], vehicle: '', instruments: [],
             notes: '', dayStatus: 'Scheduled',
-            ledger: '', amount: 0, scheduleType: ''
+            ledger: '', amount: 0, scheduleType: '', quantity: 0
         });
     };
 
@@ -3232,6 +3233,7 @@ const ScheduleMasterForm = () => {
                                                 <option value="VISIT">VISIT</option>
                                                 <option value="MONTH">MONTH</option>
                                                 <option value="TOPOGRAPHY SURVEY">TOPOGRAPHY SURVEY</option>
+                                                <option value="POINT MARKING">POINT MARKING</option>
                                             </Select>
                                         </FormControl>
                                         {formData.scheduleType === 'MONTH' && (
@@ -3433,10 +3435,26 @@ const ScheduleMasterForm = () => {
                         setIsAssignLoading(false);
                     }
                 }}
+                onDeleteSchedule={async () => {
+                    setIsAssignLoading(true);
+                    try {
+                        const res = await api.delete(`/schedule-master/${assignTarget._id}`);
+                        if (res.data.success) {
+                            toast({ title: 'Schedule Cancelled for Today', status: 'success' });
+                            onAssignClose();
+                            const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                            if (sRes.data.success) setSchedules(sRes.data.data);
+                        }
+                    } catch (err) {
+                        toast({ title: 'Cancellation Failed', description: err.response?.data?.message, status: 'error' });
+                    } finally {
+                        setIsAssignLoading(false);
+                    }
+                }}
                 isLoading={isAssignLoading}
                 onPauseMonth={async (target) => {
                     try {
-                        const res = await api.delete(`/schedule-master/pause-month/${target.client?._id || target.client}/${target.site?._id || target.site}`);
+                        const res = await api.delete(`/schedule-master/pause-month/${target.client?._id || target.client}/${target.site?._id || target.site}/${target.monthGroupId}`);
                         if (res.data.success) {
                             toast({ title: 'Month Paused', description: res.data.message, status: 'success' });
                             onAssignClose();
@@ -3456,6 +3474,7 @@ const ScheduleMasterForm = () => {
                             endDate: newEndDate,
                             includeSundays: includeSundays,
                             workForAppley: target.workForAppley,
+                            monthGroupId: target.monthGroupId,
                             operative: target.operative?._id || target.operative,
                             ledger: target.ledger,
                             amount: target.amount
@@ -3472,7 +3491,7 @@ const ScheduleMasterForm = () => {
                 }}
                 onCompleteMonth={async (target) => {
                     try {
-                        const res = await api.put(`/schedule-master/end-month/${target.client?._id || target.client}/${target.site?._id || target.site}`);
+                        const res = await api.put(`/schedule-master/end-month/${target.client?._id || target.client}/${target.site?._id || target.site}/${target.monthGroupId}`);
                         if (res.data.success) {
                             toast({ title: 'Contract Completed', description: res.data.message, status: 'success' });
                             onAssignClose();
@@ -3518,16 +3537,16 @@ const ScheduleMasterForm = () => {
     );
 };
 
-const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth }) => {
+const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth, onDeleteSchedule }) => {
     const [formData, setFormData] = useState({
         operative: '',
         helpers: [],
         vehicle: '',
         instruments: [],
-        includeSunday: false,
         scheduleType: '',
         endDate: ''
     });
+    const [requiredToday, setRequiredToday] = useState(true);
     const [showResumeInput, setShowResumeInput] = useState(false);
     const [resumeDate, setResumeDate] = useState('');
     const [resumeIncludeSundays, setResumeIncludeSundays] = useState(false);
@@ -3553,10 +3572,10 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                 helpers: schedule.helpers?.map(h => h._id || h) || [],
                 vehicle: schedule.vehicle?._id || schedule.vehicle || '',
                 instruments: schedule.instruments?.map(i => i._id || i) || [],
-                includeSunday: false,
                 scheduleType: schedule.scheduleType || '',
                 endDate: schedule.endDate ? new Date(schedule.endDate).toISOString().split('T')[0] : ''
             });
+            setRequiredToday(schedule.dayStatus !== 'Rejected');
         }
     }, [schedule, isOpen]);
 
@@ -3576,7 +3595,6 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
 
     const isCompleted = schedule?.dayStatus === 'Completed';
     const isPaused = schedule?.dayStatus === 'Paused';
-    const isSaturday = schedule?.scheduleDate && new Date(schedule.scheduleDate).getDay() === 6;
     const isMonthType = schedule?.scheduleType === 'MONTH';
 
     return (
@@ -3620,8 +3638,10 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                     <option value="VISIT">VISIT</option>
                                     <option value="MONTH">MONTH</option>
                                     <option value="TOPOGRAPHY SURVEY">TOPOGRAPHY SURVEY</option>
+                                    <option value="POINT MARKING">POINT MARKING</option>
                                 </Select>
                             </FormControl>
+
 
                             <FormControl isDisabled={isCompleted}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
@@ -3773,20 +3793,19 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                 </Box>
                             </FormControl>
                         </SimpleGrid>
-                        
-                        {isSaturday && isMonthType && !isCompleted && !isPaused && (
-                            <Box bg="blue.50" p={4} borderRadius="xl" border="1px solid" borderColor="blue.100">
+                        {isMonthType && !isCompleted && !isPaused && (
+                            <Box bg="orange.50" p={4} borderRadius="xl" border="1px solid" borderColor="orange.200">
                                 <Checkbox 
-                                    colorScheme="blue" 
+                                    colorScheme="orange" 
                                     size="md"
-                                    isChecked={formData.includeSunday}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, includeSunday: e.target.checked }))}
+                                    isChecked={requiredToday}
+                                    onChange={(e) => setRequiredToday(e.target.checked)}
                                 >
-                                    <Text fontWeight="bold" fontSize="sm" color="blue.800">
-                                        Schedule work for Tomorrow (Sunday)?
+                                    <Text fontWeight="bold" fontSize="sm" color="orange.800">
+                                        Is this schedule required today?
                                     </Text>
-                                    <Text fontSize="xs" color="blue.600">
-                                        This will automatically generate a new schedule for this site tomorrow.
+                                    <Text fontSize="xs" color="orange.600">
+                                        If unchecked, today's schedule is cancelled, but future days will still generate automatically.
                                     </Text>
                                 </Checkbox>
                             </Box>
@@ -3854,7 +3873,14 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                     _hover={{ bgGradient: 'linear(to-r, blue.700, blue.500)', transform: 'translateY(-1px)', shadow: 'xl' }}
                                     _active={{ transform: 'translateY(0)' }}
                                     isLoading={isLoading} 
-                                    onClick={() => onUpdate(formData)} 
+                                    onClick={() => {
+                                        const payload = {
+                                            ...formData,
+                                            dayStatus: (schedule.dayStatus === 'Rejected' && formData.operative) ? 'Scheduled' : schedule.dayStatus,
+                                            skipToday: !requiredToday
+                                        };
+                                        onUpdate(payload);
+                                    }} 
                                     px={8} 
                                     h="40px"
                                     borderRadius="full"
@@ -4370,6 +4396,7 @@ const InstrumentMasterForm = () => {
 const ExpenseReportsTab = () => {
     const [employees, setEmployees] = useState([]);
     const [selectedId, setSelectedId] = useState('');
+    const [reportType, setReportType] = useState('Ledger');
 
     useEffect(() => {
         const fetchEmp = async () => {
@@ -4387,17 +4414,38 @@ const ExpenseReportsTab = () => {
         <Box>
             <Card mb={6} borderRadius="2xl" boxShadow="sm">
                 <CardBody p={6}>
-                    <FormControl maxW="400px">
-                        <FormLabel fontWeight="bold">Select Employee to View Report</FormLabel>
-                        <Select placeholder="-- Choose Employee --" value={selectedId} onChange={(e) => setSelectedId(e.target.value)} bg="white">
-                            {employees.map(emp => <option key={emp._id} value={emp._id}>{emp.name}</option>)}
-                        </Select>
-                    </FormControl>
+                    <HStack spacing={6} align="end">
+                        <FormControl maxW="250px">
+                            <FormLabel fontWeight="bold">Select Report Type</FormLabel>
+                            <Select value={reportType} onChange={(e) => {
+                                setReportType(e.target.value);
+                                if (e.target.value === 'Food' || e.target.value === 'Fuel') setSelectedId('ALL');
+                                else setSelectedId('');
+                            }} bg="white">
+                                <option value="Ledger">Employee Ledger</option>
+                                <option value="Food">Global Food Report</option>
+                                <option value="Fuel">Global Fuel Report</option>
+                            </Select>
+                        </FormControl>
+
+                        <FormControl maxW="400px" isDisabled={reportType === 'Food' || reportType === 'Fuel'}>
+                            <FormLabel fontWeight="bold">Select Employee</FormLabel>
+                            <Select 
+                                placeholder={(reportType === 'Food' || reportType === 'Fuel') ? "All Employees Included" : "-- Choose Employee --"} 
+                                value={(reportType === 'Food' || reportType === 'Fuel') ? 'ALL' : selectedId} 
+                                onChange={(e) => setSelectedId(e.target.value)} 
+                                bg={(reportType === 'Food' || reportType === 'Fuel') ? 'gray.100' : 'white'}
+                            >
+                                {(reportType === 'Food' || reportType === 'Fuel') && <option value="ALL" hidden>All Employees</option>}
+                                {employees.map(emp => <option key={emp._id} value={emp._id}>{emp.name}</option>)}
+                            </Select>
+                        </FormControl>
+                    </HStack>
                 </CardBody>
             </Card>
 
-            {selectedId ? (
-                <AdminEmployeeExpenses employeeId={selectedId} employeeName={selectedName} />
+            {((selectedId && selectedId !== 'ALL') || reportType === 'Food' || reportType === 'Fuel') ? (
+                <AdminEmployeeExpenses employeeId={(reportType === 'Food' || reportType === 'Fuel') ? 'ALL' : selectedId} employeeName={(reportType === 'Food' || reportType === 'Fuel') ? 'All Employees' : selectedName} externalReportType={reportType} />
             ) : (
                 <Center p={10}><Text color="gray.500">Please select an employee to view their expense reports.</Text></Center>
             )}
