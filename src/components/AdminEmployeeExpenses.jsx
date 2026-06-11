@@ -475,16 +475,16 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
     const groupedByDate = Object.values(dateMap).sort((a, b) => new Date(a.dateKey) - new Date(b.dateKey));
 
     return (
-        <Box bg="white" p={6} borderRadius="xl" shadow="md">
-            <Flex justify="space-between" mb={6} align="center" flexWrap="wrap" gap={4}>
-                <Heading size="md" color="gray.800">Daily Report: {employeeName}</Heading>
+        <Box bg="white" p={{ base: 3, md: 6 }} borderRadius="xl" shadow="md">
+            <Flex justify="space-between" mb={{ base: 3, md: 6 }} align={{ base: 'flex-start', md: 'center' }} flexWrap="wrap" gap={3} direction={{ base: 'column', md: 'row' }}>
+                <Heading size="md" color="gray.800" fontSize={{ base: 'sm', md: 'md' }}>Daily Report: {employeeName}</Heading>
                 
-                <HStack spacing={4} flexWrap="wrap">
+                <Flex flexWrap="wrap" gap={2} align="center">
                     {!externalReportType && (
                         <HStack>
                             <Text fontSize="sm" fontWeight="bold" color="gray.600">Report:</Text>
                             <ChakraSelect 
-                                w="140px"
+                                w={{ base: '120px', md: '140px' }}
                                 bg="white"
                                 borderRadius="xl"
                                 shadow="sm"
@@ -502,9 +502,9 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                     
                     {reportType === 'Fuel' && (
                         <HStack>
-                            <Text fontSize="sm" fontWeight="bold" color="gray.600">Fuel Type:</Text>
+                            <Text fontSize="sm" fontWeight="bold" color="gray.600">Fuel:</Text>
                             <ChakraSelect 
-                                w="120px"
+                                w={{ base: '100px', md: '120px' }}
                                 bg="white"
                                 borderRadius="xl"
                                 shadow="sm"
@@ -522,9 +522,9 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                     )}
 
                     <HStack>
-                        <Text fontSize="sm" fontWeight="bold" color="gray.600">Period:</Text>
+                        <Text fontSize="sm" fontWeight="bold" color="gray.600">Month:</Text>
                         <ChakraSelect 
-                            w="130px"
+                            w={{ base: '110px', md: '130px' }}
                             bg="white"
                             borderRadius="xl"
                             shadow="sm"
@@ -585,9 +585,9 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                         Add Record
                     </Button>
                     <Button colorScheme="green" leftIcon={<FaFileExcel />} onClick={handleDownload} size="sm">
-                        Export Filtered Sheet
+                        Export
                     </Button>
-                </HStack>
+                </Flex>
             </Flex>
 
             {/* Modal for Adding Expense/Attendance */}
@@ -924,7 +924,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
             {groupedByDate.length === 0 ? (
                 <Center p={10}><Text color="gray.500">No records found for this period.</Text></Center>
             ) : reportType === 'Ledger' ? (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="md">
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" overflowX="auto">
                 <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid black' } }}>
                     <Thead bg="gray.100">
                         <Tr>
@@ -1102,7 +1102,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                 </Table>
             </TableContainer>
             ) : reportType === 'Food' ? (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white">
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white" overflowX="auto">
                     <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
                         <Thead bg="blue.50">
                             <Tr>
@@ -1180,7 +1180,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                     </Table>
                 </TableContainer>
             ) : reportType === 'Fuel' ? (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white">
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white" overflowX="auto">
                     <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
                         <Thead bg="red.50">
                             <Tr>
@@ -1339,20 +1339,19 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                     </Table>
                 </TableContainer>
             ) : reportType === 'ClientSite' ? (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white">
-                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0', whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white" overflowX="auto">
+                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
                         <Thead bg="purple.50">
                             <Tr>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">SR. NO.</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">SR. NO.</Th>
                                 <Th color="purple.900" fontSize="xs" fontWeight="bold">CLIENT NAME</Th>
                                 <Th color="purple.900" fontSize="xs" fontWeight="bold">SITE NAME</Th>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">PERIOD</Th>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">BREAKFAST</Th>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">LUNCH</Th>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">DINNER</Th>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">FUEL</Th>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">OTHER EXP.</Th>
-                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">TOTAL</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">BREAKFAST</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">LUNCH</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">DINNER</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">FUEL</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">OTHER EXP.</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">TOTAL</Th>
                             </Tr>
                         </Thead>
                         <Tbody>
@@ -1366,13 +1365,10 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                     const cName = exp.clientSites?.[0]?.clientId?.clientName || 'Unspecified Client';
                                     const sName = exp.clientSites?.map(cs => cs.siteId?.siteName).filter(Boolean).join(' & ') || 'Unspecified Site';
                                     
-                                    const d = new Date(g.dateKey);
-                                    const monthYear = d.toLocaleString('default', { month: 'short', year: 'numeric' });
-                                    
-                                    const key = `${cName}_${sName}_${monthYear}`;
+                                    const key = `${cName}_${sName}`;
                                     
                                     if (!siteAgg[key]) {
-                                        siteAgg[key] = { clientName: cName, siteName: sName, period: monthYear, timestamp: d.getTime(), breakfast: 0, lunch: 0, dinner: 0, fuel: 0, other: 0 };
+                                        siteAgg[key] = { clientName: cName, siteName: sName, breakfast: 0, lunch: 0, dinner: 0, fuel: 0, other: 0 };
                                     }
                                     
                                     siteAgg[key].breakfast += Number(exp.expenses?.breakfast) || 0;
@@ -1403,9 +1399,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                 .sort((a, b) => {
                                     const clientCmp = a.clientName.localeCompare(b.clientName);
                                     if (clientCmp !== 0) return clientCmp;
-                                    const siteCmp = a.siteName.localeCompare(b.siteName);
-                                    if (siteCmp !== 0) return siteCmp;
-                                    return a.timestamp - b.timestamp;
+                                    return a.siteName.localeCompare(b.siteName);
                                 });
 
                                 if (aggArray.length === 0) {
@@ -1423,32 +1417,31 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                     currentSrNo++;
                                     return (
                                         <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                                            <Td textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" bg="gray.50">{currentSrNo}</Td>
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" minW="150px">{site.clientName}</Td>
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" minW="150px">{site.siteName}</Td>
-                                            <Td textAlign="center" fontWeight="bold" color="blue.600" fontSize="sm" minW="100px">{site.period}</Td>
-                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.breakfast}</Td>
-                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.lunch}</Td>
-                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.dinner}</Td>
-                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.fuel}</Td>
-                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.other}</Td>
-                                            <Td textAlign="center" fontWeight="bold" color="purple.600" fontSize="sm">₹{site.total}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" bg="gray.50" whiteSpace="nowrap">{currentSrNo}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" maxW="250px" whiteSpace="normal" wordBreak="break-word">{site.clientName}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" maxW="200px" whiteSpace="normal" wordBreak="break-word">{site.siteName}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700" whiteSpace="nowrap">₹{site.breakfast}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700" whiteSpace="nowrap">₹{site.lunch}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700" whiteSpace="nowrap">₹{site.dinner}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700" whiteSpace="nowrap">₹{site.fuel}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700" whiteSpace="nowrap">₹{site.other}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="purple.600" fontSize="sm" whiteSpace="nowrap">₹{site.total}</Td>
                                         </Tr>
                                     );
                                 });
                             })()}
                             <Tr bg="gray.100">
-                                <Td colSpan={4} textAlign="right" fontWeight="bold" fontSize="md">GRAND TOTAL:</Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                <Td colSpan={3} textAlign="right" fontWeight="bold" fontSize="md" whiteSpace="nowrap">GRAND TOTAL:</Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" whiteSpace="nowrap">
                                     ₹{groupedByDate.reduce((sum, g) => sum + (Number(g.expense?.expenses?.breakfast) || 0), 0)}
                                 </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" whiteSpace="nowrap">
                                     ₹{groupedByDate.reduce((sum, g) => sum + (Number(g.expense?.expenses?.lunch) || 0), 0)}
                                 </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" whiteSpace="nowrap">
                                     ₹{groupedByDate.reduce((sum, g) => sum + (Number(g.expense?.expenses?.dinner) || 0), 0)}
                                 </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" whiteSpace="nowrap">
                                     ₹{(() => {
                                         let sum = 0;
                                         groupedByDate.forEach(g => {
@@ -1458,8 +1451,11 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                             if (exp.otherExpensesList) {
                                                 exp.otherExpensesList.forEach(other => {
                                                     const name = (other.expenseName || '').toLowerCase().trim();
-                                                    if (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel')) {
-                                                        sum += Number(other.amount) || 0;
+                                                    const amount = Number(other.amount) || 0;
+                                                    if (amount > 0) {
+                                                        if (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel')) {
+                                                            sum += amount;
+                                                        }
                                                     }
                                                 });
                                             }
@@ -1467,7 +1463,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                         return sum;
                                     })()}
                                 </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" whiteSpace="nowrap">
                                     ₹{(() => {
                                         let sum = 0;
                                         groupedByDate.forEach(g => {
@@ -1476,8 +1472,11 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                             if (exp.otherExpensesList) {
                                                 exp.otherExpensesList.forEach(other => {
                                                     const name = (other.expenseName || '').toLowerCase().trim();
-                                                    if (!(name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel'))) {
-                                                        sum += Number(other.amount) || 0;
+                                                    const amount = Number(other.amount) || 0;
+                                                    if (amount > 0) {
+                                                        if (!(name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel'))) {
+                                                            sum += amount;
+                                                        }
                                                     }
                                                 });
                                             }
@@ -1485,7 +1484,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                         return sum;
                                     })()}
                                 </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="purple.700">
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="purple.700" whiteSpace="nowrap">
                                     ₹{(() => {
                                         let sum = 0;
                                         groupedByDate.forEach(g => {
@@ -1506,17 +1505,17 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                     </Table>
                 </TableContainer>
             ) : reportType === 'EmployeeSiteLedger' ? (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white">
-                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0', whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white" overflowX="auto">
+                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
                         <Thead bg="blue.50">
                             <Tr>
-                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">SR. NO.</Th>
-                                <Th color="blue.900" fontSize="xs" fontWeight="bold">DATE</Th>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">SR. NO.</Th>
+                                <Th color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">DATE</Th>
                                 <Th color="blue.900" fontSize="xs" fontWeight="bold">CLIENT NAME</Th>
                                 <Th color="blue.900" fontSize="xs" fontWeight="bold">SITE NAME</Th>
-                                <Th textAlign="center" color="green.700" fontSize="xs" fontWeight="bold">CREDIT</Th>
-                                <Th textAlign="center" color="red.700" fontSize="xs" fontWeight="bold">DEBIT</Th>
-                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold">NET (Cr-Dr)</Th>
+                                <Th textAlign="center" color="green.700" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">CREDIT</Th>
+                                <Th textAlign="center" color="red.700" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">DEBIT</Th>
+                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">NET (Cr-Dr)</Th>
                             </Tr>
                         </Thead>
                         <Tbody>
@@ -1577,13 +1576,13 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                     currentSrNo++;
                                     return (
                                         <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                                            <Td textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" bg="gray.50">{currentSrNo}</Td>
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm">{row.dateStr}</Td>
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" minW="150px">{row.cName}</Td>
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" minW="150px">{row.sName}</Td>
-                                            <Td textAlign="center" fontWeight="bold" color="green.600" fontSize="sm">₹{row.credit}</Td>
-                                            <Td textAlign="center" fontWeight="bold" color="red.600" fontSize="sm">₹{row.debit}</Td>
-                                            <Td textAlign="center" fontWeight="bold" color={row.net >= 0 ? "blue.600" : "red.600"} fontSize="sm">
+                                            <Td textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" bg="gray.50" whiteSpace="nowrap">{currentSrNo}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" whiteSpace="nowrap">{row.dateStr}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" maxW="250px" whiteSpace="normal" wordBreak="break-word">{row.cName}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" maxW="200px" whiteSpace="normal" wordBreak="break-word">{row.sName}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="green.600" fontSize="sm" whiteSpace="nowrap">₹{row.credit}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="red.600" fontSize="sm" whiteSpace="nowrap">₹{row.debit}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color={row.net >= 0 ? "blue.600" : "red.600"} fontSize="sm" whiteSpace="nowrap">
                                                 {row.net >= 0 ? `+₹${row.net}` : `-₹${Math.abs(row.net)}`}
                                             </Td>
                                         </Tr>
@@ -1591,8 +1590,8 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                 });
                             })()}
                             <Tr bg="gray.100">
-                                <Td colSpan={4} textAlign="right" fontWeight="bold" fontSize="md">GRAND TOTAL:</Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="green.700">
+                                <Td colSpan={4} textAlign="right" fontWeight="bold" fontSize="md" whiteSpace="nowrap">GRAND TOTAL:</Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="green.700" whiteSpace="nowrap">
                                     ₹{(() => {
                                         let sum = 0;
                                         groupedByDate.forEach(g => {
@@ -1609,7 +1608,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                         return sum;
                                     })()}
                                 </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="red.700">
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="red.700" whiteSpace="nowrap">
                                     ₹{(() => {
                                         let sum = 0;
                                         groupedByDate.forEach(g => {
@@ -1629,7 +1628,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                                         return sum;
                                     })()}
                                 </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="blue.700">
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="blue.700" whiteSpace="nowrap">
                                     ₹{(() => {
                                         let cr = 0, dr = 0;
                                         groupedByDate.forEach(g => {

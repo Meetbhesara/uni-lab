@@ -549,6 +549,12 @@ const AdminDraftingWork = () => {
                                 <TabPanel p={0} key={listIdx}>
                                     {!selectedSurvey ? (
                                         <VStack spacing={6} align="stretch">
+                                            {loading ? (
+                                                <Box textAlign="center" py={10}>
+                                                    <Spinner size="xl" color="brand.500" thickness="4px" />
+                                                    <Text mt={4} color="gray.500" fontWeight="bold">Fetching data...</Text>
+                                                </Box>
+                                            ) : (
                                             <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
                                                 <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                                     <Thead bg="gray.50">
@@ -616,6 +622,7 @@ const AdminDraftingWork = () => {
                                                     </Tbody>
                                                 </Table>
                                             </Box>
+                                            )}
                                         </VStack>
                                     ) : (
                                         <Box p={4} border="1px solid" borderColor="gray.200" borderRadius="xl" bg="white" shadow="sm">

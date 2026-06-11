@@ -48,59 +48,67 @@ const EmployeeExpensesModule = () => {
     const [reportType, setReportType] = useState('Ledger');
 
     return (
-        <Box py={10} bg="gray.50" minH="100vh">
-            <Container maxW="container.xl">
-                <VStack spacing={8} align="stretch">
+        <Box py={{ base: 4, md: 10 }} bg="gray.50" minH="100vh">
+            <Container maxW="container.xl" px={{ base: 2, md: 4 }}>
+                <VStack spacing={{ base: 4, md: 8 }} align="stretch">
                     {/* Module Header */}
-                    <Flex justify="space-between" align="center" bg="white" p={6} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                        <HStack spacing={4}>
-                            <Box bg="blue.500" p={3} borderRadius="xl" color="white">
-                                <Icon as={FaMoneyBillWave} w={6} h={6} />
+                    <Flex justify="space-between" align="center" bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" flexWrap="wrap" gap={3}>
+                        <HStack spacing={{ base: 3, md: 4 }}>
+                            <Box bg="blue.500" p={{ base: 2, md: 3 }} borderRadius="xl" color="white" flexShrink={0}>
+                                <Icon as={FaMoneyBillWave} w={{ base: 5, md: 6 }} h={{ base: 5, md: 6 }} />
                             </Box>
                             <VStack align="start" spacing={0}>
-                                <Heading size="lg">Expenses Management</Heading>
-                                <Text color="gray.500" fontSize="sm">Manage internal transfers and daily operational expenses.</Text>
+                                <Heading size={{ base: 'md', md: 'lg' }}>Expenses Management</Heading>
+                                <Text color="gray.500" fontSize={{ base: 'xs', md: 'sm' }}>Manage internal transfers and daily operational expenses.</Text>
                             </VStack>
                         </HStack>
                     </Flex>
 
                     {/* Navigation Tabs */}
                     <Tabs variant="unstyled" defaultIndex={0} isLazy>
-                        <TabList bg="white" p={1.5} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" display="inline-flex">
+                        <Box overflowX="auto" pb={1}>
+                        <TabList bg="white" p={1.5} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" display="inline-flex" minW="max-content">
                             <Tab 
                                 _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
                                 borderRadius="xl" 
-                                px={8} 
-                                py={3} 
+                                px={{ base: 4, md: 8 }}
+                                py={{ base: 2, md: 3 }}
                                 fontWeight="bold" 
                                 color="gray.500"
+                                fontSize={{ base: 'sm', md: 'md' }}
                                 transition="all 0.3s"
+                                whiteSpace="nowrap"
                             >
-                                <Icon as={FaExchangeAlt} mr={2} /> Money Transfer
+                                <Icon as={FaExchangeAlt} mr={{ base: 1, md: 2 }} /> Money Transfer
                             </Tab>
                             <Tab 
                                 _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
                                 borderRadius="xl" 
-                                px={8} 
-                                py={3} 
+                                px={{ base: 4, md: 8 }}
+                                py={{ base: 2, md: 3 }}
                                 fontWeight="bold" 
                                 color="gray.500"
+                                fontSize={{ base: 'sm', md: 'md' }}
                                 transition="all 0.3s"
+                                whiteSpace="nowrap"
                             >
-                                <Icon as={FaPlus} mr={2} /> Daily Expenses
+                                <Icon as={FaPlus} mr={{ base: 1, md: 2 }} /> Daily Expenses
                             </Tab>
                             <Tab 
                                 _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
                                 borderRadius="xl" 
-                                px={8} 
-                                py={3} 
+                                px={{ base: 4, md: 8 }}
+                                py={{ base: 2, md: 3 }}
                                 fontWeight="bold" 
                                 color="gray.500"
+                                fontSize={{ base: 'sm', md: 'md' }}
                                 transition="all 0.3s"
+                                whiteSpace="nowrap"
                             >
-                                <Icon as={FaChartBar} mr={2} /> Daily Report
+                                <Icon as={FaChartBar} mr={{ base: 1, md: 2 }} /> Daily Report
                             </Tab>
                         </TabList>
+                        </Box>
 
                         <TabPanels mt={8}>
                             <TabPanel p={0}>
@@ -117,16 +125,16 @@ const EmployeeExpensesModule = () => {
                                 />
                             </TabPanel>
                             <TabPanel p={0}>
-                                <Box bg="white" p={6} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                                    <Heading size="sm" mb={5} color="gray.700">Select Report Type & Employee to View Daily Report</Heading>
-                                    <HStack spacing={6} align="end" mb={6}>
-                                        <FormControl maxW="250px">
-                                            <FormLabel fontWeight="bold">Select Report Type</FormLabel>
+                                <Box bg="white" p={{ base: 3, md: 6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                                    <Heading size="sm" mb={{ base: 3, md: 5 }} color="gray.700">Select Report Type & Employee to View Daily Report</Heading>
+                                    <Flex direction={{ base: 'column', md: 'row' }} gap={4} align={{ base: 'stretch', md: 'flex-end' }} mb={{ base: 4, md: 6 }}>
+                                        <FormControl>
+                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Select Report Type</FormLabel>
                                             <Select value={reportType} onChange={(e) => {
                                                 setReportType(e.target.value);
                                                 if (e.target.value === 'Food' || e.target.value === 'Fuel' || e.target.value === 'ClientSite') setSelectedExpenseEmployee({ id: 'ALL', name: 'All Employees' });
                                                 else setSelectedExpenseEmployee({ id: '', name: '' });
-                                            }} bg="white">
+                                            }} bg="white" size={{ base: 'sm', md: 'md' }}>
                                                 <option value="Ledger">Employee Ledger</option>
                                                 <option value="Food">Global Food Report</option>
                                                 <option value="Fuel">Global Fuel Report</option>
@@ -135,8 +143,8 @@ const EmployeeExpensesModule = () => {
                                             </Select>
                                         </FormControl>
 
-                                        <FormControl maxW="400px" isDisabled={reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite'}>
-                                            <FormLabel fontWeight="bold">Select Employee</FormLabel>
+                                        <FormControl isDisabled={reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite'}>
+                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Select Employee</FormLabel>
                                             <Select
                                                 placeholder={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? "All Employees Included" : "-- Select Employee --"}
                                                 value={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'ALL' : selectedExpenseEmployee.id}
@@ -145,6 +153,7 @@ const EmployeeExpensesModule = () => {
                                                     setSelectedExpenseEmployee({ id: emp?._id || '', name: emp?.name || '' });
                                                 }}
                                                 bg={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'gray.100' : 'white'}
+                                                size={{ base: 'sm', md: 'md' }}
                                             >
                                                 {(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') && <option value="ALL" hidden>All Employees</option>}
                                                 {employees.map(emp => (
@@ -152,7 +161,7 @@ const EmployeeExpensesModule = () => {
                                                 ))}
                                             </Select>
                                         </FormControl>
-                                    </HStack>
+                                    </Flex>
                                     {((selectedExpenseEmployee.id && selectedExpenseEmployee.id !== 'ALL') || reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? (
                                         <AdminEmployeeExpenses
                                             employeeId={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'ALL' : selectedExpenseEmployee.id}
@@ -1227,7 +1236,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                         </Center>
                     ) : (
                         <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                            <TableContainer>
+                            <TableContainer overflowX="auto">
                                 <Table variant="simple">
                                     <Thead bg="blue.50">
                                         <Tr>
@@ -1851,9 +1860,9 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
 
                         <Divider />
 
-                        <HStack spacing={4} align="flex-end" w="full" flexWrap="wrap">
+                        <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4} alignItems="flex-end" w="full">
 
-                        <FormControl isRequired flex={2}>
+                        <FormControl isRequired>
                             <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">
                                 Sender {formData.employee1 && <Badge ml={2} colorScheme="red">Avail: ₹{tempBalances[formData.employee1]?.toLocaleString()}</Badge>}
                             </FormLabel>
@@ -1875,9 +1884,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                             </Select>
                         </FormControl>
 
-                        <Box pb={3} color="gray.300"><Icon as={FaArrowRight} /></Box>
-
-                        <FormControl isRequired flex={2}>
+                        <FormControl isRequired>
                             <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">
                                 Receiver {formData.employee2 && <Badge ml={2} colorScheme="green">New Bal: ₹{tempBalances[formData.employee2]?.toLocaleString()}</Badge>}
                             </FormLabel>
@@ -1899,7 +1906,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                             </Select>
                         </FormControl>
 
-                        <FormControl isRequired flex={1}>
+                        <FormControl isRequired>
                             <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">Amount (₹)</FormLabel>
                             <InputGroup size="lg">
                                 <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
@@ -1907,10 +1914,10 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                             </InputGroup>
                         </FormControl>
 
-                        <Button colorScheme="blue" size="lg" px={10} borderRadius="xl" onClick={handleAddEntry} leftIcon={editIndex > -1 ? <FaCheckCircle /> : <FaPlus />} shadow="lg">
+                        <Button colorScheme="blue" size="lg" borderRadius="xl" onClick={handleAddEntry} leftIcon={editIndex > -1 ? <FaCheckCircle /> : <FaPlus />} shadow="lg">
                             {editIndex > -1 ? 'Update' : 'Add'}
                         </Button>
-                    </HStack>
+                    </SimpleGrid>
                 </VStack>
             </CardBody>
         </Card>
@@ -1927,7 +1934,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                     </HStack>
 
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                        <TableContainer>
+                        <TableContainer overflowX="auto">
                             <Table variant="simple">
                                 <Thead bg="gray.50">
                                     <Tr>
@@ -1983,7 +1990,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                     </Center>
                 ) : (
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                        <TableContainer>
+                        <TableContainer overflowX="auto">
                             <Table variant="simple">
                                 <Thead bg="teal.50">
                                     <Tr>

@@ -201,8 +201,15 @@ const AdminLayout = () => {
             </Drawer>
             {/* mobilenav */}
             <MobileNav onOpen={onOpen} />
-            <Box ml={{ base: 0, md: 60 }} p={{ base: 3, md: 4 }}>
-                <Outlet />
+            <Box
+                ml={{ base: 0, md: 60 }}
+                p={{ base: 2, md: 4 }}
+                overflowX="hidden"
+                minH="calc(100vh - 80px)"
+            >
+                <Box maxW="100%" overflowX="auto">
+                    <Outlet />
+                </Box>
             </Box>
         </Box>
     );

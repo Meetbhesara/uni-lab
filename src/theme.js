@@ -34,11 +34,16 @@ const theme = extendTheme({
     fonts,
     styles: {
         global: {
+            'html, body': {
+                maxWidth: '100vw',
+                overflowX: 'hidden',
+            },
             body: {
                 bg: 'gray.50',
                 color: 'slate.900',
                 overflowX: 'hidden',
                 webkitTapHighlightColor: 'transparent',
+                WebkitOverflowScrolling: 'touch',
             },
             '::selection': {
                 bg: 'brand.500',
@@ -47,9 +52,11 @@ const theme = extendTheme({
             '*': {
                 scrollbarWidth: 'thin',
                 scrollbarColor: '#0066cc #f1f1f1',
+                boxSizing: 'border-box',
             },
             '*::-webkit-scrollbar': {
-                width: '8px',
+                width: '6px',
+                height: '6px',
             },
             '*::-webkit-scrollbar-track': {
                 background: '#f1f1f1',
@@ -57,6 +64,18 @@ const theme = extendTheme({
             '*::-webkit-scrollbar-thumb': {
                 background: '#0066cc',
                 borderRadius: '10px',
+            },
+            '.hide-scrollbar::-webkit-scrollbar': {
+                display: 'none',
+            },
+            '.hide-scrollbar': {
+                msOverflowStyle: 'none',
+                scrollbarWidth: 'none',
+            },
+            /* Make sure images & videos don't overflow */
+            'img, video': {
+                maxWidth: '100%',
+                height: 'auto',
             },
         },
     },
