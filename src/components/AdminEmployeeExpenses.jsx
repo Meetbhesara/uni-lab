@@ -1184,133 +1184,303 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                         <Thead bg="red.50">
                             <Tr>
                                 <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">SR. NO.</Th>
-                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">DATE</Th>
                                 <Th color="red.900" fontSize="xs" fontWeight="bold">EMPLOYEE NAME</Th>
-                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">FUEL TYPE</Th>
-                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">AMOUNT</Th>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">PETROL</Th>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">CNG</Th>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">DIESEL</Th>
+                                <Th textAlign="center" color="red.900" fontSize="xs" fontWeight="bold">TOTAL</Th>
                             </Tr>
                         </Thead>
                         <Tbody>
                             {(() => {
-                                const fuelGroups = [];
+                                const employeeAgg = {};
+                                
                                 groupedByDate.forEach(g => {
                                     const exp = g.expense;
+                                    const empName = exp?.employeeId?.name || employeeName || 'Unknown Employee';
+                                    
+                                    if (!employeeAgg[empName]) {
+                                        employeeAgg[empName] = { petrol: 0, cng: 0, diesel: 0, other: 0 };
+                                    }
                                     
                                     // Check standard petrol field
                                     const stdPetrol = Number(exp?.expenses?.petrol) || 0;
+                                    employeeAgg[empName].petrol += stdPetrol;
                                     
                                     // Check otherExpensesList for any mention of fuels
-                                    let otherFuelType = null;
-                                    let otherFuelAmt = 0;
-
                                     if (exp?.otherExpensesList && exp.otherExpensesList.length > 0) {
                                         exp.otherExpensesList.forEach(other => {
                                             const name = (other.expenseName || '').toLowerCase().trim();
                                             const amount = Number(other.amount) || 0;
                                             
                                             if (amount > 0 && (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel'))) {
-                                                if (name.includes('petrol')) otherFuelType = 'Petrol';
-                                                else if (name.includes('cng') || name === 'cng') otherFuelType = 'CNG';
-                                                else if (name.includes('diesel')) otherFuelType = 'Diesel';
-                                                else otherFuelType = 'Fuel';
-                                                otherFuelAmt += amount;
+                                                if (name.includes('petrol')) employeeAgg[empName].petrol += amount;
+                                                else if (name.includes('cng') || name === 'cng') employeeAgg[empName].cng += amount;
+                                                else if (name.includes('diesel')) employeeAgg[empName].diesel += amount;
+                                                else employeeAgg[empName].other += amount;
                                             }
                                         });
                                     }
-
-                                    // Display Logic: Always show the row to match Food Report behavior!
-                                    if (fuelFilter === 'ALL') {
-                                        if (otherFuelAmt > 0 && stdPetrol === 0) {
-                                            fuelGroups.push({ ...g, displayFuelType: otherFuelType, displayFuelAmt: otherFuelAmt });
-                                        } else {
-                                            fuelGroups.push({ ...g, displayFuelType: 'Petrol', displayFuelAmt: stdPetrol });
-                                            if (otherFuelAmt > 0) {
-                                                fuelGroups.push({ ...g, displayFuelType: otherFuelType, displayFuelAmt: otherFuelAmt });
-                                            }
-                                        }
-                                    } else {
-                                        // If a specific filter is selected (e.g. CNG), show everyone but put 0 if they don't have it!
-                                        if (fuelFilter === 'Petrol') {
-                                            fuelGroups.push({ ...g, displayFuelType: 'Petrol', displayFuelAmt: stdPetrol });
-                                        } else {
-                                            let amtForFilter = 0;
-                                            if (otherFuelType === fuelFilter) amtForFilter = otherFuelAmt;
-                                            fuelGroups.push({ ...g, displayFuelType: fuelFilter, displayFuelAmt: amtForFilter });
-                                        }
-                                    }
                                 });
 
-                                if (fuelGroups.length === 0) {
+                                // Convert object to array and filter out employees with 0 total fuel (if fuelFilter applied, maybe filter further?)
+                                let aggArray = Object.keys(employeeAgg).map(name => ({
+                                    name,
+                                    ...employeeAgg[name],
+                                    total: employeeAgg[name].petrol + employeeAgg[name].cng + employeeAgg[name].diesel + employeeAgg[name].other
+                                })).filter(emp => emp.total > 0);
+
+                                if (fuelFilter !== 'ALL') {
+                                    // If a specific filter is selected, we might want to only show employees who spent on that specific fuel
+                                    aggArray = aggArray.filter(emp => {
+                                        if (fuelFilter === 'Petrol') return emp.petrol > 0;
+                                        if (fuelFilter === 'CNG') return emp.cng > 0;
+                                        if (fuelFilter === 'Diesel') return emp.diesel > 0;
+                                        return true;
+                                    });
+                                }
+
+                                if (aggArray.length === 0) {
                                     return (
                                         <Tr>
-                                            <Td colSpan={5} textAlign="center" py={8} color="gray.500" fontStyle="italic">
+                                            <Td colSpan={6} textAlign="center" py={8} color="gray.500" fontStyle="italic">
                                                 No fuel records found for {fuelFilter === 'ALL' ? 'this period' : fuelFilter}.
                                             </Td>
                                         </Tr>
                                     );
                                 }
 
-                                const dateCounts = {};
-                                fuelGroups.forEach(g => {
-                                    dateCounts[g.dateKey] = (dateCounts[g.dateKey] || 0) + 1;
-                                });
-
                                 let currentSrNo = 0;
-                                let lastDateKey = null;
-
-                                return fuelGroups.map((group, groupIdx) => {
-                                    const dateStr = new Date(group.dateKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                                    
-                                    let isFirstOfDate = false;
-                                    if (group.dateKey !== lastDateKey) {
-                                        currentSrNo++;
-                                        lastDateKey = group.dateKey;
-                                        isFirstOfDate = true;
-                                    }
-
-                                    const span = dateCounts[group.dateKey];
-                                    const actualEmployeeName = group.expense?.employeeId?.name || employeeName;
-
+                                return aggArray.map((emp, idx) => {
+                                    currentSrNo++;
                                     return (
-                                        <Tr key={groupIdx} _hover={{ bg: "gray.50" }}>
-                                            {isFirstOfDate && (
-                                                <Td rowSpan={span} textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" verticalAlign="middle" bg="gray.50">{currentSrNo}</Td>
-                                            )}
-                                            {isFirstOfDate && (
-                                                <Td rowSpan={span} textAlign="center" fontWeight="bold" color="red.700" fontSize="md" verticalAlign="middle" bg="red.50">{dateStr}</Td>
-                                            )}
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm">{actualEmployeeName}</Td>
-                                            <Td textAlign="center" fontSize="sm" color="gray.700">{group.displayFuelType}</Td>
-                                            <Td textAlign="center" fontWeight="bold" color="red.600" fontSize="sm">₹{group.displayFuelAmt}</Td>
+                                        <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                                            <Td textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" bg="gray.50">{currentSrNo}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm">{emp.name}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{emp.petrol}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{emp.cng}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{emp.diesel}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="red.600" fontSize="sm">₹{emp.total}</Td>
                                         </Tr>
                                     );
                                 });
                             })()}
                             <Tr bg="gray.100">
-                                <Td colSpan={4} textAlign="right" fontWeight="bold" fontSize="md">GRAND TOTAL:</Td>
+                                <Td colSpan={2} textAlign="right" fontWeight="bold" fontSize="md">GRAND TOTAL:</Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{(() => {
+                                        let sum = 0;
+                                        groupedByDate.forEach(g => {
+                                            const exp = g.expense;
+                                            sum += Number(exp?.expenses?.petrol) || 0;
+                                            if (exp?.otherExpensesList) {
+                                                exp.otherExpensesList.forEach(other => {
+                                                    const name = (other.expenseName || '').toLowerCase().trim();
+                                                    if (name.includes('petrol')) sum += (Number(other.amount) || 0);
+                                                });
+                                            }
+                                        });
+                                        return sum;
+                                    })()}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{(() => {
+                                        let sum = 0;
+                                        groupedByDate.forEach(g => {
+                                            const exp = g.expense;
+                                            if (exp?.otherExpensesList) {
+                                                exp.otherExpensesList.forEach(other => {
+                                                    const name = (other.expenseName || '').toLowerCase().trim();
+                                                    if (name.includes('cng') || name === 'cng') sum += (Number(other.amount) || 0);
+                                                });
+                                            }
+                                        });
+                                        return sum;
+                                    })()}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{(() => {
+                                        let sum = 0;
+                                        groupedByDate.forEach(g => {
+                                            const exp = g.expense;
+                                            if (exp?.otherExpensesList) {
+                                                exp.otherExpensesList.forEach(other => {
+                                                    const name = (other.expenseName || '').toLowerCase().trim();
+                                                    if (name.includes('diesel')) sum += (Number(other.amount) || 0);
+                                                });
+                                            }
+                                        });
+                                        return sum;
+                                    })()}
+                                </Td>
                                 <Td textAlign="center" fontWeight="bold" fontSize="md" color="red.700">
                                     ₹{(() => {
                                         let sum = 0;
                                         groupedByDate.forEach(g => {
                                             const exp = g.expense;
                                             const stdPetrol = Number(exp?.expenses?.petrol) || 0;
-                                            if (stdPetrol > 0 && (fuelFilter === 'ALL' || fuelFilter === 'Petrol')) {
-                                                sum += stdPetrol;
-                                            }
+                                            sum += stdPetrol;
                                             if (exp?.otherExpensesList && exp.otherExpensesList.length > 0) {
                                                 exp.otherExpensesList.forEach(other => {
                                                     const name = (other.expenseName || '').toLowerCase().trim();
                                                     const amount = Number(other.amount) || 0;
                                                     if (amount > 0 && (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel'))) {
-                                                        let detectedType = 'Fuel';
-                                                        if (name.includes('petrol')) detectedType = 'Petrol';
-                                                        else if (name.includes('cng') || name === 'cng') detectedType = 'CNG';
-                                                        else if (name.includes('diesel')) detectedType = 'Diesel';
-
-                                                        if (fuelFilter === 'ALL' || fuelFilter.toLowerCase() === detectedType.toLowerCase()) {
-                                                            sum += amount;
-                                                        }
+                                                        sum += amount;
                                                     }
+                                                });
+                                            }
+                                        });
+                                        return sum;
+                                    })()}
+                                </Td>
+                            </Tr>
+                        </Tbody>
+                    </Table>
+                </TableContainer>
+            ) : reportType === 'ClientSite' ? (
+                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white">
+                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
+                        <Thead bg="purple.50">
+                            <Tr>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">SR. NO.</Th>
+                                <Th color="purple.900" fontSize="xs" fontWeight="bold">CLIENT NAME</Th>
+                                <Th color="purple.900" fontSize="xs" fontWeight="bold">SITE NAME</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">BREAKFAST</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">LUNCH</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">DINNER</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">FUEL</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">OTHER EXP.</Th>
+                                <Th textAlign="center" color="purple.900" fontSize="xs" fontWeight="bold">TOTAL</Th>
+                            </Tr>
+                        </Thead>
+                        <Tbody>
+                            {(() => {
+                                const siteAgg = {};
+                                
+                                groupedByDate.forEach(g => {
+                                    const exp = g.expense;
+                                    if (!exp) return;
+                                    
+                                    const cName = exp.clientSites?.[0]?.clientId?.clientName || 'Unspecified Client';
+                                    const sName = exp.clientSites?.map(cs => cs.siteId?.siteName).filter(Boolean).join(' & ') || 'Unspecified Site';
+                                    const key = `${cName}_${sName}`;
+                                    
+                                    if (!siteAgg[key]) {
+                                        siteAgg[key] = { clientName: cName, siteName: sName, breakfast: 0, lunch: 0, dinner: 0, fuel: 0, other: 0 };
+                                    }
+                                    
+                                    siteAgg[key].breakfast += Number(exp.expenses?.breakfast) || 0;
+                                    siteAgg[key].lunch += Number(exp.expenses?.lunch) || 0;
+                                    siteAgg[key].dinner += Number(exp.expenses?.dinner) || 0;
+                                    siteAgg[key].fuel += Number(exp.expenses?.petrol) || 0;
+                                    
+                                    if (exp.otherExpensesList && exp.otherExpensesList.length > 0) {
+                                        exp.otherExpensesList.forEach(other => {
+                                            const name = (other.expenseName || '').toLowerCase().trim();
+                                            const amount = Number(other.amount) || 0;
+                                            
+                                            if (amount > 0) {
+                                                if (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel')) {
+                                                    siteAgg[key].fuel += amount;
+                                                } else {
+                                                    siteAgg[key].other += amount;
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+
+                                const aggArray = Object.values(siteAgg).map(s => ({
+                                    ...s,
+                                    total: s.breakfast + s.lunch + s.dinner + s.fuel + s.other
+                                })).filter(s => s.total > 0);
+
+                                if (aggArray.length === 0) {
+                                    return (
+                                        <Tr>
+                                            <Td colSpan={9} textAlign="center" py={8} color="gray.500" fontStyle="italic">
+                                                No expenses found for this period.
+                                            </Td>
+                                        </Tr>
+                                    );
+                                }
+
+                                let currentSrNo = 0;
+                                return aggArray.map((site, idx) => {
+                                    currentSrNo++;
+                                    return (
+                                        <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                                            <Td textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" bg="gray.50">{currentSrNo}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm">{site.clientName}</Td>
+                                            <Td fontWeight="bold" color="gray.700" fontSize="sm">{site.siteName}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.breakfast}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.lunch}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.dinner}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.fuel}</Td>
+                                            <Td textAlign="center" fontSize="sm" color="gray.700">₹{site.other}</Td>
+                                            <Td textAlign="center" fontWeight="bold" color="purple.600" fontSize="sm">₹{site.total}</Td>
+                                        </Tr>
+                                    );
+                                });
+                            })()}
+                            <Tr bg="gray.100">
+                                <Td colSpan={3} textAlign="right" fontWeight="bold" fontSize="md">GRAND TOTAL:</Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{groupedByDate.reduce((sum, g) => sum + (Number(g.expense?.expenses?.breakfast) || 0), 0)}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{groupedByDate.reduce((sum, g) => sum + (Number(g.expense?.expenses?.lunch) || 0), 0)}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{groupedByDate.reduce((sum, g) => sum + (Number(g.expense?.expenses?.dinner) || 0), 0)}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{(() => {
+                                        let sum = 0;
+                                        groupedByDate.forEach(g => {
+                                            const exp = g.expense;
+                                            if (!exp) return;
+                                            sum += Number(exp.expenses?.petrol) || 0;
+                                            if (exp.otherExpensesList) {
+                                                exp.otherExpensesList.forEach(other => {
+                                                    const name = (other.expenseName || '').toLowerCase().trim();
+                                                    if (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel')) {
+                                                        sum += Number(other.amount) || 0;
+                                                    }
+                                                });
+                                            }
+                                        });
+                                        return sum;
+                                    })()}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md">
+                                    ₹{(() => {
+                                        let sum = 0;
+                                        groupedByDate.forEach(g => {
+                                            const exp = g.expense;
+                                            if (!exp) return;
+                                            if (exp.otherExpensesList) {
+                                                exp.otherExpensesList.forEach(other => {
+                                                    const name = (other.expenseName || '').toLowerCase().trim();
+                                                    if (!(name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel'))) {
+                                                        sum += Number(other.amount) || 0;
+                                                    }
+                                                });
+                                            }
+                                        });
+                                        return sum;
+                                    })()}
+                                </Td>
+                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="purple.700">
+                                    ₹{(() => {
+                                        let sum = 0;
+                                        groupedByDate.forEach(g => {
+                                            const exp = g.expense;
+                                            if (!exp) return;
+                                            sum += (Number(exp.expenses?.breakfast) || 0) + (Number(exp.expenses?.lunch) || 0) + (Number(exp.expenses?.dinner) || 0) + (Number(exp.expenses?.petrol) || 0);
+                                            if (exp.otherExpensesList) {
+                                                exp.otherExpensesList.forEach(other => {
+                                                    sum += Number(other.amount) || 0;
                                                 });
                                             }
                                         });

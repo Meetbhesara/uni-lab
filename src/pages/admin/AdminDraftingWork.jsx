@@ -18,6 +18,7 @@ const AdminDraftingWork = () => {
 
     const [documents, setDocuments] = useState([]);
     const [topoSurveys, setTopoSurveys] = useState([]);
+    const [pointMarkings, setPointMarkings] = useState([]);
     const [loading, setLoading] = useState(false);
     
     const [clientOptions, setClientOptions] = useState([]);
@@ -220,7 +221,7 @@ const AdminDraftingWork = () => {
                 const topoGroupsObj = {};
                 const groupedTopo = [];
 
-                rawTopo.forEach(s => {
+                rawTopo.filter(s => s.dayStatus !== 'Rejected').forEach(s => {
                     // Force group by individual mongo ID as requested by user
                     const groupId = s._id;
                     
@@ -242,6 +243,33 @@ const AdminDraftingWork = () => {
                 groupedTopo.sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
 
                 setTopoSurveys(groupedTopo);
+            }
+
+            // Fetch Point Markings
+            const pointRes = await axios.get(`${API_URL}/schedule-master?scheduleType=POINT MARKING`);
+            if (pointRes.data.success) {
+                const rawPoint = pointRes.data.data;
+                const pointGroupsObj = {};
+                const groupedPoint = [];
+
+                rawPoint.filter(s => s.dayStatus !== 'Rejected').forEach(s => {
+                    const groupId = s._id;
+                    const groupKey = `${s.client?._id}-${s.site?._id}-${groupId}`;
+                    
+                    if (!pointGroupsObj[groupKey]) {
+                        pointGroupsObj[groupKey] = { ...s };
+                        pointGroupsObj[groupKey].isMonthGroup = false;
+                        pointGroupsObj[groupKey].groupedDates = [s.scheduleDate];
+                    }
+                });
+
+                Object.values(pointGroupsObj).forEach(mg => {
+                    mg.groupedDates.sort((a, b) => new Date(a) - new Date(b));
+                    groupedPoint.push(mg);
+                });
+                
+                groupedPoint.sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
+                setPointMarkings(groupedPoint);
             }
         } catch (error) {
             toast({ title: 'Failed to fetch data', status: 'error', duration: 3000 });
@@ -509,379 +537,329 @@ const AdminDraftingWork = () => {
 
                 <Card bg={cardBg} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.200">
                     
-                    {activeTab !== 0 && (
-                        <Flex gap={3} flexWrap="wrap" bg="white" p={4} m={4} mb={0} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                            <Input value={filterSearch} onChange={e => setFilterSearch(e.target.value)} placeholder="Search documents..." bg="gray.50" borderRadius="md" maxW="250px" />
-                            
-                            <VStack align="start" spacing={0} maxW="150px">
-                                <Text fontSize="xs" fontWeight="bold" color="gray.500">Schedule Date</Text>
-                                <Input type="date" value={filterScheduleDate} onChange={e => setFilterScheduleDate(e.target.value)} bg="gray.50" borderRadius="md" />
-                            </VStack>
 
-                            <VStack align="start" spacing={0} maxW="180px">
-                                <Text fontSize="xs" fontWeight="bold" color="gray.500">Client</Text>
-                                <Select value={filterClient} onChange={e => setFilterClient(e.target.value)} placeholder="All Clients" bg="gray.50" borderRadius="md">
-                                    {clientOptions.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>)}
-                                </Select>
-                            </VStack>
-
-                            <VStack align="start" spacing={0} maxW="180px">
-                                <Text fontSize="xs" fontWeight="bold" color="gray.500">Site</Text>
-                                <Select value={filterSite} onChange={e => setFilterSite(e.target.value)} placeholder="Select Site..." bg="gray.50" borderRadius="md">
-                                    {siteOptions.filter(s => !filterClient || s.client === filterClient || s.client?._id === filterClient).map(s => <option key={s._id} value={s._id}>{s.siteName}</option>)}
-                                </Select>
-                            </VStack>
-
-                            <VStack align="start" spacing={0} maxW="150px">
-                                <Text fontSize="xs" fontWeight="bold" color="gray.500">Status</Text>
-                                <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} placeholder="All Status" bg="gray.50" borderRadius="md">
-                                    <option value="Received">Received</option>
-                                    <option value="Under Review">Under Review</option>
-                                    <option value="Drafting In Progress">Drafting In Progress</option>
-                                    <option value="Correction Pending">Correction Pending</option>
-                                    <option value="Approved">Approved</option>
-                                    <option value="Completed">Completed</option>
-                                </Select>
-                            </VStack>
-                        </Flex>
-                    )}
-
-                    <Tabs colorScheme="brand" variant="soft-rounded" p={4} index={activeTab} onChange={(index) => setActiveTab(index)}>
-                        <TabList mb={4} gap={4} overflowX="auto" pb={2} display="none">
+                    <Tabs colorScheme="brand" variant="soft-rounded" p={4} index={activeTab} onChange={(index) => { setActiveTab(index); setSelectedSurvey(null); }}>
+                        <TabList mb={4} gap={4} overflowX="auto" pb={2}>
                             <Tab borderRadius="xl" fontWeight="bold"><Icon as={FaMapMarkedAlt} mr={2} /> Topography Surveys</Tab>
+                            <Tab borderRadius="xl" fontWeight="bold"><Icon as={FaMapMarkedAlt} mr={2} /> Point Marking</Tab>
                         </TabList>
 
                         <TabPanels>
-                            {/* SECTION 0: TOPOGRAPHY SURVEYS */}
-                            <TabPanel p={0}>
-                                {!selectedSurvey ? (
-                                    <VStack spacing={6} align="stretch">
-                                        <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                            <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
-                                                <Thead bg="gray.50">
-                                                    <Tr>
-                                                        <Th>Client</Th>
-                                                        <Th>Site Name</Th>
-                                                        <Th whiteSpace="nowrap">Schedule Date(s)</Th>
-                                                        <Th>Operative Name</Th>
-                                                        <Th>Day Status</Th>
-                                                        <Th>Drafting Status</Th>
-                                                    </Tr>
-                                                </Thead>
-                                                <Tbody>
-                                                    {topoSurveys.map((survey) => (
-                                                        <Tr 
-                                                            key={`${survey._id}`} 
-                                                            _hover={{ bg: 'blue.50', cursor: 'pointer' }}
-                                                            onClick={() => handleSurveyClick(survey)}
-                                                        >
-                                                            <Td fontWeight="bold" color="blue.600">{survey.client?.clientName || 'N/A'}</Td>
-                                                            <Td fontWeight="bold" color="gray.700">
-                                                                <VStack align="start" spacing={0}>
-                                                                    <Text>{survey.site?.siteName || 'N/A'}</Text>
-                                                                </VStack>
-                                                            </Td>
-                                                            <Td fontSize="sm" fontWeight="medium" whiteSpace="nowrap">
-                                                                <Text>{formatIST(survey.scheduleDate)}</Text>
-                                                            </Td>
-                                                            <Td>
-                                                                {survey.operative?.name ? (
-                                                                    <HStack>
-                                                                        <Avatar size="xs" name={survey.operative.name} bg="teal.500" />
-                                                                        <Text fontWeight="bold">{survey.operative.name}</Text>
-                                                                    </HStack>
-                                                                ) : (
-                                                                    <Text color="gray.400">Unassigned</Text>
-                                                                )}
-                                                            </Td>
-                                                            <Td>
-                                                                <Badge colorScheme={survey.dayStatus === 'Completed' ? 'green' : 'orange'} borderRadius="full">
-                                                                    {survey.dayStatus || 'Scheduled'}
-                                                                </Badge>
-                                                            </Td>
-                                                            <Td>
-                                                                {(() => {
-                                                                    const files = survey.draftingWorkFiles || {};
-                                                                    let status = 'Pending';
-                                                                    let color = 'gray';
-
-                                                                    if (files.mailFiles?.length > 0) { status = 'Mail'; color = 'red'; }
-                                                                    else if (files.finalCheckingFiles?.length > 0) { status = 'Final Checking'; color = 'green'; }
-                                                                    else if (files.esurveyWorkFiles?.length > 0) { status = 'eSurvey Work'; color = 'purple'; }
-                                                                    else if (files.liningDrawFiles?.length > 0) { status = 'Lining Draw'; color = 'teal'; }
-                                                                    else if (files.convertedFiles?.length > 0) { status = 'Converted'; color = 'orange'; }
-                                                                    else if (files.collectedFiles?.length > 0) { status = 'Collected All Files'; color = 'blue'; }
-
-                                                                    return <Badge colorScheme={color} borderRadius="full">{status}</Badge>;
-                                                                })()}
-                                                            </Td>
+                            {[{ title: 'Topography Surveys', list: topoSurveys }, { title: 'Point Markings', list: pointMarkings }].map((section, listIdx) => (
+                                <TabPanel p={0} key={listIdx}>
+                                    {!selectedSurvey ? (
+                                        <VStack spacing={6} align="stretch">
+                                            <Box overflow="hidden" w="full" borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                                <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                                                    <Thead bg="gray.50">
+                                                        <Tr>
+                                                            <Th>Client Name</Th>
+                                                            <Th>Site Name</Th>
+                                                            <Th whiteSpace="nowrap">Schedule Date(s)</Th>
+                                                            <Th>Operative Name</Th>
+                                                            <Th>Day Status</Th>
+                                                            <Th>Drafting Status</Th>
                                                         </Tr>
-                                                    ))}
-                                                    {topoSurveys.length === 0 && (
-                                                        <Tr><Td colSpan={5} textAlign="center" py={8} color="gray.500">No Topography Surveys found.</Td></Tr>
-                                                    )}
-                                                </Tbody>
-                                            </Table>
-                                        </Box>
-                                    </VStack>
-                                ) : (
-                                    <Box p={4} border="1px solid" borderColor="gray.200" borderRadius="xl" bg="white" shadow="sm">
-                                        <Flex justify="space-between" align="center" mb={6}>
-                                            <HStack spacing={4}>
-                                                <IconButton icon={<FaArrowLeft />} onClick={() => setSelectedSurvey(null)} borderRadius="full" aria-label="Back" />
-                                                <VStack align="start" spacing={0}>
-                                                    <Heading size="md" color="blue.700">{selectedSurvey.client?.clientName} - {selectedSurvey.site?.siteName}</Heading>
-                                                    <Text fontSize="sm" color="gray.500">Drafting Workspace • Scheduled: {formatIST(selectedSurvey.scheduleDate)}</Text>
-                                                </VStack>
-                                            </HStack>
-                                        </Flex>
-
-                                        <Tabs variant="enclosed" colorScheme="blue">
-                                            <TabList mb={4} overflowX="auto" whiteSpace="nowrap">
-                                                <Tab fontWeight="bold" color="blue.600">1. Collected Files</Tab>
-                                                <Tab fontWeight="bold" color="orange.600">2. Converted</Tab>
-                                                <Tab fontWeight="bold" color="teal.600">3. Lining Draw</Tab>
-                                                <Tab fontWeight="bold" color="purple.600">4. eSurvey Work</Tab>
-                                                <Tab fontWeight="bold" color="green.600">5. Final Checking</Tab>
-                                                <Tab fontWeight="bold" color="red.600">6. Mail</Tab>
-                                            </TabList>
-                                            
-                                            <TabPanels>
-                                                {[
-                                                    { key: 'collectedFiles', color: 'blue' },
-                                                    { key: 'convertedFiles', color: 'orange' },
-                                                    { key: 'liningDrawFiles', color: 'teal' },
-                                                    { key: 'esurveyWorkFiles', color: 'purple' },
-                                                    { key: 'finalCheckingFiles', color: 'green' },
-                                                    { key: 'mailFiles', color: 'red' }
-                                                ].map((step, idx) => (
-                                                    <TabPanel key={step.key} p={0}>
-                                                        <Card border="1px solid" borderColor={`${step.color}.200`} shadow="none" borderRadius="xl" bg={`${step.color}.50`}>
-                                                            <CardBody p={6}>
-                                                                <VStack align="stretch" spacing={6}>
-                                                                    
-                                                                    {(step.key !== 'collectedFiles' && step.key !== 'finalCheckingFiles' && step.key !== 'mailFiles') && (
-                                                                        <VStack align="stretch" spacing={4}>
-                                                                            {step.key === 'convertedFiles' && (
-                                                                                <FormControl>
-                                                                                    <FormLabel fontSize="sm" fontWeight="bold" color="orange.700">1. Select Original Collected File</FormLabel>
-                                                                                    <Select 
-                                                                                        placeholder="-- Select a received file to convert --" 
-                                                                                        value={selectedCollectedFileForConversion} 
-                                                                                        onChange={e => setSelectedCollectedFileForConversion(e.target.value)}
-                                                                                        bg="white"
-                                                                                        borderColor="orange.300"
-                                                                                    >
-                                                                                        {(surveyReceivedDocs || []).map(doc => (
-                                                                                            <option key={doc._id} value={doc._id}>{doc.name}</option>
-                                                                                        ))}
-                                                                                    </Select>
-                                                                                </FormControl>
-                                                                            )}
-                                                                            
-                                                                            {step.key === 'liningDrawFiles' && (
-                                                                                <FormControl>
-                                                                                    <FormLabel fontSize="sm" fontWeight="bold" color="teal.700">2. Select Converted File</FormLabel>
-                                                                                    <Select 
-                                                                                        placeholder="-- Select a converted file to draw lining --" 
-                                                                                        value={selectedConvertedFileForLining} 
-                                                                                        onChange={e => setSelectedConvertedFileForLining(e.target.value)}
-                                                                                        bg="white"
-                                                                                        borderColor="teal.300"
-                                                                                    >
-                                                                                        {(draftingFiles['convertedFiles'] || []).map(doc => (
-                                                                                            <option key={doc._id} value={doc._id}>{doc.name}</option>
-                                                                                        ))}
-                                                                                    </Select>
-                                                                                </FormControl>
-                                                                            )}
-                                                                            
-                                                                            {step.key === 'esurveyWorkFiles' && (
-                                                                                <FormControl>
-                                                                                    <FormLabel fontSize="sm" fontWeight="bold" color="purple.700">3. Select Lining Draw File</FormLabel>
-                                                                                    <Select 
-                                                                                        placeholder="-- Select a lining draw file for eSurvey --" 
-                                                                                        value={selectedLiningFileForEsurvey} 
-                                                                                        onChange={e => setSelectedLiningFileForEsurvey(e.target.value)}
-                                                                                        bg="white"
-                                                                                        borderColor="purple.300"
-                                                                                    >
-                                                                                        {(draftingFiles['liningDrawFiles'] || []).filter(d => d.status === 'Approved').map(doc => (
-                                                                                            <option key={doc._id} value={doc._id}>{doc.name}</option>
-                                                                                        ))}
-                                                                                    </Select>
-                                                                                </FormControl>
-                                                                            )}
-                                                                            
-                                                                            <Box 
-                                                                                p={6} 
-                                                                                border="2px dashed" 
-                                                                                borderColor={`${step.color}.300`} 
-                                                                                borderRadius="xl" 
-                                                                                bg="white" 
-                                                                                textAlign="center" 
-                                                                                position="relative" 
-                                                                                _hover={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? {} : { bg: `${step.color}.50` }} 
-                                                                                transition="all 0.2s"
-                                                                                opacity={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 0.5 : 1}
-                                                                            >
-                                                                                <Input 
-                                                                                    type="file" 
-                                                                                    multiple 
-                                                                                    opacity={0} 
-                                                                                    position="absolute" 
-                                                                                    top={0} 
-                                                                                    left={0} 
-                                                                                    w="100%" 
-                                                                                    h="100%" 
-                                                                                    cursor={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 'not-allowed' : 'pointer'} 
-                                                                                    onChange={(e) => handleDraftingFileUpload(e, step.key)} 
-                                                                                    disabled={uploadingCategory === step.key || (!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')} 
-                                                                                />
-                                                                                <Icon as={FaUpload} color={`${step.color}.500`} w={8} h={8} mb={2} />
-                                                                                <Text fontSize="md" fontWeight="bold" color={`${step.color}.700`}>
-                                                                                    {((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 'Select a file above first' : 'Drag & Drop or Click to Upload'}
-                                                                                </Text>
-                                                                                {uploadingCategory === step.key && <Spinner size="md" color={`${step.color}.500`} mt={4} />}
-                                                                            </Box>
-                                                                        </VStack>
+                                                    </Thead>
+                                                    <Tbody>
+                                                        {section.list.map((survey) => (
+                                                            <Tr 
+                                                                key={`${survey._id}`} 
+                                                                _hover={{ bg: 'blue.50', cursor: 'pointer' }}
+                                                                onClick={() => handleSurveyClick(survey)}
+                                                            >
+                                                                <Td fontWeight="bold" color="blue.600">{survey.client?.clientName || 'N/A'}</Td>
+                                                                <Td fontWeight="bold" color="gray.700">
+                                                                    <VStack align="start" spacing={0}>
+                                                                        <Text>{survey.site?.siteName || 'N/A'}</Text>
+                                                                    </VStack>
+                                                                </Td>
+                                                                <Td fontSize="sm" fontWeight="medium" whiteSpace="nowrap">
+                                                                    <Text>{formatIST(survey.scheduleDate)}</Text>
+                                                                </Td>
+                                                                <Td>
+                                                                    {survey.operative?.name ? (
+                                                                        <HStack>
+                                                                            <Avatar size="xs" name={survey.operative.name} bg="teal.500" />
+                                                                            <Text fontWeight="bold">{survey.operative.name}</Text>
+                                                                        </HStack>
+                                                                    ) : (
+                                                                        <Text color="gray.400">Unassigned</Text>
                                                                     )}
+                                                                </Td>
+                                                                <Td>
+                                                                    <Badge colorScheme={survey.dayStatus === 'Completed' ? 'green' : 'orange'} borderRadius="full">
+                                                                        {survey.dayStatus || 'Scheduled'}
+                                                                    </Badge>
+                                                                </Td>
+                                                                <Td>
+                                                                    {(() => {
+                                                                        const files = survey.draftingWorkFiles || {};
+                                                                        let status = 'Pending';
+                                                                        let color = 'gray';
 
-                                                                    <Box>
-                                                                        <Text fontWeight="bold" mb={3} color="gray.700">Uploaded Documents</Text>
-                                                                        <VStack align="stretch" spacing={3} maxH="400px" overflowY="auto" pr={2}>
-                                                                            {(() => {
-                                                                                let filesToRender = draftingFiles[step.key] || [];
-                                                                                if (step.key === 'collectedFiles' && selectedSurvey) {
-                                                                                    const receivedDocs = surveyReceivedDocs || [];
-                                                                                    // Remove uniqueness check by url if it clashes, just use all receivedDocs directly
-                                                                                    filesToRender = receivedDocs;
-                                                                                }
+                                                                        if (files.mailFiles?.length > 0) { status = 'Mail'; color = 'red'; }
+                                                                        else if (files.finalCheckingFiles?.length > 0) { status = 'Final Checking'; color = 'green'; }
+                                                                        else if (files.esurveyWorkFiles?.length > 0) { status = 'eSurvey Work'; color = 'purple'; }
+                                                                        else if (files.liningDrawFiles?.length > 0) { status = 'Lining Draw'; color = 'teal'; }
+                                                                        else if (files.convertedFiles?.length > 0) { status = 'Converted'; color = 'orange'; }
+                                                                        else if (files.collectedFiles?.length > 0) { status = 'Collected All Files'; color = 'blue'; }
 
-                                                                                return (
-                                                                                    <>
-                                                                                        {filesToRender.map((file, fIdx) => (
-                                                                                            <Flex key={file._id || fIdx} bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200" align="center" justify="space-between" shadow="sm">
-                                                                                                <HStack overflow="hidden" spacing={4} flex={1}>
-                                                                                                    <Icon as={FaFilePdf} color="red.500" w={6} h={6} />
-                                                                                                    <VStack align="start" spacing={0} flex={1} overflow="hidden">
-                                                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.700" isTruncated maxW="100%" title={file.name}>
-                                                                                                            {(() => {
-                                                                                                                const rMatch = file.name?.match(/(\(R\d+\))/i);
-                                                                                                                if (rMatch) {
-                                                                                                                    const idx = file.name.indexOf(rMatch[0]);
-                                                                                                                    return (
-                                                                                                                        <>
-                                                                                                                            {file.name.substring(0, idx)}
-                                                                                                                            <Text as="span" color="red.500">{rMatch[0]}</Text>
-                                                                                                                            {file.name.substring(idx + rMatch[0].length)}
-                                                                                                                        </>
-                                                                                                                    );
-                                                                                                                }
-                                                                                                                return file.name;
-                                                                                                            })()}
-                                                                                                        </Text>
-                                                                                                        {step.key === 'convertedFiles' && file.originalFileId && (
-                                                                                                            <HStack spacing={1} mt={0.5} title={`Mapped to: ${surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                <Icon as={FaFileAlt} w={3} h={3} color="orange.400" />
-                                                                                                                <Text fontSize="xs" color="orange.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                    Mapped: {surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                </Text>
-                                                                                                            </HStack>
-                                                                                                        )}
-                                                                                                        {step.key === 'liningDrawFiles' && file.originalFileId && (
-                                                                                                            <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                <Icon as={FaFileAlt} w={3} h={3} color="teal.400" />
-                                                                                                                <Text fontSize="xs" color="teal.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                    Mapped: {(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                </Text>
-                                                                                                            </HStack>
-                                                                                                        )}
-                                                                                                        {step.key === 'esurveyWorkFiles' && file.originalFileId && (
-                                                                                                            <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                <Icon as={FaFileAlt} w={3} h={3} color="purple.400" />
-                                                                                                                <Text fontSize="xs" color="purple.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                    Mapped: {(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                </Text>
-                                                                                                            </HStack>
-                                                                                                        )}
-                                                                                                        {step.key === 'finalCheckingFiles' && file.originalFileId && (
-                                                                                                            <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['esurveyWorkFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                <Icon as={FaFileAlt} w={3} h={3} color="green.400" />
-                                                                                                                <Text fontSize="xs" color="green.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                    Mapped: {(draftingFiles['esurveyWorkFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                </Text>
-                                                                                                            </HStack>
-                                                                                                        )}
-                                                                                                        {step.key === 'mailFiles' && file.originalFileId && (
-                                                                                                            <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['finalCheckingFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                <Icon as={FaFileAlt} w={3} h={3} color="red.400" />
-                                                                                                                <Text fontSize="xs" color="red.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                    Mapped: {(draftingFiles['finalCheckingFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                </Text>
-                                                                                                            </HStack>
-                                                                                                        )}
-                                                                                                        <HStack spacing={1} mt={0.5}>
-                                                                                                            <Icon as={FaClock} w={3} h={3} color="gray.400" />
-                                                                                                            <Text fontSize="xs" color="gray.500" fontWeight="medium">
-                                                                                                                {file.uploadedAt ? formatDateTimeIST(file.uploadedAt) : 'N/A'}
+                                                                        return <Badge colorScheme={color} borderRadius="full">{status}</Badge>;
+                                                                    })()}
+                                                                </Td>
+                                                            </Tr>
+                                                        ))}
+                                                        {section.list.length === 0 && (
+                                                            <Tr><Td colSpan={6} textAlign="center" py={8} color="gray.500">No {section.title} found.</Td></Tr>
+                                                        )}
+                                                    </Tbody>
+                                                </Table>
+                                            </Box>
+                                        </VStack>
+                                    ) : (
+                                        <Box p={4} border="1px solid" borderColor="gray.200" borderRadius="xl" bg="white" shadow="sm">
+                                            <Flex justify="space-between" align="center" mb={6}>
+                                                <HStack spacing={4}>
+                                                    <IconButton icon={<FaArrowLeft />} onClick={() => setSelectedSurvey(null)} borderRadius="full" aria-label="Back" />
+                                                    <VStack align="start" spacing={0}>
+                                                        <Heading size="md" color="blue.700">{selectedSurvey.client?.clientName} - {selectedSurvey.site?.siteName}</Heading>
+                                                        <Text fontSize="sm" color="gray.500">Workspace • Scheduled: {formatIST(selectedSurvey.scheduleDate)}</Text>
+                                                    </VStack>
+                                                </HStack>
+                                            </Flex>
+
+                                            <Tabs variant="enclosed" colorScheme="blue">
+                                                <TabList mb={4} overflowX="auto" whiteSpace="nowrap">
+                                                    <Tab fontWeight="bold" color="blue.600">1. Collected Files</Tab>
+                                                    <Tab fontWeight="bold" color="orange.600">2. Converted</Tab>
+                                                    <Tab fontWeight="bold" color="teal.600">3. Lining Draw</Tab>
+                                                    <Tab fontWeight="bold" color="purple.600">4. eSurvey Work</Tab>
+                                                    <Tab fontWeight="bold" color="green.600">5. Final Checking</Tab>
+                                                    <Tab fontWeight="bold" color="red.600">6. Mail</Tab>
+                                                </TabList>
+                                                
+                                                <TabPanels>
+                                                    {[
+                                                        { key: 'collectedFiles', color: 'blue' },
+                                                        { key: 'convertedFiles', color: 'orange' },
+                                                        { key: 'liningDrawFiles', color: 'teal' },
+                                                        { key: 'esurveyWorkFiles', color: 'purple' },
+                                                        { key: 'finalCheckingFiles', color: 'green' },
+                                                        { key: 'mailFiles', color: 'red' }
+                                                    ].map((step, idx) => (
+                                                        <TabPanel key={step.key} p={0}>
+                                                            <Card border="1px solid" borderColor={`${step.color}.200`} shadow="none" borderRadius="xl" bg={`${step.color}.50`}>
+                                                                <CardBody p={6}>
+                                                                    <VStack align="stretch" spacing={6}>
+                                                                        
+                                                                        {(step.key !== 'collectedFiles' && step.key !== 'finalCheckingFiles' && step.key !== 'mailFiles') && (
+                                                                            <VStack align="stretch" spacing={4}>
+                                                                                {step.key === 'convertedFiles' && (
+                                                                                    <FormControl>
+                                                                                        <FormLabel fontSize="sm" fontWeight="bold" color="orange.700">1. Select Original Collected File</FormLabel>
+                                                                                        <Select 
+                                                                                            placeholder="-- Select a received file to convert --" 
+                                                                                            value={selectedCollectedFileForConversion} 
+                                                                                            onChange={e => setSelectedCollectedFileForConversion(e.target.value)}
+                                                                                            bg="white"
+                                                                                            borderColor="orange.300"
+                                                                                        >
+                                                                                            {(surveyReceivedDocs || []).map(doc => (
+                                                                                                <option key={doc._id} value={doc._id}>{doc.name}</option>
+                                                                                            ))}
+                                                                                        </Select>
+                                                                                    </FormControl>
+                                                                                )}
+                                                                                
+                                                                                {step.key === 'liningDrawFiles' && (
+                                                                                    <FormControl>
+                                                                                        <FormLabel fontSize="sm" fontWeight="bold" color="teal.700">2. Select Converted File</FormLabel>
+                                                                                        <Select 
+                                                                                            placeholder="-- Select a converted file to draw lining --" 
+                                                                                            value={selectedConvertedFileForLining} 
+                                                                                            onChange={e => setSelectedConvertedFileForLining(e.target.value)}
+                                                                                            bg="white"
+                                                                                            borderColor="teal.300"
+                                                                                        >
+                                                                                            {(draftingFiles['convertedFiles'] || []).map(doc => (
+                                                                                                <option key={doc._id} value={doc._id}>{doc.name}</option>
+                                                                                            ))}
+                                                                                        </Select>
+                                                                                    </FormControl>
+                                                                                )}
+                                                                                
+                                                                                {step.key === 'esurveyWorkFiles' && (
+                                                                                    <FormControl>
+                                                                                        <FormLabel fontSize="sm" fontWeight="bold" color="purple.700">3. Select Lining Draw File</FormLabel>
+                                                                                        <Select 
+                                                                                            placeholder="-- Select a lining draw file for eSurvey --" 
+                                                                                            value={selectedLiningFileForEsurvey} 
+                                                                                            onChange={e => setSelectedLiningFileForEsurvey(e.target.value)}
+                                                                                            bg="white"
+                                                                                            borderColor="purple.300"
+                                                                                        >
+                                                                                            {(draftingFiles['liningDrawFiles'] || []).filter(d => d.status === 'Approved').map(doc => (
+                                                                                                <option key={doc._id} value={doc._id}>{doc.name}</option>
+                                                                                            ))}
+                                                                                        </Select>
+                                                                                    </FormControl>
+                                                                                )}
+                                                                                
+                                                                                <Box 
+                                                                                    p={6} 
+                                                                                    border="2px dashed" 
+                                                                                    borderColor={`${step.color}.300`} 
+                                                                                    borderRadius="xl" 
+                                                                                    bg="white" 
+                                                                                    textAlign="center" 
+                                                                                    position="relative" 
+                                                                                    _hover={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? {} : { bg: `${step.color}.50` }} 
+                                                                                    transition="all 0.2s"
+                                                                                    opacity={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 0.5 : 1}
+                                                                                >
+                                                                                    <Input 
+                                                                                        type="file" 
+                                                                                        multiple 
+                                                                                        opacity={0} 
+                                                                                        position="absolute" 
+                                                                                        top={0} 
+                                                                                        left={0} 
+                                                                                        w="100%" 
+                                                                                        h="100%" 
+                                                                                        cursor={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 'not-allowed' : 'pointer'} 
+                                                                                        onChange={(e) => handleDraftingFileUpload(e, step.key)} 
+                                                                                        disabled={uploadingCategory === step.key || (!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')} 
+                                                                                    />
+                                                                                    <Icon as={FaUpload} color={`${step.color}.500`} w={8} h={8} mb={2} />
+                                                                                    <Text fontSize="md" fontWeight="bold" color={`${step.color}.700`}>
+                                                                                        {((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 'Select a file above first' : 'Drag & Drop or Click to Upload'}
+                                                                                    </Text>
+                                                                                    {uploadingCategory === step.key && <Spinner size="md" color={`${step.color}.500`} mt={4} />}
+                                                                                </Box>
+                                                                            </VStack>
+                                                                        )}
+
+                                                                        <Box>
+                                                                            <Text fontWeight="bold" mb={3} color="gray.700">Uploaded Documents</Text>
+                                                                            <VStack align="stretch" spacing={3} maxH="400px" overflowY="auto" pr={2}>
+                                                                                {(() => {
+                                                                                    let filesToRender = draftingFiles[step.key] || [];
+                                                                                    if (step.key === 'collectedFiles' && selectedSurvey) {
+                                                                                        const receivedDocs = surveyReceivedDocs || [];
+                                                                                        filesToRender = receivedDocs;
+                                                                                    }
+
+                                                                                    return (
+                                                                                        <>
+                                                                                            {filesToRender.map((file, fIdx) => (
+                                                                                                <Flex key={file._id || fIdx} bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200" align="center" justify="space-between" shadow="sm">
+                                                                                                    <HStack overflow="hidden" spacing={4} flex={1}>
+                                                                                                        <Icon as={FaFilePdf} color="red.500" w={6} h={6} />
+                                                                                                        <VStack align="start" spacing={0} flex={1} overflow="hidden">
+                                                                                                            <Text fontSize="sm" fontWeight="bold" color="gray.700" isTruncated maxW="100%" title={file.name}>
+                                                                                                                {(() => {
+                                                                                                                    const rMatch = file.name?.match(/(\(R\d+\))/i);
+                                                                                                                    if (rMatch) {
+                                                                                                                        const idx = file.name.indexOf(rMatch[0]);
+                                                                                                                        return (
+                                                                                                                            <>
+                                                                                                                                {file.name.substring(0, idx)}
+                                                                                                                                <Text as="span" color="red.500">{rMatch[0]}</Text>
+                                                                                                                                {file.name.substring(idx + rMatch[0].length)}
+                                                                                                                            </>
+                                                                                                                        );
+                                                                                                                    }
+                                                                                                                    return file.name;
+                                                                                                                })()}
                                                                                                             </Text>
-                                                                                                        </HStack>
-                                                                                                        {step.key === 'liningDrawFiles' && (
-                                                                                                            <HStack spacing={2} mt={1}>
-                                                                                                                <Badge colorScheme={file.status === 'Approved' ? 'green' : file.status === 'Rejected' ? 'red' : 'yellow'}>
-                                                                                                                    {file.status || 'Pending'}
-                                                                                                                </Badge>
-                                                                                                            </HStack>
+                                                                                                            {step.key === 'convertedFiles' && file.originalFileId && (
+                                                                                                                <HStack spacing={1} mt={0.5} title={`Mapped to: ${surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
+                                                                                                                    <Icon as={FaFileAlt} w={3} h={3} color="orange.400" />
+                                                                                                                    <Text fontSize="xs" color="orange.600" fontWeight="bold" isTruncated maxW="100%">
+                                                                                                                        Mapped: {surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
+                                                                                                                    </Text>
+                                                                                                                </HStack>
+                                                                                                            )}
+                                                                                                            {step.key === 'liningDrawFiles' && file.originalFileId && (
+                                                                                                                <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
+                                                                                                                    <Icon as={FaFileAlt} w={3} h={3} color="teal.400" />
+                                                                                                                    <Text fontSize="xs" color="teal.600" fontWeight="bold" isTruncated maxW="100%">
+                                                                                                                        Mapped: {(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
+                                                                                                                    </Text>
+                                                                                                                </HStack>
+                                                                                                            )}
+                                                                                                            {step.key === 'esurveyWorkFiles' && file.originalFileId && (
+                                                                                                                <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
+                                                                                                                    <Icon as={FaFileAlt} w={3} h={3} color="purple.400" />
+                                                                                                                    <Text fontSize="xs" color="purple.600" fontWeight="bold" isTruncated maxW="100%">
+                                                                                                                        Mapped: {(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
+                                                                                                                    </Text>
+                                                                                                                </HStack>
+                                                                                                            )}
+                                                                                                        </VStack>
+                                                                                                    </HStack>
+                                                                                                    
+                                                                                                    <HStack spacing={1}>
+                                                                                                        {step.key !== 'collectedFiles' && (
+                                                                                                            <Select 
+                                                                                                                size="xs" 
+                                                                                                                w="120px" 
+                                                                                                                value={file.status || 'Pending'} 
+                                                                                                                onChange={(e) => updateDraftingFileStatus(step.key, file._id, e.target.value)}
+                                                                                                                bg="white"
+                                                                                                                borderRadius="md"
+                                                                                                            >
+                                                                                                                <option value="Pending">Pending</option>
+                                                                                                                <option value="Approved">Approved</option>
+                                                                                                                <option value="Rejected">Rejected</option>
+                                                                                                            </Select>
                                                                                                         )}
-                                                                                                        {(step.key === 'esurveyWorkFiles' || step.key === 'finalCheckingFiles') && (
-                                                                                                            <HStack spacing={2} mt={1}>
-                                                                                                                <Badge colorScheme={file.status === 'Approved' ? 'green' : file.status === 'Rejected' ? 'red' : 'yellow'}>
-                                                                                                                    {file.status || 'Pending'}
-                                                                                                                </Badge>
-                                                                                                            </HStack>
-                                                                                                        )}
-                                                                                                    </VStack>
-                                                                                                </HStack>
-                                                                                                <HStack spacing={2} ml={4}>
-                                                                                                    {(step.key === 'liningDrawFiles' || step.key === 'esurveyWorkFiles' || step.key === 'finalCheckingFiles') && (
-                                                                                                        <Select 
+                                                                                                        <IconButton 
+                                                                                                            as="a" 
+                                                                                                            href={`${API_BASE_URL}${file.url}`} 
+                                                                                                            target="_blank" 
+                                                                                                            icon={<FaEye />} 
                                                                                                             size="sm" 
-                                                                                                            w="110px" 
-                                                                                                            value={file.status || 'Pending'}
-                                                                                                            onChange={(e) => updateDraftingFileStatus(step.key, file._id, e.target.value)}
-                                                                                                        >
-                                                                                                            <option value="Pending">Pending</option>
-                                                                                                            <option value="Approved">Approve</option>
-                                                                                                            <option value="Rejected">Reject</option>
-                                                                                                        </Select>
-                                                                                                    )}
-                                                                                                    <Button size="sm" leftIcon={<FaEye />} colorScheme="blue" variant="outline" onClick={() => window.open(`${API_BASE_URL}${file.url}`, '_blank')}>View</Button>
-                                                                                                    {(file._id && step.key !== 'collectedFiles' && step.key !== 'finalCheckingFiles' && step.key !== 'mailFiles') && <IconButton icon={<FaTrash />} size="sm" colorScheme="red" variant="ghost" onClick={() => handleDraftingFileDelete(step.key, file._id)} />}
-                                                                                                </HStack>
-                                                                                            </Flex>
-                                                                                        ))}
-                                                                                        {filesToRender.length === 0 && (
-                                                                                            <Box p={8} textAlign="center" border="1px dashed" borderColor="gray.300" borderRadius="lg" bg="white">
-                                                                                                <Text color="gray.500">No files have been uploaded to this stage yet.</Text>
-                                                                                            </Box>
-                                                                                        )}
-                                                                                    </>
-                                                                                );
-                                                                            })()}
-                                                                        </VStack>
-                                                                    </Box>
+                                                                                                            colorScheme="blue" 
+                                                                                                            variant="ghost" 
+                                                                                                            borderRadius="full" 
+                                                                                                            title="View"
+                                                                                                        />
+                                                                                                        {step.key !== 'collectedFiles' && (
+                                                                                                            <IconButton 
+                                                                                                                icon={<FaTrash />} 
+                                                                                                                size="sm" 
+                                                                                                                colorScheme="red" 
+                                                                                                                variant="ghost" 
+                                                                                                                borderRadius="full" 
+                                                                                                                onClick={() => handleDraftingFileDelete(step.key, file._id)}
+                                                                                                                title="Delete"
+                                                                                                            />
+                                                                                                        )}
+                                                                                                    </HStack>
+                                                                                                </Flex>
+                                                                                            ))}
+                                                                                            {filesToRender.length === 0 && (
+                                                                                                <Text fontSize="sm" color="gray.400" fontStyle="italic">No files in this category yet.</Text>
+                                                                                            )}
+                                                                                        </>
+                                                                                    );
+                                                                                })()}
+                                                                            </VStack>
+                                                                        </Box>
 
-                                                                </VStack>
-                                                            </CardBody>
-                                                        </Card>
-                                                    </TabPanel>
-                                                ))}
-                                            </TabPanels>
-                                        </Tabs>
-                                    </Box>
-                                )}
-                            </TabPanel>
+                                                                    </VStack>
+                                                                </CardBody>
+                                                            </Card>
+                                                        </TabPanel>
+                                                    ))}
+                                                </TabPanels>
+                                            </Tabs>
+                                        </Box>
+                                    )}
+                                </TabPanel>
+                            ))}
                         </TabPanels>
                     </Tabs>
                 </Card>

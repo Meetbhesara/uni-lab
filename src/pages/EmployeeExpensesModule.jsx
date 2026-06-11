@@ -124,37 +124,38 @@ const EmployeeExpensesModule = () => {
                                             <FormLabel fontWeight="bold">Select Report Type</FormLabel>
                                             <Select value={reportType} onChange={(e) => {
                                                 setReportType(e.target.value);
-                                                if (e.target.value === 'Food' || e.target.value === 'Fuel') setSelectedExpenseEmployee({ id: 'ALL', name: 'All Employees' });
+                                                if (e.target.value === 'Food' || e.target.value === 'Fuel' || e.target.value === 'ClientSite') setSelectedExpenseEmployee({ id: 'ALL', name: 'All Employees' });
                                                 else setSelectedExpenseEmployee({ id: '', name: '' });
                                             }} bg="white">
                                                 <option value="Ledger">Employee Ledger</option>
                                                 <option value="Food">Global Food Report</option>
                                                 <option value="Fuel">Global Fuel Report</option>
+                                                <option value="ClientSite">Client & Site Wise Report</option>
                                             </Select>
                                         </FormControl>
 
-                                        <FormControl maxW="400px" isDisabled={reportType === 'Food' || reportType === 'Fuel'}>
+                                        <FormControl maxW="400px" isDisabled={reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite'}>
                                             <FormLabel fontWeight="bold">Select Employee</FormLabel>
                                             <Select
-                                                placeholder={(reportType === 'Food' || reportType === 'Fuel') ? "All Employees Included" : "-- Select Employee --"}
-                                                value={(reportType === 'Food' || reportType === 'Fuel') ? 'ALL' : selectedExpenseEmployee.id}
+                                                placeholder={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? "All Employees Included" : "-- Select Employee --"}
+                                                value={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'ALL' : selectedExpenseEmployee.id}
                                                 onChange={e => {
                                                     const emp = employees.find(emp => emp._id === e.target.value);
                                                     setSelectedExpenseEmployee({ id: emp?._id || '', name: emp?.name || '' });
                                                 }}
-                                                bg={(reportType === 'Food' || reportType === 'Fuel') ? 'gray.100' : 'white'}
+                                                bg={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'gray.100' : 'white'}
                                             >
-                                                {(reportType === 'Food' || reportType === 'Fuel') && <option value="ALL" hidden>All Employees</option>}
+                                                {(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') && <option value="ALL" hidden>All Employees</option>}
                                                 {employees.map(emp => (
                                                     <option key={emp._id} value={emp._id}>{emp.name}</option>
                                                 ))}
                                             </Select>
                                         </FormControl>
                                     </HStack>
-                                    {((selectedExpenseEmployee.id && selectedExpenseEmployee.id !== 'ALL') || reportType === 'Food' || reportType === 'Fuel') ? (
+                                    {((selectedExpenseEmployee.id && selectedExpenseEmployee.id !== 'ALL') || reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? (
                                         <AdminEmployeeExpenses
-                                            employeeId={(reportType === 'Food' || reportType === 'Fuel') ? 'ALL' : selectedExpenseEmployee.id}
-                                            employeeName={(reportType === 'Food' || reportType === 'Fuel') ? 'All Employees' : selectedExpenseEmployee.name}
+                                            employeeId={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'ALL' : selectedExpenseEmployee.id}
+                                            employeeName={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'All Employees' : selectedExpenseEmployee.name}
                                             externalReportType={reportType}
                                         />
                                     ) : (
