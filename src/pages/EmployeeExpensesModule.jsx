@@ -131,6 +131,7 @@ const EmployeeExpensesModule = () => {
                                                 <option value="Food">Global Food Report</option>
                                                 <option value="Fuel">Global Fuel Report</option>
                                                 <option value="ClientSite">Client & Site Wise Report</option>
+                                                <option value="EmployeeSiteLedger">Employee Client & Site Ledger</option>
                                             </Select>
                                         </FormControl>
 
