@@ -1010,7 +1010,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                             {existingPhotos.map((file, fIdx) => (
                                                                 <HStack key={`ex-ph-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
                                                                     <Icon as={FaCamera} color="gray.400" w={2.5} h={2.5} />
-                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
                                                                         icon={<Icon as={FaTrash} w={2} h={2} />} 
@@ -1048,7 +1048,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                             {existingReports.map((file, fIdx) => (
                                                                 <HStack key={`ex-rp-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
                                                                     <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} />
-                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
                                                                         icon={<Icon as={FaTrash} w={2} h={2} />} 
@@ -1086,7 +1086,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                             {existingData.map((file, fIdx) => (
                                                                 <HStack key={`ex-da-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
                                                                     <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} />
-                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
                                                                         icon={<Icon as={FaTrash} w={2} h={2} />} 
@@ -1124,7 +1124,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                             {existingDrawing.map((file, fIdx) => (
                                                                 <HStack key={`ex-dw-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
                                                                     <Icon as={FaPaperclip} color="gray.400" w={2.5} h={2.5} />
-                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
+                                                                    <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
                                                                         icon={<Icon as={FaTrash} w={2} h={2} />} 
@@ -1402,7 +1402,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                                  variant="outline" 
                                                                                  colorScheme="blue" 
                                                                                  leftIcon={<FaCamera />}
-                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                              >
                                                                                  Photo {pIdx + 1}
                                                                              </Button>
@@ -1427,7 +1427,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                                  variant="outline" 
                                                                                  colorScheme="teal" 
                                                                                  leftIcon={<FaFileAlt />}
-                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                              >
                                                                                  Report {rIdx + 1}
                                                                              </Button>
@@ -1452,7 +1452,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                                  variant="outline" 
                                                                                  colorScheme="purple" 
                                                                                  leftIcon={<FaFileAlt />}
-                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                              >
                                                                                  Drawing {dwgIdx + 1}
                                                                              </Button>
@@ -1477,7 +1477,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                                  variant="outline" 
                                                                                  colorScheme="orange" 
                                                                                  leftIcon={<FaFileAlt />}
-                                                                                 onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                                 onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                              >
                                                                                  Data File {datIdx + 1}
                                                                              </Button>
@@ -1529,7 +1529,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                     height="18px"
                                                                     px={1.5}
                                                                     leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
-                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                 >
                                                                     Bill {fIdx + 1}
                                                                 </Button>
@@ -1558,7 +1558,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                     height="18px"
                                                                     px={1.5}
                                                                     leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
-                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                 >
                                                                     Bill {fIdx + 1}
                                                                 </Button>
@@ -1587,7 +1587,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                     height="18px"
                                                                     px={1.5}
                                                                     leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
-                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                 >
                                                                     Bill {fIdx + 1}
                                                                 </Button>
@@ -1616,7 +1616,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                     height="18px"
                                                                     px={1.5}
                                                                     leftIcon={<Icon as={FaPaperclip} w={2} h={2} />}
-                                                                    onClick={() => window.open(`${api.defaults.baseURL?.replace('/api', '')}${finalUrl}`, '_blank')}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
                                                                 >
                                                                     Bill {fIdx + 1}
                                                                 </Button>
