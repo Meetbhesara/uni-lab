@@ -12,7 +12,7 @@ import {
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
-    FaPaperclip, FaUsers
+    FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -46,6 +46,22 @@ const EmployeeExpensesModule = () => {
 
     const [selectedExpenseEmployee, setSelectedExpenseEmployee] = useState({ id: '', name: '' });
     const [reportType, setReportType] = useState('Ledger');
+    
+    // Default to Current Financial Year
+    const getCurrentFY = () => {
+        const today = new Date();
+        return today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
+    };
+    
+    const today = new Date();
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+    const currentDate = today.toISOString().split('T')[0];
+    
+    const [selectedFY, setSelectedFY] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState('');
+    const [fyPageStart, setFyPageStart] = useState(Math.floor(getCurrentFY() / 12) * 12);
+    const [globalStartDate, setGlobalStartDate] = useState(currentMonthStart);
+    const [globalEndDate, setGlobalEndDate] = useState(currentDate);
 
     return (
         <Box py={{ base: 4, md: 10 }} bg="gray.50" minH="100vh">
@@ -126,9 +142,136 @@ const EmployeeExpensesModule = () => {
                             </TabPanel>
                             <TabPanel p={0}>
                                 <Box bg="white" p={{ base: 3, md: 6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                                    <Heading size="sm" mb={{ base: 3, md: 5 }} color="gray.700">Select Report Type & Employee to View Daily Report</Heading>
-                                    <Flex direction={{ base: 'column', md: 'row' }} gap={4} align={{ base: 'stretch', md: 'flex-end' }} mb={{ base: 4, md: 6 }}>
-                                        <FormControl>
+                                    <Heading size="sm" mb={{ base: 3, md: 5 }} color="gray.700">Global Date Range & Report Selection</Heading>
+                                    <Flex direction={{ base: 'column', md: 'row' }} gap={4} align={{ base: 'stretch', md: 'flex-end' }} mb={{ base: 4, md: 6 }} flexWrap="wrap">
+                                        
+                                        {/* Global Date Filters */}
+                                        <FormControl w="auto">
+                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Financial Year</FormLabel>
+                                            <Popover placement="bottom-start" matchWidth={false}>
+                                                <PopoverTrigger>
+                                                    <Button 
+                                                        w="auto"
+                                                        minW="150px"
+                                                        bg="white"
+                                                        color="gray.800"
+                                                        _hover={{ bg: "gray.50" }}
+                                                        borderRadius="md"
+                                                        shadow="sm"
+                                                        size={{ base: 'sm', md: 'md' }}
+                                                        fontWeight="bold"
+                                                        border="1px solid"
+                                                        borderColor="gray.200"
+                                                        textAlign="left"
+                                                        justifyContent="space-between"
+                                                        rightIcon={<Icon as={FaCalendarAlt} color="blue.500" />}
+                                                    >
+                                                        <Box flex="1" textAlign="left">
+                                                            {selectedFY ? `${selectedFY}-${parseInt(selectedFY)+1} (FY)` : 'Custom Date'}
+                                                        </Box>
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100" zIndex={100}>
+                                                    <PopoverBody p={4} maxH="350px" overflowY="auto" className="hide-scrollbar">
+                                                        <HStack justify="space-between" mb={4} px={2}>
+                                                            <IconButton size="sm" variant="ghost" icon={<FaChevronLeft />} onClick={() => setFyPageStart(prev => prev - 12)} />
+                                                            <Text fontWeight="bold" fontSize="sm" color="gray.700">
+                                                                {fyPageStart} - {fyPageStart + 11}
+                                                            </Text>
+                                                            <IconButton size="sm" variant="ghost" icon={<FaChevronRight />} onClick={() => setFyPageStart(prev => prev + 12)} />
+                                                        </HStack>
+                                                        <SimpleGrid columns={2} spacing={2}>
+                                                            {Array.from({ length: 12 }, (_, i) => fyPageStart + i).map(y => (
+                                                                <Button 
+                                                                    key={y} 
+                                                                    size="sm" 
+                                                                    borderRadius="lg"
+                                                                    colorScheme={selectedFY === y.toString() ? "blue" : "gray"} 
+                                                                    variant={selectedFY === y.toString() ? "solid" : "ghost"} 
+                                                                    onClick={() => {
+                                                                        setSelectedFY(y.toString());
+                                                                        setSelectedMonth('');
+                                                                        setGlobalStartDate(`${y}-04-01`);
+                                                                        setGlobalEndDate(`${y + 1}-03-31`);
+                                                                    }}
+                                                                >
+                                                                    {y}-{y+1}
+                                                                </Button>
+                                                            ))}
+                                                        </SimpleGrid>
+                                                    </PopoverBody>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </FormControl>
+
+                                        <FormControl w="auto">
+                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Month</FormLabel>
+                                            <Select
+                                                bg="white"
+                                                size={{ base: 'sm', md: 'md' }}
+                                                value={selectedMonth}
+                                                onChange={(e) => {
+                                                    setSelectedMonth(e.target.value);
+                                                    if (e.target.value) {
+                                                        const monthIdx = parseInt(e.target.value);
+                                                        let year = new Date().getFullYear();
+                                                        if (selectedFY) {
+                                                            year = monthIdx < 3 ? parseInt(selectedFY) + 1 : parseInt(selectedFY);
+                                                        }
+                                                        
+                                                        const start = new Date(year, monthIdx, 1);
+                                                        const end = new Date(year, monthIdx + 1, 0);
+                                                        
+                                                        const fmt = (d) => {
+                                                            const y = d.getFullYear();
+                                                            const m = String(d.getMonth() + 1).padStart(2, '0');
+                                                            const day = String(d.getDate()).padStart(2, '0');
+                                                            return `${y}-${m}-${day}`;
+                                                        };
+                                                        
+                                                        setGlobalStartDate(fmt(start));
+                                                        setGlobalEndDate(fmt(end));
+                                                    }
+                                                }}
+                                            >
+                                                <option value="">Custom Month</option>
+                                                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => (
+                                                    <option key={i} value={i}>{m}</option>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+
+                                        <FormControl w="auto">
+                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>From Date</FormLabel>
+                                            <Input 
+                                                type="date" 
+                                                size={{ base: 'sm', md: 'md' }} 
+                                                bg="white" 
+                                                value={globalStartDate}
+                                                onChange={(e) => {
+                                                    setGlobalStartDate(e.target.value);
+                                                    setSelectedFY('');
+                                                    setSelectedMonth('');
+                                                }}
+                                            />
+                                        </FormControl>
+
+                                        <FormControl w="auto">
+                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>To Date</FormLabel>
+                                            <Input 
+                                                type="date" 
+                                                size={{ base: 'sm', md: 'md' }} 
+                                                bg="white" 
+                                                value={globalEndDate}
+                                                onChange={(e) => {
+                                                    setGlobalEndDate(e.target.value || new Date().toISOString().split('T')[0]);
+                                                    setSelectedFY('');
+                                                    setSelectedMonth('');
+                                                }}
+                                            />
+                                        </FormControl>
+
+                                        <FormControl w="auto" flex={1}>
                                             <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Select Report Type</FormLabel>
                                             <Select value={reportType} onChange={(e) => {
                                                 setReportType(e.target.value);
@@ -143,7 +286,7 @@ const EmployeeExpensesModule = () => {
                                             </Select>
                                         </FormControl>
 
-                                        <FormControl isDisabled={reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite'}>
+                                        <FormControl w="auto" flex={1} isDisabled={reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite'}>
                                             <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Select Employee</FormLabel>
                                             <Select
                                                 placeholder={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? "All Employees Included" : "-- Select Employee --"}
@@ -167,6 +310,8 @@ const EmployeeExpensesModule = () => {
                                             employeeId={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'ALL' : selectedExpenseEmployee.id}
                                             employeeName={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'All Employees' : selectedExpenseEmployee.name}
                                             externalReportType={reportType}
+                                            globalStartDate={globalStartDate}
+                                            globalEndDate={globalEndDate}
                                         />
                                     ) : (
                                         <Center py={16}>

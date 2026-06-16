@@ -12,14 +12,16 @@ import api from '../api/axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
-const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType }) => {
+const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, globalStartDate, globalEndDate }) => {
     const [expenses, setExpenses] = useState([]);
     const [transfers, setTransfers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [employeeDetails, setEmployeeDetails] = useState(null);
-    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [yearPageStart, setYearPageStart] = useState(Math.floor(new Date().getFullYear() / 20) * 20);
+    const [localStartDate, setLocalStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+    const [localEndDate, setLocalEndDate] = useState(new Date().toISOString().split('T')[0]);
+    
+    const startDate = globalStartDate !== undefined ? globalStartDate : localStartDate;
+    const endDate = globalEndDate !== undefined ? globalEndDate : localEndDate;
     const [localReportType, setLocalReportType] = useState('Ledger');
     const [fuelFilter, setFuelFilter] = useState('ALL');
     const reportType = externalReportType || localReportType;
@@ -435,24 +437,23 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
         return <Center p={10}><Spinner size="xl" /></Center>;
     }
 
-    // Hardcoded months for 12-month report
-    const months = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    ];
 
-    // Calculate the 20 years to display based on the current page
-    const displayYears = Array.from({ length: 20 }, (_, i) => yearPageStart + i);
 
-    // Always filter by month and year
+    // Always filter by date range
     const filteredExpenses = expenses.filter(e => {
-        const d = new Date(e.date);
-        return (selectedMonth === 'ALL' || (d.getMonth() + 1) === Number(selectedMonth)) && d.getFullYear() === Number(selectedYear);
+        const d = new Date(e.date).toISOString().split('T')[0];
+        const end = endDate || new Date().toISOString().split('T')[0];
+        if (startDate && d < startDate) return false;
+        if (d > end) return false;
+        return true;
     });
 
     const filteredTransfers = transfers.filter(t => {
-        const d = new Date(t.date);
-        return (selectedMonth === 'ALL' || (d.getMonth() + 1) === Number(selectedMonth)) && d.getFullYear() === Number(selectedYear);
+        const d = new Date(t.date).toISOString().split('T')[0];
+        const end = endDate || new Date().toISOString().split('T')[0];
+        if (startDate && d < startDate) return false;
+        if (d > end) return false;
+        return true;
     });
 
     // Group all records by calendar date (YYYY-MM-DD key)
@@ -521,69 +522,52 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType })
                         </HStack>
                     )}
 
-                    <HStack>
-                        <Text fontSize="sm" fontWeight="bold" color="gray.600">Month:</Text>
-                        <ChakraSelect 
-                            w={{ base: '110px', md: '130px' }}
+                    {globalStartDate === undefined && <HStack>
+                        <ChakraSelect
+                            w={{ base: '130px', md: '150px' }}
                             bg="white"
                             borderRadius="xl"
                             shadow="sm"
                             size="sm"
                             fontWeight="bold"
-                            value={selectedMonth} 
-                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            onChange={(e) => {
+                                if (e.target.value) {
+                                    const year = parseInt(e.target.value);
+                                    setLocalStartDate(`${year}-04-01`);
+                                    setLocalEndDate(`${year + 1}-03-31`);
+                                }
+                            }}
                         >
-                            <option value="ALL">All Year</option>
-                            {months.map((m, i) => (
-                                <option key={i} value={i + 1}>{m}</option>
-                            ))}
+                            <option value="">Custom Date</option>
+                            {[...Array(5)].map((_, i) => {
+                                const y = new Date().getFullYear() - 2 + i;
+                                return <option key={y} value={y}>{y}-{y+1} (FY)</option>;
+                            })}
                         </ChakraSelect>
                         
-                        <Popover placement="bottom-start" matchWidth={false}>
-                            <PopoverTrigger>
-                                <Button 
-                                    w="110px"
-                                    bg="white"
-                                    borderRadius="xl"
-                                    shadow="sm"
-                                    size="sm"
-                                    fontWeight="bold"
-                                    rightIcon={<Icon as={FaCalendarAlt} color="blue.500" />}
-                                >
-                                    {selectedYear}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100">
-                                <PopoverBody p={4} maxH="350px" overflowY="auto" className="hide-scrollbar">
-                                    <HStack justify="space-between" mb={4} px={2}>
-                                        <IconButton size="sm" variant="ghost" icon={<FaChevronLeft />} onClick={() => setYearPageStart(prev => prev - 20)} />
-                                        <Text fontWeight="bold" fontSize="sm" color="gray.700">
-                                            {yearPageStart} - {yearPageStart + 19}
-                                        </Text>
-                                        <IconButton size="sm" variant="ghost" icon={<FaChevronRight />} onClick={() => setYearPageStart(prev => prev + 20)} />
-                                    </HStack>
-                                    <SimpleGrid columns={4} spacing={2}>
-                                        {displayYears.map(y => (
-                                            <Button 
-                                                key={y} 
-                                                size="sm" 
-                                                borderRadius="lg"
-                                                colorScheme={Number(selectedYear) === y ? "blue" : "gray"} 
-                                                variant={Number(selectedYear) === y ? "solid" : "ghost"} 
-                                                onClick={() => setSelectedYear(y)}
-                                            >
-                                                {y}
-                                            </Button>
-                                        ))}
-                                    </SimpleGrid>
-                                </PopoverBody>
-                            </PopoverContent>
-                        </Popover>
-                    </HStack>
+                        <Text fontSize="sm" fontWeight="bold" color="gray.600">From:</Text>
+                        <Input 
+                            type="date" 
+                            size="sm" 
+                            bg="white" 
+                            borderRadius="xl"
+                            shadow="sm"
+                            value={localStartDate}
+                            onChange={(e) => setLocalStartDate(e.target.value)}
+                        />
+                        <Text fontSize="sm" fontWeight="bold" color="gray.600">To:</Text>
+                        <Input 
+                            type="date" 
+                            size="sm" 
+                            bg="white" 
+                            borderRadius="xl"
+                            shadow="sm"
+                            value={localEndDate}
+                            onChange={(e) => setLocalEndDate(e.target.value || new Date().toISOString().split('T')[0])}
+                        />
+                    </HStack>}
 
-                    <Button colorScheme="purple" leftIcon={<FaPlus />} onClick={onOpen} size="sm">
-                        Add Record
-                    </Button>
+                    {/* Add Record button removed as requested */}
                     <Button colorScheme="green" leftIcon={<FaFileExcel />} onClick={handleDownload} size="sm">
                         Export
                     </Button>

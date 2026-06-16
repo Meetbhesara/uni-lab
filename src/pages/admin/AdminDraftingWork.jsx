@@ -206,7 +206,6 @@ const AdminDraftingWork = () => {
             const queryParams = new URLSearchParams();
             if (filterClient) queryParams.append('client', filterClient);
             if (filterSite) queryParams.append('site', filterSite);
-            if (filterScheduleDate) queryParams.append('scheduleDate', filterScheduleDate);
             
             const docsRes = await axios.get(`${API_URL}/site-master/all-documents?${queryParams.toString()}`);
             if (docsRes.data.success) {
@@ -370,32 +369,12 @@ const AdminDraftingWork = () => {
 
     const fetchOptions = async () => {
         try {
-            if (filterScheduleDate) {
-                const res = await axios.get(`${API_URL}/schedule-master?date=${filterScheduleDate}`);
-                if (res.data.success) {
-                    const uniqueClients = [];
-                    const uniqueSites = [];
-                    res.data.data.forEach(sch => {
-                        if (sch.client && !uniqueClients.find(c => c._id === sch.client._id)) {
-                            uniqueClients.push(sch.client);
-                        }
-                        if (sch.site && !uniqueSites.find(s => s._id === sch.site._id)) {
-                            // Attach the client ID so the dropdown filtering works perfectly
-                            const siteObj = { ...sch.site, client: sch.client ? sch.client._id : null };
-                            uniqueSites.push(siteObj);
-                        }
-                    });
-                    setClientOptions(uniqueClients);
-                    setSiteOptions(uniqueSites);
-                }
-            } else {
-                const [clientsRes, sitesRes] = await Promise.all([
-                    axios.get(`${API_URL}/client-master`),
-                    axios.get(`${API_URL}/site-master`)
-                ]);
-                if (clientsRes.data.success) setClientOptions(clientsRes.data.data);
-                if (sitesRes.data.success) setSiteOptions(sitesRes.data.data);
-            }
+            const [clientsRes, sitesRes] = await Promise.all([
+                axios.get(`${API_URL}/client-master`),
+                axios.get(`${API_URL}/site-master`)
+            ]);
+            if (clientsRes.data.success) setClientOptions(clientsRes.data.data);
+            if (sitesRes.data.success) setSiteOptions(sitesRes.data.data);
         } catch(e) { console.error("Failed to fetch options", e); }
     };
 
@@ -604,14 +583,37 @@ const AdminDraftingWork = () => {
                                                                         let status = 'Pending';
                                                                         let color = 'gray';
 
+                                                                        const hasCollected = (documents || []).some(d => {
+                                                                            if (d.source !== 'EmployeeExpense') return false;
+                                                                            if (!['Received', 'Done', 'Converted'].includes(d.status)) return false;
+                                                                            
+                                                                            const docClient = String(d.client?._id || d.client || '');
+                                                                            const surClient = String(survey.client?._id || survey.client || '');
+                                                                            if (docClient !== surClient) return false;
+                                                                            
+                                                                            const docSite = String(d.site?._id || d.site || '');
+                                                                            const surSite = String(survey.site?._id || survey.site || '');
+                                                                            if (docSite !== surSite) return false;
+
+                                                                            if (String(d.expenseId) === String(survey._id) || String(d.scheduleId) === String(survey._id)) return true;
+
+                                                                            if (!d.receivedDate && !d.uploadedAt && !d.createdAt) return false;
+                                                                            if (!survey.scheduleDate) return false;
+                                                                            const docDate = new Date(d.receivedDate || d.uploadedAt || d.createdAt).toISOString().split('T')[0];
+                                                                            const surDate = new Date(survey.scheduleDate).toISOString().split('T')[0];
+                                                                            
+                                                                            return docDate === surDate;
+                                                                        });
+
                                                                         if (files.mailFiles?.length > 0) { status = 'Mail'; color = 'red'; }
                                                                         else if (files.finalCheckingFiles?.length > 0) { status = 'Final Checking'; color = 'green'; }
                                                                         else if (files.esurveyWorkFiles?.length > 0) { status = 'eSurvey Work'; color = 'purple'; }
                                                                         else if (files.liningDrawFiles?.length > 0) { status = 'Lining Draw'; color = 'teal'; }
                                                                         else if (files.convertedFiles?.length > 0) { status = 'Converted'; color = 'orange'; }
-                                                                        else if (files.collectedFiles?.length > 0) { status = 'Collected All Files'; color = 'blue'; }
+                                                                        else if (files.collectedFiles?.length > 0 || hasCollected) { status = 'Collected Files'; color = 'blue'; }
 
-                                                                        return <Badge colorScheme={color} borderRadius="full">{status}</Badge>;
+                                                                        const matches = (documents || []).filter(d => String(d.site?._id || d.site || '') === String(survey.site?._id || survey.site || ''));
+                                                                        return <Badge colorScheme={color} borderRadius="full">{status} {status === 'Pending' ? `(Docs:${documents?.length}, SiteMatch:${matches.length})` : ''}</Badge>;
                                                                     })()}
                                                                 </Td>
                                                             </Tr>

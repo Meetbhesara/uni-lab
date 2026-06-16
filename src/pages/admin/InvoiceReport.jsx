@@ -549,162 +549,168 @@ const InvoiceReport = () => {
                                             {selectedGroup.entries.map((entry) => {
                                                 const isEntryCompleted = entry.invoiceStatus === 'Completed';
                                                 const innerStyles = rowStyle(entry);
+                                                const isSelected = selectedEntryForDocs?._id === entry._id;
                                                 return (
-                                                    <Tr key={entry._id} _hover={{ bg: innerStyles.hoverBg }}>
-                                                        <Td py={3}>
-                                                            <Checkbox
-                                                                colorScheme="green"
-                                                                isChecked={isEntryCompleted}
-                                                                onChange={() => toggleInvoiceStatus(entry)}
-                                                                isDisabled={updatingId === entry._id}
-                                                            />
-                                                        </Td>
-                                                        <Td py={3} fontWeight="bold" color="gray.700">
-                                                            {formatDate(entry.scheduleDate)}
-                                                        </Td>
-                                                        <Td py={3}>
-                                                            {entry.operative?.name ? (
-                                                                <HStack spacing={1}>
-                                                                    <Icon as={FaUser} color="purple.400" w={3} h={3} />
-                                                                    <Text fontSize="xs">{entry.operative.name}</Text>
-                                                                </HStack>
-                                                            ) : (
-                                                                <Text fontSize="xs" color="gray.400">Unassigned</Text>
-                                                            )}
-                                                        </Td>
-                                                        <Td py={3}>
-                                                            <Badge size="xs" colorScheme={entry.scheduleType === 'TOPOGRAPHY SURVEY' ? 'red' : entry.scheduleType === 'MONTH' ? 'blue' : 'purple'}>
-                                                                {entry.scheduleType === 'TOPOGRAPHY SURVEY' ? 'Topography Survey / Drafting' : entry.scheduleType || 'Visit'}
-                                                            </Badge>
-                                                        </Td>
-                                                        <Td py={3}>
-                                                            {entry.scheduleType === 'TOPOGRAPHY SURVEY' ? (
-                                                                <Badge colorScheme="teal" variant="solid" borderRadius="full" px={2} fontSize="9px">
-                                                                    Drafting Work
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge
-                                                                    colorScheme={(entry.ledger || 'Full Day') === 'Full Day' ? 'green' : 'orange'}
-                                                                    variant="solid"
-                                                                    borderRadius="full"
-                                                                    px={2}
-                                                                    fontSize="9px"
-                                                                >
-                                                                    {entry.ledger || 'Full Day'}
-                                                                </Badge>
-                                                            )}
-                                                        </Td>
-                                                        <Td py={3} textAlign="right">
-                                                            <Tooltip label="View Entry Documents" placement="top">
-                                                                <IconButton
-                                                                    aria-label="View Entry Documents"
-                                                                    icon={<FaEye />}
-                                                                    size="xs"
-                                                                    colorScheme="teal"
-                                                                    variant={selectedEntryForDocs?._id === entry._id ? 'solid' : 'ghost'}
-                                                                    borderRadius="full"
-                                                                    onClick={() => setSelectedEntryForDocs(entry)}
+                                                    <React.Fragment key={entry._id}>
+                                                        <Tr _hover={{ bg: innerStyles.hoverBg }} bg={isSelected ? 'gray.50' : 'transparent'}>
+                                                            <Td py={3}>
+                                                                <Checkbox
+                                                                    colorScheme="green"
+                                                                    isChecked={isEntryCompleted}
+                                                                    onChange={() => toggleInvoiceStatus(entry)}
+                                                                    isDisabled={updatingId === entry._id}
                                                                 />
-                                                            </Tooltip>
-                                                        </Td>
-                                                    </Tr>
+                                                            </Td>
+                                                            <Td py={3} fontWeight="bold" color="gray.700">
+                                                                {formatDate(entry.scheduleDate)}
+                                                            </Td>
+                                                            <Td py={3}>
+                                                                {entry.operative?.name ? (
+                                                                    <HStack spacing={1}>
+                                                                        <Icon as={FaUser} color="purple.400" w={3} h={3} />
+                                                                        <Text fontSize="xs">{entry.operative.name}</Text>
+                                                                    </HStack>
+                                                                ) : (
+                                                                    <Text fontSize="xs" color="gray.400">Unassigned</Text>
+                                                                )}
+                                                            </Td>
+                                                            <Td py={3}>
+                                                                <Badge size="xs" colorScheme={entry.scheduleType === 'TOPOGRAPHY SURVEY' ? 'red' : entry.scheduleType === 'MONTH' ? 'blue' : 'purple'}>
+                                                                    {entry.scheduleType === 'TOPOGRAPHY SURVEY' ? 'Topography Survey / Drafting' : entry.scheduleType || 'Visit'}
+                                                                </Badge>
+                                                            </Td>
+                                                            <Td py={3}>
+                                                                {entry.scheduleType === 'TOPOGRAPHY SURVEY' ? (
+                                                                    <Badge colorScheme="teal" variant="solid" borderRadius="full" px={2} fontSize="9px">
+                                                                        Drafting Work
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <Badge
+                                                                        colorScheme={(entry.ledger || 'Full Day') === 'Full Day' ? 'green' : 'orange'}
+                                                                        variant="solid"
+                                                                        borderRadius="full"
+                                                                        px={2}
+                                                                        fontSize="9px"
+                                                                    >
+                                                                        {entry.ledger || 'Full Day'}
+                                                                    </Badge>
+                                                                )}
+                                                            </Td>
+                                                            <Td py={3} textAlign="right">
+                                                                <Tooltip label={isSelected ? "Hide Documents" : "View Entry Documents"} placement="top">
+                                                                    <IconButton
+                                                                        aria-label="Toggle Entry Documents"
+                                                                        icon={<FaEye />}
+                                                                        size="xs"
+                                                                        colorScheme="teal"
+                                                                        variant={isSelected ? 'solid' : 'ghost'}
+                                                                        borderRadius="full"
+                                                                        onClick={() => setSelectedEntryForDocs(isSelected ? null : entry)}
+                                                                    />
+                                                                </Tooltip>
+                                                            </Td>
+                                                        </Tr>
+                                                        {isSelected && (
+                                                            <Tr bg="gray.50">
+                                                                <Td colSpan={6} p={0} borderBottom="none">
+                                                                    {(() => {
+                                                                        const docs = entry.allDocuments || [];
+                                                                        const photos = docs.filter(d => d.url?.includes('/photos/') || d.name?.toLowerCase().includes('photo') || d.url?.includes('site_') && d.url?.includes('photos') || d.url?.includes('/uploads/photos-'));
+                                                                        const reports = docs.filter(d => d.url?.includes('/Daily_report/') || d.url?.includes('dailyReports') || d.name?.toLowerCase().includes('report'));
+                                                                        const data = docs.filter(d => d.url?.includes('/data/') || d.url?.includes('dataFiles') || d.url?.includes('site_') && d.url?.includes('data'));
+                                                                        const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('site_') && d.url?.includes('drawing'));
+                                                                        const expenseReceipts = docs.filter(d => d.url?.includes('expense_') || d.url?.includes('otherExpense_') || d.category);
+                                                                        const topographyMails = docs.filter(d => d.isMail);
+                                                                        
+                                                                        const formatDateTime = (dateStr) => {
+                                                                            if (!dateStr) return '—';
+                                                                            const d = new Date(dateStr);
+                                                                            const dd = String(d.getDate()).padStart(2, '0');
+                                                                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                                                            const yyyy = d.getFullYear();
+                                                                            const hh = String(d.getHours()).padStart(2, '0');
+                                                                            const min = String(d.getMinutes()).padStart(2, '0');
+                                                                            const ss = String(d.getSeconds()).padStart(2, '0');
+                                                                            return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+                                                                        };
+
+                                                                        return (
+                                                                            <Box p={5} bg="gray.100" borderTop="1px dashed" borderBottom="1px solid" borderColor="gray.200" boxShadow="inner">
+                                                                                <Flex justify="space-between" align="center" mb={4}>
+                                                                                    <Text fontSize="xs" fontWeight="black" color="blue.600" textTransform="uppercase">
+                                                                                        Uploaded Documents: {formatDate(entry.scheduleDate)}
+                                                                                    </Text>
+                                                                                </Flex>
+                                                                                
+                                                                                {docs.length === 0 ? (
+                                                                                    <Center py={6} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.300">
+                                                                                        <VStack spacing={2}>
+                                                                                            <Icon as={FaFileAlt} w={8} h={8} color="gray.300" />
+                                                                                            <Text color="gray.400" fontSize="sm">No documents found for this schedule date</Text>
+                                                                                        </VStack>
+                                                                                    </Center>
+                                                                                ) : (
+                                                                                    <VStack spacing={4} align="stretch">
+                                                                                        {[
+                                                                                            { label: 'Topography Final Mails', files: topographyMails, color: 'red', icon: FaEnvelope },
+                                                                                            { label: 'Photos', files: photos, color: 'pink', icon: FaCamera },
+                                                                                            { label: 'Daily Reports', files: reports, color: 'blue', icon: FaFilePdf },
+                                                                                            { label: 'Data Files', files: data, color: 'teal', icon: FaFileAlt },
+                                                                                            { label: 'Drawings', files: drawing, color: 'orange', icon: FaFileAlt },
+                                                                                            { label: 'Expense Receipts', files: expenseReceipts, color: 'green', icon: FaFileInvoiceDollar },
+                                                                                        ].map(({ label, files, color, icon }) => files && files.length > 0 && (
+                                                                                            <Box key={label} bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.150" shadow="sm">
+                                                                                                <Text fontSize="10px" fontWeight="black" color={`${color}.500`} textTransform="uppercase" mb={2}>
+                                                                                                    {label} ({files.length})
+                                                                                                </Text>
+                                                                                                <VStack spacing={2} align="stretch">
+                                                                                                    {files.map((doc, i) => (
+                                                                                                        <HStack
+                                                                                                            key={i}
+                                                                                                            p={3}
+                                                                                                            bg={`${color}.50`}
+                                                                                                            borderRadius="xl"
+                                                                                                            border="1px solid"
+                                                                                                            borderColor={`${color}.100`}
+                                                                                                            justify="space-between"
+                                                                                                        >
+                                                                                                            <HStack spacing={3}>
+                                                                                                                <Icon as={icon} color={`${color}.500`} />
+                                                                                                                <VStack align="start" spacing={0}>
+                                                                                                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">{doc.name}</Text>
+                                                                                                                    <Text fontSize="xs" color="gray.400">{formatDateTime(doc.uploadedAt)}</Text>
+                                                                                                                </VStack>
+                                                                                                            </HStack>
+                                                                                                            <IconButton
+                                                                                                                as="a"
+                                                                                                                href={`${API_BASE_URL}${doc.url}`}
+                                                                                                                target="_blank"
+                                                                                                                icon={<FaDownload />}
+                                                                                                                size="sm"
+                                                                                                                colorScheme={color}
+                                                                                                                variant="ghost"
+                                                                                                                borderRadius="full"
+                                                                                                                aria-label="Download"
+                                                                                                            />
+                                                                                                        </HStack>
+                                                                                                    ))}
+                                                                                                </VStack>
+                                                                                            </Box>
+                                                                                        ))}
+                                                                                    </VStack>
+                                                                                )}
+                                                                            </Box>
+                                                                        );
+                                                                    })()}
+                                                                </Td>
+                                                            </Tr>
+                                                        )}
+                                                    </React.Fragment>
                                                 );
                                             })}
                                         </Tbody>
                                     </Table>
                                 </TableContainer>
-
-                                {/* Inline Document Viewer inside same popup */}
-                                {selectedEntryForDocs && (() => {
-                                    const docs = selectedEntryForDocs.allDocuments || [];
-                                    const photos = docs.filter(d => d.url?.includes('/photos/') || d.name?.toLowerCase().includes('photo') || d.url?.includes('site_') && d.url?.includes('photos') || d.url?.includes('/uploads/photos-'));
-                                    const reports = docs.filter(d => d.url?.includes('/Daily_report/') || d.url?.includes('dailyReports') || d.name?.toLowerCase().includes('report'));
-                                    const data = docs.filter(d => d.url?.includes('/data/') || d.url?.includes('dataFiles') || d.url?.includes('site_') && d.url?.includes('data'));
-                                    const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('site_') && d.url?.includes('drawing'));
-                                    const expenseReceipts = docs.filter(d => d.url?.includes('expense_') || d.url?.includes('otherExpense_') || d.category);
-                                    const topographyMails = docs.filter(d => d.isMail);
-                                    
-                                    const formatDateTime = (dateStr) => {
-                                        if (!dateStr) return '—';
-                                        const d = new Date(dateStr);
-                                        const dd = String(d.getDate()).padStart(2, '0');
-                                        const mm = String(d.getMonth() + 1).padStart(2, '0');
-                                        const yyyy = d.getFullYear();
-                                        const hh = String(d.getHours()).padStart(2, '0');
-                                        const min = String(d.getMinutes()).padStart(2, '0');
-                                        const ss = String(d.getSeconds()).padStart(2, '0');
-                                        return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
-                                    };
-
-                                    return (
-                                        <Box mt={4} p={5} bg="gray.50" borderRadius="2xl" border="1px solid" borderColor="gray.200">
-                                            <Flex justify="space-between" align="center" mb={4}>
-                                                <Text fontSize="xs" fontWeight="black" color="blue.600" textTransform="uppercase">
-                                                    Uploaded Documents: {formatDate(selectedEntryForDocs.scheduleDate)}
-                                                </Text>
-                                                <Button size="xs" variant="ghost" colorScheme="red" onClick={() => setSelectedEntryForDocs(null)}>Hide Documents</Button>
-                                            </Flex>
-                                            
-                                            {docs.length === 0 ? (
-                                                <Center py={6} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.300">
-                                                    <VStack spacing={2}>
-                                                        <Icon as={FaFileAlt} w={8} h={8} color="gray.300" />
-                                                        <Text color="gray.400" fontSize="sm">No documents found for this schedule date</Text>
-                                                    </VStack>
-                                                </Center>
-                                            ) : (
-                                                <VStack spacing={4} align="stretch">
-                                                    {[
-                                                        { label: 'Topography Final Mails', files: topographyMails, color: 'red', icon: FaEnvelope },
-                                                        { label: 'Photos', files: photos, color: 'pink', icon: FaCamera },
-                                                        { label: 'Daily Reports', files: reports, color: 'blue', icon: FaFilePdf },
-                                                        { label: 'Data Files', files: data, color: 'teal', icon: FaFileAlt },
-                                                        { label: 'Drawings', files: drawing, color: 'orange', icon: FaFileAlt },
-                                                        { label: 'Expense Receipts', files: expenseReceipts, color: 'green', icon: FaFileInvoiceDollar },
-                                                    ].map(({ label, files, color, icon }) => files && files.length > 0 && (
-                                                        <Box key={label} bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.150">
-                                                            <Text fontSize="10px" fontWeight="black" color={`${color}.500`} textTransform="uppercase" mb={2}>
-                                                                {label} ({files.length})
-                                                            </Text>
-                                                            <VStack spacing={2} align="stretch">
-                                                                {files.map((doc, i) => (
-                                                                    <HStack
-                                                                        key={i}
-                                                                        p={3}
-                                                                        bg={`${color}.50`}
-                                                                        borderRadius="xl"
-                                                                        border="1px solid"
-                                                                        borderColor={`${color}.100`}
-                                                                        justify="space-between"
-                                                                    >
-                                                                        <HStack spacing={3}>
-                                                                            <Icon as={icon} color={`${color}.500`} />
-                                                                            <VStack align="start" spacing={0}>
-                                                                                <Text fontSize="sm" fontWeight="bold" color="gray.700">{doc.name}</Text>
-                                                                                <Text fontSize="xs" color="gray.400">{formatDateTime(doc.uploadedAt)}</Text>
-                                                                            </VStack>
-                                                                        </HStack>
-                                                                        <IconButton
-                                                                            as="a"
-                                                                            href={`${API_BASE_URL}${doc.url}`}
-                                                                            target="_blank"
-                                                                            icon={<FaDownload />}
-                                                                            size="sm"
-                                                                            colorScheme={color}
-                                                                            variant="ghost"
-                                                                            borderRadius="full"
-                                                                            aria-label="Download"
-                                                                        />
-                                                                    </HStack>
-                                                                ))}
-                                                            </VStack>
-                                                        </Box>
-                                                    ))}
-                                                </VStack>
-                                            )}
-                                        </Box>
-                                    );
-                                })()}
                             </VStack>
                         )}
                     </ModalBody>
