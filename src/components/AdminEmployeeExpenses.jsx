@@ -62,7 +62,14 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
             try {
                 const res = await api.get(`/schedule-master?date=${expenseForm.date}`);
                 if (res.data.success) {
-                    setDaySchedules(res.data.data);
+                    // Strictly filter to only schedules matching the selected date,
+                    // preventing adjacent-date schedules from bleeding into this view.
+                    const exactMatches = res.data.data.filter(s => {
+                        if (!s.scheduleDate) return false;
+                        const sDate = new Date(s.scheduleDate).toISOString().split('T')[0];
+                        return sDate === expenseForm.date;
+                    });
+                    setDaySchedules(exactMatches);
                 } else {
                     setDaySchedules([]);
                 }
@@ -351,6 +358,79 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
             return;
         }
 
+        if (reportType === 'ClientSite') {
+            let csvContent = "SR. NO.,CLIENT NAME,SITE NAME,BREAKFAST,LUNCH,DINNER,FUEL,OTHER EXP.,TOTAL\n";
+            const siteAgg = {};
+            
+            groupedByDate.forEach(g => {
+                const exp = g.expense;
+                if (!exp) return;
+                
+                const sitesToProcess = exp.clientSites && exp.clientSites.length > 0 
+                    ? exp.clientSites 
+                    : [null];
+                    
+                const n = sitesToProcess.length;
+                
+                sitesToProcess.forEach(cs => {
+                    const cName = cs?.clientId?.clientName || 'Unspecified Client';
+                    const sName = cs?.siteId?.siteName || 'Unspecified Site';
+                    const key = `${cName}_${sName}`;
+                    
+                    if (!siteAgg[key]) {
+                        siteAgg[key] = { clientName: cName, siteName: sName, breakfast: 0, lunch: 0, dinner: 0, fuel: 0, other: 0 };
+                    }
+                    
+                    siteAgg[key].breakfast += (Number(exp.expenses?.breakfast) || 0) / n;
+                    siteAgg[key].lunch += (Number(exp.expenses?.lunch) || 0) / n;
+                    siteAgg[key].dinner += (Number(exp.expenses?.dinner) || 0) / n;
+                    siteAgg[key].fuel += (Number(exp.expenses?.petrol) || 0) / n;
+                    
+                    if (exp.otherExpensesList && exp.otherExpensesList.length > 0) {
+                        exp.otherExpensesList.forEach(other => {
+                            const name = (other.expenseName || '').toLowerCase().trim();
+                            const amount = Number(other.amount) || 0;
+                            
+                            if (amount > 0) {
+                                const fraction = amount / n;
+                                if (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel')) {
+                                    siteAgg[key].fuel += fraction;
+                                } else {
+                                    siteAgg[key].other += fraction;
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+
+            const aggArray = Object.values(siteAgg).map(s => ({
+                ...s,
+                total: s.breakfast + s.lunch + s.dinner + s.fuel + s.other
+            })).filter(s => s.total > 0)
+            .sort((a, b) => {
+                const clientCmp = a.clientName.localeCompare(b.clientName);
+                if (clientCmp !== 0) return clientCmp;
+                return a.siteName.localeCompare(b.siteName);
+            });
+
+            let currentSrNo = 0;
+            aggArray.forEach(site => {
+                currentSrNo++;
+                csvContent += `${currentSrNo},"${site.clientName}","${site.siteName}",${site.breakfast.toFixed(2)},${site.lunch.toFixed(2)},${site.dinner.toFixed(2)},${site.fuel.toFixed(2)},${site.other.toFixed(2)},${site.total.toFixed(2)}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${employeeName || 'Employee'}_ClientSite_Report.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            return;
+        }
+
         // Generate CSV manually based on filtered expenses
         let csvContent = "SR. NO.,DATE,DESCRIPTION,CREDIT,DEBIT,TOTAL,ATENDES,REMARK,SIDE WORK\n";
 
@@ -410,7 +490,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
             // Map rows to CSV
             allItems.forEach((item, index) => {
                 if (index === 0) {
-                    csvContent += `${sNum + 1},${dateStr},${item.desc},${item.cr},${item.dr},,${attendance},"${exp.attendanceRemark || ''}",${sideWorkStr}\n`;
+                    csvContent += `${sNum + 1},${dateStr},${item.desc},${item.cr},${item.dr},,${attendance},"${exp.attendanceRemark || ''}","${sideWorkStr}"\n`;
                 } else {
                     csvContent += `,,${item.desc},${item.cr},${item.dr},,,, \n`;
                 }
@@ -1346,34 +1426,42 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                                     const exp = g.expense;
                                     if (!exp) return;
                                     
-                                    const cName = exp.clientSites?.[0]?.clientId?.clientName || 'Unspecified Client';
-                                    const sName = exp.clientSites?.map(cs => cs.siteId?.siteName).filter(Boolean).join(' & ') || 'Unspecified Site';
+                                    const sitesToProcess = exp.clientSites && exp.clientSites.length > 0 
+                                        ? exp.clientSites 
+                                        : [null];
+                                        
+                                    const n = sitesToProcess.length;
                                     
-                                    const key = `${cName}_${sName}`;
-                                    
-                                    if (!siteAgg[key]) {
-                                        siteAgg[key] = { clientName: cName, siteName: sName, breakfast: 0, lunch: 0, dinner: 0, fuel: 0, other: 0 };
-                                    }
-                                    
-                                    siteAgg[key].breakfast += Number(exp.expenses?.breakfast) || 0;
-                                    siteAgg[key].lunch += Number(exp.expenses?.lunch) || 0;
-                                    siteAgg[key].dinner += Number(exp.expenses?.dinner) || 0;
-                                    siteAgg[key].fuel += Number(exp.expenses?.petrol) || 0;
-                                    
-                                    if (exp.otherExpensesList && exp.otherExpensesList.length > 0) {
-                                        exp.otherExpensesList.forEach(other => {
-                                            const name = (other.expenseName || '').toLowerCase().trim();
-                                            const amount = Number(other.amount) || 0;
-                                            
-                                            if (amount > 0) {
-                                                if (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel')) {
-                                                    siteAgg[key].fuel += amount;
-                                                } else {
-                                                    siteAgg[key].other += amount;
+                                    sitesToProcess.forEach(cs => {
+                                        const cName = cs?.clientId?.clientName || 'Unspecified Client';
+                                        const sName = cs?.siteId?.siteName || 'Unspecified Site';
+                                        const key = `${cName}_${sName}`;
+                                        
+                                        if (!siteAgg[key]) {
+                                            siteAgg[key] = { clientName: cName, siteName: sName, breakfast: 0, lunch: 0, dinner: 0, fuel: 0, other: 0 };
+                                        }
+                                        
+                                        siteAgg[key].breakfast += (Number(exp.expenses?.breakfast) || 0) / n;
+                                        siteAgg[key].lunch += (Number(exp.expenses?.lunch) || 0) / n;
+                                        siteAgg[key].dinner += (Number(exp.expenses?.dinner) || 0) / n;
+                                        siteAgg[key].fuel += (Number(exp.expenses?.petrol) || 0) / n;
+                                        
+                                        if (exp.otherExpensesList && exp.otherExpensesList.length > 0) {
+                                            exp.otherExpensesList.forEach(other => {
+                                                const name = (other.expenseName || '').toLowerCase().trim();
+                                                const amount = Number(other.amount) || 0;
+                                                
+                                                if (amount > 0) {
+                                                    const fraction = amount / n;
+                                                    if (name.includes('petrol') || name === 'cng' || name.includes('cng') || name.includes('diesel') || name.includes('fuel')) {
+                                                        siteAgg[key].fuel += fraction;
+                                                    } else {
+                                                        siteAgg[key].other += fraction;
+                                                    }
                                                 }
-                                            }
-                                        });
-                                    }
+                                            });
+                                        }
+                                    });
                                 });
 
                                 const aggArray = Object.values(siteAgg).map(s => ({

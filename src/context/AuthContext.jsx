@@ -36,14 +36,28 @@ export const AuthProvider = ({ children }) => {
         const storedUser = localStorage.getItem('user');
 
         if (token) {
-            // Technically we should validate the token with /auth/me if that endpoint existed
-            // For now, we trust the storage if present
             if (storedUser) {
                 setUser(JSON.parse(storedUser));
             }
+            refreshUser(); // Background sync on load
+        } else {
+            setLoading(false);
         }
-        setLoading(false);
     }, []);
+
+    const refreshUser = async () => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        try {
+            const res = await api.get('/auth/me');
+            setUser(res.data);
+            localStorage.setItem('user', JSON.stringify(res.data));
+        } catch (err) {
+            console.error('Failed to sync latest user data', err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const login = async (email, password) => {
         try {
@@ -173,9 +187,9 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const createAdmin = async (name, email, phone) => {
+    const createAdmin = async (name, email, phone, permissions) => {
         try {
-            const response = await api.post('/auth/create-admin', { name, email, phone });
+            const response = await api.post('/auth/create-admin', { name, email, phone, permissions });
             return { success: true, ...response.data };
         } catch (error) {
             return { success: false, message: error.response?.data?.msg || 'Failed to create admin' };
@@ -225,7 +239,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, setup2FA, verifyEnable2FA, login2FA, resetWithBackup, loading }}>
+        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, setup2FA, verifyEnable2FA, login2FA, resetWithBackup, loading, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );

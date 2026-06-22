@@ -3,17 +3,15 @@ import {
     Box, Flex, VStack, Text, IconButton, useColorModeValue, Drawer, DrawerContent,
     useDisclosure, Icon, Link
 } from '@chakra-ui/react';
-import { FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut, FiGlobe, FiArrowLeft, FiDollarSign, FiEdit3, FiFileText } from 'react-icons/fi'; // Using Fi icons as standard
+import { FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut, FiGlobe, FiArrowLeft, FiDollarSign, FiEdit3, FiFileText, FiLock } from 'react-icons/fi'; // Using Fi icons as standard
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { hasPermission } from '../../utils/permissions';
 
 const LinkItems = [
-    { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard' },
-    { name: 'Products (Admin)', icon: FiBox, path: '/admin/products' },
-    { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries' },
-    { name: 'Daily Report', icon: FiDollarSign, path: '/admin/employee-expenses' },
-    { name: 'Drafting Work', icon: FiEdit3, path: '/admin/drafting-work' },
-    { name: 'Invoice Report', icon: FiFileText, path: '/admin/invoice-report' },
+    { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: null },
+    { name: 'Products (Admin)', icon: FiBox, path: '/admin/products', permissionKey: 'products' },
+    { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries', permissionKey: 'enquiries' },
 ];
 
 const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
@@ -39,14 +37,27 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
             <Box px="8" py="4" mb="4" borderBottom="1px" borderColor="gray.100">
                 <Text fontSize="xs" color="gray.500" fontWeight="bold" textTransform="uppercase">Logged in as</Text>
                 <Text fontWeight="bold" color="brand.600" noOfLines={1}>{user?.name || 'Admin'}</Text>
+                {!user?.isSuperAdmin && !user?.permissions && (
+                    <Text mt={2} color="red.500" fontSize="xs" fontWeight="bold" bg="red.50" p={2} borderRadius="md" border="1px solid" borderColor="red.200">
+                        ⚠️ OUTDATED LOGIN TOKEN.<br/>Please LOG OUT and LOG IN again to apply permissions!
+                    </Text>
+                )}
             </Box>
 
             <Box flex="1">
-                {LinkItems.map((link) => (
-                    <NavItem key={link.name} icon={link.icon} path={link.path}>
-                        {link.name}
+                {LinkItems.map((link) => {
+                    if (link.permissionKey && !hasPermission(user, link.permissionKey, 'read')) return null;
+                    return (
+                        <NavItem key={link.name} icon={link.icon} path={link.path}>
+                            {link.name}
+                        </NavItem>
+                    );
+                })}
+                {user?.isSuperAdmin && (
+                    <NavItem icon={FiLock} path="/admin/permissions">
+                        Permissions
                     </NavItem>
-                ))}
+                )}
             </Box>
 
             {/* Public Navigation */}
@@ -161,14 +172,20 @@ const MobileNav = ({ onOpen, ...rest }) => {
 
 const AdminLayout = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
-    const { user, logout, loading } = useAuth();
+    const { user, logout, loading, refreshUser } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
 
     useEffect(() => {
         if (!loading && (!user || !user.isAdmin)) {
             navigate('/');
         }
     }, [user, loading, navigate]);
+
+    // Live Background Sync
+    useEffect(() => {
+        if (refreshUser) refreshUser();
+    }, [location.pathname]);
 
     if (loading) return null;
     if (!user || !user.isAdmin) return null;

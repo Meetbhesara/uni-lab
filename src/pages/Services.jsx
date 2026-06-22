@@ -6,14 +6,14 @@ import {
     Table, Thead, Tbody, Tr, Th, Td, TableContainer, Tag, TagLabel, Wrap, WrapItem, Avatar,
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
-    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton
+    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
     FaUserTie, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope, FaIdCard, FaCamera,
     FaHandshake, FaFingerprint, FaIdBadge, FaMap,
     FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt, FaUndo, FaListUl,
-    FaSearch, FaCar, FaFolderOpen
+    FaSearch, FaCar, FaFolderOpen, FaCopy, FaPrint
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -155,6 +155,7 @@ const VehicleMasterForm = () => {
     const [viewMode, setViewMode] = useState('table');
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
+    const [activeTab, setActiveTab] = useState(0);
 
     const filteredVehicles = vehicles.filter(v =>
         v.vehicleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -336,6 +337,7 @@ const VehicleMasterForm = () => {
                                     onClick={() => {
                                         setEditId(null);
                                         setFormData({ vehicleNumber: '', vehicleName: '', insuranceDate: '', pucDate: '', serviceDate: '', logInName: user?.name || '' });
+                                        setActiveTab(0);
                                     }} borderRadius="xl"
                                 >
                                     Add New
@@ -343,8 +345,15 @@ const VehicleMasterForm = () => {
                             </HStack>
                         </Stack>
                     </Box>
-                    <CardBody p={10}>
-                        <form onSubmit={handleSubmit}>
+                    <CardBody p={{ base: 4, md: 10 }}>
+                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="purple" variant="soft-rounded">
+                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'purple.500', shadow: 'md' }}>Form</Tab>
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'purple.500', shadow: 'md' }}>View</Tab>
+                            </TabList>
+                            <TabPanels>
+                                <TabPanel p={0}>
+                                    <form onSubmit={handleSubmit}>
                             <VStack spacing={8}>
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8} w="full">
                                     <FormControl isRequired>
@@ -507,7 +516,8 @@ const VehicleMasterForm = () => {
                                 )}
                             </VStack>
                         </form>
-
+                                </TabPanel>
+                                <TabPanel p={0}>
                         {/* Vehicle List View */}
                         <Box mt={10}>
                             <Flex justify="space-between" align="center" mb={4}>
@@ -666,6 +676,9 @@ const VehicleMasterForm = () => {
                                 </ModalFooter>
                             </ModalContent>
                         </Modal>
+                                </TabPanel>
+                            </TabPanels>
+                        </Tabs>
                     </CardBody>
                 </Card>
             </Container>
@@ -708,20 +721,26 @@ const EmployeeMasterForm = () => {
         ifscCode: '',
         salary: '',
         designation: '',
+        paymentMode: 'Cash',
+        paymentStatus: 'Pending',
+        foodAllowance: 'Food',
+        status: 'Active',
     });
     const [files, setFiles] = useState({
         photo: null,
         aadharCard: null,
         panCard: null,
         voterId: null,
-        drivingLicense: null
+        drivingLicense: null,
+        bankDocuments: []
     });
     const [photoPreview, setPhotoPreview] = useState(null);
     const [existingDocs, setExistingDocs] = useState({
         aadharCard: null,
         panCard: null,
         voterId: null,
-        drivingLicense: null
+        drivingLicense: null,
+        bankDocuments: []
     });
     const [sameAsAddress, setSameAsAddress] = useState(false);
     const [bankVerified, setBankVerified] = useState(false);
@@ -735,6 +754,23 @@ const EmployeeMasterForm = () => {
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
+
+    const tabConfig = [
+        { id: 'form', label: 'Form', permission: 'canViewForm' },
+        { id: 'view', label: 'View', permission: 'canViewList' },
+        { id: 'payment', label: 'Payment Report', permission: 'canViewList' },
+    ];
+    const [employeeActiveTab, setEmployeeActiveTab] = useState(0);
+
+    const [reportSearchQuery, setReportSearchQuery] = useState('');
+    const [reportPaymentModeFilter, setReportPaymentModeFilter] = useState('All');
+    const [reportPaymentStatusFilter, setReportPaymentStatusFilter] = useState('All');
+    const [reportMonthFilter, setReportMonthFilter] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+    const [reportFoodFilter, setReportFoodFilter] = useState('All');
+    const [reportStatusFilter, setReportStatusFilter] = useState('All');
 
     const filteredEmployees = employees.filter(emp =>
         emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -773,10 +809,14 @@ const EmployeeMasterForm = () => {
                 emergencyContact: { name: '', phone: '' },
                 bankName: '', accountName: '', accountNumber: '', confirmAccountNumber: '', ifscCode: '',
                 salary: '',
-                designation: ''
+                designation: '',
+                paymentMode: 'Cash',
+                paymentStatus: 'Pending',
+                foodAllowance: 'Food',
+                status: 'Active',
             });
-            setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
-            setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
+            setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
+            setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
             setPhotoPreview(null);
             setSameAsAddress(false);
             setBankVerified(false);
@@ -801,16 +841,23 @@ const EmployeeMasterForm = () => {
                 ifscCode: emp.bankDetails?.ifscCode || '',
                 salary: emp.salary || '',
                 designation: emp.designation || '',
+                paymentMode: emp.paymentMode || 'Cash',
+                paymentStatus: emp.paymentStatus || 'Pending',
+                foodAllowance: emp.foodAllowance || 'Food',
+                status: emp.status || 'Active',
             });
             setPhotoPreview(emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : null);
-            setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
+            setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
             setExistingDocs({
                 aadharCard: emp.aadharCard || null,
                 panCard: emp.panCard || null,
                 voterId: emp.voterId || null,
-                drivingLicense: emp.drivingLicense || null
+                drivingLicense: emp.drivingLicense || null,
+                bankDocuments: emp.bankDetails?.documents || []
             });
             if (emp.bankDetails?.ifscCode) setBankVerified(true);
+            const formIdx = tabConfig.findIndex(t => t.id === 'form');
+            if (formIdx !== -1) setEmployeeActiveTab(formIdx);
         }
     };
 
@@ -866,13 +913,34 @@ const EmployeeMasterForm = () => {
     };
 
     const handleFileChange = (e, field) => {
-        const file = e.target.files[0];
-        setFiles(prev => ({ ...prev, [field]: file }));
-        if (field === 'photo' && file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => setPhotoPreview(ev.target.result);
-            reader.readAsDataURL(file);
+        if (field === 'bankDocuments') {
+            const selectedFiles = Array.from(e.target.files);
+            setFiles(prev => ({ ...prev, [field]: [...(prev[field] || []), ...selectedFiles] }));
+        } else {
+            const file = e.target.files[0];
+            setFiles(prev => ({ ...prev, [field]: file }));
+            if (field === 'photo' && file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => setPhotoPreview(ev.target.result);
+                reader.readAsDataURL(file);
+            }
         }
+    };
+
+    const removeBankDocument = (index) => {
+        setFiles(prev => {
+            const newDocs = [...(prev.bankDocuments || [])];
+            newDocs.splice(index, 1);
+            return { ...prev, bankDocuments: newDocs };
+        });
+    };
+
+    const removeExistingBankDoc = (index) => {
+        setExistingDocs(prev => {
+            const newDocs = [...(prev.bankDocuments || [])];
+            newDocs.splice(index, 1);
+            return { ...prev, bankDocuments: newDocs };
+        });
     };
 
     const handleCheckboxChange = (e) => {
@@ -969,10 +1037,22 @@ const EmployeeMasterForm = () => {
             }));
             uploadData.append('salary', formData.salary);
             uploadData.append('designation', formData.designation);
+            uploadData.append('paymentMode', formData.paymentMode || 'Cash');
+            uploadData.append('paymentStatus', formData.paymentStatus || 'Pending');
+            uploadData.append('foodAllowance', formData.foodAllowance || 'Food');
+            uploadData.append('status', formData.status || 'Active');
 
             Object.keys(files).forEach(key => {
-                if (files[key]) uploadData.append(key, files[key]);
+                if (Array.isArray(files[key])) {
+                    files[key].forEach(f => uploadData.append(key, f));
+                } else if (files[key]) {
+                    uploadData.append(key, files[key]);
+                }
             });
+
+            if (editId) {
+                uploadData.append('existingBankDocuments', JSON.stringify(existingDocs.bankDocuments || []));
+            }
 
             let response;
             if (editId) {
@@ -995,16 +1075,22 @@ const EmployeeMasterForm = () => {
                     accountNumber: '',
                     ifscCode: '',
                     salary: '',
-                    designation: ''
+                    designation: '',
+                    paymentMode: 'Cash',
+                    paymentStatus: 'Pending',
+                    foodAllowance: 'Food',
+                    status: 'Active',
                 });
-                setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
-                setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null });
+                setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
+                setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
                 setPhotoPreview(null);
                 setSameAsAddress(false);
                 setBankVerified(false);
                 setEditId('');
                 fetchNextEmpId();
                 fetchEmployees();
+                const viewIdx = tabConfig.findIndex(t => t.id === 'view');
+                if (viewIdx !== -1) setEmployeeActiveTab(viewIdx);
             }
         } catch (error) {
             toast({ title: "Error", description: error.response?.data?.message || "Failed to store record", status: "error", duration: 3000 });
@@ -1076,6 +1162,69 @@ const EmployeeMasterForm = () => {
         );
     };
 
+    const getMonthlyPayment = (emp, month) => {
+        return emp.monthlyPayments?.find(p => p.month === month) || { paymentMode: 'Cash', paymentStatus: 'Pending' };
+    };
+
+    const exportPaymentReportToCSV = () => {
+        const month = reportMonthFilter;
+        const reportRows = employees.filter(emp => {
+            const monthData = getMonthlyPayment(emp, month);
+            const matchesSearch = emp.name?.toLowerCase().includes(reportSearchQuery.toLowerCase()) || emp.empId?.toLowerCase().includes(reportSearchQuery.toLowerCase());
+            const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
+            const matchesStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
+            const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
+            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
+            return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
+        });
+
+        const headers = ['SR. NO.', 'Month', 'Employee ID', 'Name', 'Bank A/C No', 'IFSC Code', 'Monthly Salary (INR)', 'Food Allowance', 'Payment Mode', 'Payment Status', 'Employee Status'];
+        const rows = reportRows.map((emp, idx) => {
+            const monthData = getMonthlyPayment(emp, month);
+            return [
+                idx + 1,
+                month,
+                emp.empId || '',
+                emp.name || '',
+                emp.bankDetails?.accountNumber || '',
+                emp.bankDetails?.ifscCode || '',
+                emp.salary || 0,
+                emp.foodAllowance || 'Food',
+                monthData.paymentMode,
+                monthData.paymentStatus,
+                emp.status || 'Active',
+            ];
+        });
+
+        // BOM for Excel UTF-8 support
+        const BOM = '\uFEFF';
+        const csvContent = BOM + [headers.join(','), ...rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Employee_Payment_Report_${month}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleUpdatePaymentField = async (employeeId, field, value) => {
+        try {
+            const res = await api.put(`/employee-master/${employeeId}/monthly-payment`, {
+                month: reportMonthFilter,
+                [field]: value
+            });
+            if (res.data.success) {
+                toast({ title: "Updated", description: `Changed payment ${field === 'paymentMode' ? 'mode' : 'status'} successfully.`, status: "success", duration: 2000 });
+                fetchEmployees();
+            }
+        } catch (error) {
+            toast({ title: "Error", description: error.response?.data?.message || "Failed to update record", status: "error", duration: 3000 });
+        }
+    };
+
     return (
         <Box py={5} bg="gray.100" minH="100vh">
             <Container maxW="container.lg">
@@ -1095,7 +1244,19 @@ const EmployeeMasterForm = () => {
                                     borderRadius="xl"
                                     w={{ base: "full", md: "250px" }}
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) => {
+                                        setSearchQuery(e.target.value);
+                                        const viewIdx = tabConfig.findIndex(t => t.id === 'view');
+                                        if (viewIdx !== -1 && employeeActiveTab !== viewIdx) {
+                                            setEmployeeActiveTab(viewIdx);
+                                        }
+                                    }}
+                                    onClick={() => {
+                                        const viewIdx = tabConfig.findIndex(t => t.id === 'view');
+                                        if (viewIdx !== -1 && employeeActiveTab !== viewIdx) {
+                                            setEmployeeActiveTab(viewIdx);
+                                        }
+                                    }}
                                 />
                                 <IconButton
                                     icon={<Icon as={viewMode === 'table' ? FaUsers : FaUsers} />}
@@ -1108,7 +1269,11 @@ const EmployeeMasterForm = () => {
                                 <Button
                                     colorScheme="green"
                                     leftIcon={<Icon as={FaUsers} />}
-                                    onClick={() => handleSelectEmployee({ target: { value: '' } })}
+                                    onClick={() => {
+                                        handleSelectEmployee({ target: { value: '' } });
+                                        const formIdx = tabConfig.findIndex(t => t.id === 'form');
+                                        if (formIdx !== -1) setEmployeeActiveTab(formIdx);
+                                    }}
                                     borderRadius="xl"
                                 >
                                     Add New
@@ -1117,7 +1282,19 @@ const EmployeeMasterForm = () => {
                         </Stack>
                     </Box>
                     <CardBody p={{ base: 4, md: 10 }}>
-                        <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
+                        <Tabs index={employeeActiveTab} onChange={(idx) => setEmployeeActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
+                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                {tabConfig.map((tab, idx) => (
+                                    <Tab key={tab.id} fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>
+                                        {tab.label}
+                                    </Tab>
+                                ))}
+                            </TabList>
+
+                            <TabPanels>
+                                {/* ── Tab 1: Form ── */}
+                                <TabPanel p={0}>
+                                    <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
                             <VStack spacing={8} align="stretch">
 
                                 {/* ── Section 1: Basic Info + Photo ── */}
@@ -1196,6 +1373,33 @@ const EmployeeMasterForm = () => {
                                                         <Icon as={FaEnvelope} ml={2} color="blue.500" />
                                                         <Input variant="unstyled" p={2} type="email" placeholder="email@company.com" value={formData.email} onChange={(e) => handleChange(e, 'email')} />
                                                     </HStack>
+                                                </FormControl>
+                                            </SimpleGrid>
+
+                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
+                                                <FormControl>
+                                                    <FormLabel fontWeight="bold" fontSize="sm">🍽️ Food Allowance</FormLabel>
+                                                    <Select
+                                                        borderRadius="xl"
+                                                        bg="green.50"
+                                                        value={formData.foodAllowance || 'Food'}
+                                                        onChange={(e) => handleChange(e, 'foodAllowance')}
+                                                    >
+                                                        <option value="Food">🍱 Food Included</option>
+                                                        <option value="Without Food">🚫 Without Food</option>
+                                                    </Select>
+                                                </FormControl>
+                                                <FormControl>
+                                                    <FormLabel fontWeight="bold" fontSize="sm">👤 Employee Status</FormLabel>
+                                                    <Select
+                                                        borderRadius="xl"
+                                                        bg={formData.status === 'Active' ? 'green.50' : 'red.50'}
+                                                        value={formData.status || 'Active'}
+                                                        onChange={(e) => handleChange(e, 'status')}
+                                                    >
+                                                        <option value="Active">✅ Active</option>
+                                                        <option value="Deactive">❌ Deactive</option>
+                                                    </Select>
                                                 </FormControl>
                                             </SimpleGrid>
 
@@ -1330,6 +1534,32 @@ const EmployeeMasterForm = () => {
                                             <Input borderRadius="lg" bg="white" placeholder="Confirm Account Number" value={formData.confirmAccountNumber} onChange={(e) => handleChange(e, 'confirmAccountNumber')} type="text" />
                                         </FormControl>
                                     </SimpleGrid>
+
+                                    <FormControl mt={6}>
+                                        <FormLabel fontWeight="bold" fontSize="sm">Bank Documents (Passbook / Cancelled Cheque / Statement)</FormLabel>
+                                        <Box p={4} border="2px dashed" borderColor="green.300" borderRadius="xl" bg="white" textAlign="center" cursor="pointer" onClick={() => document.getElementById('bankDocuments-upload').click()} _hover={{ bg: "green.50", borderColor: "green.500" }}>
+                                            <input type="file" id="bankDocuments-upload" multiple hidden onChange={(e) => handleFileChange(e, 'bankDocuments')} accept="image/*,.pdf" />
+                                            <Icon as={FaCloudUploadAlt} w={6} h={6} color="green.500" mb={2} />
+                                            <Text fontSize="sm" fontWeight="bold" color="green.700">Click to upload bank documents</Text>
+                                        </Box>
+                                        
+                                        {(existingDocs?.bankDocuments?.length > 0 || files?.bankDocuments?.length > 0) && (
+                                            <VStack align="stretch" mt={3} spacing={2}>
+                                                {existingDocs?.bankDocuments?.map((doc, idx) => (
+                                                    <HStack key={`ex-${idx}`} p={2} bg="white" borderRadius="md" borderWidth="1px" justifyContent="space-between">
+                                                        <Text fontSize="xs" noOfLines={1}>📎 {doc.name || 'Existing Document'}</Text>
+                                                        <Button size="xs" colorScheme="red" variant="ghost" onClick={() => removeExistingBankDoc(idx)}><FaTrash /></Button>
+                                                    </HStack>
+                                                ))}
+                                                {files?.bankDocuments?.map((file, idx) => (
+                                                    <HStack key={`new-${idx}`} p={2} bg="green.50" borderRadius="md" borderWidth="1px" borderColor="green.200" justifyContent="space-between">
+                                                        <Text fontSize="xs" noOfLines={1} color="green.800">📄 {file.name}</Text>
+                                                        <Button size="xs" colorScheme="red" variant="ghost" onClick={() => removeBankDocument(idx)}><FaTrash /></Button>
+                                                    </HStack>
+                                                ))}
+                                            </VStack>
+                                        )}
+                                    </FormControl>
                                 </Box>
 
                                 <Divider />
@@ -1366,9 +1596,12 @@ const EmployeeMasterForm = () => {
                                 </Button>
                             </VStack>
                         </form>
+                                </TabPanel>
 
-                        {/* Employee List View */}
-                        <Box mt={10}>
+                                {/* ── Tab 2: View (List) ── */}
+                                <TabPanel p={0}>
+                                    {/* Employee List View */}
+                                    <Box mt={4}>
                             <Flex justify="space-between" align="center" mb={4}>
                                 <Heading size="md" color="blue.700" display="flex" alignItems="center">
                                     <Icon as={FaUsers} mr={2} /> Registered Employees ({filteredEmployees.length})
@@ -1445,7 +1678,242 @@ const EmployeeMasterForm = () => {
                                     </VStack>
                                 </Center>
                             )}
-                        </Box>
+                                    </Box>
+                                </TabPanel>
+
+                                {/* ── Tab 3: Payment Report ── */}
+                                <TabPanel p={0}>
+                                    {(() => {
+                                        const reportFiltered = employees.filter(emp => {
+                                            const monthData = getMonthlyPayment(emp, reportMonthFilter);
+                                            const matchesSearch = emp.name?.toLowerCase().includes(reportSearchQuery.toLowerCase()) || emp.empId?.toLowerCase().includes(reportSearchQuery.toLowerCase());
+                                            const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
+                                            const matchesPayStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
+                                            const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
+                                            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
+                                            return matchesSearch && matchesMode && matchesPayStatus && matchesFood && matchesEmpStatus;
+                                        });
+                                        return (
+                                            <VStack spacing={5} align="stretch" mt={4}>
+                                                {/* Summary Stats */}
+                                                <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
+                                                    <Box bgGradient="linear(to-br, blue.500, blue.700)" p={4} borderRadius="2xl" color="white" boxShadow="md">
+                                                        <Text fontSize="10px" fontWeight="black" opacity={0.8} textTransform="uppercase">Monthly Payout</Text>
+                                                        <Heading size="md" mt={1}>₹{employees.reduce((a, e) => a + parseFloat(e.salary || 0), 0).toLocaleString()}</Heading>
+                                                        <Text fontSize="10px" opacity={0.7} mt={1}>{employees.length} Employees · {reportMonthFilter}</Text>
+                                                    </Box>
+                                                    <Box bgGradient="linear(to-br, green.500, green.700)" p={4} borderRadius="2xl" color="white" boxShadow="md">
+                                                        <Text fontSize="10px" fontWeight="black" opacity={0.8} textTransform="uppercase">Disbursed ✅</Text>
+                                                        <Heading size="md" mt={1}>₹{employees.filter(e => getMonthlyPayment(e, reportMonthFilter).paymentStatus === 'Done').reduce((a, e) => a + parseFloat(e.salary || 0), 0).toLocaleString()}</Heading>
+                                                        <Text fontSize="10px" opacity={0.7} mt={1}>{employees.filter(e => getMonthlyPayment(e, reportMonthFilter).paymentStatus === 'Done').length} Paid</Text>
+                                                    </Box>
+                                                    <Box bgGradient="linear(to-br, orange.400, orange.600)" p={4} borderRadius="2xl" color="white" boxShadow="md">
+                                                        <Text fontSize="10px" fontWeight="black" opacity={0.8} textTransform="uppercase">Pending ⏳</Text>
+                                                        <Heading size="md" mt={1}>₹{employees.filter(e => getMonthlyPayment(e, reportMonthFilter).paymentStatus !== 'Done').reduce((a, e) => a + parseFloat(e.salary || 0), 0).toLocaleString()}</Heading>
+                                                        <Text fontSize="10px" opacity={0.7} mt={1}>{employees.filter(e => getMonthlyPayment(e, reportMonthFilter).paymentStatus !== 'Done').length} Pending</Text>
+                                                    </Box>
+                                                    <Box bgGradient="linear(to-br, purple.500, purple.700)" p={4} borderRadius="2xl" color="white" boxShadow="md">
+                                                        <Text fontSize="10px" fontWeight="black" opacity={0.8} textTransform="uppercase">Active Staff</Text>
+                                                        <Heading size="md" mt={1}>{employees.filter(e => e.status === 'Active').length}</Heading>
+                                                        <Text fontSize="10px" opacity={0.7} mt={1}>🍱 Food: {employees.filter(e => e.foodAllowance === 'Food').length} | 🚫 No Food: {employees.filter(e => e.foodAllowance === 'Without Food').length}</Text>
+                                                    </Box>
+                                                </SimpleGrid>
+
+                                                {/* Filter Bar */}
+                                                <Box bg="gray.50" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                                    <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={3} textTransform="uppercase">🔍 Filter & Export — {reportMonthFilter}</Text>
+                                                    <SimpleGrid columns={{ base: 2, md: 6 }} spacing={3} alignItems="flex-end">
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>MONTH</Text>
+                                                            <Input
+                                                                type="month"
+                                                                bg="white"
+                                                                size="sm"
+                                                                borderRadius="lg"
+                                                                value={reportMonthFilter}
+                                                                onChange={(e) => setReportMonthFilter(e.target.value)}
+                                                            />
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>SEARCH</Text>
+                                                            <Input
+                                                                bg="white"
+                                                                placeholder="Name / ID..."
+                                                                size="sm"
+                                                                borderRadius="lg"
+                                                                value={reportSearchQuery}
+                                                                onChange={(e) => setReportSearchQuery(e.target.value)}
+                                                            />
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>PAY MODE</Text>
+                                                            <Select bg="white" size="sm" borderRadius="lg" value={reportPaymentModeFilter} onChange={(e) => setReportPaymentModeFilter(e.target.value)}>
+                                                                <option value="All">All Modes</option>
+                                                                <option value="Cash">💵 Cash</option>
+                                                                <option value="Cheque">✍️ Cheque</option>
+                                                                <option value="UPI">📱 UPI</option>
+                                                            </Select>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>PAY STATUS</Text>
+                                                            <Select bg="white" size="sm" borderRadius="lg" value={reportPaymentStatusFilter} onChange={(e) => setReportPaymentStatusFilter(e.target.value)}>
+                                                                <option value="All">All Status</option>
+                                                                <option value="Pending">⏳ Pending</option>
+                                                                <option value="Done">✅ Done</option>
+                                                            </Select>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>FOOD</Text>
+                                                            <Select bg="white" size="sm" borderRadius="lg" value={reportFoodFilter} onChange={(e) => setReportFoodFilter(e.target.value)}>
+                                                                <option value="All">All</option>
+                                                                <option value="Food">🍱 Food</option>
+                                                                <option value="Without Food">🚫 No Food</option>
+                                                            </Select>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>EMP STATUS</Text>
+                                                            <Select bg="white" size="sm" borderRadius="lg" value={reportStatusFilter} onChange={(e) => setReportStatusFilter(e.target.value)}>
+                                                                <option value="All">All</option>
+                                                                <option value="Active">✅ Active</option>
+                                                                <option value="Deactive">❌ Deactive</option>
+                                                            </Select>
+                                                        </Box>
+                                                    </SimpleGrid>
+                                                    <HStack mt={3} spacing={2} justify="flex-end">
+                                                        <Button leftIcon={<Icon as={FaCopy} />} colorScheme="blue" variant="outline" borderRadius="xl" onClick={exportPaymentReportToCSV} size="sm">
+                                                            Export CSV ({reportFiltered.length})
+                                                        </Button>
+                                                        <Button leftIcon={<Icon as={FaPrint} />} colorScheme="purple" variant="solid" borderRadius="xl" onClick={() => window.print()} size="sm">
+                                                            Print
+                                                        </Button>
+                                                    </HStack>
+                                                </Box>
+
+                                                {/* Payment Report Table — no horizontal scroll */}
+                                                <Box bg="white" borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm" overflow="hidden">
+                                                    <Table variant="simple" size="sm">
+                                                        <Thead>
+                                                            <Tr bgGradient="linear(to-r, blue.600, blue.800)">
+                                                                <Th color="white" py={4} fontSize="10px">#</Th>
+                                                                <Th color="white" py={4} fontSize="10px">EMP ID</Th>
+                                                                <Th color="white" py={4} fontSize="10px">NAME</Th>
+                                                                <Th color="white" py={4} fontSize="10px">BANK A/C NO</Th>
+                                                                <Th color="white" py={4} fontSize="10px">IFSC CODE</Th>
+                                                                <Th color="white" py={4} fontSize="10px" isNumeric>SALARY</Th>
+                                                                <Th color="white" py={4} fontSize="10px">FOOD</Th>
+                                                                <Th color="white" py={4} fontSize="10px">PAY TYPE</Th>
+                                                                <Th color="white" py={4} fontSize="10px">STATUS</Th>
+                                                                <Th color="white" py={4} fontSize="10px" textAlign="center">EMP STATUS</Th>
+                                                            </Tr>
+                                                        </Thead>
+                                                        <Tbody>
+                                                            {reportFiltered.length === 0 ? (
+                                                                <Tr>
+                                                                    <Td colSpan={8} textAlign="center" py={10} color="gray.400">
+                                                                        <VStack spacing={2}>
+                                                                            <Icon as={FaUsers} w={8} h={8} color="gray.200" />
+                                                                            <Text fontSize="sm">No records match current filters</Text>
+                                                                        </VStack>
+                                                                    </Td>
+                                                                </Tr>
+                                                            ) : reportFiltered.map((emp, idx) => {
+                                                                const monthData = getMonthlyPayment(emp, reportMonthFilter);
+                                                                const isDone = monthData.paymentStatus === 'Done';
+                                                                const isDeactive = emp.status === 'Deactive';
+                                                                const rowBg = isDeactive ? 'red.50' : isDone ? 'green.50' : idx % 2 === 0 ? 'white' : 'gray.50';
+                                                                return (
+                                                                    <Tr key={emp._id} bg={rowBg} _hover={{ bg: isDone ? 'green.100' : isDeactive ? 'red.100' : 'blue.50' }} transition="background 0.15s">
+                                                                        <Td fontSize="xs" fontWeight="bold" color="gray.500">{idx + 1}</Td>
+                                                                        <Td fontSize="xs" fontWeight="bold" color="blue.600">{emp.empId}</Td>
+                                                                        <Td>
+                                                                            <HStack spacing={2}>
+                                                                                <Avatar size="xs" src={emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : undefined} name={emp.name} />
+                                                                                <Text fontSize="xs" fontWeight="bold" noOfLines={1}>{emp.name}</Text>
+                                                                            </HStack>
+                                                                        </Td>
+                                                                        <Td fontSize="xs" color="gray.700">{emp.bankDetails?.accountNumber || '-'}</Td>
+                                                                        <Td fontSize="xs" color="gray.700">{emp.bankDetails?.ifscCode || '-'}</Td>
+                                                                        <Td isNumeric>
+                                                                            <Text fontSize="xs" fontWeight="black" color="green.700">₹{parseFloat(emp.salary || 0).toLocaleString()}</Text>
+                                                                        </Td>
+                                                                        <Td>
+                                                                            <Badge size="sm" colorScheme={emp.foodAllowance === 'Food' ? 'green' : 'gray'} borderRadius="full" px={2} fontSize="9px">
+                                                                                {emp.foodAllowance === 'Food' ? '🍱 Food' : '🚫 No Food'}
+                                                                            </Badge>
+                                                                        </Td>
+                                                                        <Td>
+                                                                            <Select
+                                                                                size="xs"
+                                                                                borderRadius="lg"
+                                                                                value={monthData.paymentMode}
+                                                                                onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentMode', e.target.value)}
+                                                                                w="100px"
+                                                                                fontSize="xs"
+                                                                                bg={monthData.paymentMode === 'UPI' ? 'purple.50' : monthData.paymentMode === 'Cheque' ? 'orange.50' : 'blue.50'}
+                                                                                border="1px solid"
+                                                                                borderColor={monthData.paymentMode === 'UPI' ? 'purple.200' : monthData.paymentMode === 'Cheque' ? 'orange.200' : 'blue.200'}
+                                                                            >
+                                                                                <option value="Cash">💵 Cash</option>
+                                                                                <option value="Cheque">✍️ Cheque</option>
+                                                                                <option value="UPI">📱 UPI</option>
+                                                                            </Select>
+                                                                        </Td>
+                                                                        <Td>
+                                                                            <Select
+                                                                                size="xs"
+                                                                                borderRadius="lg"
+                                                                                value={monthData.paymentStatus}
+                                                                                onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentStatus', e.target.value)}
+                                                                                w="105px"
+                                                                                fontSize="xs"
+                                                                                fontWeight="bold"
+                                                                                color={isDone ? 'green.700' : 'orange.700'}
+                                                                                bg={isDone ? 'green.50' : 'orange.50'}
+                                                                                border="1px solid"
+                                                                                borderColor={isDone ? 'green.200' : 'orange.200'}
+                                                                            >
+                                                                                <option value="Pending">⏳ Pending</option>
+                                                                                <option value="Done">✅ Done</option>
+                                                                            </Select>
+                                                                        </Td>
+                                                                        <Td textAlign="center">
+                                                                            <Badge
+                                                                                colorScheme={isDeactive ? 'red' : 'green'}
+                                                                                variant="solid"
+                                                                                borderRadius="full"
+                                                                                px={3}
+                                                                                fontSize="9px"
+                                                                            >
+                                                                                {isDeactive ? '❌ Deactive' : '✅ Active'}
+                                                                            </Badge>
+                                                                        </Td>
+                                                                    </Tr>
+                                                                );
+                                                            })}
+                                                        </Tbody>
+                                                    </Table>
+                                                </Box>
+
+                                                {reportFiltered.length > 0 && (
+                                                    <Box bg="blue.50" p={3} borderRadius="xl" border="1px solid" borderColor="blue.100">
+                                                        <HStack justify="space-between" wrap="wrap" spacing={4}>
+                                                            <Text fontSize="xs" color="blue.700" fontWeight="bold">
+                                                                Showing {reportFiltered.length} of {employees.length} employees · Month: {reportMonthFilter}
+                                                            </Text>
+                                                            <Text fontSize="xs" color="blue.700" fontWeight="bold">
+                                                                Total: ₹{reportFiltered.reduce((a, e) => a + parseFloat(e.salary || 0), 0).toLocaleString()}
+                                                            </Text>
+                                                        </HStack>
+                                                    </Box>
+                                                )}
+                                            </VStack>
+                                        );
+                                    })()}
+                                </TabPanel>
+
+                            </TabPanels>
+                        </Tabs>
+
                         {/* Standardized Employee View Modal */}
                         <Modal isOpen={!!viewEmployee} onClose={() => setViewEmployee(null)} size="4xl" isCentered motionPreset="slideInBottom">
                             <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
@@ -1612,6 +2080,7 @@ const ClientMasterForm = () => {
     const [viewClient, setViewClient] = useState(null);
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
+    const [activeTab, setActiveTab] = useState(0);
 
     const filteredClients = clients.filter(c =>
         c.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1782,7 +2251,10 @@ const ClientMasterForm = () => {
                                 />
                                 <Button
                                     colorScheme="green" leftIcon={<Icon as={FaUserTie} />}
-                                    onClick={() => handleSelectClient({ target: { value: '' } })} borderRadius="xl"
+                                    onClick={() => {
+                                        handleSelectClient({ target: { value: '' } });
+                                        setActiveTab(0);
+                                    }} borderRadius="xl"
                                 >
                                     Add New
                                 </Button>
@@ -1790,6 +2262,13 @@ const ClientMasterForm = () => {
                         </Stack>
                     </Box>
                     <CardBody p={{ base: 5, md: 10 }}>
+                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="orange" variant="soft-rounded">
+                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'orange.500', shadow: 'md' }}>Form</Tab>
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'orange.500', shadow: 'md' }}>View</Tab>
+                            </TabList>
+                            <TabPanels>
+                                <TabPanel p={0}>
                         <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
                             <VStack spacing={8} align="stretch">
                                 <FormControl isRequired>
@@ -1881,7 +2360,8 @@ const ClientMasterForm = () => {
                                 </Button>
                             </VStack>
                         </form>
-
+                                </TabPanel>
+                                <TabPanel p={0}>
                         {/* Client List View */}
                         <Box mt={10}>
                             <Flex justify="space-between" align="center" mb={4}>
@@ -2038,6 +2518,9 @@ const ClientMasterForm = () => {
                                 </ModalFooter>
                             </ModalContent>
                         </Modal>
+                                </TabPanel>
+                            </TabPanels>
+                        </Tabs>
                     </CardBody>
                 </Card>
             </Container>
@@ -2074,6 +2557,7 @@ const SiteMasterForm = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [tableSearch, setTableSearch] = useState('');
     const [viewMode, setViewMode] = useState('table');
+    const [activeTab, setActiveTab] = useState(0);
 
     const [formData, setFormData] = useState({
         client: '',
@@ -2336,6 +2820,7 @@ const SiteMasterForm = () => {
                                         setEditId('');
                                         setFormData({ client: '', siteName: '', siteAddress: '', siteLocation: '', ledger: '', amount: '' });
                                         setContactPersons([{ name: '', phone: '' }]);
+                                        setActiveTab(0);
                                     }} borderRadius="xl"
                                 >
                                     Add New
@@ -2344,6 +2829,13 @@ const SiteMasterForm = () => {
                         </Stack>
                     </Box>
                     <CardBody p={{ base: 4, md: 10 }}>
+                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="teal" variant="soft-rounded">
+                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'teal.500', shadow: 'md' }}>Form</Tab>
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'teal.500', shadow: 'md' }}>View</Tab>
+                            </TabList>
+                            <TabPanels>
+                                <TabPanel p={0}>
                         <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
                             <VStack spacing={6} align="stretch">
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
@@ -2556,7 +3048,8 @@ const SiteMasterForm = () => {
                                 </Button>
                             </VStack>
                         </form>
-
+                                </TabPanel>
+                                <TabPanel p={0}>
                         {/* Site List View */}
                         <Box mt={10}>
                             <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={4}>
@@ -2832,6 +3325,9 @@ const SiteMasterForm = () => {
                                 </ModalFooter>
                             </ModalContent>
                         </Modal>
+                                </TabPanel>
+                            </TabPanels>
+                        </Tabs>
                     </CardBody>
                 </Card>
             </Container>
@@ -3666,7 +4162,9 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                     fontWeight="bold"
                                     h="50px"
                                 >
-                                    {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+                                    {employees.filter(e => e.status !== 'Deactive' || e._id === formData.operative).map(e => (
+                                        <option key={e._id} value={e._id}>{e.name}</option>
+                                    ))}
                                 </Select>
                             </FormControl>
                         </SimpleGrid>
@@ -3697,7 +4195,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                             </FormLabel>
                             <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg="white">
                                 <SimpleGrid columns={2} spacing={3}>
-                                    {employees.filter(e => e._id !== formData.operative).map(e => {
+                                    {employees.filter(e => (e.status !== 'Deactive' || formData.helpers.includes(e._id)) && e._id !== formData.operative).map(e => {
                                         const isSelected = formData.helpers.includes(e._id);
                                         return (
                                             <HStack 
@@ -4007,6 +4505,7 @@ const InstrumentMasterForm = () => {
     const [photoPreviews, setPhotoPreviews] = useState([]);
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
+    const [activeTab, setActiveTab] = useState(0);
 
     const [formData, setFormData] = useState({ model: '', serialNo: '', instrumentName: '', notes: '' });
 
@@ -4127,6 +4626,13 @@ const InstrumentMasterForm = () => {
                     </Box>
 
                     <CardBody px={8} py={7}>
+                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
+                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>Form</Tab>
+                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>View</Tab>
+                            </TabList>
+                            <TabPanels>
+                                <TabPanel p={0}>
                         <form onSubmit={handleSubmit}>
                             <VStack spacing={6} align="stretch">
 
@@ -4228,11 +4734,11 @@ const InstrumentMasterForm = () => {
 
                             </VStack>
                         </form>
-                    </CardBody>
-                </Card>
+                                </TabPanel>
+                                <TabPanel p={0}>
 
                 {/* Instrument Table List */}
-                <Box mt={10}>
+                <Box mt={4}>
                     <HStack justify="space-between" mb={4}>
                         <Heading size="md" color="blue.700" display="flex" alignItems="center">
                             <Icon as={FaWrench} mr={2} /> Registered Instruments
@@ -4307,6 +4813,11 @@ const InstrumentMasterForm = () => {
                         </Table>
                     </Box>
                 </Box>
+                                </TabPanel>
+                            </TabPanels>
+                        </Tabs>
+                    </CardBody>
+                </Card>
 
                 {/* View Instrument Modal */}
                 {viewInstrument && (

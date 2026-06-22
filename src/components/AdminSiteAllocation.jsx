@@ -55,7 +55,12 @@ const AdminSiteAllocation = () => {
 
         // Group by date for SR. NO. logic
         const groupedByDate = schedules.reduce((acc, curr) => {
-            const dStr = new Date(curr.scheduleDate).toISOString().split('T')[0];
+            const dObj = new Date(curr.scheduleDate);
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dObj.getDate()).padStart(2, '0');
+            const dStr = `${y}-${m}-${d}`;
+            
             if (!acc[dStr]) acc[dStr] = [];
             acc[dStr].push(curr);
             return acc;
@@ -106,9 +111,18 @@ const AdminSiteAllocation = () => {
 
     if (loading) return <Center p={20}><Spinner size="xl" /></Center>;
 
+    // Helper to get robust local YYYY-MM-DD string
+    const getLocalYMD = (dateVal) => {
+        const dObj = new Date(dateVal);
+        const y = dObj.getFullYear();
+        const m = String(dObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+
     // Group by date for rendering
     const groupedSchedules = schedules.reduce((acc, curr) => {
-        const dStr = new Date(curr.scheduleDate).toISOString().split('T')[0];
+        const dStr = getLocalYMD(curr.scheduleDate);
         if (!acc[dStr]) acc[dStr] = [];
         acc[dStr].push(curr);
         return acc;

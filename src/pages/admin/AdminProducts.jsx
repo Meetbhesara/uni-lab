@@ -10,6 +10,7 @@ import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDol
 import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
+import { hasPermission } from '../../utils/permissions';
 
 const PRODUCT_CATEGORIES = [
     "CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT",
@@ -67,7 +68,38 @@ const AdminProducts = () => {
 
     // Super Admin Check
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const isSuperAdmin = user.email === 'iatulkanak@gmail.com';
+    const isSuperAdmin = user.isSuperAdmin;
+    const canWrite = hasPermission(user, 'products', 'write');
+    const canShowStock = hasPermission(user, 'showStock', 'read');
+
+    const getGroupedAndSortedProducts = () => {
+        const groups = {};
+        PRODUCT_CATEGORIES.forEach(cat => {
+            groups[cat] = [];
+        });
+        groups["Unassigned Categories"] = [];
+
+        products.forEach(p => {
+            const cat = p.category;
+            if (cat) {
+                const found = PRODUCT_CATEGORIES.find(c => c.toLowerCase() === cat.toLowerCase());
+                if (found) {
+                    groups[found].push(p);
+                } else {
+                    groups["Unassigned Categories"].push(p);
+                }
+            } else {
+                groups["Unassigned Categories"].push(p);
+            }
+        });
+
+        // Sort alphabetically by name
+        Object.keys(groups).forEach(key => {
+            groups[key].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        });
+
+        return groups;
+    };
 
     const getImageUrl = (path) => {
         if (!path) return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150"><rect width="150" height="150" fill="%23f7fafc"/><path d="M55,85 L75,60 L95,85" stroke="%23cbd5e0" stroke-width="4" fill="none"/><circle cx="95" cy="55" r="8" fill="%23cbd5e0"/><rect x="40" y="40" width="70" height="70" rx="8" stroke="%23cbd5e0" stroke-width="4" fill="none"/></svg>';
@@ -87,7 +119,8 @@ const AdminProducts = () => {
         dealerPrice: '',
         vendors: [], // Array of { name: '', price: '' }
         details: [], // Array of { key: '', value: '' }
-        alternativeNames: [] // Array of strings
+        alternativeNames: [], // Array of strings
+        stock: ''
     });
 
     const [formErrors, setFormErrors] = useState({});
@@ -160,6 +193,7 @@ const AdminProducts = () => {
                 vendors: parsedVendors,
                 details: parseDetails(p.details),
                 alternativeNames: Array.isArray(p.alternativeNames) ? p.alternativeNames : [],
+                stock: p.stock ?? ''
             });
             setExistingPhotos(p.images || p.photos || []);
             setNewPhotos([]);
@@ -186,7 +220,7 @@ const AdminProducts = () => {
     };
 
     const confirmDelete = async () => {
-        if (!productToDelete) return;
+        if (!productToDelete || !canWrite) return;
         setIsDeleting(true);
         try {
             await api.delete(`/products/${productToDelete._id || productToDelete.id}`);
@@ -216,6 +250,11 @@ const AdminProducts = () => {
             errors.sellingPriceStart = 'Price cannot be negative';
         }
 
+        // ── Stock Validation ──────────────────────────────────────
+        if (formData.stock !== '' && formData.stock !== null && Number(formData.stock) < 0) {
+            errors.stock = 'Stock cannot be negative';
+        }
+
         // ── Vendors Array Validation ──────────────────────────────
         // But we must enforce non-negative for purchase price IF provided.
         formData.vendors.forEach((v, index) => {
@@ -234,6 +273,11 @@ const AdminProducts = () => {
 
     const handleSubmit = async (e) => {
         if (e) e.preventDefault();
+
+        if (!canWrite) {
+            toast({ title: "Permission Denied", description: "You do not have write access to modify products.", status: "error", duration: 3000 });
+            return;
+        }
 
         const errors = validateForm();
         setFormErrors(errors);
@@ -262,6 +306,7 @@ const AdminProducts = () => {
 
         if (formData.dealerPrice !== '' && formData.dealerPrice !== null) data.append('dealerPrice', formData.dealerPrice);
         data.append('alternativeNames', JSON.stringify(formData.alternativeNames));
+        if (formData.stock !== '' && formData.stock !== null) data.append('stock', formData.stock);
 
         // Filter out empty vendors and append as stringified array
         const validVendors = formData.vendors.filter(v => v.name?.trim() || (v.price !== '' && v.price !== null));
@@ -300,7 +345,7 @@ const AdminProducts = () => {
             onClose();
             // Reset
             setEditingProduct(null);
-            setFormData({ name: '', description: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [] });
+            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '' });
             setFormErrors({});
             setExistingPhotos([]);
             setNewPhotos([]);
@@ -408,9 +453,10 @@ const AdminProducts = () => {
                         boxShadow="lg"
                         px={8}
                         w={{ base: 'full', sm: 'auto' }}
+                        isDisabled={!canWrite}
                         onClick={() => {
                             setEditingProduct(null);
-                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [] });
+                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '' });
                             setFormErrors({});
                             setExistingPhotos([]);
                             setNewPhotos([]);
@@ -422,114 +468,155 @@ const AdminProducts = () => {
                 </Flex>
             </Flex>
 
-            <Box overflowX="auto" borderRadius="xl" border="1px" borderColor="gray.100">
-                <Table variant="simple" minW="600px">
-                    <Thead bg="gray.50">
-                        <Tr>
-                            <Th py={4}>Product Info</Th>
-                            <Th py={4}>Vendor</Th>
-                            <Th py={4}>Pricing</Th>
-                            <Th py={4} textAlign="right">Actions</Th>
-                        </Tr>
-                    </Thead>
-                    <Tbody>
-                        {products.map((product) => (
-                            <Tr key={product._id || product.id} _hover={{ bg: 'gray.50/50' }} transition="0.2s">
-                                <Td>
-                                    <Flex align="center" gap={4}>
-                                        <Image
-                                            src={getImageUrl(product.images?.[0] || product.photos?.[0])}
-                                            boxSize="40px"
-                                            objectFit="contain"
-                                            borderRadius="md"
-                                            bg="white"
-                                            boxShadow="sm"
-                                            fallbackSrc='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60"><rect width="60" height="60" fill="%23f7fafc"/><path d="M20,38 L30,28 L40,38" stroke="%23cbd5e0" stroke-width="3" fill="none"/><circle cx="38" cy="24" r="3" fill="%23cbd5e0"/><rect x="15" y="15" width="30" height="30" rx="4" stroke="%23cbd5e0" stroke-width="3" fill="none"/></svg>'
-                                        />
-                                        <Stack spacing={0}>
-                                            <Text fontWeight="700" color="gray.800">{product.name}</Text>
-                                            <Text fontSize="xs" color="blue.500" fontWeight="600" mt={1}>{product.category}</Text>
-                                            <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="200px">
-                                                {product.description || 'No description provided'}
-                                            </Text>
-                                        </Stack>
-                                    </Flex>
-                                </Td>
-                                <Td>
-                                    <Flex wrap="wrap" gap={1} maxW="150px">
-                                        {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
-                                            product.vendors.map((v, i) => (
-                                                <Badge key={i} variant="subtle" colorScheme="blue" borderRadius="full" px={2} fontSize="10px">
-                                                    {v.name || 'N/A'}
-                                                </Badge>
-                                            ))
-                                        ) : (
-                                            <Badge variant="subtle" colorScheme="blue" borderRadius="full" px={3}>
-                                                {product.vendor || 'N/A'}
-                                            </Badge>
-                                        )}
-                                    </Flex>
-                                </Td>
-                                <Td>
-                                    <Stack spacing={0}>
-                                        <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd || 'N/A'}</Text>
-                                        <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice || 'N/A'}</Text>
-                                        {isSuperAdmin && (
-                                            <Flex direction="column" gap={1} mt={1}>
-                                                {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
-                                                    product.vendors.map((v, i) => (
-                                                        <Text key={i} fontSize="xs" color="gray.500">
-                                                            {v.name || 'Unknown'}: ₹{v.price ?? '0'}
-                                                        </Text>
-                                                    ))
-                                                ) : (
-                                                    <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
+            {(() => {
+                const grouped = getGroupedAndSortedProducts();
+                const categoriesWithProducts = [
+                    ...PRODUCT_CATEGORIES,
+                    "Unassigned Categories"
+                ].filter(cat => grouped[cat] && grouped[cat].length > 0);
+
+                if (categoriesWithProducts.length === 0) {
+                    return (
+                        <Flex p={20} flexDir="column" align="center" justify="center" bg="gray.50/50" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
+                            <Box color="gray.300" mb={4}><FiPackage size={48} /></Box>
+                            <Text color="gray.500">No products found in your inventory.</Text>
+                        </Flex>
+                    );
+                }
+
+                return categoriesWithProducts.map(categoryName => {
+                    const list = grouped[categoryName];
+                    return (
+                        <Box key={categoryName} mb={8} bg="white" borderRadius="2xl" border="1px" borderColor="gray.150" boxShadow="sm" overflow="hidden">
+                            <Flex bg="gray.50" px={6} py={4} align="center" justify="space-between" borderBottom="1px" borderColor="gray.100">
+                                <Flex align="center" gap={3}>
+                                    <Box p={2} bg="brand.50" color="brand.600" borderRadius="lg">
+                                        <FiPackage size={18} />
+                                    </Box>
+                                    <Text fontWeight="800" fontSize="xs" color="gray.700" letterSpacing="wider">
+                                        {categoryName === "Unassigned Categories" ? "UNASSIGNED CATEGORIES" : categoryName.toUpperCase()}
+                                    </Text>
+                                </Flex>
+                                <Badge colorScheme="brand" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="xs" fontWeight="bold">
+                                    {list.length} {list.length === 1 ? 'Product' : 'Products'}
+                                </Badge>
+                            </Flex>
+                            <Box overflowX="auto">
+                                <Table variant="simple" minW="600px">
+                                    <Thead bg="white">
+                                        <Tr borderBottom="2px solid" borderBottomColor="gray.50">
+                                            <Th py={4}>Product Info</Th>
+                                            <Th py={4}>Vendor</Th>
+                                            <Th py={4}>Pricing</Th>
+                                            {canShowStock && <Th py={4}>Stock</Th>}
+                                            <Th py={4} textAlign="right">Actions</Th>
+                                        </Tr>
+                                    </Thead>
+                                    <Tbody>
+                                        {list.map((product) => (
+                                            <Tr key={product._id || product.id} _hover={{ bg: 'gray.50/50' }} transition="0.2s">
+                                                <Td>
+                                                    <Flex align="center" gap={4}>
+                                                        <Image
+                                                            src={getImageUrl(product.images?.[0] || product.photos?.[0])}
+                                                            boxSize="40px"
+                                                            objectFit="contain"
+                                                            borderRadius="md"
+                                                            bg="white"
+                                                            boxShadow="sm"
+                                                            fallbackSrc='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60"><rect width="60" height="60" fill="%23f7fafc"/><path d="M20,38 L30,28 L40,38" stroke="%23cbd5e0" stroke-width="3" fill="none"/><circle cx="38" cy="24" r="3" fill="%23cbd5e0"/><rect x="15" y="15" width="30" height="30" rx="4" stroke="%23cbd5e0" stroke-width="3" fill="none"/></svg>'
+                                                        />
+                                                        <Stack spacing={0}>
+                                                            <Text fontWeight="700" color="gray.800">{product.name}</Text>
+                                                            <Text fontSize="xs" color="blue.500" fontWeight="600" mt={1}>{product.category}</Text>
+                                                            <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="200px">
+                                                                {product.description || 'No description provided'}
+                                                            </Text>
+                                                        </Stack>
+                                                    </Flex>
+                                                </Td>
+                                                <Td>
+                                                    <Flex wrap="wrap" gap={1} maxW="150px">
+                                                        {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                                            product.vendors.map((v, i) => (
+                                                                <Badge key={i} variant="subtle" colorScheme="blue" borderRadius="full" px={2} fontSize="10px">
+                                                                    {v.name || 'N/A'}
+                                                                </Badge>
+                                                            ))
+                                                        ) : (
+                                                            <Badge variant="subtle" colorScheme="blue" borderRadius="full" px={3}>
+                                                                {product.vendor || 'N/A'}
+                                                            </Badge>
+                                                        )}
+                                                    </Flex>
+                                                </Td>
+                                                <Td>
+                                                    <Stack spacing={0}>
+                                                        <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd || 'N/A'}</Text>
+                                                        <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice || 'N/A'}</Text>
+                                                        {isSuperAdmin && (
+                                                            <Flex direction="column" gap={1} mt={1}>
+                                                                {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                                                    product.vendors.map((v, i) => (
+                                                                        <Text key={i} fontSize="xs" color="gray.500">
+                                                                            {v.name || 'Unknown'}: ₹{v.price ?? '0'}
+                                                                        </Text>
+                                                                    ))
+                                                                ) : (
+                                                                    <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
+                                                                )}
+                                                            </Flex>
+                                                        )}
+                                                    </Stack>
+                                                </Td>
+                                                {canShowStock && (
+                                                    <Td>
+                                                        <Badge colorScheme={product.stock > 0 ? "green" : "red"} borderRadius="md" px={2} py={1}>
+                                                            {product.stock ?? 0}
+                                                        </Badge>
+                                                    </Td>
                                                 )}
-                                            </Flex>
-                                        )}
-                                    </Stack>
-                                </Td>
-                                <Td textAlign="right">
-                                    <Stack direction="row" spacing={2} justify="flex-end">
-                                        <IconButton
-                                            size="sm"
-                                            bg="#25D366"
-                                            color="white"
-                                            _hover={{ bg: "#128C7E" }}
-                                            icon={<FaWhatsapp />}
-                                            aria-label="WhatsApp"
-                                            onClick={() => handleWhatsappOpen(product)}
-                                        />
-                                        <IconButton
-                                            size="sm"
-                                            variant="ghost"
-                                            icon={<FiEdit2 />}
-                                            aria-label="Edit"
-                                            _hover={{ color: 'brand.500', bg: 'brand.50' }}
-                                            onClick={() => handleEdit(product)}
-                                        />
-                                        <IconButton
-                                            size="sm"
-                                            variant="ghost"
-                                            icon={<FiTrash2 />}
-                                            colorScheme="red"
-                                            aria-label="Delete"
-                                            _hover={{ color: 'red.500', bg: 'red.50' }}
-                                            onClick={() => handleDeleteClick(product)}
-                                        />
-                                    </Stack>
-                                </Td>
-                            </Tr>
-                        ))}
-                    </Tbody>
-                </Table>
-                {products.length === 0 && (
-                    <Flex p={20} flexDir="column" align="center" justify="center">
-                        <Box color="gray.300" mb={4}><FiPackage size={48} /></Box>
-                        <Text color="gray.500">No products found in your inventory.</Text>
-                    </Flex>
-                )}
-            </Box>
+                                                <Td textAlign="right">
+                                                    <Stack direction="row" spacing={2} justify="flex-end">
+                                                        <IconButton
+                                                            size="sm"
+                                                            bg="#25D366"
+                                                            color="white"
+                                                            _hover={{ bg: "#128C7E" }}
+                                                            icon={<FaWhatsapp />}
+                                                            aria-label="WhatsApp"
+                                                            onClick={() => handleWhatsappOpen(product)}
+                                                        />
+                                                        <IconButton
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            icon={<FiEdit2 />}
+                                                            aria-label="Edit"
+                                                            _hover={{ color: 'brand.500', bg: 'brand.50' }}
+                                                            isDisabled={!canWrite}
+                                                            onClick={() => handleEdit(product)}
+                                                        />
+                                                        <IconButton
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            icon={<FiTrash2 />}
+                                                            colorScheme="red"
+                                                            aria-label="Delete"
+                                                            _hover={{ color: 'red.500', bg: 'red.50' }}
+                                                            isDisabled={!canWrite}
+                                                            onClick={() => handleDeleteClick(product)}
+                                                        />
+                                                    </Stack>
+                                                </Td>
+                                            </Tr>
+                                        ))}
+                                    </Tbody>
+                                </Table>
+                            </Box>
+                        </Box>
+                    );
+                });
+            })()}
 
             {/* Premium Add/Edit Modal */}
             <Modal isOpen={isOpen} onClose={onClose} size={{ base: 'full', md: '4xl' }} scrollBehavior="inside">
@@ -690,6 +777,20 @@ const AdminProducts = () => {
                                                 <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
                                             </FormControl>
                                         </SimpleGrid>
+
+                                        {canShowStock && (
+                                            <FormControl isInvalid={!!formErrors.stock}>
+                                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500">INVENTORY STOCK</FormLabel>
+                                                <InputGroup size="md">
+                                                    <InputLeftElement pointerEvents='none' children={<Box as={FiPackage} color="gray.400" />} />
+                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" placeholder="e.g. 10" value={formData.stock} onChange={(e) => {
+                                                        setFormData({ ...formData, stock: e.target.value });
+                                                        if (formErrors.stock) setFormErrors({ ...formErrors, stock: '' });
+                                                    }} />
+                                                </InputGroup>
+                                                <FormErrorMessage fontSize="10px">{formErrors.stock}</FormErrorMessage>
+                                            </FormControl>
+                                        )}
 
                                         {isSuperAdmin && (
                                             <Box border="1px dashed" borderColor="gray.200" p={4} borderRadius="xl" bg="gray.50">
@@ -934,7 +1035,7 @@ const AdminProducts = () => {
                                 onClick={handleSubmit}
                                 isLoading={isSubmitting}
                                 loadingText={editingProduct ? 'Updating...' : 'Initializing...'}
-                                isDisabled={isSubmitting}
+                                isDisabled={isSubmitting || !canWrite}
                             >
                                 {editingProduct ? 'Commit Changes' : 'Initialize Product'}
                             </Button>

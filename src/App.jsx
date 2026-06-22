@@ -13,6 +13,7 @@ import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminProducts from "./pages/admin/AdminProducts";
 import AdminEnquiries from "./pages/admin/AdminEnquiries";
+import AdminPermissions from "./pages/admin/AdminPermissions";
 import AdminDraftingWork from "./pages/admin/AdminDraftingWork";
 import InvoiceReport from "./pages/admin/InvoiceReport";
 import EmployeeExpensesModule from "./pages/EmployeeExpensesModule";
@@ -28,6 +29,7 @@ function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="enquiries" element={<AdminEnquiries />} />
+          <Route path="permissions" element={<AdminPermissions />} />
           <Route path="employee-expenses" element={<EmployeeExpensesModule />} />
           <Route path="drafting-work" element={<AdminDraftingWork />} />
           <Route path="invoice-report" element={<InvoiceReport />} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Icon, Spinner, Text, FormControl, FormLabel, Input, Button, Flex, useToast } from '@chakra-ui/react';
+import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Icon, Spinner, Text, FormControl, FormLabel, Input, Button, Flex, useToast, Checkbox, Table, Thead, Tbody, Tr, Th, Td, Switch } from '@chakra-ui/react';
 import { FiBox, FiMessageSquare, FiClock, FiUserPlus } from 'react-icons/fi';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
@@ -17,7 +17,37 @@ const AdminDashboard = () => {
         rejectedQuotations: 0
     });
     const [loading, setLoading] = useState(true);
-    const [adminForm, setAdminForm] = useState({ name: '', email: '', phone: '' });
+    const defaultPermissions = {
+        products: { read: true, write: true },
+        enquiries: { read: true, write: true },
+        incomingEnquiries: { read: true, write: true },
+        outboundQuotations: { read: true, write: true },
+        processedHistory: { read: true, write: true },
+        vehicleMaster: { read: true, write: true },
+        vehicleMaster_form: { read: true, write: true },
+        vehicleMaster_view: { read: true, write: true },
+        employeeMaster: { read: true, write: true },
+        employeeMaster_form: { read: true, write: true },
+        employeeMaster_view: { read: true, write: true },
+        clientMaster: { read: true, write: true },
+        clientMaster_form: { read: true, write: true },
+        clientMaster_view: { read: true, write: true },
+        siteMaster: { read: true, write: true },
+        siteMaster_form: { read: true, write: true },
+        siteMaster_view: { read: true, write: true },
+        scheduleMaster: { read: true, write: true },
+        scheduleMaster_form: { read: true, write: true },
+        scheduleMaster_view: { read: true, write: true },
+        scheduleMaster_report: { read: true, write: true },
+        instrumentMaster: { read: true, write: true },
+        instrumentMaster_form: { read: true, write: true },
+        instrumentMaster_view: { read: true, write: true },
+        employeeExpense: { read: true, write: true },
+        draftingWork: { read: true, write: true },
+        invoiceReport: { read: true, write: true }
+    };
+    const [adminForm, setAdminForm] = useState({ name: '', email: '', phone: '', permissions: defaultPermissions });
+    const [viewPermissions, setViewPermissions] = useState(false);
     const [adminLoading, setAdminLoading] = useState(false);
 
     useEffect(() => {
@@ -65,11 +95,12 @@ const AdminDashboard = () => {
             return toast({ title: 'Enter a valid 10-digit phone number', status: 'error', duration: 2500 });
         }
         setAdminLoading(true);
-        const res = await createAdmin(adminForm.name, adminForm.email, adminForm.phone);
+        const res = await createAdmin(adminForm.name, adminForm.email, adminForm.phone, adminForm.permissions);
         setAdminLoading(false);
         if (res.success) {
             toast({ title: '✅ Admin Created!', description: res.msg, status: 'success' });
-            setAdminForm({ name: '', email: '', phone: '' });
+            setAdminForm({ name: '', email: '', phone: '', permissions: defaultPermissions });
+            setViewPermissions(false);
         } else {
             toast({ title: 'Failed', description: res.message, status: 'error' });
         }
@@ -142,7 +173,7 @@ const AdminDashboard = () => {
             </SimpleGrid>
 
             {/* Create Admin Card - Restricted to Super Admin (iatulkanak@gmail.com) */}
-            {user?.email === 'iatulkanak@gmail.com' && (
+            {user?.isSuperAdmin && (
                 <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="purple.100">
                     <Flex align="center" gap={3} mb={4}>
                         <Box p={2} bg="purple.100" borderRadius="lg">
@@ -185,6 +216,7 @@ const AdminDashboard = () => {
                             />
                         </FormControl>
                     </SimpleGrid>
+
 
                     <Button
                         mt={4}

@@ -6,13 +6,14 @@ import {
     Tabs, TabList, TabPanels, Tab, TabPanel, FormControl, FormLabel,
     Flex, Spinner, Center, Tooltip, CloseButton, Image, List, ListItem, ListIcon,
     Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverArrow, Portal,
-    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton
+    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
+    useDisclosure, Switch
 } from '@chakra-ui/react';
 import { 
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
-    FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight
+    FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight, FaUserCheck, FaUserSlash, FaClipboardList
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -338,6 +339,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     
     // Core State
     const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+    const selectedEmployee = employees.find(e => e._id === selectedEmployeeId);
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [standardExpenses, setStandardExpenses] = useState({ breakfast: '', lunch: '', dinner: '', petrol: '' });
     const [otherExpenses, setOtherExpenses] = useState([]);
@@ -362,6 +364,21 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     const [selectedExpenseForView, setSelectedExpenseForView] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
+    const isMatchingDate = (dateVal, targetDateStr) => {
+        if (!dateVal || !targetDateStr) return false;
+        
+        const [year, month, day] = targetDateStr.split('-');
+        const dStart = new Date();
+        dStart.setFullYear(parseInt(year), parseInt(month) - 1, parseInt(day));
+        dStart.setHours(0, 0, 0, 0);
+        
+        const nextDay = new Date(dStart);
+        nextDay.setDate(dStart.getDate() + 1);
+
+        const dObj = new Date(dateVal);
+        return dObj >= dStart && dObj < nextDay;
+    };
+
     const fetchCommittedExpenses = async () => {
         if (!selectedEmployeeId || !date) {
             setCommittedExpenses([]);
@@ -371,8 +388,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             const res = await api.get(`/employee-expense/admin/${selectedEmployeeId}`);
             if (res.data.success) {
                 const matched = res.data.data.filter(e => {
-                    const eDate = e.date ? new Date(e.date).toISOString().split('T')[0] : '';
-                    return eDate === date;
+                    return isMatchingDate(e.date, date);
                 });
                 setCommittedExpenses(matched);
             }
@@ -388,7 +404,11 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             try {
                 const res = await api.get(`/schedule-master?date=${date}`);
                 if (res.data.success) {
-                    setDaySchedules(res.data.data);
+                    // Force strictly matching the date, since backend might return future dates if today is selected
+                    const exactMatches = res.data.data.filter(s => {
+                        return isMatchingDate(s.scheduleDate, date);
+                    });
+                    setDaySchedules(exactMatches);
                 } else {
                     setDaySchedules([]);
                 }
@@ -404,22 +424,28 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         fetchCommittedExpenses();
     }, [selectedEmployeeId, date]);
 
-    // Filter employees down to scheduled operatives/helpers on this date
+    // Filter employees down to scheduled operatives on this date (excluding rejected)
     const scheduledEmployees = useMemo(() => {
         const ids = new Set();
         daySchedules.forEach(s => {
-            if (s.operative?._id) ids.add(s.operative._id);
-            else if (s.operative) ids.add(s.operative);
+            if (s.dayStatus === 'Rejected') return;
+            
+            if (s.operative?._id) ids.add(String(s.operative._id));
+            else if (s.operative) ids.add(String(s.operative));
         });
-        return employees.filter(e => ids.has(e._id));
+        return employees.filter(e => ids.has(String(e._id)));
     }, [daySchedules, employees]);
 
-    // All schedules for the selected employee on this day
+    // All valid schedules for the selected employee on this day
     const employeeSchedules = useMemo(() => {
         if (!selectedEmployeeId) return [];
+        const targetId = String(selectedEmployeeId);
+        
         return daySchedules.filter(s => {
-            const opId = s.operative?._id || s.operative;
-            return opId === selectedEmployeeId;
+            if (s.dayStatus === 'Rejected') return false;
+            
+            const opId = String(s.operative?._id || s.operative || '');
+            return opId === targetId;
         });
     }, [daySchedules, selectedEmployeeId]);
 
@@ -510,6 +536,75 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         }
     }, [employeeSchedules, committedExpenses]);
 
+    // Prefill form states when committedExpenses changes (to support editing/overwriting)
+    useEffect(() => {
+        const isWithoutFood = selectedEmployee?.foodAllowance === 'Without Food';
+        if (committedExpenses && committedExpenses.length > 0) {
+            const exp = committedExpenses[0];
+            setStandardExpenses({
+                breakfast: !isWithoutFood && exp.expenses?.breakfast !== undefined ? String(exp.expenses.breakfast) : '',
+                lunch: !isWithoutFood && exp.expenses?.lunch !== undefined ? String(exp.expenses.lunch) : '',
+                dinner: !isWithoutFood && exp.expenses?.dinner !== undefined ? String(exp.expenses.dinner) : '',
+                petrol: exp.expenses?.petrol !== undefined ? String(exp.expenses.petrol) : ''
+            });
+            if (exp.expenses?.fuelType) {
+                setFuelType(exp.expenses.fuelType);
+            } else if (exp.fuelType) {
+                setFuelType(exp.fuelType);
+            }
+            setNotes(exp.notes || '');
+            setAttendance(exp.attendance || 'Present');
+            setAttendanceRemark(exp.attendanceRemark || '');
+
+            // Load otherExpensesList
+            if (Array.isArray(exp.otherExpensesList)) {
+                setOtherExpenses(exp.otherExpensesList.map(oe => ({
+                    expenseName: oe.expenseName || '',
+                    amount: oe.amount !== undefined ? String(oe.amount) : '',
+                    files: [],
+                    previews: [],
+                    existingFiles: oe.files || []
+                })));
+            } else {
+                setOtherExpenses([]);
+            }
+            setDeletedExistingFiles([]);
+        } else {
+            // Reset to default/empty if no committed expense exists
+            setStandardExpenses({ breakfast: '', lunch: '', dinner: '', petrol: '' });
+            setFuelType('Petrol');
+            setNotes('');
+            setOtherExpenses([]);
+            setDeletedExistingFiles([]);
+            // Attendance will be auto-set by the attendance auto-mark effect
+        }
+    }, [committedExpenses]);
+
+    // Automatically clear food expenses if selected employee is Without Food
+    useEffect(() => {
+        if (selectedEmployee?.foodAllowance === 'Without Food') {
+            setStandardExpenses(prev => ({
+                ...prev,
+                breakfast: '',
+                lunch: '',
+                dinner: ''
+            }));
+            // Clear any newly uploaded food files/previews
+            setExpenseFiles(prev => ({
+                ...prev,
+                breakfast: [],
+                lunch: [],
+                dinner: []
+            }));
+            setExpensePreviews(prev => ({
+                ...prev,
+                breakfast: [],
+                lunch: [],
+                dinner: []
+            }));
+        }
+    }, [selectedEmployeeId, selectedEmployee?.foodAllowance]);
+
     // Files State
     const [files, setFiles] = useState({ photos: [], data: [], dailyReports: [] });
     const [previews, setPreviews] = useState({ photos: [], data: [], dailyReports: [] });
@@ -517,7 +612,6 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     const [expensePreviews, setExpensePreviews] = useState({ breakfast: [], lunch: [], dinner: [], petrol: [] });
 
     // Computed Logic
-    const selectedEmployee = employees.find(e => e._id === selectedEmployeeId);
     
     const totals = useMemo(() => {
         const stdTotal = Object.values(standardExpenses).reduce((acc, val) => acc + (Number(val) || 0), 0);
@@ -652,14 +746,28 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             formData.append('notes', notes);
             formData.append('attendance', attendance);
             formData.append('attendanceRemark', attendanceRemark);
-            formData.append('expenses', JSON.stringify(standardExpenses));
+            
+            const isWithoutFood = selectedEmployee?.foodAllowance === 'Without Food';
+            const cleanStandardExpenses = {
+                breakfast: isWithoutFood ? '' : standardExpenses.breakfast,
+                lunch: isWithoutFood ? '' : standardExpenses.lunch,
+                dinner: isWithoutFood ? '' : standardExpenses.dinner,
+                petrol: standardExpenses.petrol
+            };
+            formData.append('expenses', JSON.stringify(cleanStandardExpenses));
             formData.append('fuelType', fuelType);
             
             const otherExpsToSend = [];
             otherExpenses.forEach((exp, idx) => {
                 if (exp.expenseName && exp.amount) {
                     const mappedIdx = otherExpsToSend.length;
-                    otherExpsToSend.push({ expenseName: exp.expenseName, amount: exp.amount });
+                    // Filter out any deleted files from the existing files list
+                    const filteredExistingFiles = (exp.existingFiles || []).filter(f => !deletedExistingFiles.includes(f.url || f));
+                    otherExpsToSend.push({ 
+                        expenseName: exp.expenseName, 
+                        amount: exp.amount,
+                        files: filteredExistingFiles
+                    });
                     if (exp.files) {
                         exp.files.forEach(f => formData.append(`otherExpense_${mappedIdx}`, f));
                     }
@@ -717,19 +825,25 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 }
                 
                 // 2. Wait a bit for the DB to stabilize before a full refresh
-                // This prevents race conditions where the GET request might hit a stale read
                 setTimeout(() => {
                     onRefresh();
                     fetchCommittedExpenses();
                 }, 1000);
                 
-                // 3. Reset form
-                setStandardExpenses({ breakfast: '', lunch: '', dinner: '', petrol: '' });
-                setOtherExpenses([]);
-                setClientSites([{ clientId: '', siteId: '', ledger: '', quantity: 0, files: { photos: [], data: [], dailyReports: [], drawing: [] } }]);
-                setNotes('');
-                setAttendance('Present');
-                setAttendanceRemark('');
+                // 3. Clean up only file selection/preview states
+                setExpenseFiles({ breakfast: [], lunch: [], dinner: [], petrol: [] });
+                setExpensePreviews({ breakfast: [], lunch: [], dinner: [], petrol: [] });
+                setFiles({ photos: [], data: [], dailyReports: [] });
+                setPreviews({ photos: [], data: [], dailyReports: [] });
+                setClientSites(prev => prev.map(cs => ({
+                    ...cs,
+                    files: { photos: [], data: [], dailyReports: [], drawing: [] }
+                })));
+                setOtherExpenses(prev => prev.map(oe => ({
+                    ...oe,
+                    files: [],
+                    previews: []
+                })));
                 setDeletedExistingFiles([]);
             }
         } catch (err) {
@@ -823,6 +937,9 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                             <HStack align="center" w="full" justify="space-between">
                                                 <FormLabel fontSize="sm" fontWeight="bold" textTransform="capitalize" m={0} minW="80px">
                                                     {expName === 'petrol' ? 'Fuel' : expName}
+                                                    {selectedEmployee?.foodAllowance === 'Without Food' && expName !== 'petrol' && (
+                                                        <Badge ml={2} colorScheme="red" variant="subtle" borderRadius="full">Disabled</Badge>
+                                                    )}
                                                 </FormLabel>
                                                 
                                                 {expName === 'petrol' && (
@@ -843,7 +960,15 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                 <HStack flex={1} maxW="200px">
                                                     <InputGroup size="sm">
                                                         <InputLeftElement><Icon as={expName === 'petrol' ? FaGasPump : FaRupeeSign} color="gray.400" fontSize="xs" /></InputLeftElement>
-                                                        <Input type="number" value={standardExpenses[expName]} onChange={(e) => setStandardExpenses({...standardExpenses, [expName]: e.target.value})} borderRadius="lg" placeholder="0" bg="white" />
+                                                        <Input 
+                                                            type="number" 
+                                                            value={standardExpenses[expName]} 
+                                                            onChange={(e) => setStandardExpenses({...standardExpenses, [expName]: e.target.value})} 
+                                                            borderRadius="lg" 
+                                                            placeholder="0" 
+                                                            bg="white" 
+                                                            isDisabled={selectedEmployee?.foodAllowance === 'Without Food' && expName !== 'petrol'}
+                                                        />
                                                     </InputGroup>
                                                 </HStack>
 
@@ -855,6 +980,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                         size="sm"
                                                         borderRadius="lg"
                                                         onClick={() => document.getElementById(`upload-${expName}`).click()}
+                                                        isDisabled={selectedEmployee?.foodAllowance === 'Without Food' && expName !== 'petrol'}
                                                     />
                                                 </Tooltip>
                                                 <input
@@ -866,6 +992,39 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     accept="image/*,.pdf,.doc,.docx"
                                                 />
                                             </HStack>
+                                            {!(selectedEmployee?.foodAllowance === 'Without Food' && expName !== 'petrol') && committedExpenses && committedExpenses[0]?.expenseFiles?.[expName] && committedExpenses[0].expenseFiles[expName].length > 0 && (
+                                                <HStack overflowX="auto" py={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
+                                                    {committedExpenses[0].expenseFiles[expName].map((fileUrl, i) => {
+                                                        if (deletedExistingFiles.includes(fileUrl)) return null;
+                                                        const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                        const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(fileUrl);
+                                                        return (
+                                                            <Box key={`exist-${expName}-${i}`} position="relative" minW="40px" h="40px" borderRadius="md" overflow="hidden" border="1px solid" borderColor="green.200" flexShrink={0}>
+                                                                {isImage ? (
+                                                                    <Image src={`${api.defaults.baseURL}${finalUrl}`} w="full" h="full" objectFit="cover" />
+                                                                ) : (
+                                                                    <Center w="full" h="full" bg="green.50"><Icon as={FaFileAlt} color="green.500" /></Center>
+                                                                )}
+                                                                <IconButton
+                                                                    aria-label="view file"
+                                                                    icon={<Icon as={FaPaperclip} />} size="xs" colorScheme="blue"
+                                                                    position="absolute" bottom={0} left={0} opacity={0.8}
+                                                                    onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
+                                                                />
+                                                                <IconButton
+                                                                    aria-label="remove existing file"
+                                                                    icon={<Icon as={FaTrash} />} size="xs" colorScheme="red"
+                                                                    position="absolute" top={0} right={0} opacity={0.8}
+                                                                    onClick={() => {
+                                                                        setDeletedExistingFiles(prev => [...prev, fileUrl]);
+                                                                    }}
+                                                                />
+                                                            </Box>
+                                                        );
+                                                    })}
+                                                </HStack>
+                                            )}
+
                                             {expensePreviews[expName] && expensePreviews[expName].length > 0 && (
                                                 <HStack overflowX="auto" py={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
                                                     {expensePreviews[expName].map((file, i) => (
@@ -930,6 +1089,40 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                             />
                                             <IconButton size="sm" aria-label="remove row" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => removeOtherExpense(idx)} />
                                         </HStack>
+                                        {/* Existing custom expense files */}
+                                        {row.existingFiles && row.existingFiles.length > 0 && (
+                                            <HStack overflowX="auto" pt={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
+                                                {row.existingFiles.map((fileUrl, i) => {
+                                                    if (deletedExistingFiles.includes(fileUrl)) return null;
+                                                    const finalUrl = typeof fileUrl === 'string' && fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+                                                    const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(fileUrl);
+                                                    return (
+                                                        <Box key={`exist-other-${idx}-${i}`} position="relative" minW="40px" h="40px" borderRadius="md" overflow="hidden" border="1px solid" borderColor="green.200" flexShrink={0}>
+                                                            {isImage ? (
+                                                                <Image src={`${api.defaults.baseURL}${finalUrl}`} w="full" h="full" objectFit="cover" />
+                                                            ) : (
+                                                                <Center w="full" h="full" bg="green.50"><Icon as={FaFileAlt} color="green.500" /></Center>
+                                                            )}
+                                                            <IconButton
+                                                                aria-label="view file"
+                                                                icon={<Icon as={FaPaperclip} />} size="xs" colorScheme="blue"
+                                                                position="absolute" bottom={0} left={0} opacity={0.8}
+                                                                onClick={() => window.open(`${api.defaults.baseURL}${finalUrl}`, '_blank')}
+                                                            />
+                                                            <IconButton
+                                                                aria-label="remove existing file"
+                                                                icon={<Icon as={FaTrash} />} size="xs" colorScheme="red"
+                                                                position="absolute" top={0} right={0} opacity={0.8}
+                                                                onClick={() => {
+                                                                    setDeletedExistingFiles(prev => [...prev, fileUrl]);
+                                                                }}
+                                                            />
+                                                        </Box>
+                                                    );
+                                                })}
+                                            </HStack>
+                                        )}
+
                                         {row.previews && row.previews.length > 0 && (
                                             <HStack overflowX="auto" pt={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
                                                 {row.previews.map((file, i) => (
@@ -1824,6 +2017,251 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     );
 };
 
+// ── Attendance Sub-Module for Unscheduled Employees ────────────────────────
+const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate }) => {
+    const toast = useToast();
+    const [attendanceMap, setAttendanceMap] = useState({});
+    const [remarks, setRemarks] = useState({});
+    const [isSaving, setIsSaving] = useState(false);
+    const [savedAttendance, setSavedAttendance] = useState([]);
+
+    // Compute IDs of all scheduled operatives + helpers
+    const scheduledIds = useMemo(() => {
+        const ids = new Set();
+        daySchedules.forEach(s => {
+            const opId = s.operative?._id || s.operative;
+            if (opId) ids.add(String(opId));
+            (s.helpers || []).forEach(h => {
+                const hId = h._id || h;
+                if (hId) ids.add(String(hId));
+            });
+        });
+        return ids;
+    }, [daySchedules]);
+
+    // Employees NOT in the scheduler for this date
+    const unscheduledEmployees = useMemo(() => {
+        return employees.filter(e => !scheduledIds.has(String(e._id)));
+    }, [employees, scheduledIds]);
+
+    // Fetch existing attendance for this date
+    useEffect(() => {
+        if (!attendanceDate) return;
+        const fetchExisting = async () => {
+            try {
+                const res = await api.get(`/employee-expense/attendance?date=${attendanceDate}`);
+                if (res.data.success) {
+                    setSavedAttendance(res.data.data || []);
+                    // Pre-fill map from saved
+                    const map = {};
+                    const rem = {};
+                    (res.data.data || []).forEach(a => {
+                        map[a.employeeId] = a.attendance;
+                        rem[a.employeeId] = a.attendanceRemark || '';
+                    });
+                    setAttendanceMap(map);
+                    setRemarks(rem);
+                }
+            } catch (err) {
+                // Silently handle — attendance endpoint may not exist yet
+            }
+        };
+        fetchExisting();
+    }, [attendanceDate]);
+
+    const setStatus = (empId, status) => {
+        setAttendanceMap(prev => ({ ...prev, [empId]: status }));
+    };
+
+    const setRemark = (empId, val) => {
+        setRemarks(prev => ({ ...prev, [empId]: val }));
+    };
+
+    const handleSaveAttendance = async () => {
+        const entries = unscheduledEmployees
+            .filter(e => attendanceMap[e._id])
+            .map(e => ({
+                employeeId: e._id,
+                date: attendanceDate,
+                attendance: attendanceMap[e._id],
+                attendanceRemark: remarks[e._id] || ''
+            }));
+
+        if (entries.length === 0) {
+            toast({ title: 'No Attendance Marked', description: 'Please mark attendance for at least one employee.', status: 'warning', position: 'top-right' });
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const res = await api.post('/employee-expense/bulk-attendance', { entries });
+            if (res.data.success) {
+                toast({ title: '✅ Attendance Saved', description: `${entries.length} record(s) saved successfully`, status: 'success', position: 'top-right', duration: 3000 });
+                setSavedAttendance(res.data.data || entries);
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Failed to save attendance', status: 'error', position: 'top-right' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (unscheduledEmployees.length === 0) {
+        return (
+            <Center py={10} bg="green.50" borderRadius="2xl" border="1px dashed" borderColor="green.200">
+                <VStack spacing={2}>
+                    <Icon as={FaUserCheck} w={8} h={8} color="green.400" />
+                    <Text color="green.600" fontWeight="bold" fontSize="sm">All employees are scheduled for this date!</Text>
+                    <Text color="green.400" fontSize="xs">No unscheduled attendance to mark.</Text>
+                </VStack>
+            </Center>
+        );
+    }
+
+    return (
+        <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="orange.100" overflow="hidden">
+            <CardBody p={0}>
+                <Box bg="linear-gradient(135deg, #f6ad55 0%, #ed8936 100%)" px={6} py={4}>
+                    <HStack justify="space-between">
+                        <HStack spacing={3}>
+                            <Box bg="white" p={2} borderRadius="lg" shadow="sm">
+                                <Icon as={FaClipboardList} color="orange.500" w={5} h={5} />
+                            </Box>
+                            <VStack align="start" spacing={0}>
+                                <Heading size="sm" color="white">Unscheduled Employee Attendance</Heading>
+                                <Text fontSize="xs" color="orange.100">Employees not assigned to any site today</Text>
+                            </VStack>
+                        </HStack>
+                        <Badge bg="white" color="orange.600" fontSize="sm" px={3} py={1} borderRadius="full" fontWeight="black">
+                            {unscheduledEmployees.length} Employees
+                        </Badge>
+                    </HStack>
+                </Box>
+
+                <Box p={6}>
+                    <TableContainer>
+                        <Table size="sm" variant="simple">
+                            <Thead>
+                                <Tr bg="orange.50">
+                                    <Th color="orange.700" fontSize="xs" fontWeight="black" py={3}>Employee Name</Th>
+                                    <Th textAlign="center" color="orange.700" fontSize="xs" fontWeight="black" py={3}>
+                                        <HStack justify="center" spacing={1}>
+                                            <Icon as={FaUserCheck} color="green.500" />
+                                            <Text>Present</Text>
+                                        </HStack>
+                                    </Th>
+                                    <Th textAlign="center" color="orange.700" fontSize="xs" fontWeight="black" py={3}>
+                                        <HStack justify="center" spacing={1}>
+                                            <Icon as={FaUserSlash} color="orange.400" />
+                                            <Text>Half Day</Text>
+                                        </HStack>
+                                    </Th>
+                                    <Th textAlign="center" color="orange.700" fontSize="xs" fontWeight="black" py={3}>
+                                        <HStack justify="center" spacing={1}>
+                                            <Icon as={FaUserSlash} color="red.400" />
+                                            <Text>Absent</Text>
+                                        </HStack>
+                                    </Th>
+                                    <Th color="orange.700" fontSize="xs" fontWeight="black" py={3}>Remark</Th>
+                                </Tr>
+                            </Thead>
+                            <Tbody>
+                                {unscheduledEmployees.map((emp, idx) => {
+                                    const status = attendanceMap[emp._id] || '';
+                                    const saved = savedAttendance.find(a => a.employeeId === emp._id);
+                                    return (
+                                        <Tr key={emp._id}
+                                            bg={idx % 2 === 0 ? 'white' : 'orange.50'}
+                                            _hover={{ bg: 'yellow.50' }}
+                                            transition="background 0.15s"
+                                        >
+                                            <Td py={3}>
+                                                <HStack spacing={2}>
+                                                    <Box w={2} h={2} borderRadius="full"
+                                                        bg={status === 'Present' ? 'green.400' : status === 'Half Day' ? 'orange.400' : status === 'Absent' ? 'red.400' : 'gray.200'}
+                                                    />
+                                                    <Text fontWeight="bold" fontSize="sm" color="gray.700">{emp.name}</Text>
+                                                    {saved && (
+                                                        <Badge colorScheme={saved.attendance === 'Present' ? 'green' : saved.attendance === 'Half Day' ? 'orange' : 'red'}
+                                                            fontSize="9px" borderRadius="full" px={2}>
+                                                            Saved
+                                                        </Badge>
+                                                    )}
+                                                </HStack>
+                                            </Td>
+                                            <Td textAlign="center">
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="full"
+                                                    colorScheme={status === 'Present' ? 'green' : 'gray'}
+                                                    variant={status === 'Present' ? 'solid' : 'outline'}
+                                                    onClick={() => setStatus(emp._id, status === 'Present' ? '' : 'Present')}
+                                                    minW="60px"
+                                                >
+                                                    {status === 'Present' ? '✓ P' : 'P'}
+                                                </Button>
+                                            </Td>
+                                            <Td textAlign="center">
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="full"
+                                                    colorScheme={status === 'Half Day' ? 'orange' : 'gray'}
+                                                    variant={status === 'Half Day' ? 'solid' : 'outline'}
+                                                    onClick={() => setStatus(emp._id, status === 'Half Day' ? '' : 'Half Day')}
+                                                    minW="60px"
+                                                >
+                                                    {status === 'Half Day' ? '✓ HD' : 'HD'}
+                                                </Button>
+                                            </Td>
+                                            <Td textAlign="center">
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="full"
+                                                    colorScheme={status === 'Absent' ? 'red' : 'gray'}
+                                                    variant={status === 'Absent' ? 'solid' : 'outline'}
+                                                    onClick={() => setStatus(emp._id, status === 'Absent' ? '' : 'Absent')}
+                                                    minW="60px"
+                                                >
+                                                    {status === 'Absent' ? '✓ A' : 'A'}
+                                                </Button>
+                                            </Td>
+                                            <Td>
+                                                <Input
+                                                    size="xs"
+                                                    placeholder="Optional remark..."
+                                                    value={remarks[emp._id] || ''}
+                                                    onChange={e => setRemark(emp._id, e.target.value)}
+                                                    borderRadius="lg"
+                                                    maxW="180px"
+                                                    isDisabled={!status}
+                                                />
+                                            </Td>
+                                        </Tr>
+                                    );
+                                })}
+                            </Tbody>
+                        </Table>
+                    </TableContainer>
+
+                    <Flex justify="flex-end" mt={4}>
+                        <Button
+                            colorScheme="orange"
+                            leftIcon={<FaCheckCircle />}
+                            borderRadius="xl"
+                            shadow="md"
+                            isLoading={isSaving}
+                            loadingText="Saving..."
+                            onClick={handleSaveAttendance}
+                        >
+                            Save Attendance
+                        </Button>
+                    </Flex>
+                </Box>
+            </CardBody>
+        </Card>
+    );
+};
+
 // ── Money Transfer Module (Corrected Balance Logic) ────────────────────────
 const MoneyTransferSection = ({ employees, onRefresh }) => {
     const toast = useToast();
@@ -1841,13 +2279,27 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
     const [daySchedules, setDaySchedules] = useState([]);
     const [committedTransfers, setCommittedTransfers] = useState([]);
 
+    const isMatchingDate = (dateVal, targetDateStr) => {
+        if (!dateVal || !targetDateStr) return false;
+        
+        const [year, month, day] = targetDateStr.split('-');
+        const dStart = new Date();
+        dStart.setFullYear(parseInt(year), parseInt(month) - 1, parseInt(day));
+        dStart.setHours(0, 0, 0, 0);
+        
+        const nextDay = new Date(dStart);
+        nextDay.setDate(dStart.getDate() + 1);
+
+        const dObj = new Date(dateVal);
+        return dObj >= dStart && dObj < nextDay;
+    };
+
     const fetchCommittedTransfers = async () => {
         try {
             const res = await api.get('/employee-transfer');
             if (res.data.success) {
                 const matched = res.data.data.filter(t => {
-                    const tDate = t.date ? new Date(t.date).toISOString().split('T')[0] : '';
-                    return tDate === transferDate;
+                    return isMatchingDate(t.date, transferDate);
                 });
                 setCommittedTransfers(matched);
             }
@@ -1862,7 +2314,10 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
             try {
                 const res = await api.get(`/schedule-master?date=${transferDate}`);
                 if (res.data.success) {
-                    setDaySchedules(res.data.data);
+                    const exactMatches = res.data.data.filter(s => {
+                        return isMatchingDate(s.scheduleDate, transferDate);
+                    });
+                    setDaySchedules(exactMatches);
                 } else {
                     setDaySchedules([]);
                 }
@@ -1989,6 +2444,23 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
         }
     };
 
+    const handleDeleteCommittedTransfer = async (transferId) => {
+        if (!window.confirm("Are you sure you want to delete this transfer? This will revert the balances of the sender and receiver.")) {
+            return;
+        }
+
+        try {
+            const res = await api.delete(`/employee-transfer/${transferId}`);
+            if (res.data.success) {
+                toast({ title: 'Transfer Deleted', description: 'Reverted sender & receiver balances.', status: 'success' });
+                await onRefresh();
+                await fetchCommittedTransfers();
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error' });
+        }
+    };
+
     return (
         <VStack spacing={8} align="stretch">
             {/* Entry Form - One Row Layout */}
@@ -2021,7 +2493,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                                 border="1px solid"
                                 borderColor="gray.200"
                             >
-                                {employees.map(e => (
+                                {employees.filter(e => e.status !== 'Deactive' || e._id === formData.employee1).map(e => (
                                     <option key={e._id} value={e._id} disabled={e._id === formData.employee2}>
                                         {e.name} (₹{tempBalances[e._id]?.toLocaleString()})
                                     </option>
@@ -2043,7 +2515,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                                 border="1px solid"
                                 borderColor="gray.200"
                             >
-                                {employees.map(e => (
+                                {employees.filter(e => e.status !== 'Deactive' || e._id === formData.employee2).map(e => (
                                     <option key={e._id} value={e._id} disabled={e._id === formData.employee1}>
                                         {e.name} (₹{tempBalances[e._id]?.toLocaleString()})
                                     </option>
@@ -2116,6 +2588,13 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                 </Box>
             )}
 
+            {/* ── Attendance Panel for Unscheduled Employees ── */}
+            <UnscheduledAttendancePanel
+                employees={employees}
+                daySchedules={daySchedules}
+                attendanceDate={transferDate}
+            />
+
             {/* Committed Transfers List */}
             <Box mt={8} w="full">
                 <HStack justify="space-between" mb={4} px={2}>
@@ -2142,6 +2621,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                                         <Th color="teal.700">Employee From (Sender)</Th>
                                         <Th color="teal.700">Employee To (Receiver)</Th>
                                         <Th isNumeric color="teal.700">Amount</Th>
+                                        <Th textAlign="center" color="teal.700">Actions</Th>
                                     </Tr>
                                 </Thead>
                                 <Tbody bg="white">
@@ -2154,6 +2634,19 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                                                 <HStack><Icon as={FaUserTie} /><Text>{t.taker?.name || 'Unknown'}</Text></HStack>
                                             </Td>
                                             <Td isNumeric fontWeight="black" fontSize="lg" color="teal.600">₹{t.amount?.toLocaleString()}</Td>
+                                            <Td>
+                                                <HStack justify="center">
+                                                    <IconButton
+                                                        size="sm"
+                                                        colorScheme="red"
+                                                        variant="ghost"
+                                                        icon={<Icon as={FaTrash} />}
+                                                        aria-label="Delete Transfer"
+                                                        onClick={() => handleDeleteCommittedTransfer(t._id)}
+                                                        borderRadius="lg"
+                                                    />
+                                                </HStack>
+                                            </Td>
                                         </Tr>
                                     ))}
                                 </Tbody>
