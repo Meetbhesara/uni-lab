@@ -531,19 +531,39 @@ const VehicleMasterForm = () => {
                                     <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
-                                                <Th>Vehicle No</Th>
-                                                <Th>Name</Th>
-                                                <Th>Next Service</Th>
-                                                <Th textAlign="center">Actions</Th>
+                                                <Th textAlign="center" whiteSpace="nowrap">Image</Th>
+                                                <Th whiteSpace="nowrap">Vehicle No</Th>
+                                                <Th whiteSpace="nowrap">Name</Th>
+                                                <Th whiteSpace="nowrap">Next Service</Th>
+                                                <Th textAlign="center" whiteSpace="nowrap">Actions</Th>
                                             </Tr>
                                         </Thead>
                                         <Tbody>
                                             {filteredVehicles.map(v => (
                                                 <Tr key={v._id} _hover={{ bg: "purple.50" }} transition="background 0.2s">
-                                                    <Td fontWeight="bold" color="purple.600">{v.vehicleNumber}</Td>
-                                                    <Td>{v.vehicleName}</Td>
-                                                    <Td><Badge colorScheme="red" variant="subtle" borderRadius="full" px={2}>{v.serviceDate?.substring(0, 10)}</Badge></Td>
-                                                    <Td textAlign="center">
+                                                    <Td textAlign="center" py={2}>
+                                                        {v.vehiclePhotos && v.vehiclePhotos[0]?.url ? (
+                                                            <Image
+                                                                src={`${API_BASE_URL}${v.vehiclePhotos[0].url}`}
+                                                                alt={v.vehicleNumber}
+                                                                w="45px"
+                                                                h="60px"
+                                                                borderRadius="md"
+                                                                objectFit="cover"
+                                                                border="1px solid"
+                                                                borderColor="gray.200"
+                                                                mx="auto"
+                                                            />
+                                                        ) : (
+                                                            <Box w="45px" h="60px" bg="purple.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center" border="1px solid" borderColor="gray.100" mx="auto">
+                                                                <Icon as={FaTruck} color="purple.400" />
+                                                            </Box>
+                                                        )}
+                                                    </Td>
+                                                    <Td fontWeight="bold" color="purple.600" whiteSpace="nowrap">{v.vehicleNumber}</Td>
+                                                    <Td whiteSpace="nowrap">{v.vehicleName}</Td>
+                                                    <Td whiteSpace="nowrap"><Badge colorScheme="red" variant="subtle" borderRadius="full" px={2}>{v.serviceDate?.substring(0, 10)}</Badge></Td>
+                                                    <Td textAlign="center" whiteSpace="nowrap">
                                                         <HStack justify="center" spacing={1}>
                                                             <IconButton aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} onClick={() => setViewVehicle(v)} />
                                                             <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => {
@@ -572,7 +592,15 @@ const VehicleMasterForm = () => {
                                         <Card key={v._id} borderRadius="xl" border="1px solid" borderColor="gray.100" _hover={{ shadow: 'md', borderColor: 'purple.300' }} transition="all 0.2s">
                                             <CardBody p={4}>
                                                 <HStack spacing={4} mb={4}>
-                                                    <Box p={2} bg="purple.50" borderRadius="lg"><Icon as={FaTruck} color="purple.500" w={6} h={6} /></Box>
+                                                    <Avatar
+                                                        size="md"
+                                                        src={v.vehiclePhotos && v.vehiclePhotos[0]?.url ? `${API_BASE_URL}${v.vehiclePhotos[0].url}` : undefined}
+                                                        name={v.vehicleNumber}
+                                                        icon={<Icon as={FaTruck} />}
+                                                        borderRadius="lg"
+                                                        bg="purple.50"
+                                                        color="purple.500"
+                                                    />
                                                     <Box flex={1}>
                                                         <Text fontWeight="bold" fontSize="md" noOfLines={1}>{v.vehicleNumber}</Text>
                                                         <Text fontSize="xs" color="gray.500">{v.vehicleName}</Text>
@@ -1227,7 +1255,7 @@ const EmployeeMasterForm = () => {
 
     return (
         <Box py={5} bg="gray.100" minH="100vh">
-            <Container maxW="container.lg">
+            <Container maxW="100%" px={0}>
                 <Card variant="elevated" borderRadius="2xl" boxShadow="2xl" bg="white" overflow="hidden">
                     <Box bg="blue.600" p={{ base: 5, md: 8 }} color="white">
                         <Stack direction={{ base: "column", md: "row" }} justify="space-between" align="center" spacing={4}>
@@ -1613,26 +1641,26 @@ const EmployeeMasterForm = () => {
                                     <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
-                                                <Th>ID</Th>
+                                                <Th whiteSpace="nowrap">ID</Th>
                                                 <Th>Name</Th>
-                                                <Th>Designation</Th>
-                                                <Th>Phone</Th>
-                                                <Th textAlign="center">Actions</Th>
+                                                <Th whiteSpace="nowrap">Designation</Th>
+                                                <Th whiteSpace="nowrap">Phone</Th>
+                                                <Th textAlign="center" whiteSpace="nowrap">Actions</Th>
                                             </Tr>
                                         </Thead>
                                         <Tbody>
                                             {filteredEmployees.map(emp => (
                                                 <Tr key={emp._id} _hover={{ bg: "blue.50" }} transition="background 0.2s">
-                                                    <Td fontWeight="bold" color="blue.600">{emp.empId}</Td>
-                                                    <Td>
+                                                    <Td fontWeight="bold" color="blue.600" whiteSpace="nowrap">{emp.empId}</Td>
+                                                    <Td whiteSpace="normal" wordBreak="break-word">
                                                         <HStack spacing={3}>
                                                             <Avatar size="xs" src={emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : undefined} name={emp.name} />
                                                             <Text fontWeight="semibold">{emp.name}</Text>
                                                         </HStack>
                                                     </Td>
-                                                    <Td><Badge colorScheme="blue" variant="subtle" borderRadius="full" px={2}>{emp.designation}</Badge></Td>
-                                                    <Td>{emp.phone}</Td>
-                                                    <Td textAlign="center">
+                                                    <Td whiteSpace="nowrap"><Badge colorScheme="blue" variant="subtle" borderRadius="full" px={2}>{emp.designation}</Badge></Td>
+                                                    <Td whiteSpace="nowrap">{emp.phone}</Td>
+                                                    <Td textAlign="center" whiteSpace="nowrap">
                                                         <HStack justify="center" spacing={1}>
                                                             <IconButton aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} onClick={() => setViewEmployee(emp)} />
                                                             <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => handleSelectEmployee({ target: { value: emp._id } })} />
@@ -1794,22 +1822,22 @@ const EmployeeMasterForm = () => {
                                                     <Table variant="simple" size="sm">
                                                         <Thead>
                                                             <Tr bgGradient="linear(to-r, blue.600, blue.800)">
-                                                                <Th color="white" py={4} fontSize="10px">#</Th>
-                                                                <Th color="white" py={4} fontSize="10px">EMP ID</Th>
-                                                                <Th color="white" py={4} fontSize="10px">NAME</Th>
-                                                                <Th color="white" py={4} fontSize="10px">BANK A/C NO</Th>
-                                                                <Th color="white" py={4} fontSize="10px">IFSC CODE</Th>
-                                                                <Th color="white" py={4} fontSize="10px" isNumeric>SALARY</Th>
-                                                                <Th color="white" py={4} fontSize="10px">FOOD</Th>
-                                                                <Th color="white" py={4} fontSize="10px">PAY TYPE</Th>
-                                                                <Th color="white" py={4} fontSize="10px">STATUS</Th>
-                                                                <Th color="white" py={4} fontSize="10px" textAlign="center">EMP STATUS</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">#</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">EMP ID</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">NAME</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">BANK A/C NO</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">IFSC CODE</Th>
+                                                                <Th color="white" py={4} fontSize="10px" isNumeric whiteSpace="nowrap">SALARY</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">FOOD</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">PAY TYPE</Th>
+                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">STATUS</Th>
+                                                                <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">EMP STATUS</Th>
                                                             </Tr>
                                                         </Thead>
                                                         <Tbody>
                                                             {reportFiltered.length === 0 ? (
                                                                 <Tr>
-                                                                    <Td colSpan={8} textAlign="center" py={10} color="gray.400">
+                                                                    <Td colSpan={10} textAlign="center" py={10} color="gray.400">
                                                                         <VStack spacing={2}>
                                                                             <Icon as={FaUsers} w={8} h={8} color="gray.200" />
                                                                             <Text fontSize="sm">No records match current filters</Text>
@@ -1823,25 +1851,25 @@ const EmployeeMasterForm = () => {
                                                                 const rowBg = isDeactive ? 'red.50' : isDone ? 'green.50' : idx % 2 === 0 ? 'white' : 'gray.50';
                                                                 return (
                                                                     <Tr key={emp._id} bg={rowBg} _hover={{ bg: isDone ? 'green.100' : isDeactive ? 'red.100' : 'blue.50' }} transition="background 0.15s">
-                                                                        <Td fontSize="xs" fontWeight="bold" color="gray.500">{idx + 1}</Td>
-                                                                        <Td fontSize="xs" fontWeight="bold" color="blue.600">{emp.empId}</Td>
+                                                                        <Td fontSize="xs" fontWeight="bold" color="gray.500" whiteSpace="nowrap">{idx + 1}</Td>
+                                                                        <Td fontSize="xs" fontWeight="bold" color="blue.600" whiteSpace="nowrap">{emp.empId}</Td>
                                                                         <Td>
                                                                             <HStack spacing={2}>
                                                                                 <Avatar size="xs" src={emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : undefined} name={emp.name} />
-                                                                                <Text fontSize="xs" fontWeight="bold" noOfLines={1}>{emp.name}</Text>
+                                                                                <Text fontSize="xs" fontWeight="bold" whiteSpace="normal" wordBreak="break-word">{emp.name}</Text>
                                                                             </HStack>
                                                                         </Td>
-                                                                        <Td fontSize="xs" color="gray.700">{emp.bankDetails?.accountNumber || '-'}</Td>
-                                                                        <Td fontSize="xs" color="gray.700">{emp.bankDetails?.ifscCode || '-'}</Td>
-                                                                        <Td isNumeric>
+                                                                        <Td fontSize="xs" color="gray.700" whiteSpace="nowrap">{emp.bankDetails?.accountNumber || '-'}</Td>
+                                                                        <Td fontSize="xs" color="gray.700" whiteSpace="nowrap">{emp.bankDetails?.ifscCode || '-'}</Td>
+                                                                        <Td isNumeric whiteSpace="nowrap">
                                                                             <Text fontSize="xs" fontWeight="black" color="green.700">₹{parseFloat(emp.salary || 0).toLocaleString()}</Text>
                                                                         </Td>
-                                                                        <Td>
+                                                                        <Td whiteSpace="nowrap">
                                                                             <Badge size="sm" colorScheme={emp.foodAllowance === 'Food' ? 'green' : 'gray'} borderRadius="full" px={2} fontSize="9px">
                                                                                 {emp.foodAllowance === 'Food' ? '🍱 Food' : '🚫 No Food'}
                                                                             </Badge>
                                                                         </Td>
-                                                                        <Td>
+                                                                        <Td whiteSpace="nowrap">
                                                                             <Select
                                                                                 size="xs"
                                                                                 borderRadius="lg"
@@ -1858,7 +1886,7 @@ const EmployeeMasterForm = () => {
                                                                                 <option value="UPI">📱 UPI</option>
                                                                             </Select>
                                                                         </Td>
-                                                                        <Td>
+                                                                        <Td whiteSpace="nowrap">
                                                                             <Select
                                                                                 size="xs"
                                                                                 borderRadius="lg"
@@ -1876,7 +1904,7 @@ const EmployeeMasterForm = () => {
                                                                                 <option value="Done">✅ Done</option>
                                                                             </Select>
                                                                         </Td>
-                                                                        <Td textAlign="center">
+                                                                        <Td textAlign="center" whiteSpace="nowrap">
                                                                             <Badge
                                                                                 colorScheme={isDeactive ? 'red' : 'green'}
                                                                                 variant="solid"
@@ -2375,7 +2403,7 @@ const ClientMasterForm = () => {
                                     <Table variant="simple" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                         <Thead bg="gray.50">
                                             <Tr>
-                                                <Th>ID</Th>
+                                                <Th whiteSpace="nowrap">ID</Th>
                                                 <Th>Client Name</Th>
                                                 <Th>Contact Person</Th>
                                                 <Th>GST No</Th>
@@ -2385,8 +2413,8 @@ const ClientMasterForm = () => {
                                         <Tbody>
                                             {filteredClients.map(c => (
                                                 <Tr key={c._id} _hover={{ bg: "orange.50" }} transition="background 0.2s">
-                                                    <Td fontWeight="bold" color="orange.600">{c.clientId}</Td>
-                                                    <Td fontWeight="semibold">{c.clientName}</Td>
+                                                    <Td fontWeight="bold" color="orange.600" whiteSpace="nowrap">{c.clientId}</Td>
+                                                    <Td fontWeight="semibold" whiteSpace="normal" wordBreak="break-word">{c.clientName}</Td>
                                                     <Td>
                                                         <VStack align="start" spacing={0}>
                                                             <Text fontSize="sm" fontWeight="bold">{c.contactPersonName || c.contactPerson?.name}</Text>

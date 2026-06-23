@@ -10,6 +10,30 @@ import axios from 'axios';
 // Use environment variable for real NAS deployment
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 const API_URL = API_BASE_URL.endsWith('/api') ? API_BASE_URL : `${API_BASE_URL}/api`;
+const getCollectedDocCategory = (doc) => {
+    const docType = (doc.documentType || '').toLowerCase();
+    const docName = (doc.name || '').toLowerCase();
+    
+    // 1. Check documentType first
+    if (docType.includes('photo') || docType.includes('image')) return 'Photos';
+    if (docType.includes('report') || docType.includes('check')) return 'Reports';
+    if (docType.includes('data') || docType.includes('csv') || docType.includes('txt') || docType.includes('tasks')) return 'Data';
+    if (docType.includes('drawing') || docType.includes('dwg') || docType.includes('dxf')) return 'Drawing';
+
+    // 2. Check filename extension
+    const ext = docName.split('.').pop() || '';
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) return 'Photos';
+    if (['dwg', 'dxf', 'dgn', 'dwf'].includes(ext)) return 'Drawing';
+    if (['csv', 'xlsx', 'xls', 'txt', 'dat'].includes(ext)) return 'Data';
+    if (['pdf', 'docx', 'doc'].includes(ext)) {
+        if (docName.includes('report') || docName.includes('sheet') || docName.includes('check')) return 'Reports';
+        if (docName.includes('drawing') || docName.includes('draft') || docName.includes('design') || docName.includes('line')) return 'Drawing';
+        if (docName.includes('data') || docName.includes('point') || docName.includes('mark')) return 'Data';
+        return 'Reports'; // Default for PDF/Word
+    }
+
+    return 'Reports'; // Default fallback
+};
 
 const AdminDraftingWork = () => {
     const bgColor = useColorModeValue('gray.50', 'gray.900');
@@ -20,6 +44,45 @@ const AdminDraftingWork = () => {
     const [topoSurveys, setTopoSurveys] = useState([]);
     const [pointMarkings, setPointMarkings] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [selectedGroup, setSelectedGroup] = useState(null);
+    const [scheduleGroupToSelect, setScheduleGroupToSelect] = useState(null);
+
+    const getSurveyDraftingStatus = (survey) => {
+        const files = survey.draftingWorkFiles || {};
+        let status = 'Pending';
+        let color = 'gray';
+
+        const hasCollected = (documents || []).some(d => {
+            if (d.source !== 'EmployeeExpense') return false;
+            if (!['Received', 'Done', 'Converted'].includes(d.status)) return false;
+            
+            const docClient = String(d.client?._id || d.client || '');
+            const surClient = String(survey.client?._id || survey.client || '');
+            if (docClient !== surClient) return false;
+            
+            const docSite = String(d.site?._id || d.site || '');
+            const surSite = String(survey.site?._id || survey.site || '');
+            if (docSite !== surSite) return false;
+
+            if (String(d.expenseId) === String(survey._id) || String(d.scheduleId) === String(survey._id)) return true;
+
+            if (!d.receivedDate && !d.uploadedAt && !d.createdAt) return false;
+            if (!survey.scheduleDate) return false;
+            const docDate = new Date(d.receivedDate || d.uploadedAt || d.createdAt).toISOString().split('T')[0];
+            const surDate = new Date(survey.scheduleDate).toISOString().split('T')[0];
+            
+            return docDate === surDate;
+        });
+
+        if (files.mailFiles?.length > 0) { status = 'Mail'; color = 'red'; }
+        else if (files.finalCheckingFiles?.length > 0) { status = 'Final Checking'; color = 'green'; }
+        else if (files.esurveyWorkFiles?.length > 0) { status = 'eSurvey Work'; color = 'purple'; }
+        else if (files.liningDrawFiles?.length > 0) { status = 'Lining Draw'; color = 'teal'; }
+        else if (files.convertedFiles?.length > 0) { status = 'Converted'; color = 'orange'; }
+        else if (files.collectedFiles?.length > 0 || hasCollected) { status = 'Collected Files'; color = 'blue'; }
+
+        return { status, color };
+    };
     
     const [clientOptions, setClientOptions] = useState([]);
     const [siteOptions, setSiteOptions] = useState([]);
@@ -49,15 +112,49 @@ const AdminDraftingWork = () => {
     const [selectedLiningFileForEsurvey, setSelectedLiningFileForEsurvey] = useState('');
     const [draftingFiles, setDraftingFiles] = useState({});
 
-    const handleSurveyClick = async (survey) => {
+
+    const handleSurveyClick = async (group) => {
+        setScheduleGroupToSelect(group);
+    };
+
+    const handleSelectScheduleFromModal = async (group, survey) => {
+        setSelectedGroup(group);
+        setSelectedSurvey(survey);
+        setDraftingFiles(survey.draftingWorkFiles || {});
+        setSurveyReceivedDocs([]); // reset
+        setScheduleGroupToSelect(null);
+        
+        if (survey.client?._id && survey.site?._id) {
+            try {
+                const formattedDate = survey.scheduleDate ? new Date(survey.scheduleDate).toISOString().split('T')[0] : '';
+                const res = await axios.get(`${API_URL}/site-master/all-documents?client=${survey.client._id}&site=${survey.site._id}&scheduleDate=${formattedDate}&scheduleId=${survey._id}`);
+                if (res.data.success) {
+                    // Only get documents specifically uploaded via the Employee app (source: EmployeeExpense)
+                    const received = res.data.data.filter(d => ['Received', 'Done', 'Converted'].includes(d.status) && d.source === 'EmployeeExpense').map(doc => ({
+                        _id: doc._id,
+                        name: doc.documentName,
+                        url: doc.documentUrl,
+                        isGlobalDoc: true,
+                        source: doc.source,
+                        expenseId: doc.expenseId,
+                        status: doc.status,
+                        uploadedAt: doc.receivedDate
+                    }));
+                    setSurveyReceivedDocs(received);
+                }
+            } catch (e) {
+                console.error("Failed to fetch site docs for topography", e);
+            }
+        }
+    };
+
+    const handleScheduleChange = async (survey) => {
         setSelectedSurvey(survey);
         setDraftingFiles(survey.draftingWorkFiles || {});
         setSurveyReceivedDocs([]); // reset
         
-        // Fetch specifically for this site to avoid global date filter missing past files
         if (survey.client?._id && survey.site?._id) {
             try {
-                // Pass scheduleDate and scheduleId to ensure we ONLY get documents for this specific survey date and EXACT schedule, avoiding other surveys on the same site!
                 const formattedDate = survey.scheduleDate ? new Date(survey.scheduleDate).toISOString().split('T')[0] : '';
                 const res = await axios.get(`${API_URL}/site-master/all-documents?client=${survey.client._id}&site=${survey.site._id}&scheduleDate=${formattedDate}&scheduleId=${survey._id}`);
                 if (res.data.success) {
@@ -112,10 +209,18 @@ const AdminDraftingWork = () => {
             formData.append('originalFileId', selectedCollectedFileForConversion);
         }
         
+
+        
+
+
+
+
+
+
         if (category === 'liningDrawFiles' && selectedConvertedFileForLining) {
             formData.append('originalFileId', selectedConvertedFileForLining);
         }
-        
+
         if (category === 'esurveyWorkFiles' && selectedLiningFileForEsurvey) {
             formData.append('originalFileId', selectedLiningFileForEsurvey);
         }
@@ -169,7 +274,7 @@ const AdminDraftingWork = () => {
             toast({ title: 'Upload failed', status: 'error' });
         } finally {
             setUploadingCategory(null);
-            e.target.value = null; // reset input
+            if (e && e.target) e.target.value = null; // reset input
         }
     };
 
@@ -215,32 +320,35 @@ const AdminDraftingWork = () => {
             // Fetch Topography Surveys
             const topoRes = await axios.get(`${API_URL}/schedule-master?scheduleType=TOPOGRAPHY SURVEY`);
             if (topoRes.data.success) {
-                // Group Topography Surveys identical to InvoiceReport
                 const rawTopo = topoRes.data.data;
-                const topoGroupsObj = {};
-                const groupedTopo = [];
+                const topoGroups = {};
 
                 rawTopo.filter(s => s.dayStatus !== 'Rejected').forEach(s => {
-                    // Force group by individual mongo ID as requested by user
-                    const groupId = s._id;
+                    if (filterClient && s.client?._id !== filterClient) return;
+                    if (filterSite && s.site?._id !== filterSite) return;
+
+                    const clientVal = s.client?._id || s.client || 'unknown-client';
+                    const siteVal = s.site?._id || s.site || 'unknown-site';
+                    const groupKey = `${clientVal}-${siteVal}`;
                     
-                    const groupKey = `${s.client?._id}-${s.site?._id}-${groupId}`;
-                    
-                    if (!topoGroupsObj[groupKey]) {
-                        topoGroupsObj[groupKey] = { ...s };
-                        topoGroupsObj[groupKey].isMonthGroup = false; // Render them individually
-                        topoGroupsObj[groupKey].groupedDates = [s.scheduleDate];
+                    if (!topoGroups[groupKey]) {
+                        topoGroups[groupKey] = {
+                            client: s.client,
+                            site: s.site,
+                            groupKey: groupKey,
+                            schedules: []
+                        };
                     }
+                    topoGroups[groupKey].schedules.push(s);
                 });
 
-                Object.values(topoGroupsObj).forEach(mg => {
-                    mg.groupedDates.sort((a, b) => new Date(a) - new Date(b));
-                    groupedTopo.push(mg);
+                const groupedTopo = Object.values(topoGroups).map(g => {
+                    g.schedules.sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
+                    g.scheduleDate = g.schedules[0]?.scheduleDate;
+                    return g;
                 });
                 
-                // Sort the final array by scheduleDate descending
                 groupedTopo.sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
-
                 setTopoSurveys(groupedTopo);
             }
 
@@ -248,23 +356,31 @@ const AdminDraftingWork = () => {
             const pointRes = await axios.get(`${API_URL}/schedule-master?scheduleType=POINT MARKING`);
             if (pointRes.data.success) {
                 const rawPoint = pointRes.data.data;
-                const pointGroupsObj = {};
-                const groupedPoint = [];
+                const pointGroups = {};
 
                 rawPoint.filter(s => s.dayStatus !== 'Rejected').forEach(s => {
-                    const groupId = s._id;
-                    const groupKey = `${s.client?._id}-${s.site?._id}-${groupId}`;
+                    if (filterClient && s.client?._id !== filterClient) return;
+                    if (filterSite && s.site?._id !== filterSite) return;
+
+                    const clientVal = s.client?._id || s.client || 'unknown-client';
+                    const siteVal = s.site?._id || s.site || 'unknown-site';
+                    const groupKey = `${clientVal}-${siteVal}`;
                     
-                    if (!pointGroupsObj[groupKey]) {
-                        pointGroupsObj[groupKey] = { ...s };
-                        pointGroupsObj[groupKey].isMonthGroup = false;
-                        pointGroupsObj[groupKey].groupedDates = [s.scheduleDate];
+                    if (!pointGroups[groupKey]) {
+                        pointGroups[groupKey] = {
+                            client: s.client,
+                            site: s.site,
+                            groupKey: groupKey,
+                            schedules: []
+                        };
                     }
+                    pointGroups[groupKey].schedules.push(s);
                 });
 
-                Object.values(pointGroupsObj).forEach(mg => {
-                    mg.groupedDates.sort((a, b) => new Date(a) - new Date(b));
-                    groupedPoint.push(mg);
+                const groupedPoint = Object.values(pointGroups).map(g => {
+                    g.schedules.sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
+                    g.scheduleDate = g.schedules[0]?.scheduleDate;
+                    return g;
                 });
                 
                 groupedPoint.sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
@@ -305,10 +421,7 @@ const AdminDraftingWork = () => {
         try {
             const inProgressDocs = documents.filter(d => d.status === 'Drafting In Progress');
             const originalDoc = inProgressDocs.find(d => d._id === trackedDocId);
-            
-            // Determine the file name based on linked drafts
             const linkedDrafts = documents.filter(d => d.isDraft && d.linkedDocumentId === originalDoc._id);
-            
             let newFileName = uploadTrackingFile.name; // Default: use uploaded file name (e.g., meet.pdf)
             
             if (linkedDrafts.length > 0) {
@@ -319,8 +432,8 @@ const AdminDraftingWork = () => {
                 const nameWithoutExt = lastDot === -1 ? firstDraftName : firstDraftName.substring(0, lastDot);
                 const baseName = nameWithoutExt.replace(/\(R\d+\)$/, '').trim();
                 const uploadedExt = uploadTrackingFile.name.split('.').pop();
-                
                 let maxRev = 0;
+
                 linkedDrafts.forEach(d => {
                     const match = d.documentName.match(new RegExp(`\\(R(\\d+)\\)\\.`));
                     if (match) {
@@ -547,74 +660,92 @@ const AdminDraftingWork = () => {
                                                         </Tr>
                                                     </Thead>
                                                     <Tbody>
-                                                        {section.list.map((survey) => (
+                                                        {section.list.map((group) => (
                                                             <Tr 
-                                                                key={`${survey._id}`} 
+                                                                key={`${group.groupKey}`} 
                                                                 _hover={{ bg: 'blue.50', cursor: 'pointer' }}
-                                                                onClick={() => handleSurveyClick(survey)}
+                                                                onClick={() => handleSurveyClick(group)}
                                                             >
-                                                                <Td fontWeight="bold" color="blue.600">{survey.client?.clientName || 'N/A'}</Td>
+                                                                <Td fontWeight="bold" color="blue.600">{group.client?.clientName || 'N/A'}</Td>
                                                                 <Td fontWeight="bold" color="gray.700">
                                                                     <VStack align="start" spacing={0}>
-                                                                        <Text>{survey.site?.siteName || 'N/A'}</Text>
+                                                                        <Text>{group.site?.siteName || 'N/A'}</Text>
                                                                     </VStack>
                                                                 </Td>
-                                                                <Td fontSize="sm" fontWeight="medium" whiteSpace="nowrap">
-                                                                    <Text>{formatIST(survey.scheduleDate)}</Text>
+                                                                <Td fontSize="sm" fontWeight="medium">
+                                                                    <VStack align="start" spacing={1}>
+                                                                        {group.schedules.map(s => (
+                                                                            <Text key={s._id} whiteSpace="nowrap">{formatIST(s.scheduleDate)}</Text>
+                                                                        ))}
+                                                                    </VStack>
                                                                 </Td>
                                                                 <Td>
-                                                                    {survey.operative?.name ? (
-                                                                        <HStack>
-                                                                            <Avatar size="xs" name={survey.operative.name} bg="teal.500" />
-                                                                            <Text fontWeight="bold">{survey.operative.name}</Text>
-                                                                        </HStack>
-                                                                    ) : (
-                                                                        <Text color="gray.400">Unassigned</Text>
-                                                                    )}
+                                                                    <VStack align="start" spacing={1.5}>
+                                                                        {group.schedules.map(s => (
+                                                                            s.operative?.name ? (
+                                                                                <HStack key={s._id} spacing={1}>
+                                                                                    <Avatar size="2xs" name={s.operative.name} bg="teal.500" />
+                                                                                    <Text fontSize="xs" fontWeight="bold">{s.operative.name}</Text>
+                                                                                </HStack>
+                                                                            ) : (
+                                                                                <Text key={s._id} fontSize="xs" color="gray.400">Unassigned</Text>
+                                                                            )
+                                                                        ))}
+                                                                    </VStack>
                                                                 </Td>
                                                                 <Td>
-                                                                    <Badge colorScheme={survey.dayStatus === 'Completed' ? 'green' : 'orange'} borderRadius="full">
-                                                                        {survey.dayStatus || 'Scheduled'}
-                                                                    </Badge>
+                                                                    <VStack align="start" spacing={1.5}>
+                                                                        {group.schedules.map(s => (
+                                                                            <Badge key={s._id} colorScheme={s.dayStatus === 'Completed' ? 'green' : 'orange'} borderRadius="full" fontSize="2xs">
+                                                                                {s.dayStatus || 'Scheduled'}
+                                                                            </Badge>
+                                                                        ))}
+                                                                    </VStack>
                                                                 </Td>
                                                                 <Td>
-                                                                    {(() => {
-                                                                        const files = survey.draftingWorkFiles || {};
-                                                                        let status = 'Pending';
-                                                                        let color = 'gray';
+                                                                    <VStack align="start" spacing={1.5}>
+                                                                        {group.schedules.map(s => {
+                                                                            const files = s.draftingWorkFiles || {};
+                                                                            let status = 'Pending';
+                                                                            let color = 'gray';
 
-                                                                        const hasCollected = (documents || []).some(d => {
-                                                                            if (d.source !== 'EmployeeExpense') return false;
-                                                                            if (!['Received', 'Done', 'Converted'].includes(d.status)) return false;
-                                                                            
-                                                                            const docClient = String(d.client?._id || d.client || '');
-                                                                            const surClient = String(survey.client?._id || survey.client || '');
-                                                                            if (docClient !== surClient) return false;
-                                                                            
-                                                                            const docSite = String(d.site?._id || d.site || '');
-                                                                            const surSite = String(survey.site?._id || survey.site || '');
-                                                                            if (docSite !== surSite) return false;
+                                                                            const hasCollected = (documents || []).some(d => {
+                                                                                if (d.source !== 'EmployeeExpense') return false;
+                                                                                if (!['Received', 'Done', 'Converted'].includes(d.status)) return false;
+                                                                                
+                                                                                const docClient = String(d.client?._id || d.client || '');
+                                                                                const surClient = String(s.client?._id || s.client || '');
+                                                                                if (docClient !== surClient) return false;
+                                                                                
+                                                                                const docSite = String(d.site?._id || d.site || '');
+                                                                                const surSite = String(s.site?._id || s.site || '');
+                                                                                if (docSite !== surSite) return false;
 
-                                                                            if (String(d.expenseId) === String(survey._id) || String(d.scheduleId) === String(survey._id)) return true;
+                                                                                if (String(d.expenseId) === String(s._id) || String(d.scheduleId) === String(s._id)) return true;
 
-                                                                            if (!d.receivedDate && !d.uploadedAt && !d.createdAt) return false;
-                                                                            if (!survey.scheduleDate) return false;
-                                                                            const docDate = new Date(d.receivedDate || d.uploadedAt || d.createdAt).toISOString().split('T')[0];
-                                                                            const surDate = new Date(survey.scheduleDate).toISOString().split('T')[0];
-                                                                            
-                                                                            return docDate === surDate;
-                                                                        });
+                                                                                if (!d.receivedDate && !d.uploadedAt && !d.createdAt) return false;
+                                                                                if (!s.scheduleDate) return false;
+                                                                                const docDate = new Date(d.receivedDate || d.uploadedAt || d.createdAt).toISOString().split('T')[0];
+                                                                                const surDate = new Date(s.scheduleDate).toISOString().split('T')[0];
+                                                                                
+                                                                                return docDate === surDate;
+                                                                            });
 
-                                                                        if (files.mailFiles?.length > 0) { status = 'Mail'; color = 'red'; }
-                                                                        else if (files.finalCheckingFiles?.length > 0) { status = 'Final Checking'; color = 'green'; }
-                                                                        else if (files.esurveyWorkFiles?.length > 0) { status = 'eSurvey Work'; color = 'purple'; }
-                                                                        else if (files.liningDrawFiles?.length > 0) { status = 'Lining Draw'; color = 'teal'; }
-                                                                        else if (files.convertedFiles?.length > 0) { status = 'Converted'; color = 'orange'; }
-                                                                        else if (files.collectedFiles?.length > 0 || hasCollected) { status = 'Collected Files'; color = 'blue'; }
+                                                                            if (files.mailFiles?.length > 0) { status = 'Mail'; color = 'red'; }
+                                                                            else if (files.finalCheckingFiles?.length > 0) { status = 'Final Checking'; color = 'green'; }
+                                                                            else if (files.esurveyWorkFiles?.length > 0) { status = 'eSurvey Work'; color = 'purple'; }
+                                                                            else if (files.liningDrawFiles?.length > 0) { status = 'Lining Draw'; color = 'teal'; }
+                                                                            else if (files.convertedFiles?.length > 0) { status = 'Converted'; color = 'orange'; }
+                                                                            else if (files.collectedFiles?.length > 0 || hasCollected) { status = 'Collected Files'; color = 'blue'; }
 
-                                                                        const matches = (documents || []).filter(d => String(d.site?._id || d.site || '') === String(survey.site?._id || survey.site || ''));
-                                                                        return <Badge colorScheme={color} borderRadius="full">{status} {status === 'Pending' ? `(Docs:${documents?.length}, SiteMatch:${matches.length})` : ''}</Badge>;
-                                                                    })()}
+                                                                            const matches = (documents || []).filter(d => String(d.site?._id || d.site || '') === String(s.site?._id || s.site || ''));
+                                                                            return (
+                                                                                <Badge key={s._id} colorScheme={color} borderRadius="full" fontSize="2xs">
+                                                                                    {status} {status === 'Pending' ? `(Docs:${documents?.length}, SiteMatch:${matches.length})` : ''}
+                                                                                </Badge>
+                                                                            );
+                                                                        })}
+                                                                    </VStack>
                                                                 </Td>
                                                             </Tr>
                                                         ))}
@@ -628,14 +759,36 @@ const AdminDraftingWork = () => {
                                         </VStack>
                                     ) : (
                                         <Box p={4} border="1px solid" borderColor="gray.200" borderRadius="xl" bg="white" shadow="sm">
-                                            <Flex justify="space-between" align="center" mb={6}>
+                                            <Flex justify="space-between" align="center" mb={6} flexWrap="wrap" gap={4}>
                                                 <HStack spacing={4}>
-                                                    <IconButton icon={<FaArrowLeft />} onClick={() => setSelectedSurvey(null)} borderRadius="full" aria-label="Back" />
+                                                    <IconButton icon={<FaArrowLeft />} onClick={() => { setSelectedSurvey(null); setSelectedGroup(null); }} borderRadius="full" aria-label="Back" />
                                                     <VStack align="start" spacing={0}>
                                                         <Heading size="md" color="blue.700">{selectedSurvey.client?.clientName} - {selectedSurvey.site?.siteName}</Heading>
-                                                        <Text fontSize="sm" color="gray.500">Workspace • Scheduled: {formatIST(selectedSurvey.scheduleDate)}</Text>
+                                                        <Text fontSize="sm" color="gray.500">Workspace • Active Job Date: {formatIST(selectedSurvey.scheduleDate)}</Text>
                                                     </VStack>
                                                 </HStack>
+
+                                                {selectedGroup && selectedGroup.schedules.length > 1 && (
+                                                    <HStack spacing={2} bg="blue.50" p={2} borderRadius="xl" border="1px solid" borderColor="blue.100">
+                                                        <Text fontSize="sm" fontWeight="bold" color="blue.700">Select Job / Schedule ID:</Text>
+                                                        <Select
+                                                            size="sm"
+                                                            w="240px"
+                                                            bg="white"
+                                                            value={selectedSurvey._id}
+                                                            onChange={e => {
+                                                                const chosen = selectedGroup.schedules.find(s => s._id === e.target.value);
+                                                                if (chosen) handleScheduleChange(chosen);
+                                                            }}
+                                                        >
+                                                            {selectedGroup.schedules.map(s => (
+                                                                <option key={s._id} value={s._id}>
+                                                                    {formatIST(s.scheduleDate)} ({s.operative?.name || 'Unassigned'})
+                                                                </option>
+                                                            ))}
+                                                        </Select>
+                                                    </HStack>
+                                                )}
                                             </Flex>
 
                                             <Tabs variant="enclosed" colorScheme="blue">
@@ -674,7 +827,7 @@ const AdminDraftingWork = () => {
                                                                                             bg="white"
                                                                                             borderColor="orange.300"
                                                                                         >
-                                                                                            {(surveyReceivedDocs || []).map(doc => (
+                                                                                            {(surveyReceivedDocs || []).filter(doc => getCollectedDocCategory(doc) !== 'Photos').map(doc => (
                                                                                                 <option key={doc._id} value={doc._id}>{doc.name}</option>
                                                                                             ))}
                                                                                         </Select>
@@ -747,70 +900,118 @@ const AdminDraftingWork = () => {
                                                                                     {uploadingCategory === step.key && <Spinner size="md" color={`${step.color}.500`} mt={4} />}
                                                                                 </Box>
                                                                             </VStack>
-                                                                        )}
-
-                                                                        <Box>
+                                                                        )}                                                                        <Box>
                                                                             <Text fontWeight="bold" mb={3} color="gray.700">Uploaded Documents</Text>
-                                                                            <VStack align="stretch" spacing={3} maxH="400px" overflowY="auto" pr={2}>
-                                                                                {(() => {
-                                                                                    let filesToRender = draftingFiles[step.key] || [];
-                                                                                    if (step.key === 'collectedFiles' && selectedSurvey) {
-                                                                                        const receivedDocs = surveyReceivedDocs || [];
-                                                                                        filesToRender = receivedDocs;
-                                                                                    }
+                                                                            {step.key === 'collectedFiles' ? (
+                                                                                <VStack align="stretch" spacing={6} maxH="500px" overflowY="auto" pr={2}>
+                                                                                    {['Photos', 'Reports', 'Data', 'Drawing'].map(cat => {
+                                                                                        const catFiles = (surveyReceivedDocs || []).filter(d => getCollectedDocCategory(d) === cat);
+                                                                                        let catColor = 'blue';
+                                                                                        let catIcon = FaFileImage;
+                                                                                        if (cat === 'Reports') { catColor = 'green'; catIcon = FaFilePdf; }
+                                                                                        if (cat === 'Data') { catColor = 'purple'; catIcon = FaTasks; }
+                                                                                        if (cat === 'Drawing') { catColor = 'teal'; catIcon = FaFolderOpen; }
 
-                                                                                    return (
-                                                                                        <>
-                                                                                            {filesToRender.map((file, fIdx) => (
-                                                                                                <Flex key={file._id || fIdx} bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200" align="center" justify="space-between" shadow="sm">
-                                                                                                    <HStack overflow="hidden" spacing={4} flex={1}>
-                                                                                                        <Icon as={FaFilePdf} color="red.500" w={6} h={6} />
-                                                                                                        <VStack align="start" spacing={0} flex={1} overflow="hidden">
-                                                                                                            <Text fontSize="sm" fontWeight="bold" color="gray.700" isTruncated maxW="100%" title={file.name}>
-                                                                                                                {(() => {
-                                                                                                                    const rMatch = file.name?.match(/(\(R\d+\))/i);
-                                                                                                                    if (rMatch) {
-                                                                                                                        const idx = file.name.indexOf(rMatch[0]);
-                                                                                                                        return (
-                                                                                                                            <>
-                                                                                                                                {file.name.substring(0, idx)}
-                                                                                                                                <Text as="span" color="red.500">{rMatch[0]}</Text>
-                                                                                                                                {file.name.substring(idx + rMatch[0].length)}
-                                                                                                                            </>
-                                                                                                                        );
-                                                                                                                    }
-                                                                                                                    return file.name;
-                                                                                                                })()}
-                                                                                                            </Text>
-                                                                                                            {step.key === 'convertedFiles' && file.originalFileId && (
-                                                                                                                <HStack spacing={1} mt={0.5} title={`Mapped to: ${surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                    <Icon as={FaFileAlt} w={3} h={3} color="orange.400" />
-                                                                                                                    <Text fontSize="xs" color="orange.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                        Mapped: {surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                    </Text>
-                                                                                                                </HStack>
-                                                                                                            )}
-                                                                                                            {step.key === 'liningDrawFiles' && file.originalFileId && (
-                                                                                                                <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                    <Icon as={FaFileAlt} w={3} h={3} color="teal.400" />
-                                                                                                                    <Text fontSize="xs" color="teal.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                        Mapped: {(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                    </Text>
-                                                                                                                </HStack>
-                                                                                                            )}
-                                                                                                            {step.key === 'esurveyWorkFiles' && file.originalFileId && (
-                                                                                                                <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
-                                                                                                                    <Icon as={FaFileAlt} w={3} h={3} color="purple.400" />
-                                                                                                                    <Text fontSize="xs" color="purple.600" fontWeight="bold" isTruncated maxW="100%">
-                                                                                                                        Mapped: {(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
-                                                                                                                    </Text>
-                                                                                                                </HStack>
-                                                                                                            )}
-                                                                                                        </VStack>
+                                                                                        return (
+                                                                                            <Box key={cat} p={4} borderRadius="xl" bg="gray.50" border="1px solid" borderColor="gray.200">
+                                                                                                <HStack mb={3} justify="space-between">
+                                                                                                    <HStack spacing={2}>
+                                                                                                        <Icon as={catIcon} color={`${catColor}.500`} w={5} h={5} />
+                                                                                                        <Text fontWeight="extrabold" color={`${catColor}.700`}>{cat} ({catFiles.length})</Text>
                                                                                                     </HStack>
-                                                                                                    
-                                                                                                    <HStack spacing={1}>
-                                                                                                        {step.key !== 'collectedFiles' && (
+                                                                                                </HStack>
+                                                                                                
+                                                                                                {catFiles.length > 0 ? (
+                                                                                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                                                                                                        {catFiles.map((file, fIdx) => (
+                                                                                                            <Flex key={file._id || fIdx} bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200" align="center" justify="space-between" shadow="sm">
+                                                                                                                <HStack overflow="hidden" spacing={3} flex={1}>
+                                                                                                                    <Icon as={catIcon} color={`${catColor}.400`} w={5} h={5} />
+                                                                                                                    <VStack align="start" spacing={0} flex={1} overflow="hidden">
+                                                                                                                        <Text fontSize="xs" fontWeight="bold" color="gray.700" isTruncated maxW="100%" title={file.name}>
+                                                                                                                            {file.name}
+                                                                                                                        </Text>
+                                                                                                                        <Text fontSize="2xs" color="gray.400">
+                                                                                                                            Uploaded: {file.uploadedAt ? formatIST(file.uploadedAt) : 'N/A'}
+                                                                                                                        </Text>
+                                                                                                                    </VStack>
+                                                                                                                </HStack>
+                                                                                                                <IconButton 
+                                                                                                                    as="a" 
+                                                                                                                    href={`${API_BASE_URL}${file.url}`} 
+                                                                                                                    target="_blank" 
+                                                                                                                    icon={<FaEye />} 
+                                                                                                                    size="xs" 
+                                                                                                                    colorScheme="blue" 
+                                                                                                                    variant="ghost" 
+                                                                                                                    borderRadius="full" 
+                                                                                                                    title="View"
+                                                                                                                />
+                                                                                                            </Flex>
+                                                                                                        ))}
+                                                                                                    </SimpleGrid>
+                                                                                                ) : (
+                                                                                                    <Text fontSize="xs" color="gray.400" fontStyle="italic" pl={7}>No {cat.toLowerCase()} uploaded yet.</Text>
+                                                                                                )}
+                                                                                            </Box>
+                                                                                        );
+                                                                                    })}
+                                                                                </VStack>
+                                                                            ) : (
+                                                                                <VStack align="stretch" spacing={3} maxH="400px" overflowY="auto" pr={2}>
+                                                                                    {(() => {
+                                                                                        const filesToRender = draftingFiles[step.key] || [];
+                                                                                        return (
+                                                                                            <>
+                                                                                                {filesToRender.map((file, fIdx) => (
+                                                                                                    <Flex key={file._id || fIdx} bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200" align="center" justify="space-between" shadow="sm">
+                                                                                                        <HStack overflow="hidden" spacing={4} flex={1}>
+                                                                                                            <Icon as={FaFilePdf} color="red.500" w={6} h={6} />
+                                                                                                            <VStack align="start" spacing={0} flex={1} overflow="hidden">
+                                                                                                                <Text fontSize="sm" fontWeight="bold" color="gray.700" isTruncated maxW="100%" title={file.name}>
+                                                                                                                    {(() => {
+                                                                                                                        const rMatch = file.name?.match(/(\(R\d+\))/i);
+                                                                                                                        if (rMatch) {
+                                                                                                                            const idx = file.name.indexOf(rMatch[0]);
+                                                                                                                            return (
+                                                                                                                                <>
+                                                                                                                                    {file.name.substring(0, idx)}
+                                                                                                                                    <Text as="span" color="red.500">{rMatch[0]}</Text>
+                                                                                                                                    {file.name.substring(idx + rMatch[0].length)}
+                                                                                                                                </>
+                                                                                                                            );
+                                                                                                                        }
+                                                                                                                        return file.name;
+                                                                                                                    })()}
+                                                                                                                </Text>
+                                                                                                                {step.key === 'convertedFiles' && file.originalFileId && (
+                                                                                                                    <HStack spacing={1} mt={0.5} title={`Mapped to: ${surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
+                                                                                                                        <Icon as={FaFileAlt} w={3} h={3} color="orange.400" />
+                                                                                                                        <Text fontSize="xs" color="orange.600" fontWeight="bold" isTruncated maxW="100%">
+                                                                                                                            Mapped: {surveyReceivedDocs?.find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
+                                                                                                                        </Text>
+                                                                                                                    </HStack>
+                                                                                                                )}
+                                                                                                                {step.key === 'liningDrawFiles' && file.originalFileId && (
+                                                                                                                    <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
+                                                                                                                        <Icon as={FaFileAlt} w={3} h={3} color="teal.400" />
+                                                                                                                        <Text fontSize="xs" color="teal.600" fontWeight="bold" isTruncated maxW="100%">
+                                                                                                                            Mapped: {(draftingFiles['convertedFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
+                                                                                                                        </Text>
+                                                                                                                    </HStack>
+                                                                                                                )}
+                                                                                                                {step.key === 'esurveyWorkFiles' && file.originalFileId && (
+                                                                                                                    <HStack spacing={1} mt={0.5} title={`Mapped to: ${(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}`}>
+                                                                                                                        <Icon as={FaFileAlt} w={3} h={3} color="purple.400" />
+                                                                                                                        <Text fontSize="xs" color="purple.600" fontWeight="bold" isTruncated maxW="100%">
+                                                                                                                            Mapped: {(draftingFiles['liningDrawFiles'] || []).find(d => d._id === file.originalFileId)?.name || 'Unknown File'}
+                                                                                                                        </Text>
+                                                                                                                    </HStack>
+                                                                                                                )}
+                                                                                                            </VStack>
+                                                                                                        </HStack>
+                                                                                                        
+                                                                                                        <HStack spacing={1}>
                                                                                                             <Select 
                                                                                                                 size="xs" 
                                                                                                                 w="120px" 
@@ -823,19 +1024,17 @@ const AdminDraftingWork = () => {
                                                                                                                 <option value="Approved">Approved</option>
                                                                                                                 <option value="Rejected">Rejected</option>
                                                                                                             </Select>
-                                                                                                        )}
-                                                                                                        <IconButton 
-                                                                                                            as="a" 
-                                                                                                            href={`${API_BASE_URL}${file.url}`} 
-                                                                                                            target="_blank" 
-                                                                                                            icon={<FaEye />} 
-                                                                                                            size="sm" 
-                                                                                                            colorScheme="blue" 
-                                                                                                            variant="ghost" 
-                                                                                                            borderRadius="full" 
-                                                                                                            title="View"
-                                                                                                        />
-                                                                                                        {step.key !== 'collectedFiles' && (
+                                                                                                            <IconButton 
+                                                                                                                as="a" 
+                                                                                                                href={`${API_BASE_URL}${file.url}`} 
+                                                                                                                target="_blank" 
+                                                                                                                icon={<FaEye />} 
+                                                                                                                size="sm" 
+                                                                                                                colorScheme="blue" 
+                                                                                                                variant="ghost" 
+                                                                                                                borderRadius="full" 
+                                                                                                                title="View"
+                                                                                                            />
                                                                                                             <IconButton 
                                                                                                                 icon={<FaTrash />} 
                                                                                                                 size="sm" 
@@ -845,17 +1044,17 @@ const AdminDraftingWork = () => {
                                                                                                                 onClick={() => handleDraftingFileDelete(step.key, file._id)}
                                                                                                                 title="Delete"
                                                                                                             />
-                                                                                                        )}
-                                                                                                    </HStack>
-                                                                                                </Flex>
-                                                                                            ))}
-                                                                                            {filesToRender.length === 0 && (
-                                                                                                <Text fontSize="sm" color="gray.400" fontStyle="italic">No files in this category yet.</Text>
-                                                                                            )}
-                                                                                        </>
-                                                                                    );
-                                                                                })()}
-                                                                            </VStack>
+                                                                                                        </HStack>
+                                                                                                    </Flex>
+                                                                                                ))}
+                                                                                                {filesToRender.length === 0 && (
+                                                                                                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No files in this category yet.</Text>
+                                                                                                )}
+                                                                                            </>
+                                                                                        );
+                                                                                    })()}
+                                                                                </VStack>
+                                                                            )}
                                                                         </Box>
 
                                                                     </VStack>
@@ -872,6 +1071,70 @@ const AdminDraftingWork = () => {
                         </TabPanels>
                     </Tabs>
                 </Card>
+
+                {/* Schedule Selector Modal */}
+                <Modal isOpen={!!scheduleGroupToSelect} onClose={() => setScheduleGroupToSelect(null)} size="lg" isCentered>
+                    <ModalOverlay />
+                    <ModalContent borderRadius="2xl">
+                        <ModalHeader borderBottom="1px solid" borderColor="gray.100">
+                            <VStack align="start" spacing={1}>
+                                <Text fontSize="xs" color="gray.400" fontWeight="bold">SELECT JOB / SCHEDULE</Text>
+                                <Heading size="md" color="blue.700">
+                                    {scheduleGroupToSelect?.client?.clientName} - {scheduleGroupToSelect?.site?.siteName}
+                                </Heading>
+                            </VStack>
+                        </ModalHeader>
+                        <ModalCloseButton />
+                        <ModalBody py={4}>
+                            <VStack align="stretch" spacing={3}>
+                                {scheduleGroupToSelect?.schedules.map((s, idx) => {
+                                    const { status, color } = getSurveyDraftingStatus(s);
+                                    return (
+                                        <Box
+                                            key={s._id}
+                                            p={4}
+                                            border="1px solid"
+                                            borderColor="gray.200"
+                                            borderRadius="xl"
+                                            cursor="pointer"
+                                            _hover={{ bg: 'blue.50', borderColor: 'blue.300', transform: 'translateY(-2px)' }}
+                                            transition="all 0.2s"
+                                            onClick={() => handleSelectScheduleFromModal(scheduleGroupToSelect, s)}
+                                            shadow="sm"
+                                        >
+                                            <Flex justify="space-between" align="center">
+                                                <VStack align="start" spacing={1}>
+                                                    <Text fontWeight="bold" color="gray.800" fontSize="md">
+                                                        {formatIST(s.scheduleDate)}
+                                                    </Text>
+                                                    <HStack spacing={1}>
+                                                        <Avatar size="2xs" name={s.operative?.name} bg="teal.500" />
+                                                        <Text fontSize="xs" color="gray.600" fontWeight="semibold">
+                                                            {s.operative?.name || 'Unassigned'}
+                                                        </Text>
+                                                    </HStack>
+                                                </VStack>
+                                                <VStack align="end" spacing={1}>
+                                                    <Badge colorScheme={s.dayStatus === 'Completed' ? 'green' : 'orange'} borderRadius="full" fontSize="2xs">
+                                                        Day Status: {s.dayStatus || 'Scheduled'}
+                                                    </Badge>
+                                                    <Badge colorScheme={color} borderRadius="full" fontSize="2xs">
+                                                        Drafting: {status}
+                                                    </Badge>
+                                                </VStack>
+                                            </Flex>
+                                        </Box>
+                                    );
+                                })}
+                            </VStack>
+                        </ModalBody>
+                        <ModalFooter borderTop="1px solid" borderColor="gray.100">
+                            <Button onClick={() => setScheduleGroupToSelect(null)} borderRadius="xl">
+                                Cancel
+                            </Button>
+                        </ModalFooter>
+                    </ModalContent>
+                </Modal>
             </Container>
         </Box>
     );
