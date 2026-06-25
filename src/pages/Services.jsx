@@ -1399,7 +1399,7 @@ const EmployeeMasterForm = () => {
                                                     <FormLabel fontWeight="bold" fontSize="sm">Email Address</FormLabel>
                                                     <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
                                                         <Icon as={FaEnvelope} ml={2} color="blue.500" />
-                                                        <Input variant="unstyled" p={2} type="email" placeholder="email@company.com" value={formData.email} onChange={(e) => handleChange(e, 'email')} />
+                                                        <Input variant="unstyled" p={2} type="email" placeholder="email@company.com" value={formData.email} onChange={(e) => handleChange(e, 'email')} autoComplete="new-password" />
                                                     </HStack>
                                                 </FormControl>
                                             </SimpleGrid>

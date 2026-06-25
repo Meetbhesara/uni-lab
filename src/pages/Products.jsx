@@ -4,7 +4,7 @@ import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, Ic
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { FaShoppingCart, FaChevronLeft, FaChevronRight, FaTrash } from 'react-icons/fa';
-import { FiSettings, FiSearch } from 'react-icons/fi';
+import { FiSettings, FiSearch, FiPlay } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 
@@ -19,32 +19,32 @@ const PRODUCT_CATEGORIES = [
     {
         id: "CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT",
         title: "Cement, Concrete & Aggregate",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181871/cat_cement.jpg"
+        image: "/api/uploads/products/images/cat_cement.jpg"
     },
     {
         id: "SOIL TESTING EQUIPMENT",
         title: "Soil Testing Equipment",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181874/cat_soil.jpg"
+        image: "/api/uploads/products/images/cat_soil.jpg"
     },
     {
         id: "BITUMIN TESTING EQUPMENT",
         title: "Bitumen Testing Equipment",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181875/cat_bitumin.jpg"
+        image: "/api/uploads/products/images/cat_bitumin.jpg"
     },
     {
         id: "Construction Machinery",
         title: "Construction Machinery",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181872/cat_construction.jpg"
+        image: "/api/uploads/products/images/cat_construction.jpg"
     },
     {
         id: "SURVEY & MEASURING INSTRUMENT",
         title: "Survey & Measuring Instruments",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774182146/cat_survey.jpg"
+        image: "/api/uploads/products/images/cat_survey.jpg"
     },
     {
         id: "SAFETY PRODUCTS",
         title: "Safety Products",
-        image: "https://res.cloudinary.com/dlnvxu56m/image/upload/v1774181873/cat_safety.jpg"
+        image: "/api/uploads/products/images/cat_safety.jpg"
     }
 ];
 
@@ -93,7 +93,7 @@ const ProductSlider = ({ products }) => {
 
             <div className="marquee-track">
                 {items.map((product, idx) => {
-                    const imgSrc = getImageUrl(product.images?.[0] || product.photos?.[0]);
+                    const imgSrc = getImageUrl(product.localImages?.[0] || product.images?.[0] || product.photos?.[0]);
                     return (
                         <Box
                             key={`${product._id}-${idx}`}
@@ -284,7 +284,7 @@ const CartSidebar = () => {
                     const product = item.productId || item.product || {};
                     const name = product.name || item.name || 'Product';
                     const qty = item.quantity || 1;
-                    const img = product.images?.[0] || product.photos?.[0] || item.images?.[0] || '';
+                    const img = product.localImages?.[0] || product.images?.[0] || product.photos?.[0] || item.images?.[0] || '';
                     const imgSrc = img
                         ? (img.startsWith('http') ? img : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'}${img.startsWith('/') ? '' : '/'}${img}`)
                         : 'https://via.placeholder.com/36';
@@ -361,25 +361,12 @@ const Products = () => {
             .then(res => {
                 const all = Array.isArray(res.data) ? res.data : (res.data.data || []);
                 // Only include products that have at least one image
-                setSliderProducts(all.filter(p => (p.images?.length || p.photos?.length)));
+                setSliderProducts(all.filter(p => (p.localImages?.length || p.images?.length || p.photos?.length)));
             })
             .catch(() => { });
     }, []);
 
     const fetchProducts = async (search = '', category = null) => {
-        const cacheKey = `products_v2_${search}_${category}`;
-        const cachedData = sessionStorage.getItem(cacheKey);
-
-        if (cachedData) {
-            try {
-                setProducts(JSON.parse(cachedData));
-                setLoading(false);
-                return;
-            } catch (e) {
-                console.error("Cache parsing error", e);
-            }
-        }
-
         try {
             let url = `/products?`;
             if (search) url += `search=${search}&`;
@@ -388,7 +375,6 @@ const Products = () => {
             const res = await api.get(url);
             let finalData = Array.isArray(res.data) ? res.data : (res.data.data || []);
             setProducts(finalData);
-            sessionStorage.setItem(cacheKey, JSON.stringify(finalData));
         } catch (err) {
             console.error(err);
             toast({ title: "Failed to load products", status: "error" });
@@ -461,7 +447,7 @@ const Products = () => {
                                         left={0}
                                         right={0}
                                         bottom={0}
-                                        backgroundImage={`url(${cat.image})`}
+                                        backgroundImage={`url(${getImageUrl(cat.image)})`}
                                         backgroundSize="cover"
                                         backgroundPosition="center"
                                         transition="transform 0.6s"
@@ -548,7 +534,7 @@ const Products = () => {
                                                         <Flex direction={{ base: 'column', md: 'row' }} gap={{ base: 6, md: 10 }} align="start">
                                                             {/* Image Carousel with Premium Feel */}
                                                             <Box flexShrink={0} w={{ base: '100%', md: '380px' }}>
-                                                                <ImageCarousel images={product.images || product.photos || []} />
+                                                                <ImageCarousel images={(product.localImages && product.localImages.length > 0) ? product.localImages : (product.images || product.photos || [])} />
                                                             </Box>
 
                                                             {/* Product Details Section */}
@@ -614,16 +600,82 @@ const Products = () => {
 
 
 
+                                                                {/* Videos & Video Links Section */}
+                                                                {((product.localVideos && product.localVideos.length > 0) || (product.videoLinks && product.videoLinks.length > 0)) && (
+                                                                    <Box
+                                                                        bg="gray.50"
+                                                                        p={5}
+                                                                        borderRadius="2xl"
+                                                                        border="1px solid"
+                                                                        borderColor="gray.100"
+                                                                    >
+                                                                        <Flex align="center" gap={2} mb={4} color="brand.600">
+                                                                            <FiPlay size={14} />
+                                                                            <Text fontWeight="800" fontSize="xs" letterSpacing="widest">PRODUCT VIDEOS</Text>
+                                                                        </Flex>
+                                                                        <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
+                                                                            {/* Render Local Videos */}
+                                                                            {(product.localVideos || []).map((videoPath, vidIndex) => (
+                                                                                <Box key={`local-vid-${vidIndex}`} borderRadius="xl" overflow="hidden" border="1px solid" borderColor="gray.200" bg="black" position="relative">
+                                                                                    <video
+                                                                                        controls
+                                                                                        style={{ width: '100%', maxHeight: '180px' }}
+                                                                                        src={getImageUrl(videoPath)}
+                                                                                    />
+                                                                                </Box>
+                                                                            ))}
+
+                                                                            {/* Render External Video Links */}
+                                                                            {(product.videoLinks || []).filter(link => link && link.trim() !== '').map((link, linkIndex) => {
+                                                                                // Extract YouTube ID if applicable
+                                                                                let embedUrl = link;
+                                                                                const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+                                                                                const match = link.match(ytRegex);
+                                                                                if (match && match[1]) {
+                                                                                    embedUrl = `https://www.youtube.com/embed/${match[1]}`;
+                                                                                }
+
+                                                                                const isYoutube = ytRegex.test(link);
+
+                                                                                return (
+                                                                                    <Box key={`link-vid-${linkIndex}`} borderRadius="xl" overflow="hidden" border="1px solid" borderColor="gray.200" bg="black" aspectRatio="16/9">
+                                                                                        {isYoutube ? (
+                                                                                            <iframe
+                                                                                                width="100%"
+                                                                                                height="100%"
+                                                                                                src={embedUrl}
+                                                                                                title={`Video ${linkIndex}`}
+                                                                                                frameBorder="0"
+                                                                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                                                                allowFullScreen
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <Flex h="full" align="center" justify="center" p={4} direction="column" gap={2} bg="gray.100">
+                                                                                                <FiPlay size={24} color="brand.500" />
+                                                                                                <Button size="xs" colorScheme="brand" variant="link" onClick={() => window.open(link, '_blank')}>
+                                                                                                    Watch Video Link
+                                                                                                </Button>
+                                                                                            </Flex>
+                                                                                        )}
+                                                                                    </Box>
+                                                                                );
+                                                                            })}
+                                                                        </SimpleGrid>
+                                                                    </Box>
+                                                                )}
+
+
+
                                                                 {/* Action Bar */}
                                                                 <Flex justify="space-between" align="center" pt={4} borderTop="1px" borderColor="gray.50">
                                                                     <Box>
-                                                                        {product.pdf && (
+                                                                        {(product.localPdf || product.pdf) && (
                                                                             <Button
                                                                                 size="sm"
                                                                                 variant="ghost"
                                                                                 colorScheme="brand"
                                                                                 leftIcon={<FiSearch />}
-                                                                                onClick={() => window.open(product.pdf, '_blank')}
+                                                                                onClick={() => window.open(getImageUrl(product.localPdf || product.pdf), '_blank')}
                                                                                 _hover={{ bg: 'brand.50' }}
                                                                             >
                                                                                 Technical Brochure

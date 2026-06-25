@@ -12,6 +12,7 @@ const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: null },
     { name: 'Products (Admin)', icon: FiBox, path: '/admin/products', permissionKey: 'products' },
     { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries', permissionKey: 'enquiries' },
+    { name: 'WhatsApp Settings', icon: FiMessageSquare, path: '/admin/whatsapp-settings', permissionKey: null },
 ];
 
 const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
@@ -142,6 +143,7 @@ const NavItem = ({ icon, children, path, ...rest }) => {
 const MobileNav = ({ onOpen, ...rest }) => {
     return (
         <Flex
+            display={{ base: 'flex', md: 'none' }}
             ml={{ base: 0, md: 60 }}
             px={{ base: 4, md: 4 }}
             height="20"

@@ -85,15 +85,19 @@ const Header = () => {
             <Flex py={{ base: 3, md: 4 }} px={{ base: 4, md: 8 }} justify="space-between" align="center">
                 {/* Logo Section */}
                 <Flex align="center" gap={{ base: 2, md: 4 }} as={RouterLink} to="/">
-                    <Box w={{ base: "40px", md: "50px" }} h={{ base: "40px", md: "50px" }} bg="brand.500" borderRadius="md" display="flex" alignItems="center" justifyContent="center" color="white" fontWeight="bold" flexShrink={0}>
-                        UE
-                    </Box>
+                    <Image 
+                        src="/uni-logo.svg" 
+                        alt="UNI Logo" 
+                        w={{ base: "40px", md: "50px" }} 
+                        h={{ base: "40px", md: "50px" }} 
+                        flexShrink={0} 
+                    />
                     <Box>
-                        <Text fontSize={{ base: 'md', sm: 'xl', md: '2xl' }} fontWeight="bold" color="brand.700" lineHeight="1" noOfLines={1}>
-                            Unique Engineering
+                        <Text fontSize={{ base: 'xl', sm: '2xl', md: '3xl' }} fontWeight="900" color="#0D3F66" lineHeight="1.0" noOfLines={1} letterSpacing="2px">
+                            UNI
                         </Text>
-                        <Text fontSize={{ base: '9px', md: 'xs' }} color="gray.500" letterSpacing="widest">
-                            CIVIL & INSTRUMENTAL
+                        <Text fontSize={{ base: '8px', md: 'xs' }} color="#6B7C87" letterSpacing="3px" fontWeight="700">
+                            ENGINEERING
                         </Text>
                     </Box>
                 </Flex>
@@ -888,7 +892,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                 } else if (item.product && typeof item.product === 'object') {
                                     product = item.product;
                                 }
-                                const mainImage = product.images?.[0] || product.photos?.[0] || null;
+                                const mainImage = product.localImages?.[0] || product.images?.[0] || product.photos?.[0] || null;
 
                                 return (
                                     <Box key={idx} p={4} borderWidth="1px" borderRadius="lg" bg="gray.50">

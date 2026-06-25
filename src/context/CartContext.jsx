@@ -91,6 +91,7 @@ export const CartProvider = ({ children }) => {
                     productId: product,
                     name: product.name,
                     images: product.images,
+                    localImages: product.localImages,
                     photos: product.photos,
                     quantity: 1
                 };

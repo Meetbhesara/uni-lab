@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="100%" height="100%">
+  <defs>
+    <!-- Gear blue gradient matching the screenshot -->
+    <linearGradient id="gearGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4B90C2"/>
+      <stop offset="50%" stop-color="#2D6797"/>
+      <stop offset="100%" stop-color="#143D61"/>
+    </linearGradient>
+    
+    <!-- Metallic silver gradient for interlocked UE -->
+    <linearGradient id="metalGrad" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="30%" stop-color="#D5DFE6"/>
+      <stop offset="70%" stop-color="#8A9CA8"/>
+      <stop offset="100%" stop-color="#556570"/>
+    </linearGradient>
+
+    <!-- Dark steel color for 3D extrusion shadows -->
+    <linearGradient id="metalDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6B7C87"/>
+      <stop offset="100%" stop-color="#2E3C45"/>
+    </linearGradient>
+
+    <!-- Drop shadow filter for 3D depth and realism -->
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- 1. Outer gear structure with 16 teeth -->
+  <g id="gear-group" transform="translate(160, 160)">
+    <!-- Base Gear Circle -->
+    <circle cx="0" cy="0" r="110" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="5" filter="url(#shadow)" />
+    <circle cx="0" cy="0" r="120" fill="none" stroke="#6EAED9" stroke-width="2.5" opacity="0.6"/>
+    
+    <!-- 16 Gear Teeth rotated symmetrically -->
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(0)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(22.5)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(45)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(67.5)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(90)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(112.5)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(135)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(157.5)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(180)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(202.5)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(225)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(247.5)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(270)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(292.5)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(315)"/>
+    <path d="M -15 -125 L -10 -105 L 10 -105 L 15 -125 Z" fill="url(#gearGrad)" stroke="#102E4B" stroke-width="3" transform="rotate(337.5)"/>
+
+    <!-- Inner Groove Ring Structure -->
+    <circle cx="0" cy="0" r="96" fill="none" stroke="#0B1E2F" stroke-width="6"/>
+    <circle cx="0" cy="0" r="92" fill="none" stroke="#5294C4" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.9"/>
+    
+    <!-- White Inner Shield Background -->
+    <circle cx="0" cy="0" r="77" fill="#FFFFFF"/>
+  </g>
+
+  <!-- 2. Interlocked "UE" Letters in the Center -->
+  <g id="ue-letters" transform="translate(160, 160)">
+    <!-- White outer highlight stroke backdrop -->
+    <path d="M -50 -42 L -32 -42 L -32 12 C -32 20 -24 26 -15 26 C -6 26 2 20 2 12 L 2 -8 L 20 -8 L 20 12 C 20 33 -2 46 -17 46 C -34 46 -50 33 -50 12 Z" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M -5 -25 L 38 -25 L 38 -10 L 12 -10 L 12 0 L 30 0 L 30 12 L 12 12 L 12 28 L 42 28 L 42 43 L -5 43 Z" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
+
+    <!-- 3D Extrusion Shadows -->
+    <path d="M -50 -42 L -32 -42 L -32 12 C -32 20 -24 26 -15 26 C -6 26 2 20 2 12 L 2 -8 L 20 -8 L 20 12 C 20 33 -2 46 -17 46 C -34 46 -50 33 -50 12 Z" fill="url(#metalDark)" transform="translate(2.5, 3)"/>
+    <path d="M -5 -25 L 38 -25 L 38 -10 L 12 -10 L 12 0 L 30 0 L 30 12 L 12 12 L 12 28 L 42 28 L 42 43 L -5 43 Z" fill="url(#metalDark)" transform="translate(2.5, 3)"/>
+
+    <!-- Main Front Silver Metallic Face -->
+    <path d="M -50 -42 L -32 -42 L -32 12 C -32 20 -24 26 -15 26 C -6 26 2 20 2 12 L 2 -8 L 20 -8 L 20 12 C 20 33 -2 46 -17 46 C -34 46 -50 33 -50 12 Z" fill="url(#metalGrad)" stroke="#2B3A45" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M -5 -25 L 38 -25 L 38 -10 L 12 -10 L 12 0 L 30 0 L 30 12 L 12 12 L 12 28 L 42 28 L 42 43 L -5 43 Z" fill="url(#metalGrad)" stroke="#2B3A45" stroke-width="1.8" stroke-linejoin="round"/>
+
+    <!-- Clean reflection bezel highlights -->
+    <path d="M -46 -38 L -36 -38 L -36 12 C -36 22 -28 30 -15 30 C -2 30 6 22 6 12 L 6 -4" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.65"/>
+    <path d="M -2 -21 L 34 -21 M 15 -6 L 26 -6 M 15 17 L 38 17" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.65"/>
+  </g>
+</svg>

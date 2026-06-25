@@ -6,7 +6,7 @@ import {
     FormControl, FormLabel, FormErrorMessage, Input, Textarea, Checkbox, Stack, useToast, Flex,
     Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, Select
 } from '@chakra-ui/react';
-import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch, FiPlay } from 'react-icons/fi';
 import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
@@ -120,7 +120,8 @@ const AdminProducts = () => {
         vendors: [], // Array of { name: '', price: '' }
         details: [], // Array of { key: '', value: '' }
         alternativeNames: [], // Array of strings
-        stock: ''
+        stock: '',
+        videoLinks: [] // Array of strings
     });
 
     const [formErrors, setFormErrors] = useState({});
@@ -128,6 +129,8 @@ const AdminProducts = () => {
     // Separate state for file handling
     const [existingPhotos, setExistingPhotos] = useState([]); // URLs
     const [newPhotos, setNewPhotos] = useState([]); // File Objects
+    const [existingVideos, setExistingVideos] = useState([]); // URLs
+    const [newVideos, setNewVideos] = useState([]); // File Objects
 
     const toast = useToast();
 
@@ -193,10 +196,13 @@ const AdminProducts = () => {
                 vendors: parsedVendors,
                 details: parseDetails(p.details),
                 alternativeNames: Array.isArray(p.alternativeNames) ? p.alternativeNames : [],
-                stock: p.stock ?? ''
+                stock: p.stock ?? '',
+                videoLinks: Array.isArray(p.videoLinks) ? p.videoLinks : []
             });
-            setExistingPhotos(p.images || p.photos || []);
+            setExistingPhotos((p.localImages && p.localImages.length > 0) ? p.localImages : (p.images || p.photos || []));
             setNewPhotos([]);
+            setExistingVideos(p.localVideos || []);
+            setNewVideos([]);
         };
 
         // 1. Immediate fill from list data so form opens fast
@@ -330,6 +336,18 @@ const AdminProducts = () => {
             data.append('images', file); // Use 'images' field name as per backend
         });
 
+        // Append Existing Videos
+        existingVideos.forEach(vidUrl => {
+            data.append('existingVideos', vidUrl);
+        });
+
+        // Append New Videos
+        newVideos.forEach(file => {
+            data.append('videos', file);
+        });
+
+        data.append('videoLinks', JSON.stringify(formData.videoLinks || []));
+
         try {
             const config = {
                 headers: { 'Content-Type': 'multipart/form-data' }
@@ -345,10 +363,12 @@ const AdminProducts = () => {
             onClose();
             // Reset
             setEditingProduct(null);
-            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '' });
+            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', videoLinks: [] });
             setFormErrors({});
             setExistingPhotos([]);
             setNewPhotos([]);
+            setExistingVideos([]);
+            setNewVideos([]);
             fetchProducts();
         } catch (error) {
             console.error('Submission error:', error);
@@ -375,6 +395,21 @@ const AdminProducts = () => {
         setFormData(prev => ({ ...prev, details: newDetails }));
     };
 
+    // Video Helpers
+    const handleVideoFileChange = (e) => {
+        if (e.target.files) {
+            setNewVideos(prev => [...prev, ...Array.from(e.target.files)]);
+        }
+    };
+
+    const removeNewVideo = (index) => {
+        setNewVideos(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const removeExistingVideo = (index) => {
+        setExistingVideos(prev => prev.filter((_, i) => i !== index));
+    };
+
     // Photo Helpers
     const handleFileChange = (e) => {
         if (e.target.files) {
@@ -398,7 +433,7 @@ const AdminProducts = () => {
         setIsWhatsappSending(true);
         try {
             const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
-            const imgPath = whatsappProduct?.images?.[0] || whatsappProduct?.photos?.[0];
+            const imgPath = whatsappProduct?.localImages?.[0] || whatsappProduct?.images?.[0] || whatsappProduct?.photos?.[0];
             const imgUrl = imgPath ? (imgPath.startsWith('http') ? imgPath : `${baseUrl}${imgPath.startsWith('/') ? '' : '/'}${imgPath}`) : null;
 
             const caption = `🚀 *${whatsappProduct?.name?.toUpperCase()}*\n\n` +
@@ -456,7 +491,7 @@ const AdminProducts = () => {
                         isDisabled={!canWrite}
                         onClick={() => {
                             setEditingProduct(null);
-                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '' });
+                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', videoLinks: [] });
                             setFormErrors({});
                             setExistingPhotos([]);
                             setNewPhotos([]);
@@ -508,6 +543,7 @@ const AdminProducts = () => {
                                             <Th py={4}>Product Info</Th>
                                             <Th py={4}>Vendor</Th>
                                             <Th py={4}>Pricing</Th>
+                                            <Th py={4}>Videos</Th>
                                             {canShowStock && <Th py={4}>Stock</Th>}
                                             <Th py={4} textAlign="right">Actions</Th>
                                         </Tr>
@@ -518,7 +554,7 @@ const AdminProducts = () => {
                                                 <Td>
                                                     <Flex align="center" gap={4}>
                                                         <Image
-                                                            src={getImageUrl(product.images?.[0] || product.photos?.[0])}
+                                                            src={getImageUrl(product.localImages?.[0] || product.images?.[0] || product.photos?.[0])}
                                                             boxSize="40px"
                                                             objectFit="contain"
                                                             borderRadius="md"
@@ -568,6 +604,18 @@ const AdminProducts = () => {
                                                             </Flex>
                                                         )}
                                                     </Stack>
+                                                </Td>
+                                                <Td>
+                                                    {((product.localVideos && product.localVideos.length > 0) || (product.videoLinks && product.videoLinks.length > 0)) ? (
+                                                        <Badge colorScheme="purple" borderRadius="md" px={2} py={1} display="inline-flex" alignItems="center" gap={1}>
+                                                            <FiPlay size={10} />
+                                                            {((product.localVideos?.length || 0) + (product.videoLinks?.length || 0))} Videos
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge colorScheme="gray" variant="subtle" borderRadius="md" px={2} py={1}>
+                                                            None
+                                                        </Badge>
+                                                    )}
                                                 </Td>
                                                 {canShowStock && (
                                                     <Td>
@@ -955,6 +1003,143 @@ const AdminProducts = () => {
                                             No images uploaded. At least 1 is required.
                                         </Text>
                                     )}
+                                </Box>
+
+                                {/* Local Videos & Video Links Section */}
+                                <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
+                                    <Flex align="center" justify="space-between" mb={4}>
+                                        <Flex align="center" gap={2} color="brand.600">
+                                            <FiPlay /> <Text fontWeight="700" fontSize="sm">LOCAL VIDEO UPLOADS</Text>
+                                        </Flex>
+                                        <Badge colorScheme="blue" variant="subtle" borderRadius="md">
+                                            {existingVideos.length + newVideos.length} VIDEOS
+                                        </Badge>
+                                    </Flex>
+
+                                    <SimpleGrid columns={3} spacing={3} mb={4}>
+                                        {/* Video Upload Box */}
+                                        <label style={{ cursor: 'pointer' }}>
+                                            <Flex
+                                                h="80px"
+                                                border="2px dashed"
+                                                borderColor="brand.200"
+                                                borderRadius="xl"
+                                                align="center"
+                                                justify="center"
+                                                color="brand.500"
+                                                _hover={{ bg: 'brand.50', borderColor: 'brand.400' }}
+                                                transition="0.2s"
+                                            >
+                                                <FiUpload size={20} />
+                                            </Flex>
+                                            <input
+                                                type="file"
+                                                multiple
+                                                accept="video/*"
+                                                onChange={handleVideoFileChange}
+                                                style={{ display: 'none' }}
+                                            />
+                                        </label>
+
+                                        {/* Video Previews */}
+                                        <AnimatePresence>
+                                            {existingVideos.map((video, index) => (
+                                                <motion.div
+                                                    key={`existing-video-${index}`}
+                                                    initial={{ opacity: 0, scale: 0.8 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    exit={{ opacity: 0, scale: 0.5 }}
+                                                    style={{ position: 'relative' }}
+                                                >
+                                                    <Box h="80px" w="full" bg="gray.100" borderRadius="xl" border="1px" borderColor="gray.300" overflow="hidden">
+                                                        <Flex h="full" align="center" justify="center" flexDir="column" gap={1}>
+                                                            <FiPlay size={16} color="brand.500" />
+                                                            <Text fontSize="8px" fontWeight="bold" noOfLines={1} px={2} textAlign="center">
+                                                                {video.split('/').pop()}
+                                                            </Text>
+                                                        </Flex>
+                                                    </Box>
+                                                    <IconButton
+                                                        size="xs"
+                                                        position="absolute"
+                                                        top={1}
+                                                        right={1}
+                                                        icon={<FiTrash2 />}
+                                                        colorScheme="red"
+                                                        borderRadius="full"
+                                                        onClick={() => removeExistingVideo(index)}
+                                                    />
+                                                </motion.div>
+                                            ))}
+                                            {newVideos.map((file, index) => (
+                                                <motion.div
+                                                    key={`new-video-${index}`}
+                                                    initial={{ opacity: 0, scale: 0.8 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    exit={{ opacity: 0, scale: 0.5 }}
+                                                    style={{ position: 'relative' }}
+                                                >
+                                                    <Box h="80px" w="full" bg="brand.50" borderRadius="xl" border="1px" borderColor="brand.200" overflow="hidden">
+                                                        <Flex h="full" align="center" justify="center" flexDir="column" gap={1}>
+                                                            <FiPlay size={16} color="brand.500" />
+                                                            <Text fontSize="8px" fontWeight="bold" noOfLines={1} px={2} textAlign="center">{file.name}</Text>
+                                                        </Flex>
+                                                    </Box>
+                                                    <IconButton
+                                                        size="xs"
+                                                        position="absolute"
+                                                        top={1}
+                                                        right={1}
+                                                        icon={<FiTrash2 />}
+                                                        colorScheme="red"
+                                                        borderRadius="full"
+                                                        onClick={() => removeNewVideo(index)}
+                                                    />
+                                                </motion.div>
+                                            ))}
+                                        </AnimatePresence>
+                                    </SimpleGrid>
+                                    {existingVideos.length + newVideos.length === 0 && (
+                                        <Text fontSize="xs" color="gray.400" textAlign="center" py={4} border="1px dashed" borderColor="gray.200" borderRadius="lg">
+                                            No local videos uploaded.
+                                        </Text>
+                                    )}
+                                </Box>
+
+                                <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
+                                    <FormControl>
+                                        <Flex align="center" justify="space-between" mb={2}>
+                                            <FormLabel fontSize="xs" fontWeight="700" color="gray.500" mb={0}>VIDEO LINKS (YOUTUBE, ETC.)</FormLabel>
+                                            <Button size="xs" colorScheme="brand" variant="outline" onClick={() => setFormData({ ...formData, videoLinks: [...(formData.videoLinks || []), ''] })}>
+                                                + ADD LINK
+                                            </Button>
+                                        </Flex>
+                                        <Stack spacing={2}>
+                                            {(formData.videoLinks || []).map((link, index) => (
+                                                <Flex key={index} gap={2}>
+                                                    <Input
+                                                        variant="filled"
+                                                        placeholder="https://www.youtube.com/watch?v=..."
+                                                        value={link}
+                                                        onChange={(e) => {
+                                                            const newLinks = [...formData.videoLinks];
+                                                            newLinks[index] = e.target.value;
+                                                            setFormData({ ...formData, videoLinks: newLinks });
+                                                        }}
+                                                    />
+                                                    <IconButton
+                                                        size="sm"
+                                                        colorScheme="red"
+                                                        icon={<FiTrash2 />}
+                                                        onClick={() => {
+                                                            const newLinks = formData.videoLinks.filter((_, i) => i !== index);
+                                                            setFormData({ ...formData, videoLinks: newLinks });
+                                                        }}
+                                                    />
+                                                </Flex>
+                                            ))}
+                                        </Stack>
+                                    </FormControl>
                                 </Box>
 
                                 <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
