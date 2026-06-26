@@ -431,6 +431,122 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
             return;
         }
 
+        if (reportType === 'EmployeeSiteLedger') {
+            let csvContent = "SR. NO.,DATE,CLIENT NAME,SITE NAME,CREDIT,DEBIT,NET (Cr-Dr)\n";
+            let currentSrNo = 0;
+            let totalCr = 0;
+            let totalDr = 0;
+
+            const rows = [];
+            groupedByDate.forEach(g => {
+                const dateStr = new Date(g.dateKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                
+                if (g.expense) {
+                    const exp = g.expense;
+                    const sitesToProcess = exp.clientSites && exp.clientSites.length > 0 ? exp.clientSites : [null];
+                    const n = sitesToProcess.length;
+                    
+                    let dayCredit = 0;
+                    if (exp.creditDebit?.receivedFrom) {
+                        exp.creditDebit.receivedFrom.forEach(r => dayCredit += (Number(r.amount) || 0));
+                    }
+                    if (g.transfers && g.transfers.length > 0) {
+                        g.transfers.forEach(t => {
+                            const isTaker = (t.taker?._id || t.taker) === employeeId;
+                            if (isTaker) dayCredit += (Number(t.amount) || 0);
+                        });
+                    }
+
+                    let dayDebit = 0;
+                    const fixed = exp.expenses || {};
+                    dayDebit += (Number(fixed.breakfast) || 0) + (Number(fixed.lunch) || 0) + (Number(fixed.dinner) || 0) + (Number(fixed.petrol) || 0);
+                    if (exp.otherExpensesList) {
+                        exp.otherExpensesList.forEach(o => dayDebit += (Number(o.amount) || 0));
+                    }
+                    if (exp.creditDebit?.givenTo) {
+                        exp.creditDebit.givenTo.forEach(gOut => dayDebit += (Number(gOut.amount) || 0));
+                    }
+                    if (g.transfers && g.transfers.length > 0) {
+                        g.transfers.forEach(t => {
+                            const isGiver = (t.giver?._id || t.giver) === employeeId;
+                            if (isGiver) dayDebit += (Number(t.amount) || 0);
+                        });
+                    }
+
+                    sitesToProcess.forEach(cs => {
+                        const cName = cs?.clientId?.clientName || 'Unspecified Client';
+                        const sName = cs?.siteId?.siteName || 'Unspecified Site';
+                        const splitCr = dayCredit / n;
+                        const splitDr = dayDebit / n;
+                        rows.push({
+                            dateStr,
+                            cName,
+                            sName,
+                            credit: Number(splitCr.toFixed(2)),
+                            debit: Number(splitDr.toFixed(2)),
+                            net: Number((splitCr - splitDr).toFixed(2))
+                        });
+                    });
+                } else {
+                    let credit = 0;
+                    let debit = 0;
+                    if (g.transfers && g.transfers.length > 0) {
+                        g.transfers.forEach(t => {
+                            const isTaker = (t.taker?._id || t.taker) === employeeId;
+                            const isGiver = (t.giver?._id || t.giver) === employeeId;
+                            if (isTaker) credit += (Number(t.amount) || 0);
+                            if (isGiver) debit += (Number(t.amount) || 0);
+                        });
+                    }
+                    rows.push({
+                        dateStr,
+                        cName: 'Unspecified Client',
+                        sName: 'Unspecified Site',
+                        credit,
+                        debit,
+                        net: credit - debit
+                    });
+                }
+            });
+
+            const filteredRows = rows.filter(r => r.credit > 0 || r.debit > 0 || r.cName !== 'Unspecified Client');
+
+            let lastDate = '';
+            let currentSr = 0;
+            const finalRows = filteredRows.map(row => {
+                const showDate = row.dateStr !== lastDate;
+                if (row.dateStr) {
+                    lastDate = row.dateStr;
+                }
+                if (showDate) {
+                    currentSr++;
+                }
+                return {
+                    ...row,
+                    displayDate: showDate ? row.dateStr : '',
+                    displaySrNo: currentSr
+                };
+            });
+
+            finalRows.forEach(row => {
+                totalCr += row.credit;
+                totalDr += row.debit;
+                csvContent += `${row.displayDate ? row.displaySrNo : ''},"${row.displayDate}","${row.cName}","${row.sName}",${row.credit.toFixed(2)},${row.debit.toFixed(2)},${row.net.toFixed(2)}\n`;
+            });
+
+            csvContent += `,,,GRAND TOTAL,${totalCr.toFixed(2)},${totalDr.toFixed(2)},${(totalCr - totalDr).toFixed(2)}\n`;
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${employeeName || 'Employee'}_SiteLedger_Report.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            return;
+        }
+
         // Generate CSV manually based on filtered expenses
         let csvContent = "SR. NO.,DATE,DESCRIPTION,CREDIT,DEBIT,TOTAL,ATENDES,REMARK,SIDE WORK\n";
 
@@ -438,25 +554,26 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
             const dateStr = new Date(exp.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
             const attendance = exp.attendance === 'Present' ? 'P' : (exp.attendance === 'Half Day' ? 'HD' : 'A');
             
-            // Build Site list string
-            let sideWork = [];
-            if (exp.siteId) sideWork.push(exp.siteId.siteName);
-            if (exp.clientSites && exp.clientSites.length > 0) {
-                sideWork = sideWork.concat(exp.clientSites.map(cs => {
-                    const sName = cs.siteId?.siteName || '';
-                    const ledg = cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : '';
-                    return `${sName}${ledg}`;
-                }));
-            }
-            const sideWorkStr = sideWork.map((s, i) => `${i+1} ${s}`).join(' | ') || '';
+            const sites = exp.clientSites && exp.clientSites.length > 0 ? exp.clientSites : [null];
+            const n = sites.length;
 
             // Aggregate Credits
             let credits = [];
             let totalCr = 0;
             if (exp.creditDebit?.receivedFrom) {
                 exp.creditDebit.receivedFrom.forEach(r => {
-                    credits.push({ desc: r.employeeRef?.name || 'Advance', cr: r.amount, dr: '' });
-                    totalCr += r.amount;
+                    const rAmount = Number(r.amount) || 0;
+                    totalCr += rAmount;
+                    sites.forEach(cs => {
+                        const siteName = cs?.siteId?.siteName ? ` (${cs.siteId.siteName.toUpperCase()})` : '';
+                        const allocatedCr = rAmount / n;
+                        credits.push({
+                            desc: `RECEIVED FROM ${(r.employeeRef?.name || 'Employee').toUpperCase()}${siteName}`,
+                            cr: allocatedCr ? allocatedCr.toFixed(2) : '',
+                            dr: '',
+                            sideWork: cs?.siteId?.siteName ? `${cs.siteId.siteName}${cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : ''}` : ''
+                        });
+                    });
                 });
             }
 
@@ -464,42 +581,66 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
             let debits = [];
             let totalDr = 0;
             const fixed = exp.expenses || {};
-            if (fixed.breakfast) { debits.push({ desc: 'BREAK FAST', cr: '', dr: fixed.breakfast }); totalDr += Number(fixed.breakfast); }
-            if (fixed.lunch) { debits.push({ desc: 'LUNCH', cr: '', dr: fixed.lunch }); totalDr += Number(fixed.lunch); }
-            if (fixed.dinner) { debits.push({ desc: 'DINNER', cr: '', dr: fixed.dinner }); totalDr += Number(fixed.dinner); }
-            if (fixed.petrol) { debits.push({ desc: 'PETROL', cr: '', dr: fixed.petrol }); totalDr += Number(fixed.petrol); }
+            
+            const pushSplitDebit = (baseDesc, amount) => {
+                const numVal = Number(amount) || 0;
+                if (!numVal) return;
+                totalDr += numVal;
+                sites.forEach(cs => {
+                    const siteName = cs?.siteId?.siteName ? ` (${cs.siteId.siteName.toUpperCase()})` : '';
+                    const allocatedDr = numVal / n;
+                    debits.push({
+                        desc: `${baseDesc}${siteName}`,
+                        cr: '',
+                        dr: allocatedDr ? allocatedDr.toFixed(2) : '',
+                        sideWork: cs?.siteId?.siteName ? `${cs.siteId.siteName}${cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : ''}` : ''
+                    });
+                });
+            };
+
+            pushSplitDebit('BREAK FAST', fixed.breakfast);
+            pushSplitDebit('LUNCH', fixed.lunch);
+            pushSplitDebit('DINNER', fixed.dinner);
+            pushSplitDebit('PETROL', fixed.petrol);
             
             if (exp.otherExpensesList) {
                 exp.otherExpensesList.forEach(o => {
-                    debits.push({ desc: o.expenseName.toUpperCase(), cr: '', dr: o.amount });
-                    totalDr += Number(o.amount);
+                    pushSplitDebit(o.expenseName.toUpperCase(), o.amount);
                 });
             }
             if (exp.creditDebit?.givenTo) {
                 exp.creditDebit.givenTo.forEach(g => {
-                    debits.push({ desc: g.employeeRef?.name || 'Unknown', cr: '', dr: g.amount });
-                    totalDr += Number(g.amount);
+                    const gAmount = Number(g.amount) || 0;
+                    totalDr += gAmount;
+                    sites.forEach(cs => {
+                        const siteName = cs?.siteId?.siteName ? ` (${cs.siteId.siteName.toUpperCase()})` : '';
+                        const allocatedDr = gAmount / n;
+                        debits.push({
+                            desc: `GIVEN TO ${(g.employeeRef?.name || 'Employee').toUpperCase()}${siteName}`,
+                            cr: '',
+                            dr: allocatedDr ? allocatedDr.toFixed(2) : '',
+                            sideWork: cs?.siteId?.siteName ? `${cs.siteId.siteName}${cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : ''}` : ''
+                        });
+                    });
                 });
             }
 
             const allItems = [...credits, ...debits];
-            if (allItems.length === 0) allItems.push({ desc: 'NO TRANSACTIONS', cr: '', dr: '' });
-
-            const totalRows = allItems.length + 3; // +3 for CR, DR, Net Bal
+            if (allItems.length === 0) allItems.push({ desc: 'NO TRANSACTIONS', cr: '', dr: '', sideWork: '' });
 
             // Map rows to CSV
             allItems.forEach((item, index) => {
                 if (index === 0) {
-                    csvContent += `${sNum + 1},${dateStr},${item.desc},${item.cr},${item.dr},,${attendance},"${exp.attendanceRemark || ''}","${sideWorkStr}"\n`;
+                    csvContent += `${sNum + 1},${dateStr},"${item.desc}",${item.cr},${item.dr},,${attendance},"${exp.attendanceRemark || ''}","${item.sideWork || ''}"\n`;
                 } else {
-                    csvContent += `,,${item.desc},${item.cr},${item.dr},,,, \n`;
+                    csvContent += `,, "${item.desc}",${item.cr},${item.dr},,,, "${item.sideWork || ''}"\n`;
                 }
             });
 
             // Summary rows
-            csvContent += `,,,,CR,${totalCr},,\n`;
-            csvContent += `,,,,DR,${totalDr},,\n`;
-            csvContent += `,,,,,${totalCr - totalDr},,\n`;
+            csvContent += `,,,,CR,${totalCr.toFixed(2)},,\n`;
+            csvContent += `,,,,DR,${totalDr.toFixed(2)},,\n`;
+            csvContent += `,,,,,${(totalCr - totalDr).toFixed(2)},,\n`;
         });
 
         // Download local
@@ -1024,34 +1165,75 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                             const allItems = [];
                             let totalCr = 0;
                             let totalDr = 0;
+                            const sites = exp?.clientSites && exp.clientSites.length > 0 ? exp.clientSites : [null];
+                            const n = sites.length;
 
                             // 1. Credits from expense receivedFrom
                             if (exp?.creditDebit?.receivedFrom) {
                                 exp.creditDebit.receivedFrom.forEach(r => {
-                                    allItems.push({ desc: `RECEIVED FROM ${r.employeeRef?.name?.toUpperCase() || 'EMPLOYEE'}`, cr: Number(r.amount) || 0, dr: 0, type: 'transfer-in' });
-                                    totalCr += Number(r.amount) || 0;
+                                    const rAmount = Number(r.amount) || 0;
+                                    totalCr += rAmount;
+                                    sites.forEach(cs => {
+                                        const siteSuffix = cs?.siteId?.siteName ? ` (${cs.siteId.siteName.toUpperCase()})` : '';
+                                        const allocatedCr = rAmount / n;
+                                        allItems.push({
+                                            desc: `RECEIVED FROM ${r.employeeRef?.name?.toUpperCase() || 'EMPLOYEE'}${siteSuffix}`,
+                                            cr: allocatedCr ? Number(allocatedCr.toFixed(2)) : 0,
+                                            dr: 0,
+                                            type: 'transfer-in'
+                                        });
+                                    });
                                 });
                             }
+
+                            // Helper for standard debits
+                            const pushDebitItem = (baseDesc, amount, itemFiles) => {
+                                const numVal = Number(amount) || 0;
+                                if (!numVal) return;
+                                totalDr += numVal;
+                                sites.forEach(cs => {
+                                    const siteSuffix = cs?.siteId?.siteName ? ` (${cs.siteId.siteName.toUpperCase()})` : '';
+                                    const allocatedDr = numVal / n;
+                                    allItems.push({
+                                        desc: `${baseDesc}${siteSuffix}`,
+                                        cr: 0,
+                                        dr: allocatedDr ? Number(allocatedDr.toFixed(2)) : 0,
+                                        type: 'expense',
+                                        files: itemFiles
+                                    });
+                                });
+                            };
 
                             // 2. Standard expense debits
                             const fixed = exp?.expenses || {};
                             const files = exp?.expenseFiles || {};
-                            if (fixed.breakfast) { allItems.push({ desc: 'BREAK FAST', cr: 0, dr: Number(fixed.breakfast), type: 'expense', files: files.breakfast }); totalDr += Number(fixed.breakfast); }
-                            if (fixed.lunch)     { allItems.push({ desc: 'LUNCH', cr: 0, dr: Number(fixed.lunch), type: 'expense', files: files.lunch }); totalDr += Number(fixed.lunch); }
-                            if (fixed.dinner)    { allItems.push({ desc: 'DINNER', cr: 0, dr: Number(fixed.dinner), type: 'expense', files: files.dinner }); totalDr += Number(fixed.dinner); }
-                            if (fixed.petrol)    { allItems.push({ desc: 'PETROL', cr: 0, dr: Number(fixed.petrol), type: 'expense', files: files.petrol }); totalDr += Number(fixed.petrol); }
+                            pushDebitItem('BREAK FAST', fixed.breakfast, files.breakfast);
+                            pushDebitItem('LUNCH', fixed.lunch, files.lunch);
+                            pushDebitItem('DINNER', fixed.dinner, files.dinner);
+                            pushDebitItem('PETROL', fixed.petrol, files.petrol);
 
                             // 3. Other expenses
                             exp?.otherExpensesList?.forEach(o => {
-                                allItems.push({ desc: o.expenseName.toUpperCase(), cr: 0, dr: Number(o.amount), type: 'expense', files: o.files });
-                                totalDr += Number(o.amount);
+                                pushDebitItem(o.expenseName.toUpperCase(), o.amount, o.files);
                             });
 
                             // 4. Debits from expense givenTo
-                            exp?.creditDebit?.givenTo?.forEach(g => {
-                                allItems.push({ desc: `GIVEN TO ${g.employeeRef?.name?.toUpperCase() || 'EMPLOYEE'}`, cr: 0, dr: Number(g.amount), type: 'transfer-out' });
-                                totalDr += Number(g.amount);
-                            });
+                            if (exp?.creditDebit?.givenTo) {
+                                exp.creditDebit.givenTo.forEach(g => {
+                                    const gAmount = Number(g.amount) || 0;
+                                    totalDr += gAmount;
+                                    sites.forEach(cs => {
+                                        const siteSuffix = cs?.siteId?.siteName ? ` (${cs.siteId.siteName.toUpperCase()})` : '';
+                                        const allocatedDr = gAmount / n;
+                                        allItems.push({
+                                            desc: `GIVEN TO ${g.employeeRef?.name?.toUpperCase() || 'EMPLOYEE'}${siteSuffix}`,
+                                            cr: 0,
+                                            dr: allocatedDr ? Number(allocatedDr.toFixed(2)) : 0,
+                                            type: 'transfer-out'
+                                        });
+                                    });
+                                });
+                            }
 
                             // 5. Transfer records (from EmployeeTransfer collection)
                             group.transfers.forEach(t => {
@@ -1576,81 +1758,181 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                         </Tbody>
                     </Table>
                 </TableContainer>
-            ) : reportType === 'EmployeeSiteLedger' ? (
-                <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white" overflowX="auto">
-                    <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
-                        <Thead bg="blue.50">
-                            <Tr>
-                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">SR. NO.</Th>
-                                <Th color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">DATE</Th>
-                                <Th color="blue.900" fontSize="xs" fontWeight="bold">CLIENT NAME</Th>
-                                <Th color="blue.900" fontSize="xs" fontWeight="bold">SITE NAME</Th>
-                                <Th textAlign="center" color="green.700" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">CREDIT</Th>
-                                <Th textAlign="center" color="red.700" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">DEBIT</Th>
-                                <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">NET (Cr-Dr)</Th>
-                            </Tr>
-                        </Thead>
-                        <Tbody>
-                            {(() => {
-                                let currentSrNo = 0;
-                                const rows = groupedByDate.map(g => {
-                                    const dateStr = new Date(g.dateKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                                    
-                                    let cName = 'Unspecified Client';
-                                    let sName = 'Unspecified Site';
-                                    let credit = 0;
-                                    let debit = 0;
-                                    
-                                    if (g.expense) {
-                                        const exp = g.expense;
-                                        cName = exp.clientSites?.[0]?.clientId?.clientName || 'Unspecified Client';
-                                        sName = exp.clientSites?.map(cs => cs.siteId?.siteName).filter(Boolean).join(' & ') || 'Unspecified Site';
-                                        
-                                        if (exp.creditDebit?.receivedFrom) {
-                                            exp.creditDebit.receivedFrom.forEach(r => credit += (Number(r.amount) || 0));
-                                        }
-                                        
-                                        const fixed = exp.expenses || {};
-                                        debit += (Number(fixed.breakfast) || 0) + (Number(fixed.lunch) || 0) + (Number(fixed.dinner) || 0) + (Number(fixed.petrol) || 0);
-                                        
-                                        if (exp.otherExpensesList) {
-                                            exp.otherExpensesList.forEach(o => debit += (Number(o.amount) || 0));
-                                        }
-                                        
-                                        if (exp.creditDebit?.givenTo) {
-                                            exp.creditDebit.givenTo.forEach(gOut => debit += (Number(gOut.amount) || 0));
-                                        }
-                                    }
-                                    
-                                    if (g.transfers && g.transfers.length > 0) {
-                                        g.transfers.forEach(t => {
-                                            const isTaker = (t.taker?._id || t.taker) === employeeId;
-                                            const isGiver = (t.giver?._id || t.giver) === employeeId;
-                                            if (isTaker) credit += (Number(t.amount) || 0);
-                                            if (isGiver) debit += (Number(t.amount) || 0);
-                                        });
-                                    }
-                                    
-                                    return { dateStr, cName, sName, credit, debit, net: credit - debit };
-                                }).filter(r => r.credit > 0 || r.debit > 0 || r.cName !== 'Unspecified Client');
+            ) : reportType === 'EmployeeSiteLedger' ? (() => {
+                const rows = [];
+                groupedByDate.forEach(g => {
+                    const dateStr = new Date(g.dateKey).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    
+                    if (g.expense) {
+                        const exp = g.expense;
+                        const sitesToProcess = exp.clientSites && exp.clientSites.length > 0 ? exp.clientSites : [null];
+                        const n = sitesToProcess.length;
+                        
+                        let dayCredit = 0;
+                        if (exp.creditDebit?.receivedFrom) {
+                            exp.creditDebit.receivedFrom.forEach(r => dayCredit += (Number(r.amount) || 0));
+                        }
+                        if (g.transfers && g.transfers.length > 0) {
+                            g.transfers.forEach(t => {
+                                const isTaker = (t.taker?._id || t.taker) === employeeId;
+                                if (isTaker) dayCredit += (Number(t.amount) || 0);
+                            });
+                        }
 
-                                if (rows.length === 0) {
-                                    return (
-                                        <Tr>
-                                            <Td colSpan={7} textAlign="center" py={8} color="gray.500" fontStyle="italic">
-                                                No ledger records found for this period.
-                                            </Td>
-                                        </Tr>
-                                    );
-                                }
+                        let dayDebit = 0;
+                        const fixed = exp.expenses || {};
+                        dayDebit += (Number(fixed.breakfast) || 0) + (Number(fixed.lunch) || 0) + (Number(fixed.dinner) || 0) + (Number(fixed.petrol) || 0);
+                        if (exp.otherExpensesList) {
+                            exp.otherExpensesList.forEach(o => dayDebit += (Number(o.amount) || 0));
+                        }
+                        if (exp.creditDebit?.givenTo) {
+                            exp.creditDebit.givenTo.forEach(gOut => dayDebit += (Number(gOut.amount) || 0));
+                        }
+                        if (g.transfers && g.transfers.length > 0) {
+                            g.transfers.forEach(t => {
+                                const isGiver = (t.giver?._id || t.giver) === employeeId;
+                                if (isGiver) dayDebit += (Number(t.amount) || 0);
+                            });
+                        }
 
-                                return rows.map((row, idx) => {
-                                    currentSrNo++;
-                                    return (
+                        sitesToProcess.forEach(cs => {
+                            const cName = cs?.clientId?.clientName || 'Unspecified Client';
+                            const sName = cs?.siteId?.siteName || 'Unspecified Site';
+                            const splitCr = dayCredit / n;
+                            const splitDr = dayDebit / n;
+                            rows.push({
+                                dateStr,
+                                cName,
+                                sName,
+                                credit: Number(splitCr.toFixed(2)),
+                                debit: Number(splitDr.toFixed(2)),
+                                net: Number((splitCr - splitDr).toFixed(2))
+                            });
+                        });
+                    } else {
+                        let credit = 0;
+                        let debit = 0;
+                        if (g.transfers && g.transfers.length > 0) {
+                            g.transfers.forEach(t => {
+                                const isTaker = (t.taker?._id || t.taker) === employeeId;
+                                const isGiver = (t.giver?._id || t.giver) === employeeId;
+                                if (isTaker) credit += (Number(t.amount) || 0);
+                                if (isGiver) debit += (Number(t.amount) || 0);
+                            });
+                        }
+                        rows.push({
+                            dateStr,
+                            cName: 'Unspecified Client',
+                            sName: 'Unspecified Site',
+                            credit,
+                            debit,
+                            net: credit - debit
+                        });
+                    }
+                });
+
+                const filteredRows = rows.filter(r => r.credit > 0 || r.debit > 0 || r.cName !== 'Unspecified Client');
+
+                const finalRows = [];
+                let i = 0;
+                let currentSr = 0;
+
+                while (i < filteredRows.length) {
+                    const currentDate = filteredRows[i].dateStr;
+                    currentSr++;
+
+                    let j = i;
+                    while (j < filteredRows.length && filteredRows[j].dateStr === currentDate) {
+                        j++;
+                    }
+                    const dateCount = j - i;
+
+                    let k = i;
+                    while (k < j) {
+                        const currentClient = filteredRows[k].cName;
+                        let l = k;
+                        while (l < j && filteredRows[l].cName === currentClient) {
+                            l++;
+                        }
+                        const clientCount = l - k;
+
+                        for (let index = k; index < l; index++) {
+                            finalRows.push({
+                                ...filteredRows[index],
+                                displaySrNo: currentSr,
+                                dateRowSpan: index === i ? dateCount : 0,
+                                clientRowSpan: index === k ? clientCount : 0
+                            });
+                        }
+                        k = l;
+                    }
+                    i = j;
+                }
+
+                const totalCrSum = finalRows.reduce((sum, r) => sum + r.credit, 0);
+                const totalDrSum = finalRows.reduce((sum, r) => sum + r.debit, 0);
+
+                return (
+                    <TableContainer border="1px" borderColor="gray.300" borderRadius="md" bg="white" overflowX="auto">
+                        <Table size="sm" variant="simple" sx={{ borderCollapse: 'collapse', 'th, td': { border: '1px solid #CBD5E0' } }}>
+                            <Thead bg="blue.50">
+                                <Tr>
+                                    <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">SR. NO.</Th>
+                                    <Th color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">DATE</Th>
+                                    <Th color="blue.900" fontSize="xs" fontWeight="bold">CLIENT NAME</Th>
+                                    <Th color="blue.900" fontSize="xs" fontWeight="bold">SITE NAME</Th>
+                                    <Th textAlign="center" color="green.700" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">CREDIT</Th>
+                                    <Th textAlign="center" color="red.700" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">DEBIT</Th>
+                                    <Th textAlign="center" color="blue.900" fontSize="xs" fontWeight="bold" whiteSpace="nowrap">NET (Cr-Dr)</Th>
+                                </Tr>
+                            </Thead>
+                            <Tbody>
+                                {finalRows.length === 0 ? (
+                                    <Tr>
+                                        <Td colSpan={7} textAlign="center" py={8} color="gray.500" fontStyle="italic">
+                                            No ledger records found for this period.
+                                        </Td>
+                                    </Tr>
+                                ) : (
+                                    finalRows.map((row, idx) => (
                                         <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                                            <Td textAlign="center" fontWeight="bold" color="gray.600" fontSize="md" bg="gray.50" whiteSpace="nowrap">{currentSrNo}</Td>
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" whiteSpace="nowrap">{row.dateStr}</Td>
-                                            <Td fontWeight="bold" color="gray.700" fontSize="sm" maxW="250px" whiteSpace="normal" wordBreak="break-word">{row.cName}</Td>
+                                            {row.dateRowSpan > 0 && (
+                                                <Td 
+                                                    rowSpan={row.dateRowSpan} 
+                                                    textAlign="center" 
+                                                    fontWeight="bold" 
+                                                    color="gray.600" 
+                                                    fontSize="md" 
+                                                    bg="gray.50" 
+                                                    whiteSpace="nowrap"
+                                                >
+                                                    {row.displaySrNo}
+                                                </Td>
+                                            )}
+                                            {row.dateRowSpan > 0 && (
+                                                <Td 
+                                                    rowSpan={row.dateRowSpan} 
+                                                    fontWeight="bold" 
+                                                    color="gray.700" 
+                                                    fontSize="sm" 
+                                                    whiteSpace="nowrap"
+                                                >
+                                                    {row.dateStr}
+                                                </Td>
+                                            )}
+                                            {row.clientRowSpan > 0 && (
+                                                <Td 
+                                                    rowSpan={row.clientRowSpan} 
+                                                    fontWeight="bold" 
+                                                    color="gray.700" 
+                                                    fontSize="sm" 
+                                                    maxW="250px" 
+                                                    whiteSpace="normal" 
+                                                    wordBreak="break-word"
+                                                >
+                                                    {row.cName}
+                                                </Td>
+                                            )}
                                             <Td fontWeight="bold" color="gray.700" fontSize="sm" maxW="200px" whiteSpace="normal" wordBreak="break-word">{row.sName}</Td>
                                             <Td textAlign="center" fontWeight="bold" color="green.600" fontSize="sm" whiteSpace="nowrap">₹{row.credit}</Td>
                                             <Td textAlign="center" fontWeight="bold" color="red.600" fontSize="sm" whiteSpace="nowrap">₹{row.debit}</Td>
@@ -1658,77 +1940,25 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                                                 {row.net >= 0 ? `+₹${row.net}` : `-₹${Math.abs(row.net)}`}
                                             </Td>
                                         </Tr>
-                                    );
-                                });
-                            })()}
-                            <Tr bg="gray.100">
-                                <Td colSpan={4} textAlign="right" fontWeight="bold" fontSize="md" whiteSpace="nowrap">GRAND TOTAL:</Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="green.700" whiteSpace="nowrap">
-                                    ₹{(() => {
-                                        let sum = 0;
-                                        groupedByDate.forEach(g => {
-                                            if (g.expense && g.expense.creditDebit?.receivedFrom) {
-                                                g.expense.creditDebit.receivedFrom.forEach(r => sum += (Number(r.amount) || 0));
-                                            }
-                                            if (g.transfers) {
-                                                g.transfers.forEach(t => {
-                                                    const isTaker = (t.taker?._id || t.taker) === employeeId;
-                                                    if (isTaker) sum += (Number(t.amount) || 0);
-                                                });
-                                            }
-                                        });
-                                        return sum;
-                                    })()}
-                                </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="red.700" whiteSpace="nowrap">
-                                    ₹{(() => {
-                                        let sum = 0;
-                                        groupedByDate.forEach(g => {
-                                            if (g.expense) {
-                                                const fixed = g.expense.expenses || {};
-                                                sum += (Number(fixed.breakfast) || 0) + (Number(fixed.lunch) || 0) + (Number(fixed.dinner) || 0) + (Number(fixed.petrol) || 0);
-                                                if (g.expense.otherExpensesList) g.expense.otherExpensesList.forEach(o => sum += (Number(o.amount) || 0));
-                                                if (g.expense.creditDebit?.givenTo) g.expense.creditDebit.givenTo.forEach(gOut => sum += (Number(gOut.amount) || 0));
-                                            }
-                                            if (g.transfers) {
-                                                g.transfers.forEach(t => {
-                                                    const isGiver = (t.giver?._id || t.giver) === employeeId;
-                                                    if (isGiver) sum += (Number(t.amount) || 0);
-                                                });
-                                            }
-                                        });
-                                        return sum;
-                                    })()}
-                                </Td>
-                                <Td textAlign="center" fontWeight="bold" fontSize="md" color="blue.700" whiteSpace="nowrap">
-                                    ₹{(() => {
-                                        let cr = 0, dr = 0;
-                                        groupedByDate.forEach(g => {
-                                            if (g.expense) {
-                                                if (g.expense.creditDebit?.receivedFrom) g.expense.creditDebit.receivedFrom.forEach(r => cr += (Number(r.amount) || 0));
-                                                const fixed = g.expense.expenses || {};
-                                                dr += (Number(fixed.breakfast) || 0) + (Number(fixed.lunch) || 0) + (Number(fixed.dinner) || 0) + (Number(fixed.petrol) || 0);
-                                                if (g.expense.otherExpensesList) g.expense.otherExpensesList.forEach(o => dr += (Number(o.amount) || 0));
-                                                if (g.expense.creditDebit?.givenTo) g.expense.creditDebit.givenTo.forEach(gOut => dr += (Number(gOut.amount) || 0));
-                                            }
-                                            if (g.transfers) {
-                                                g.transfers.forEach(t => {
-                                                    const isTaker = (t.taker?._id || t.taker) === employeeId;
-                                                    const isGiver = (t.giver?._id || t.giver) === employeeId;
-                                                    if (isTaker) cr += (Number(t.amount) || 0);
-                                                    if (isGiver) dr += (Number(t.amount) || 0);
-                                                });
-                                            }
-                                        });
-                                        const net = cr - dr;
-                                        return net >= 0 ? `+${net}` : `-${Math.abs(net)}`;
-                                    })()}
-                                </Td>
-                            </Tr>
-                        </Tbody>
-                    </Table>
-                </TableContainer>
-            ) : null}
+                                    ))
+                                )}
+                                <Tr bg="gray.100">
+                                    <Td colSpan={4} textAlign="right" fontWeight="bold" fontSize="md" whiteSpace="nowrap">GRAND TOTAL:</Td>
+                                    <Td textAlign="center" fontWeight="bold" fontSize="md" color="green.700" whiteSpace="nowrap">
+                                        ₹{Number(totalCrSum.toFixed(2))}
+                                    </Td>
+                                    <Td textAlign="center" fontWeight="bold" fontSize="md" color="red.700" whiteSpace="nowrap">
+                                        ₹{Number(totalDrSum.toFixed(2))}
+                                    </Td>
+                                    <Td textAlign="center" fontWeight="bold" fontSize="md" color="blue.700" whiteSpace="nowrap">
+                                        ₹{(totalCrSum - totalDrSum) >= 0 ? `+${(totalCrSum - totalDrSum).toFixed(2)}` : `-${Math.abs(totalCrSum - totalDrSum).toFixed(2)}`}
+                                    </Td>
+                                </Tr>
+                            </Tbody>
+                        </Table>
+                    </TableContainer>
+                );
+            })() : null}
         </Box>
     );
 };
