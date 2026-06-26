@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Icon, Spinner, Text, FormControl, FormLabel, Input, Button, Flex, useToast, Checkbox, Table, Thead, Tbody, Tr, Th, Td, Switch } from '@chakra-ui/react';
-import { FiBox, FiMessageSquare, FiClock, FiUserPlus } from 'react-icons/fi';
+import {
+    Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText,
+    Icon, Spinner, Text, FormControl, FormLabel, Input, Button, Flex,
+    useToast, Table, Thead, Tbody, Tr, Th, Td, Badge, Avatar, Stack,
+    InputGroup, InputLeftElement, Tooltip, Tag, TagLabel
+} from '@chakra-ui/react';
+import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar } from 'react-icons/fi';
+import { motion } from 'framer-motion';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import { DEMO_PRODUCTS, DEMO_ENQUIRIES } from '../../data/mockData';
+
+const MotionBox = motion(Box);
 
 const AdminDashboard = () => {
     const { user, createAdmin } = useAuth();
@@ -14,9 +22,16 @@ const AdminDashboard = () => {
         totalEnquiries: 0,
         pendingEnquiries: 0,
         doneQuotations: 0,
-        rejectedQuotations: 0
+        rejectedQuotations: 0,
+        totalUsers: 0
     });
     const [loading, setLoading] = useState(true);
+
+    // Users state
+    const [users, setUsers] = useState([]);
+    const [usersLoading, setUsersLoading] = useState(true);
+    const [userSearch, setUserSearch] = useState('');
+
     const defaultPermissions = {
         products: { read: true, write: true },
         enquiries: { read: true, write: true },
@@ -47,7 +62,6 @@ const AdminDashboard = () => {
         invoiceReport: { read: true, write: true }
     };
     const [adminForm, setAdminForm] = useState({ name: '', email: '', phone: '', permissions: defaultPermissions });
-    const [viewPermissions, setViewPermissions] = useState(false);
     const [adminLoading, setAdminLoading] = useState(false);
 
     useEffect(() => {
@@ -68,20 +82,39 @@ const AdminDashboard = () => {
                 ]);
                 const qData = quoteRes.data.quotations || quoteRes.data.data || quoteRes.data || [];
                 const eData = enqRes.data.enquiries || enqRes.data.data || enqRes.data || [];
-                setStats({
+                setStats(prev => ({
+                    ...prev,
                     products: pCount,
                     totalEnquiries: Array.isArray(eData) ? eData.length : 0,
                     pendingEnquiries: Array.isArray(eData) ? eData.filter(e => !e.isSeen).length : 0,
                     doneQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Done').length : 0,
                     rejectedQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Reject').length : 0,
-                });
+                }));
             } catch (err) {
-                setStats({ products: pCount, totalEnquiries: DEMO_ENQUIRIES.length, pendingEnquiries: 0, doneQuotations: 0, rejectedQuotations: 0 });
+                setStats(prev => ({ ...prev, products: pCount, totalEnquiries: DEMO_ENQUIRIES.length, pendingEnquiries: 0, doneQuotations: 0, rejectedQuotations: 0 }));
             } finally {
                 setLoading(false);
             }
         };
         fetchData();
+    }, []);
+
+    // Fetch regular users
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                setUsersLoading(true);
+                const res = await api.get('/auth/users');
+                const data = res.data.users || res.data || [];
+                setUsers(Array.isArray(data) ? data : []);
+                setStats(prev => ({ ...prev, totalUsers: res.data.total || data.length }));
+            } catch (err) {
+                console.error('Failed to fetch users:', err);
+            } finally {
+                setUsersLoading(false);
+            }
+        };
+        fetchUsers();
     }, []);
 
     const handleCreateAdmin = async () => {
@@ -100,11 +133,36 @@ const AdminDashboard = () => {
         if (res.success) {
             toast({ title: '✅ Admin Created!', description: res.msg, status: 'success' });
             setAdminForm({ name: '', email: '', phone: '', permissions: defaultPermissions });
-            setViewPermissions(false);
         } else {
             toast({ title: 'Failed', description: res.message, status: 'error' });
         }
     };
+
+    // Filter users by search
+    const filteredUsers = users.filter(u => {
+        if (!userSearch) return true;
+        const q = userSearch.toLowerCase();
+        return (
+            (u.name || '').toLowerCase().includes(q) ||
+            (u.email || '').toLowerCase().includes(q) ||
+            (u.phone || '').includes(q) ||
+            (u.companyName || '').toLowerCase().includes(q) ||
+            (u.contactPersonName || '').toLowerCase().includes(q)
+        );
+    });
+
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '—';
+        return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+
+    const getInitials = (u) => {
+        const name = u.contactPersonName || u.name || u.companyName || '?';
+        return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    };
+
+    const AVATAR_COLORS = ['blue', 'teal', 'purple', 'orange', 'pink', 'cyan', 'green', 'red'];
+    const getColor = (idx) => AVATAR_COLORS[idx % AVATAR_COLORS.length];
 
     if (loading) {
         return (
@@ -125,56 +183,44 @@ const AdminDashboard = () => {
             </Box>
 
             {/* Stats Grid */}
-            <SimpleGrid columns={{ base: 1, md: 3, lg: 5 }} spacing={6} mb={10}>
-                <Stat bg="white" p={6} borderRadius="lg" boxShadow="sm">
-                    <Box display="flex" alignItems="center" mb={2} color="brand.500">
-                        <Icon as={FiBox} w={6} h={6} mr={2} />
-                        <StatLabel fontSize="sm" fontWeight="bold">Products</StatLabel>
-                    </Box>
-                    <StatNumber fontSize="3xl">{stats.products}</StatNumber>
-                    <StatHelpText>Active products</StatHelpText>
-                </Stat>
-
-                <Stat bg="white" p={6} borderRadius="lg" boxShadow="sm">
-                    <Box display="flex" alignItems="center" mb={2} color="blue.500">
-                        <Icon as={FiMessageSquare} w={6} h={6} mr={2} />
-                        <StatLabel fontSize="sm" fontWeight="bold">Total Enquiries</StatLabel>
-                    </Box>
-                    <StatNumber fontSize="3xl">{stats.totalEnquiries}</StatNumber>
-                    <StatHelpText>All time count</StatHelpText>
-                </Stat>
-
-                <Stat bg="white" p={6} borderRadius="lg" boxShadow="sm">
-                    <Box display="flex" alignItems="center" mb={2} color="orange.500">
-                        <Icon as={FiMessageSquare} w={6} h={6} mr={2} />
-                        <StatLabel fontSize="sm" fontWeight="bold">New Enquiries</StatLabel>
-                    </Box>
-                    <StatNumber fontSize="3xl">{stats.pendingEnquiries}</StatNumber>
-                    <StatHelpText color="red.500">Action Required</StatHelpText>
-                </Stat>
-
-                <Stat bg="white" p={6} borderRadius="lg" boxShadow="sm">
-                    <Box display="flex" alignItems="center" mb={2} color="green.500">
-                        <Icon as={FiClock} w={6} h={6} mr={2} />
-                        <StatLabel fontSize="sm" fontWeight="bold">Success (Done)</StatLabel>
-                    </Box>
-                    <StatNumber fontSize="3xl">{stats.doneQuotations}</StatNumber>
-                    <StatHelpText>Closed deals</StatHelpText>
-                </Stat>
-
-                <Stat bg="white" p={6} borderRadius="lg" boxShadow="sm">
-                    <Box display="flex" alignItems="center" mb={2} color="red.500">
-                        <Icon as={FiClock} w={6} h={6} mr={2} />
-                        <StatLabel fontSize="sm" fontWeight="bold">Rejected</StatLabel>
-                    </Box>
-                    <StatNumber fontSize="3xl">{stats.rejectedQuotations}</StatNumber>
-                    <StatHelpText>Lost deals</StatHelpText>
-                </Stat>
+            <SimpleGrid columns={{ base: 2, md: 3, lg: 6 }} spacing={5} mb={10}>
+                {[
+                    { label: 'Products', value: stats.products, icon: FiBox, color: 'brand.500', help: 'Active catalog', bg: 'brand.50' },
+                    { label: 'Total Enquiries', value: stats.totalEnquiries, icon: FiMessageSquare, color: 'blue.500', help: 'All time', bg: 'blue.50' },
+                    { label: 'New Enquiries', value: stats.pendingEnquiries, icon: FiMessageSquare, color: 'orange.500', help: 'Action needed', bg: 'orange.50' },
+                    { label: 'Success (Done)', value: stats.doneQuotations, icon: FiClock, color: 'green.500', help: 'Closed deals', bg: 'green.50' },
+                    { label: 'Rejected', value: stats.rejectedQuotations, icon: FiClock, color: 'red.500', help: 'Lost deals', bg: 'red.50' },
+                    { label: 'Registered Users', value: stats.totalUsers, icon: FiUsers, color: 'purple.500', help: 'Website clients', bg: 'purple.50' },
+                ].map((s, i) => (
+                    <MotionBox
+                        key={s.label}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: i * 0.07 }}
+                        bg="white"
+                        p={5}
+                        borderRadius="xl"
+                        boxShadow="sm"
+                        border="1px solid"
+                        borderColor="gray.100"
+                        _hover={{ boxShadow: 'md', transform: 'translateY(-2px)' }}
+                        style={{ transition: 'all 0.2s' }}
+                    >
+                        <Flex align="center" mb={3} gap={2}>
+                            <Box p={2} bg={s.bg} borderRadius="lg">
+                                <Icon as={s.icon} w={4} h={4} color={s.color} />
+                            </Box>
+                        </Flex>
+                        <Text fontSize="2xl" fontWeight="900" color="gray.800" lineHeight="1">{s.value}</Text>
+                        <Text fontSize="xs" fontWeight="700" color="gray.600" mt={1}>{s.label}</Text>
+                        <Text fontSize="10px" color="gray.400" mt={0.5}>{s.help}</Text>
+                    </MotionBox>
+                ))}
             </SimpleGrid>
 
-            {/* Create Admin Card - Restricted to Super Admin (iatulkanak@gmail.com) */}
+            {/* Create Admin Card - Restricted to Super Admin */}
             {user?.isSuperAdmin && (
-                <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="purple.100">
+                <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="purple.100" mb={8}>
                     <Flex align="center" gap={3} mb={4}>
                         <Box p={2} bg="purple.100" borderRadius="lg">
                             <Icon as={FiUserPlus} color="purple.600" w={5} h={5} />
@@ -217,7 +263,6 @@ const AdminDashboard = () => {
                         </FormControl>
                     </SimpleGrid>
 
-
                     <Button
                         mt={4}
                         colorScheme="purple"
@@ -232,6 +277,160 @@ const AdminDashboard = () => {
                     </Button>
                 </Box>
             )}
+
+            {/* ── Registered Users Panel ───────────────────────────────────── */}
+            <MotionBox
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                bg="white"
+                borderRadius="2xl"
+                boxShadow="sm"
+                border="1px solid"
+                borderColor="gray.100"
+                overflow="hidden"
+                mb={8}
+            >
+                {/* Panel Header */}
+                <Flex
+                    px={6} py={4}
+                    bg="linear-gradient(135deg, #6B46C1 0%, #553C9A 100%)"
+                    align="center"
+                    justify="space-between"
+                    wrap="wrap"
+                    gap={3}
+                >
+                    <Flex align="center" gap={3}>
+                        <Box p={2} bg="whiteAlpha.200" borderRadius="lg">
+                            <Icon as={FiUsers} w={5} h={5} color="white" />
+                        </Box>
+                        <Box>
+                            <Text fontWeight="800" fontSize="md" color="white">Registered Users</Text>
+                            <Text fontSize="xs" color="whiteAlpha.700">All website clients (non-admin)</Text>
+                        </Box>
+                    </Flex>
+                    <Flex align="center" gap={3}>
+                        <Badge bg="whiteAlpha.300" color="white" borderRadius="full" px={3} py={1} fontSize="sm" fontWeight="700">
+                            {filteredUsers.length} {filteredUsers.length === 1 ? 'User' : 'Users'}
+                        </Badge>
+                        <InputGroup size="sm" maxW="220px" bg="whiteAlpha.200" borderRadius="lg">
+                            <InputLeftElement pointerEvents="none">
+                                <Icon as={FiSearch} color="whiteAlpha.700" />
+                            </InputLeftElement>
+                            <Input
+                                placeholder="Search users..."
+                                value={userSearch}
+                                onChange={e => setUserSearch(e.target.value)}
+                                border="none"
+                                color="white"
+                                _placeholder={{ color: 'whiteAlpha.600' }}
+                                _focus={{ boxShadow: 'none', bg: 'whiteAlpha.300' }}
+                                borderRadius="lg"
+                            />
+                        </InputGroup>
+                    </Flex>
+                </Flex>
+
+                {/* Table */}
+                {usersLoading ? (
+                    <Flex justify="center" align="center" py={16}>
+                        <Spinner size="lg" color="purple.500" thickness="3px" />
+                    </Flex>
+                ) : filteredUsers.length === 0 ? (
+                    <Flex direction="column" align="center" justify="center" py={16} color="gray.400">
+                        <Icon as={FiUsers} w={12} h={12} mb={3} />
+                        <Text fontWeight="600">No registered users found</Text>
+                        <Text fontSize="sm" mt={1}>
+                            {userSearch ? `No results for "${userSearch}"` : 'Users who register on the website will appear here'}
+                        </Text>
+                    </Flex>
+                ) : (
+                    <Box overflowX="auto">
+                        <Table variant="simple" size="sm">
+                            <Thead bg="gray.50">
+                                <Tr>
+                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">#</Th>
+                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">USER</Th>
+                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">CONTACT</Th>
+                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">COMPANY</Th>
+                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">GST</Th>
+                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">JOINED</Th>
+                                </Tr>
+                            </Thead>
+                            <Tbody>
+                                {filteredUsers.map((u, idx) => (
+                                    <Tr
+                                        key={u._id || idx}
+                                        _hover={{ bg: 'purple.50' }}
+                                        transition="background 0.15s"
+                                        borderBottom="1px solid"
+                                        borderColor="gray.100"
+                                    >
+                                        <Td py={3}>
+                                            <Text fontSize="xs" color="gray.400" fontWeight="600">
+                                                {idx + 1}
+                                            </Text>
+                                        </Td>
+                                        <Td py={3}>
+                                            <Flex align="center" gap={3}>
+                                                <Avatar
+                                                    size="sm"
+                                                    name={getInitials(u)}
+                                                    bg={`${getColor(idx)}.400`}
+                                                    color="white"
+                                                    fontWeight="700"
+                                                    fontSize="xs"
+                                                />
+                                                <Stack spacing={0}>
+                                                    <Text fontWeight="700" fontSize="sm" color="gray.800">
+                                                        {u.contactPersonName || u.name || '—'}
+                                                    </Text>
+                                                    <Text fontSize="xs" color="gray.400">{u.email}</Text>
+                                                </Stack>
+                                            </Flex>
+                                        </Td>
+                                        <Td py={3}>
+                                            <Stack spacing={1}>
+                                                <Flex align="center" gap={1}>
+                                                    <Icon as={FiPhone} w={3} h={3} color="green.400" />
+                                                    <Text fontSize="xs" fontWeight="600" color="gray.700">{u.phone || '—'}</Text>
+                                                </Flex>
+                                                <Flex align="center" gap={1}>
+                                                    <Icon as={FiMail} w={3} h={3} color="blue.400" />
+                                                    <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="160px">{u.email || '—'}</Text>
+                                                </Flex>
+                                            </Stack>
+                                        </Td>
+                                        <Td py={3}>
+                                            <Flex align="center" gap={1}>
+                                                <Icon as={FiBriefcase} w={3} h={3} color="orange.400" />
+                                                <Text fontSize="xs" fontWeight="600" color="gray.700" noOfLines={1} maxW="140px">
+                                                    {u.companyName || '—'}
+                                                </Text>
+                                            </Flex>
+                                        </Td>
+                                        <Td py={3}>
+                                            {u.gstNumber ? (
+                                                <Tag size="sm" colorScheme="green" borderRadius="full">
+                                                    <TagLabel fontSize="10px" fontWeight="700">{u.gstNumber}</TagLabel>
+                                                </Tag>
+                                            ) : (
+                                                <Text fontSize="xs" color="gray.400">—</Text>
+                                            )}
+                                        </Td>
+                                        <Td py={3}>
+                                            <Flex align="center" gap={1}>
+                                                <Icon as={FiCalendar} w={3} h={3} color="gray.400" />
+                                                <Text fontSize="xs" color="gray.500">{formatDate(u.createdAt)}</Text>
+                                            </Flex>
+                                        </Td>
+                                    </Tr>
+                                ))}
+                            </Tbody>
+                        </Table>
+                    </Box>
+                )}
+            </MotionBox>
         </Box>
     );
 };

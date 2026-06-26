@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement } from '@chakra-ui/react';
+import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner } from '@chakra-ui/react';
 import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch } from 'react-icons/fi';
 import { FaWhatsapp, FaChevronLeft } from 'react-icons/fa';
 import api from '../../api/axios';
@@ -13,6 +13,7 @@ const AdminEnquiries = () => {
     const [selectedQuotation, setSelectedQuotation] = useState(null);
     const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
     const [allProducts, setAllProducts] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     // Status Confirmation State
     const { isOpen: isStatusConfirmOpen, onOpen: onStatusConfirmOpen, onClose: onStatusConfirmClose } = useDisclosure();
@@ -98,6 +99,7 @@ const AdminEnquiries = () => {
 
     const fetchData = async () => {
         try {
+            setLoading(true);
             const [enqRes, quoteRes, prodRes] = await Promise.all([
                 api.get('/enquiries'),
                 api.get('/quotations'),
@@ -128,6 +130,8 @@ const AdminEnquiries = () => {
                 duration: 5000,
                 isClosable: true
             });
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -776,6 +780,11 @@ const AdminEnquiries = () => {
                     <Tab fontWeight="bold">Processed (History)</Tab>
                 </TabList>
 
+                {loading ? (
+                    <Flex justify="center" align="center" py={20}>
+                        <Spinner size="xl" color="brand.500" thickness="4px" />
+                    </Flex>
+                ) : (
                 <TabPanels>
                     <TabPanel p={0} pt={4}>
                         <Box overflowX="auto">
@@ -928,6 +937,7 @@ const AdminEnquiries = () => {
                         </Box>
                     </TabPanel>
                 </TabPanels>
+                )}
             </Tabs>
 
             {/* ENQUIRY DETAILS / CREATE QUOTE MODAL */}

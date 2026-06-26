@@ -294,6 +294,7 @@ const AdminWhatsappSettings = () => {
                                 isLoading={loadingSystem}
                                 w="full"
                                 leftIcon={<Icon as={FiRefreshCw} />}
+                                isDisabled={!user?.isSuperAdmin}
                             >
                                 Connect WhatsApp
                             </Button>
@@ -305,6 +306,7 @@ const AdminWhatsappSettings = () => {
                                 isLoading={loadingSystem}
                                 w="full"
                                 leftIcon={<Icon as={FiXCircle} />}
+                                isDisabled={!user?.isSuperAdmin}
                             >
                                 Disconnect Session
                             </Button>
