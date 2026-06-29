@@ -335,7 +335,7 @@ const AdminPermissions = () => {
                                                                 isChecked={permissions[sub.key]?.write || false}
                                                                 isDisabled={!permissions[sub.key]?.read}
                                                                 onChange={(e) => handlePermissionChange(sub.key, 'write', e.target.checked)}
-                                                                visibility={(module.mainTabKey && sub.key === module.mainTabKey) ? 'hidden' : 'visible'}
+                                                                visibility={(module.mainTabKey && sub.key === module.mainTabKey && module.mainTabKey !== 'products') ? 'hidden' : 'visible'}
                                                             >
                                                                 Write / Modify
                                                             </Checkbox>
