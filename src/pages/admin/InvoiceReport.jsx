@@ -152,6 +152,15 @@ const InvoiceReport = () => {
             return s.dayStatus === 'Completed';
         }
         
+        if (s.scheduleType === 'MONTH' && s.endDate) {
+            const end = new Date(s.endDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (end <= today) {
+                return true;
+            }
+        }
+        
         const hasCoreDocs = s.allDocuments && s.allDocuments.some(d => {
             // EXPLICITLY ignore Expense Receipts when determining if a schedule is ready for invoice
             if (d.category || d.url?.includes('employee_master') || d.url?.includes('expense_') || d.url?.includes('otherExpense_')) {

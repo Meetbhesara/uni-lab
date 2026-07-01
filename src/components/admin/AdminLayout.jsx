@@ -10,6 +10,7 @@ import { hasPermission } from '../../utils/permissions';
 
 const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: null },
+    { name: 'Admin Login Report', icon: FiFileText, path: '/admin/login-report', permissionKey: null },
     { name: 'Products (Admin)', icon: FiBox, path: '/admin/products', permissionKey: 'products' },
     { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries', permissionKey: 'enquiries' },
     { name: 'WhatsApp Settings', icon: FiMessageSquare, path: '/admin/whatsapp-settings', permissionKey: null },

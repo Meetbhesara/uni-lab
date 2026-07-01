@@ -142,187 +142,7 @@ const EmployeeExpensesModule = () => {
                                 />
                             </TabPanel>
                             <TabPanel p={0}>
-                                <Box bg="white" p={{ base: 3, md: 6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                                    <Heading size="sm" mb={{ base: 3, md: 5 }} color="gray.700">Global Date Range & Report Selection</Heading>
-                                    <Flex direction={{ base: 'column', md: 'row' }} gap={4} align={{ base: 'stretch', md: 'flex-end' }} mb={{ base: 4, md: 6 }} flexWrap="wrap">
-                                        
-                                        {/* Global Date Filters */}
-                                        <FormControl w="auto">
-                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Financial Year</FormLabel>
-                                            <Popover placement="bottom-start" matchWidth={false}>
-                                                <PopoverTrigger>
-                                                    <Button 
-                                                        w="auto"
-                                                        minW="150px"
-                                                        bg="white"
-                                                        color="gray.800"
-                                                        _hover={{ bg: "gray.50" }}
-                                                        borderRadius="md"
-                                                        shadow="sm"
-                                                        size={{ base: 'sm', md: 'md' }}
-                                                        fontWeight="bold"
-                                                        border="1px solid"
-                                                        borderColor="gray.200"
-                                                        textAlign="left"
-                                                        justifyContent="space-between"
-                                                        rightIcon={<Icon as={FaCalendarAlt} color="blue.500" />}
-                                                    >
-                                                        <Box flex="1" textAlign="left">
-                                                            {selectedFY ? `${selectedFY}-${parseInt(selectedFY)+1} (FY)` : 'Custom Date'}
-                                                        </Box>
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100" zIndex={100}>
-                                                    <PopoverBody p={4} maxH="350px" overflowY="auto" className="hide-scrollbar">
-                                                        <HStack justify="space-between" mb={4} px={2}>
-                                                            <IconButton size="sm" variant="ghost" icon={<FaChevronLeft />} onClick={() => setFyPageStart(prev => prev - 12)} />
-                                                            <Text fontWeight="bold" fontSize="sm" color="gray.700">
-                                                                {fyPageStart} - {fyPageStart + 11}
-                                                            </Text>
-                                                            <IconButton size="sm" variant="ghost" icon={<FaChevronRight />} onClick={() => setFyPageStart(prev => prev + 12)} />
-                                                        </HStack>
-                                                        <SimpleGrid columns={2} spacing={2}>
-                                                            {Array.from({ length: 12 }, (_, i) => fyPageStart + i).map(y => (
-                                                                <Button 
-                                                                    key={y} 
-                                                                    size="sm" 
-                                                                    borderRadius="lg"
-                                                                    colorScheme={selectedFY === y.toString() ? "blue" : "gray"} 
-                                                                    variant={selectedFY === y.toString() ? "solid" : "ghost"} 
-                                                                    onClick={() => {
-                                                                        setSelectedFY(y.toString());
-                                                                        setSelectedMonth('');
-                                                                        setGlobalStartDate(`${y}-04-01`);
-                                                                        setGlobalEndDate(`${y + 1}-03-31`);
-                                                                    }}
-                                                                >
-                                                                    {y}-{y+1}
-                                                                </Button>
-                                                            ))}
-                                                        </SimpleGrid>
-                                                    </PopoverBody>
-                                                </PopoverContent>
-                                            </Popover>
-                                        </FormControl>
-
-                                        <FormControl w="auto">
-                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Month</FormLabel>
-                                            <Select
-                                                bg="white"
-                                                size={{ base: 'sm', md: 'md' }}
-                                                value={selectedMonth}
-                                                onChange={(e) => {
-                                                    setSelectedMonth(e.target.value);
-                                                    if (e.target.value) {
-                                                        const monthIdx = parseInt(e.target.value);
-                                                        let year = new Date().getFullYear();
-                                                        if (selectedFY) {
-                                                            year = monthIdx < 3 ? parseInt(selectedFY) + 1 : parseInt(selectedFY);
-                                                        }
-                                                        
-                                                        const start = new Date(year, monthIdx, 1);
-                                                        const end = new Date(year, monthIdx + 1, 0);
-                                                        
-                                                        const fmt = (d) => {
-                                                            const y = d.getFullYear();
-                                                            const m = String(d.getMonth() + 1).padStart(2, '0');
-                                                            const day = String(d.getDate()).padStart(2, '0');
-                                                            return `${y}-${m}-${day}`;
-                                                        };
-                                                        
-                                                        setGlobalStartDate(fmt(start));
-                                                        setGlobalEndDate(fmt(end));
-                                                    }
-                                                }}
-                                            >
-                                                <option value="">Custom Month</option>
-                                                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => (
-                                                    <option key={i} value={i}>{m}</option>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-
-                                        <FormControl w="auto">
-                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>From Date</FormLabel>
-                                            <Input 
-                                                type="date" 
-                                                size={{ base: 'sm', md: 'md' }} 
-                                                bg="white" 
-                                                value={globalStartDate}
-                                                onChange={(e) => {
-                                                    setGlobalStartDate(e.target.value);
-                                                    setSelectedFY('');
-                                                    setSelectedMonth('');
-                                                }}
-                                            />
-                                        </FormControl>
-
-                                        <FormControl w="auto">
-                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>To Date</FormLabel>
-                                            <Input 
-                                                type="date" 
-                                                size={{ base: 'sm', md: 'md' }} 
-                                                bg="white" 
-                                                value={globalEndDate}
-                                                onChange={(e) => {
-                                                    setGlobalEndDate(e.target.value || new Date().toISOString().split('T')[0]);
-                                                    setSelectedFY('');
-                                                    setSelectedMonth('');
-                                                }}
-                                            />
-                                        </FormControl>
-
-                                        <FormControl w="auto" flex={1}>
-                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Select Report Type</FormLabel>
-                                            <Select value={reportType} onChange={(e) => {
-                                                setReportType(e.target.value);
-                                                if (e.target.value === 'Food' || e.target.value === 'Fuel' || e.target.value === 'ClientSite') setSelectedExpenseEmployee({ id: 'ALL', name: 'All Employees' });
-                                                else setSelectedExpenseEmployee({ id: '', name: '' });
-                                            }} bg="white" size={{ base: 'sm', md: 'md' }}>
-                                                <option value="Ledger">Employee Ledger</option>
-                                                <option value="Food">Global Food Report</option>
-                                                <option value="Fuel">Global Fuel Report</option>
-                                                <option value="ClientSite">Client & Site Wise Report</option>
-                                                <option value="EmployeeSiteLedger">Employee Client & Site Ledger</option>
-                                            </Select>
-                                        </FormControl>
-
-                                        <FormControl w="auto" flex={1} isDisabled={reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite'}>
-                                            <FormLabel fontWeight="bold" fontSize={{ base: 'sm', md: 'md' }}>Select Employee</FormLabel>
-                                            <Select
-                                                placeholder={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? "All Employees Included" : "-- Select Employee --"}
-                                                value={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'ALL' : selectedExpenseEmployee.id}
-                                                onChange={e => {
-                                                    const emp = employees.find(emp => emp._id === e.target.value);
-                                                    setSelectedExpenseEmployee({ id: emp?._id || '', name: emp?.name || '' });
-                                                }}
-                                                bg={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'gray.100' : 'white'}
-                                                size={{ base: 'sm', md: 'md' }}
-                                            >
-                                                {(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') && <option value="ALL" hidden>All Employees</option>}
-                                                {employees.map(emp => (
-                                                    <option key={emp._id} value={emp._id}>{emp.name}</option>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                    </Flex>
-                                    {((selectedExpenseEmployee.id && selectedExpenseEmployee.id !== 'ALL') || reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? (
-                                        <AdminEmployeeExpenses
-                                            employeeId={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'ALL' : selectedExpenseEmployee.id}
-                                            employeeName={(reportType === 'Food' || reportType === 'Fuel' || reportType === 'ClientSite') ? 'All Employees' : selectedExpenseEmployee.name}
-                                            externalReportType={reportType}
-                                            globalStartDate={globalStartDate}
-                                            globalEndDate={globalEndDate}
-                                        />
-                                    ) : (
-                                        <Center py={16}>
-                                            <VStack spacing={3}>
-                                                <Icon as={FaChartBar} w={10} h={10} color="gray.300" />
-                                                <Text color="gray.400" fontSize="md">Select an employee to view their daily report</Text>
-                                            </VStack>
-                                        </Center>
-                                    )}
-                                </Box>
+                                <DailyReportSection employees={employees} />
                             </TabPanel>
                         </TabPanels>
                     </Tabs>
@@ -332,7 +152,311 @@ const EmployeeExpensesModule = () => {
     );
 };
 
+// ── Daily Report Section ──────────────────────────────────────────────
+const _getCurrFY = () => { const t = new Date(); return t.getMonth() < 3 ? t.getFullYear()-1 : t.getFullYear(); };
+
+const DailyReportSection = ({ employees = [] }) => {
+    const [data, setData]               = useState([]);
+    const [summaryLoading, setSummaryLoading] = useState(true);
+    const [lastRefreshed, setLastRefreshed]   = useState(null);
+
+    // ── Custom report state ──────────────────────────────────────
+    const _today = new Date();
+    const [reportType, setReportType]                     = useState('Ledger');
+    const [selectedExpEmp, setSelectedExpEmp]             = useState({ id: '', name: '' });
+    const [selectedFY, setSelectedFY]                     = useState('');
+    const [selectedMonth, setSelectedMonth]               = useState('');
+    const [fyPageStart, setFyPageStart]                   = useState(_getCurrFY());
+    const [globalStartDate, setGlobalStartDate]           = useState(
+        new Date(_today.getFullYear(), _today.getMonth(), 1).toISOString().split('T')[0]
+    );
+    const [globalEndDate, setGlobalEndDate]               = useState(
+        _today.toISOString().split('T')[0]
+    );
+    const _todayStr = _today.toISOString().split('T')[0];
+
+    const isAllEmp = ['Food','Fuel','ClientSite'].includes(reportType);
+
+    const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', weekday:'short' });
+    const fmtAmt  = (n) => `₹${Number(n||0).toLocaleString('en-IN')}`;
+
+    const attStyle = (s) => ({
+        Present: { bg:'#f0fdf4', color:'#15803d', label:'✓ Present' },
+        Absent:  { bg:'#fef2f2', color:'#dc2626', label:'✗ Absent'  },
+        Leave:   { bg:'#fff7ed', color:'#c2410c', label:'◷ Leave'   },
+    }[s] || { bg:'#f8fafc', color:'#94a3b8', label: s || '—' });
+
+    const fetchSummary = async () => {
+        setSummaryLoading(true);
+        try {
+            const res = await api.get('/employee-expense/report/daily-summary');
+            if (res.data.success) { setData(res.data.data); setLastRefreshed(new Date()); }
+        } catch (e) { console.error(e); }
+        finally { setSummaryLoading(false); }
+    };
+    useEffect(() => { fetchSummary(); }, []);
+
+    const fmtMonthFn = (d) => { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
+
+    return (
+        <VStack spacing={8} align="stretch">
+
+            {/* ════════ SECTION 1 — Last 5 Days ════════ */}
+            <Box>
+                <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={3}>
+                    <VStack align="start" spacing={0}>
+                        <Heading size="sm" color="gray.800" fontWeight="800">⚡ Last 5 Days — All Employees</Heading>
+                        <Text fontSize="xs" color="gray.400">
+                            Auto-loaded · Dates ascending
+                            {lastRefreshed && ` · ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`}
+                        </Text>
+                    </VStack>
+                    <Button size="sm" leftIcon={<Icon as={FaClipboardList}/>} colorScheme="blue" variant="outline" borderRadius="lg" onClick={fetchSummary} isLoading={summaryLoading}>
+                        Refresh
+                    </Button>
+                </Flex>
+
+                {summaryLoading ? (
+                    <Center py={16}><Spinner size="lg" color="blue.400" thickness="3px" /></Center>
+                ) : !data.length ? (
+                    <Center py={14}>
+                        <VStack spacing={2}>
+                            <Icon as={FaChartBar} w={9} h={9} color="gray.200"/>
+                            <Text color="gray.400" fontSize="sm">No entries found in last 5 days</Text>
+                        </VStack>
+                    </Center>
+                ) : (
+                    <VStack spacing={3} align="stretch">
+                        {data.map((emp) => {
+                            const groupedMap = {};
+                            (emp.entries || []).forEach(e => {
+                                const dk = new Date(e.date).toISOString().split('T')[0];
+                                if (!groupedMap[dk]) groupedMap[dk] = { ...e };
+                                else {
+                                    groupedMap[dk].totalDebit = (groupedMap[dk].totalDebit||0) + (e.totalDebit||0);
+                                    groupedMap[dk].totalCredit = (groupedMap[dk].totalCredit||0) + (e.totalCredit||0);
+                                    if ((!groupedMap[dk].attendance || groupedMap[dk].attendance === '-') && e.attendance && e.attendance !== '-') groupedMap[dk].attendance = e.attendance;
+                                    if (e.siteNames && !groupedMap[dk].siteNames?.includes(e.siteNames)) groupedMap[dk].siteNames = groupedMap[dk].siteNames ? `${groupedMap[dk].siteNames} | ${e.siteNames}` : e.siteNames;
+                                    if (groupedMap[dk].category !== e.category) groupedMap[dk].category = 'Combined';
+                                }
+                            });
+                            const asc = Object.values(groupedMap).sort((a,b)=>new Date(a.date)-new Date(b.date));
+                            const totD = asc.reduce((s,e)=>s+(e.totalDebit||0),0);
+                            const totC = asc.reduce((s,e)=>s+(e.totalCredit||0),0);
+                            const initials = emp.empName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+                            return (
+                                <Box key={emp.empId} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.100" shadow="sm" overflow="hidden">
+                                    {/* — Employee header — */}
+                                    <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
+                                        <HStack spacing={3}>
+                                            <Flex w={7} h={7} borderRadius="md" bg="blue.500" align="center" justify="center" color="white" fontWeight="800" fontSize="xs" flexShrink={0}>
+                                                {initials}
+                                            </Flex>
+                                            <Text fontWeight="700" fontSize="sm" color="gray.800">{emp.empName}</Text>
+                                            <Badge colorScheme="gray" variant="subtle" borderRadius="full" fontSize="9px">{asc.length} entries</Badge>
+                                        </HStack>
+                                    </Flex>
+
+                                    {/* — Column headers — */}
+                                    <Flex px={4} py={1.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100">
+                                        <Text flex="0 0 100px" fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Date</Text>
+                                        <Text flex="0 0 90px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Attendance</Text>
+                                        <Text flex={1}         fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Site / Note</Text>
+                                        <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right">Credit</Text>
+                                        <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
+                                        <Text flex="0 0 65px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="center" ml={2}>Type</Text>
+                                    </Flex>
+
+                                    {/* — Rows — */}
+                                    {asc.map((entry, idx) => {
+                                        const att = attStyle(entry.attendance);
+                                        const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
+                                        const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
+                                        return (
+                                            <Flex
+                                                key={idx}
+                                                px={4} py={2.5}
+                                                align="center"
+                                                bg={idx%2===0 ? 'white' : 'gray.50'}
+                                                borderLeft="3px solid"
+                                                borderLeftColor={hasDebitOnly ? 'red.300' : hasCreditOnly ? 'green.300' : 'transparent'}
+                                                borderBottom={idx < asc.length-1 ? "1px solid" : "none"}
+                                                borderColor="gray.50"
+                                                _hover={{ bg:'blue.50' }}
+                                                transition="background 0.15s"
+                                                flexWrap={{ base:'wrap', md:'nowrap' }}
+                                                gap={1}
+                                            >
+                                                <Text flex="0 0 100px" fontSize="xs" fontWeight="600" color="gray.700">{fmtDate(entry.date)}</Text>
+                                                <Box flex="0 0 90px">
+                                                    {entry.attendance && entry.attendance !== '-' ? (
+                                                        <Box display="inline-flex" px={2} py={0.5} borderRadius="md" bg={att.bg} fontSize="10px" fontWeight="700" color={att.color} whiteSpace="nowrap">
+                                                            {att.label}
+                                                        </Box>
+                                                    ) : <Text fontSize="xs" color="gray.300">—</Text>}
+                                                </Box>
+                                                <Box flex={1} minW={0}>
+                                                    <Text fontSize="xs" color={entry.siteNames ? 'gray.600' : 'gray.300'} noOfLines={1}>
+                                                        {entry.siteNames || '—'}
+                                                    </Text>
+                                                    {entry.attendanceRemark && !entry.attendanceRemark.toLowerCase().includes('auto-marked') && !entry.attendanceRemark.toLowerCase().includes('auto marked') && (
+                                                        <Text fontSize="9px" color="orange.400">{entry.attendanceRemark}</Text>
+                                                    )}
+                                                </Box>
+                                                <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalCredit>0 ? 'green.500' : 'gray.200'} textAlign="right">
+                                                    {entry.totalCredit>0 ? fmtAmt(entry.totalCredit) : '—'}
+                                                </Text>
+                                                <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalDebit>0 ? 'red.500' : 'gray.200'} textAlign="right" ml={2}>
+                                                    {entry.totalDebit>0 ? fmtAmt(entry.totalDebit) : '—'}
+                                                </Text>
+                                                <Box flex="0 0 65px" ml={2} textAlign="center">
+                                                    <Badge colorScheme={entry.category==='Transfer' ? 'purple' : entry.category==='Combined' ? 'teal' : 'blue'} variant="subtle" borderRadius="md" fontSize="9px">
+                                                        {entry.category==='Transfer' ? 'Transfer' : entry.category==='Combined' ? 'Combined' : 'Expense'}
+                                                    </Badge>
+                                                </Box>
+                                            </Flex>
+                                        );
+                                    })}
+
+                                    {/* — Totals footer — */}
+                                    {(totD > 0 || totC > 0) && (
+                                        <Flex px={4} py={2} bg="blue.50" borderTop="1px solid" borderColor="blue.100" align="center" justify="flex-end" gap={6}>
+                                            <Text fontSize="10px" color="gray.500" fontWeight="600" flex={1}>5-Day Total</Text>
+                                            {totC > 0 && <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)} Credit</Text>}
+                                            {totD > 0 && <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)} Debit</Text>}
+                                        </Flex>
+                                    )}
+                                </Box>
+                            );
+                        })}
+                    </VStack>
+                )}
+            </Box>
+
+            {/* ════════ Divider ════════ */}
+            <Flex align="center" gap={3}>
+                <Divider borderColor="gray.200" />
+                <Text fontSize="10px" color="gray.400" fontWeight="700" whiteSpace="nowrap" letterSpacing="widest">ADVANCED REPORTS</Text>
+                <Divider borderColor="gray.200" />
+            </Flex>
+
+            {/* ════════ SECTION 2 — Custom Reports ════════ */}
+            <Box bg="white" p={{ base:4, md:6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                <Heading size="sm" mb={5} color="gray.700">Custom Date Range &amp; Report Selection</Heading>
+                <Flex direction={{ base:'column', md:'row' }} gap={4} align={{ base:'stretch', md:'flex-end' }} mb={6} flexWrap="wrap">
+
+                    {/* Financial Year */}
+                    <FormControl w="auto">
+                        <FormLabel fontWeight="bold" fontSize="sm">Financial Year</FormLabel>
+                        <Popover placement="bottom-start">
+                            <PopoverTrigger>
+                                <Button w="auto" minW="150px" bg="white" color="gray.800" _hover={{bg:'gray.50'}} borderRadius="md" shadow="sm" size="md" fontWeight="bold" border="1px solid" borderColor="gray.200" justifyContent="space-between" rightIcon={<Icon as={FaCalendarAlt} color="blue.500"/>}>
+                                    <Box flex="1" textAlign="left">{selectedFY ? `${selectedFY}-${parseInt(selectedFY)+1} (FY)` : 'Custom Date'}</Box>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100" zIndex={100}>
+                                <PopoverBody p={4} maxH="350px" overflowY="auto">
+                                    <HStack justify="space-between" mb={4} px={2}>
+                                        <IconButton size="sm" variant="ghost" icon={<FaChevronLeft/>} onClick={()=>setFyPageStart(p=>p-12)}/>
+                                        <Text fontWeight="bold" fontSize="sm">{fyPageStart} – {fyPageStart+11}</Text>
+                                        <IconButton size="sm" variant="ghost" icon={<FaChevronRight/>} onClick={()=>setFyPageStart(p=>p+12)}/>
+                                    </HStack>
+                                    <SimpleGrid columns={2} spacing={2}>
+                                        {Array.from({length:12},(_,i)=>fyPageStart+i).map(y=>(
+                                            <Button key={y} size="sm" borderRadius="lg" colorScheme={selectedFY===y.toString()?'blue':'gray'} variant={selectedFY===y.toString()?'solid':'ghost'} onClick={()=>{setSelectedFY(y.toString());setSelectedMonth('');setGlobalStartDate(`${y}-04-01`);setGlobalEndDate(`${y+1}-03-31`);}}>
+                                                {y}-{y+1}
+                                            </Button>
+                                        ))}
+                                    </SimpleGrid>
+                                </PopoverBody>
+                            </PopoverContent>
+                        </Popover>
+                    </FormControl>
+
+                    {/* Month */}
+                    <FormControl w="auto">
+                        <FormLabel fontWeight="bold" fontSize="sm">Month</FormLabel>
+                        <Select bg="white" size="md" value={selectedMonth} onChange={e=>{
+                            setSelectedMonth(e.target.value);
+                            if(e.target.value){
+                                const mi=parseInt(e.target.value);
+                                let yr=new Date().getFullYear();
+                                if(selectedFY) yr=mi<3?parseInt(selectedFY)+1:parseInt(selectedFY);
+                                setGlobalStartDate(fmtMonthFn(new Date(yr,mi,1)));
+                                setGlobalEndDate(fmtMonthFn(new Date(yr,mi+1,0)));
+                            }
+                        }}>
+                            <option value="">Custom Month</option>
+                            {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m,i)=>(
+                                <option key={i} value={i}>{m}</option>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    {/* From */}
+                    <FormControl w="auto">
+                        <FormLabel fontWeight="bold" fontSize="sm">From Date</FormLabel>
+                        <Input type="date" size="md" bg="white" value={globalStartDate} onChange={e=>{setGlobalStartDate(e.target.value);setSelectedFY('');setSelectedMonth('');}}/>
+                    </FormControl>
+
+                    {/* To */}
+                    <FormControl w="auto">
+                        <FormLabel fontWeight="bold" fontSize="sm">To Date</FormLabel>
+                        <Input type="date" size="md" bg="white" value={globalEndDate} onChange={e=>{setGlobalEndDate(e.target.value||_todayStr);setSelectedFY('');setSelectedMonth('');}}/>
+                    </FormControl>
+
+                    {/* Report Type */}
+                    <FormControl w="auto" flex={1}>
+                        <FormLabel fontWeight="bold" fontSize="sm">Report Type</FormLabel>
+                        <Select value={reportType} bg="white" size="md" onChange={e=>{
+                            setReportType(e.target.value);
+                            if(['Food','Fuel','ClientSite'].includes(e.target.value)) setSelectedExpEmp({id:'ALL',name:'All Employees'});
+                            else setSelectedExpEmp({id:'',name:''});
+                        }}>
+                            <option value="Ledger">Employee Ledger</option>
+                            <option value="Food">Global Food Report</option>
+                            <option value="Fuel">Global Fuel Report</option>
+                            <option value="ClientSite">Client &amp; Site Wise Report</option>
+                            <option value="EmployeeSiteLedger">Employee Client &amp; Site Ledger</option>
+                        </Select>
+                    </FormControl>
+
+                    {/* Employee */}
+                    <FormControl w="auto" flex={1} isDisabled={isAllEmp}>
+                        <FormLabel fontWeight="bold" fontSize="sm">Select Employee</FormLabel>
+                        <Select placeholder={isAllEmp ? "All Employees Included" : "-- Select Employee --"} value={isAllEmp ? 'ALL' : selectedExpEmp.id} bg={isAllEmp ? 'gray.100' : 'white'} size="md" onChange={e=>{const emp=employees.find(x=>x._id===e.target.value);setSelectedExpEmp({id:emp?._id||'',name:emp?.name||''});}}>
+                            {isAllEmp && <option value="ALL" hidden>All Employees</option>}
+                            {employees.map(emp=>(<option key={emp._id} value={emp._id}>{emp.name}</option>))}
+                        </Select>
+                    </FormControl>
+                </Flex>
+
+                {/* Report Output */}
+                {((selectedExpEmp.id && selectedExpEmp.id !== 'ALL') || isAllEmp) ? (
+                    <AdminEmployeeExpenses
+                        employeeId={isAllEmp ? 'ALL' : selectedExpEmp.id}
+                        employeeName={isAllEmp ? 'All Employees' : selectedExpEmp.name}
+                        externalReportType={reportType}
+                        globalStartDate={globalStartDate}
+                        globalEndDate={globalEndDate}
+                    />
+                ) : (
+                    <Center py={12}>
+                        <VStack spacing={2}>
+                            <Icon as={FaChartBar} w={9} h={9} color="gray.200"/>
+                            <Text color="gray.400" fontSize="sm">Select an employee to view their report</Text>
+                        </VStack>
+                    </Center>
+                )}
+            </Box>
+
+        </VStack>
+    );
+};
+
 // ── Daily Expenses Module ──────────────────────────────────────────────
+
 const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, onUpdateEmployee }) => {
     const toast = useToast();
     const [isSaving, setIsSaving] = useState(false);
@@ -2152,12 +2276,6 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
                                     </Th>
                                     <Th textAlign="center" color="orange.700" fontSize="xs" fontWeight="black" py={3}>
                                         <HStack justify="center" spacing={1}>
-                                            <Icon as={FaUserSlash} color="orange.400" />
-                                            <Text>Half Day</Text>
-                                        </HStack>
-                                    </Th>
-                                    <Th textAlign="center" color="orange.700" fontSize="xs" fontWeight="black" py={3}>
-                                        <HStack justify="center" spacing={1}>
                                             <Icon as={FaUserSlash} color="red.400" />
                                             <Text>Absent</Text>
                                         </HStack>
@@ -2178,7 +2296,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
                                             <Td py={3}>
                                                 <HStack spacing={2}>
                                                     <Box w={2} h={2} borderRadius="full"
-                                                        bg={status === 'Present' ? 'green.400' : status === 'Half Day' ? 'orange.400' : status === 'Absent' ? 'red.400' : 'gray.200'}
+                                                        bg={status === 'Present' ? 'green.400' : status === 'Absent' ? 'red.400' : 'gray.200'}
                                                     />
                                                     <Text fontWeight="bold" fontSize="sm" color="gray.700">{emp.name}</Text>
                                                     {saved && (
@@ -2199,18 +2317,6 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
                                                     minW="60px"
                                                 >
                                                     {status === 'Present' ? '✓ P' : 'P'}
-                                                </Button>
-                                            </Td>
-                                            <Td textAlign="center">
-                                                <Button
-                                                    size="xs"
-                                                    borderRadius="full"
-                                                    colorScheme={status === 'Half Day' ? 'orange' : 'gray'}
-                                                    variant={status === 'Half Day' ? 'solid' : 'outline'}
-                                                    onClick={() => setStatus(emp._id, status === 'Half Day' ? '' : 'Half Day')}
-                                                    minW="60px"
-                                                >
-                                                    {status === 'Half Day' ? '✓ HD' : 'HD'}
                                                 </Button>
                                             </Td>
                                             <Td textAlign="center">

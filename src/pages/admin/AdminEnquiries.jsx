@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner } from '@chakra-ui/react';
-import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch } from 'react-icons/fi';
+import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner, Heading } from '@chakra-ui/react';
+import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, FiEdit } from 'react-icons/fi';
 import { FaWhatsapp, FaChevronLeft } from 'react-icons/fa';
 import api from '../../api/axios';
 import { DEMO_ENQUIRIES, DEMO_QUOTATIONS } from '../../data/mockData';
@@ -14,6 +14,11 @@ const AdminEnquiries = () => {
     const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
     const [allProducts, setAllProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    
+    // Search States
+    const [enquirySearch, setEnquirySearch] = useState('');
+    const [activeSearch, setActiveSearch] = useState('');
+    const [historySearch, setHistorySearch] = useState('');
 
     // Status Confirmation State
     const { isOpen: isStatusConfirmOpen, onOpen: onStatusConfirmOpen, onClose: onStatusConfirmClose } = useDisclosure();
@@ -762,6 +767,27 @@ const AdminEnquiries = () => {
     };
 
 
+    const filteredEnquiries = enquiries.filter(e => {
+        const term = enquirySearch.toLowerCase();
+        return (e.Name || '').toLowerCase().includes(term) ||
+               (e.email || '').toLowerCase().includes(term) ||
+               (e.phone || '').toLowerCase().includes(term);
+    });
+
+    const filteredQuotations = quotations.filter(q => {
+        const term = activeSearch.toLowerCase();
+        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || '';
+        const refNo = q.refNo || '';
+        return clientName.toLowerCase().includes(term) || refNo.toLowerCase().includes(term);
+    });
+
+    const filteredHistory = processedQuotations.filter(q => {
+        const term = historySearch.toLowerCase();
+        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || '';
+        const refNo = q.refNo || '';
+        return clientName.toLowerCase().includes(term) || refNo.toLowerCase().includes(term);
+    });
+
     return (
         <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100">
             <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={8} direction={{ base: 'column', md: 'row' }} gap={4}>
@@ -773,9 +799,39 @@ const AdminEnquiries = () => {
                 </Stack>
             </Flex>
 
+            {/* Stat Cards */}
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={5} mb={8}>
+                <Box p={5} bg="blue.50" borderRadius="2xl" border="1px" borderColor="blue.100">
+                    <VStack align="start" spacing={1}>
+                        <Text fontSize="sm" color="blue.600" fontWeight="bold" textTransform="uppercase">New Enquiries</Text>
+                        <Heading size="xl" color="blue.800">{enquiries.filter(e => !e.isSeen).length}</Heading>
+                        <Text fontSize="xs" color="blue.500">Unseen client requests in inbox</Text>
+                    </VStack>
+                </Box>
+                <Box p={5} bg="orange.50" borderRadius="2xl" border="1px" borderColor="orange.100">
+                    <VStack align="start" spacing={1}>
+                        <Text fontSize="sm" color="orange.600" fontWeight="bold" textTransform="uppercase">Active Quotations</Text>
+                        <Heading size="xl" color="orange.800">{quotations.length}</Heading>
+                        <Text fontSize="xs" color="orange.500">Sent quotes awaiting client decision</Text>
+                    </VStack>
+                </Box>
+                <Box p={5} bg="green.50" borderRadius="2xl" border="1px" borderColor="green.100">
+                    <VStack align="start" spacing={1}>
+                        <Text fontSize="sm" color="green.600" fontWeight="bold" textTransform="uppercase">Successful Sales</Text>
+                        <Heading size="xl" color="green.800">{processedQuotations.filter(q => q.status === 'Done').length}</Heading>
+                        <Text fontSize="xs" color="green.500">Approved orders synced with billing</Text>
+                    </VStack>
+                </Box>
+            </SimpleGrid>
+
             <Tabs colorScheme="brand" isLazy>
                 <TabList>
-                    <Tab fontWeight="bold">Incoming Enquiries</Tab>
+                    <Tab fontWeight="bold">
+                        Incoming Enquiries
+                        {enquiries.some(e => !e.isSeen) && (
+                            <Badge ml={2} colorScheme="red" borderRadius="full">NEW</Badge>
+                        )}
+                    </Tab>
                     <Tab fontWeight="bold">Outbound Quotations</Tab>
                     <Tab fontWeight="bold">Processed (History)</Tab>
                 </TabList>
@@ -787,22 +843,51 @@ const AdminEnquiries = () => {
                 ) : (
                 <TabPanels>
                     <TabPanel p={0} pt={4}>
-                        <Box overflowX="auto">
+                        <Flex justify="space-between" mb={4} align="center">
+                            <InputGroup maxW="350px" size="sm">
+                                <InputLeftElement pointerEvents="none">
+                                    <FiSearch color="gray.400" />
+                                </InputLeftElement>
+                                <Input 
+                                    placeholder="Search by sender name or contact..." 
+                                    borderRadius="xl"
+                                    value={enquirySearch}
+                                    onChange={(e) => setEnquirySearch(e.target.value)}
+                                />
+                            </InputGroup>
+                        </Flex>
+                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="500px">
-                                <Thead><Tr><Th>Date</Th><Th>Sender</Th><Th>Action</Th></Tr></Thead>
+                                <Thead bg="gray.50">
+                                    <Tr>
+                                        <Th>Date</Th>
+                                        <Th>Sender</Th>
+                                        <Th>Requested Items</Th>
+                                        <Th textAlign="right">Action</Th>
+                                    </Tr>
+                                </Thead>
                                 <Tbody>
-                                    {enquiries.map(e => (
-                                        <Tr key={e._id}>
+                                    {filteredEnquiries.map(e => (
+                                        <Tr key={e._id} _hover={{ bg: "gray.50" }}>
                                             <Td fontSize="sm">
                                                 <HStack>
                                                     {!e.isSeen && <Box w="8px" h="8px" bg="red.500" borderRadius="full" />}
                                                     <Text>{new Date(e.createdAt).toLocaleDateString('en-GB')}</Text>
                                                 </HStack>
                                             </Td>
-                                            <Td fontWeight="medium">{e.Name}</Td>
                                             <Td>
-                                                <HStack spacing={2}>
-                                                    <Button size="sm" onClick={() => handleViewEnquiry(e)}>View Details</Button>
+                                                <VStack align="start" spacing={0}>
+                                                    <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
+                                                    <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
+                                                    <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
+                                                </VStack>
+                                            </Td>
+                                            <Td>
+                                                <Badge colorScheme="purple">{(e.products || []).length} items requested</Badge>
+                                            </Td>
+                                            <Td textAlign="right">
+                                                <HStack spacing={2} justify="flex-end">
+                                                    <Button size="sm" colorScheme="brand" leftIcon={<FiEye />} onClick={() => handleViewEnquiry(e)}>View Details</Button>
                                                     <IconButton 
                                                         aria-label="Delete" 
                                                         icon={<FiTrash />} 
@@ -815,18 +900,40 @@ const AdminEnquiries = () => {
                                             </Td>
                                         </Tr>
                                     ))}
-                                    {enquiries.length === 0 && <Tr><Td colSpan={4}>No enquiries found.</Td></Tr>}
+                                    {filteredEnquiries.length === 0 && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No enquiries found.</Td></Tr>}
                                 </Tbody>
                             </Table>
                         </Box>
                     </TabPanel>
 
                     <TabPanel p={0} pt={4}>
-                        <Box overflowX="auto">
+                        <Flex justify="space-between" mb={4} align="center">
+                            <InputGroup maxW="350px" size="sm">
+                                <InputLeftElement pointerEvents="none">
+                                    <FiSearch color="gray.400" />
+                                </InputLeftElement>
+                                <Input 
+                                    placeholder="Search by client or Ref No..." 
+                                    borderRadius="xl"
+                                    value={activeSearch}
+                                    onChange={(e) => setActiveSearch(e.target.value)}
+                                />
+                            </InputGroup>
+                        </Flex>
+                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="560px">
-                                <Thead><Tr><Th>Date</Th><Th>Ref No.</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
+                                <Thead bg="gray.50">
+                                    <Tr>
+                                        <Th>Date</Th>
+                                        <Th>Ref No.</Th>
+                                        <Th>Client</Th>
+                                        <Th>Total Value</Th>
+                                        <Th>Status</Th>
+                                        <Th textAlign="right">Action</Th>
+                                    </Tr>
+                                </Thead>
                                 <Tbody>
-                                    {quotations.map(q => {
+                                    {filteredQuotations.map(q => {
                                         let refSuffix = '';
                                         if (q.refNo) {
                                             const lowerRef = q.refNo.toLowerCase();
@@ -834,18 +941,33 @@ const AdminEnquiries = () => {
                                                 refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
                                             }
                                         }
+                                        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
+                                        const totalAmt = q.grandTotal || q.totalAmount || 0;
+
                                         return (
-                                            <Tr key={q._id}>
+                                            <Tr key={q._id} _hover={{ bg: "gray.50" }}>
                                                 <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
                                                 <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
-                                                <Td fontWeight="medium">
-                                                    {q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text>
-                                                </Td>
-                                                <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
                                                 <Td>
-                                                    <HStack spacing={2}>
-                                                        <Button size="xs" variant="outline" onClick={() => handleViewQuotation(q)}>View</Button>
-                                                        <Button 
+                                                    <VStack align="start" spacing={0}>
+                                                        <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
+                                                        <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
+                                                    </VStack>
+                                                </Td>
+                                                <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
+                                                <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
+                                                <Td textAlign="right">
+                                                    <HStack spacing={2} justify="flex-end">
+                                                        <IconButton 
+                                                            aria-label="View" 
+                                                            icon={<FiEye />} 
+                                                            size="xs" 
+                                                            variant="outline" 
+                                                            onClick={() => handleViewQuotation(q)} 
+                                                        />
+                                                        <IconButton 
+                                                            aria-label="Edit" 
+                                                            icon={<FiEdit />} 
                                                             size="xs" 
                                                             colorScheme="blue" 
                                                             variant="outline" 
@@ -853,13 +975,10 @@ const AdminEnquiries = () => {
                                                                 const enq = q.enquiryId || q.enquiry;
                                                                 if (enq) {
                                                                     setSelectedEnquiry(enq);
-                                                                    // Trigger update mode after state settles
                                                                     setTimeout(() => initCreateQuote(), 50);
                                                                 }
                                                             }}
-                                                        >
-                                                            Edit
-                                                        </Button>
+                                                        />
                                                         <Button 
                                                             size="xs" 
                                                             bg="#25D366" 
@@ -872,8 +991,20 @@ const AdminEnquiries = () => {
                                                         >
                                                             WhatsApp
                                                         </Button>
-                                                        <Button size="xs" colorScheme="green" onClick={() => handleStatusUpdate(q._id, 'Done')}>Done</Button>
-                                                        <Button size="xs" colorScheme="red" onClick={() => handleStatusUpdate(q._id, 'Reject')}>Reject</Button>
+                                                        <IconButton 
+                                                            aria-label="Accept" 
+                                                            icon={<FiCheck />} 
+                                                            size="xs" 
+                                                            colorScheme="green" 
+                                                            onClick={() => handleStatusUpdate(q._id, 'Done')} 
+                                                        />
+                                                        <IconButton 
+                                                            aria-label="Reject" 
+                                                            icon={<FiX />} 
+                                                            size="xs" 
+                                                            colorScheme="red" 
+                                                            onClick={() => handleStatusUpdate(q._id, 'Reject')} 
+                                                        />
                                                         <IconButton 
                                                             aria-label="Delete" 
                                                             icon={<FiTrash />} 
@@ -887,18 +1018,40 @@ const AdminEnquiries = () => {
                                             </Tr>
                                         );
                                     })}
-                                    {quotations.length === 0 && <Tr><Td colSpan={5}>No active quotations.</Td></Tr>}
+                                    {filteredQuotations.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No active quotations found.</Td></Tr>}
                                 </Tbody>
                             </Table>
                         </Box>
                     </TabPanel>
 
                     <TabPanel p={0} pt={4}>
-                        <Box overflowX="auto">
+                        <Flex justify="space-between" mb={4} align="center">
+                            <InputGroup maxW="350px" size="sm">
+                                <InputLeftElement pointerEvents="none">
+                                    <FiSearch color="gray.400" />
+                                </InputLeftElement>
+                                <Input 
+                                    placeholder="Search by client or Ref No..." 
+                                    borderRadius="xl"
+                                    value={historySearch}
+                                    onChange={(e) => setHistorySearch(e.target.value)}
+                                />
+                            </InputGroup>
+                        </Flex>
+                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="560px">
-                                <Thead><Tr><Th>Date</Th><Th>Ref No.</Th><Th>Client</Th><Th>Status</Th><Th>Action</Th></Tr></Thead>
+                                <Thead bg="gray.50">
+                                    <Tr>
+                                        <Th>Date</Th>
+                                        <Th>Ref No.</Th>
+                                        <Th>Client</Th>
+                                        <Th>Total Value</Th>
+                                        <Th>Status</Th>
+                                        <Th textAlign="right">Action</Th>
+                                    </Tr>
+                                </Thead>
                                 <Tbody>
-                                    {processedQuotations.map(q => {
+                                    {filteredHistory.map(q => {
                                         let refSuffix = '';
                                         if (q.refNo) {
                                             const lowerRef = q.refNo.toLowerCase();
@@ -906,18 +1059,26 @@ const AdminEnquiries = () => {
                                                 refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
                                             }
                                         }
+                                        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
+                                        const totalAmt = q.grandTotal || q.totalAmount || 0;
+
                                         return (
-                                            <Tr key={q._id}>
+                                            <Tr key={q._id} _hover={{ bg: "gray.50" }}>
                                                 <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
                                                 <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
-                                                <Td fontWeight="medium">
-                                                    {q.enquiryId?.Name || q.enquiry?.Name || 'Unknown'} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text>
-                                                </Td>
-                                                <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status}</Badge></Td>
                                                 <Td>
-                                                        <Button size="sm" variant="outline" mr={2} onClick={() => handleViewQuotation(q)}>View Quote</Button>
+                                                    <VStack align="start" spacing={0}>
+                                                        <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
+                                                        <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
+                                                    </VStack>
+                                                </Td>
+                                                <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
+                                                <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status === 'Done' ? 'Accepted' : 'Rejected'}</Badge></Td>
+                                                <Td textAlign="right">
+                                                    <HStack spacing={2} justify="flex-end">
+                                                        <Button size="sm" variant="outline" leftIcon={<FiEye />} onClick={() => handleViewQuotation(q)}>View Quote</Button>
                                                         {q.status === 'Done' && (
-                                                            <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} mr={2} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
+                                                            <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
                                                         )}
                                                         <IconButton 
                                                             aria-label="Delete" 
@@ -927,11 +1088,12 @@ const AdminEnquiries = () => {
                                                             variant="ghost" 
                                                             onClick={() => handleDeleteRequest('quotation', q._id)}
                                                         />
-                                                    </Td>
+                                                    </HStack>
+                                                </Td>
                                             </Tr>
                                         );
                                     })}
-                                    {processedQuotations.length === 0 && <Tr><Td colSpan={5}>No processed quotations.</Td></Tr>}
+                                    {filteredHistory.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No processed quotations found.</Td></Tr>}
                                 </Tbody>
                             </Table>
                         </Box>

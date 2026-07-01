@@ -18,6 +18,7 @@ import AdminDraftingWork from "./pages/admin/AdminDraftingWork";
 import InvoiceReport from "./pages/admin/InvoiceReport";
 import EmployeeExpensesModule from "./pages/EmployeeExpensesModule";
 import AdminWhatsappSettings from "./pages/admin/AdminWhatsappSettings";
+import AdminLoginReport from "./pages/admin/AdminLoginReport";
 import Login from "./pages/Login";
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
           <Route path="drafting-work" element={<AdminDraftingWork />} />
           <Route path="invoice-report" element={<InvoiceReport />} />
           <Route path="whatsapp-settings" element={<AdminWhatsappSettings />} />
+          <Route path="login-report" element={<AdminLoginReport />} />
         </Route>
 
         {/* Employee Portal — standalone (no Layout) */}

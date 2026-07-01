@@ -6,14 +6,15 @@ import {
     Table, Thead, Tbody, Tr, Th, Td, TableContainer, Tag, TagLabel, Wrap, WrapItem, Avatar,
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
-    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer
+    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer,
+    NumberInput, NumberInputField
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
     FaUserTie, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope, FaIdCard, FaCamera,
     FaHandshake, FaFingerprint, FaIdBadge, FaMap,
     FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt, FaUndo, FaListUl,
-    FaSearch, FaCar, FaFolderOpen, FaCopy, FaPrint
+    FaSearch, FaCar, FaFolderOpen, FaCopy, FaPrint, FaFileExcel
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -21,6 +22,7 @@ import EmployeeExpensesModule from '../pages/EmployeeExpensesModule';
 import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import AdminDraftingWork from './admin/AdminDraftingWork';
 import InvoiceReport from './admin/InvoiceReport';
+import AdminLoginReportView from '../components/admin/AdminLoginReportView';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -780,6 +782,7 @@ const EmployeeMasterForm = () => {
     const [viewEmployee, setViewEmployee] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
+    const [employeeViewSubTab, setEmployeeViewSubTab] = useState('active'); // 'active' or 'deactive'
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
 
@@ -787,6 +790,7 @@ const EmployeeMasterForm = () => {
         { id: 'form', label: 'Form', permission: 'canViewForm' },
         { id: 'view', label: 'View', permission: 'canViewList' },
         { id: 'payment', label: 'Payment Report', permission: 'canViewList' },
+        { id: 'adminReport', label: 'Admin Login Report', permission: 'canViewList' },
     ];
     const [employeeActiveTab, setEmployeeActiveTab] = useState(0);
 
@@ -799,13 +803,46 @@ const EmployeeMasterForm = () => {
     });
     const [reportFoodFilter, setReportFoodFilter] = useState('All');
     const [reportStatusFilter, setReportStatusFilter] = useState('All');
+    // Cache of { [empId_month]: { present, absent, halfDay, totalRecorded } }
+    const [attendanceCache, setAttendanceCache] = useState({});
+    const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-    const filteredEmployees = employees.filter(emp =>
+    const fetchAttendanceSummaries = async (empList, month) => {
+        if (!empList?.length || !month) return;
+        setAttendanceLoading(true);
+        try {
+            const results = await Promise.all(
+                empList.map(emp =>
+                    api.get(`/employee-master/${emp._id}/attendance-summary?month=${month}`)
+                        .then(r => ({ empId: emp._id, data: r.data.data }))
+                        .catch(() => ({ empId: emp._id, data: null }))
+                )
+            );
+            const cache = {};
+            results.forEach(r => {
+                if (r.data) cache[`${r.empId}_${month}`] = r.data;
+            });
+            setAttendanceCache(prev => ({ ...prev, ...cache }));
+        } finally {
+            setAttendanceLoading(false);
+        }
+    };
+
+    const baseSearchedEmployees = employees.filter(emp =>
         emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.empId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.designation?.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const activeEmployeesCount = baseSearchedEmployees.filter(emp => emp.status !== 'Deactive').length;
+    const deactiveEmployeesCount = baseSearchedEmployees.filter(emp => emp.status === 'Deactive').length;
+
+    const filteredEmployees = baseSearchedEmployees.filter(emp => {
+        if (employeeViewSubTab === 'active') return emp.status !== 'Deactive';
+        if (employeeViewSubTab === 'deactive') return emp.status === 'Deactive';
+        return true;
+    });
 
     const fetchNextEmpId = async () => {
         try {
@@ -825,6 +862,12 @@ const EmployeeMasterForm = () => {
         fetchNextEmpId();
         fetchEmployees();
     }, []);
+
+    useEffect(() => {
+        if (employees.length > 0 && reportMonthFilter) {
+            fetchAttendanceSummaries(employees, reportMonthFilter);
+        }
+    }, [employees, reportMonthFilter]);
 
     const handleSelectEmployee = (e) => {
         const id = e.target.value;
@@ -1191,7 +1234,142 @@ const EmployeeMasterForm = () => {
     };
 
     const getMonthlyPayment = (emp, month) => {
-        return emp.monthlyPayments?.find(p => p.month === month) || { paymentMode: 'Cash', paymentStatus: 'Pending' };
+        return emp.monthlyPayments?.find(p => p.month === month) || { paymentMode: 'Cash', paymentStatus: 'Pending', presentDays: null, absentDays: null, upad: 0 };
+    };
+
+    // Returns total days in the given YYYY-MM string
+    const getDaysInMonth = (monthStr) => {
+        if (!monthStr) return 30;
+        const [y, m] = monthStr.split('-').map(Number);
+        return new Date(y, m, 0).getDate();
+    };
+
+    const exportPaymentReportToExcel = () => {
+        const month = reportMonthFilter;
+        const reportRows = employees.filter(emp => {
+            const monthData = getMonthlyPayment(emp, month);
+            const matchesSearch = emp.name?.toLowerCase().includes(reportSearchQuery.toLowerCase()) || emp.empId?.toLowerCase().includes(reportSearchQuery.toLowerCase());
+            const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
+            const matchesStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
+            const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
+            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
+            return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
+        });
+
+        const totalSalary = reportRows.reduce((acc, emp) => acc + parseFloat(emp.salary || 0), 0);
+        let totalPayable = 0;
+
+        let tableHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta charset="utf-8" />
+            <style>
+                table { border-collapse: collapse; width: 100%; font-family: 'Segoe UI', Arial, sans-serif; }
+                th { background-color: #1e3a8a; color: #ffffff; font-weight: bold; padding: 12px 10px; border: 1px solid #94a3b8; text-align: center; font-size: 12px; }
+                td { padding: 8px 10px; border: 1px solid #cbd5e1; font-size: 11px; vertical-align: middle; }
+                .row-even { background-color: #ffffff; }
+                .row-odd { background-color: #f8fafc; }
+                .row-done { background-color: #ecfdf5; }
+                .row-deactive { background-color: #fef2f2; }
+                .badge-green { background-color: #dcfce7; color: #15803d; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+                .badge-orange { background-color: #fef9c3; color: #a16207; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+                .badge-red { background-color: #fee2e2; color: #b91c1c; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+                .money { font-weight: bold; color: #0f172a; text-align: right; }
+                .title-banner { background-color: #0f172a; color: #f8fafc; font-size: 16px; font-weight: bold; padding: 15px; text-align: center; border: 2px solid #334155; }
+            </style>
+        </head>
+        <body>
+            <table>
+                <tr>
+                    <td colspan="16" class="title-banner">EMPLOYEE MONTHLY PAYMENT REPORT — ${month}</td>
+                </tr>
+                <tr>
+                    <td colspan="16" style="background-color: #e2e8f0; font-weight: bold; padding: 8px; color: #1e293b;">Generated On: ${new Date().toLocaleDateString()} | Total Employees: ${reportRows.length}</td>
+                </tr>
+                <tr></tr>
+                <tr>
+                    <th>SR. NO.</th>
+                    <th>Month</th>
+                    <th>Employee ID</th>
+                    <th>Employee Name</th>
+                    <th>Bank A/C No</th>
+                    <th>IFSC Code</th>
+                    <th>Monthly Salary (₹)</th>
+                    <th>Total Days</th>
+                    <th>Present</th>
+                    <th>Absent</th>
+                    <th>Per Day Salary (₹)</th>
+                    <th>UPAD (₹)</th>
+                    <th>Payable Salary (₹)</th>
+                    <th>Payment Mode</th>
+                    <th>Payment Status</th>
+                    <th>Employee Status</th>
+                </tr>
+        `;
+
+        reportRows.forEach((emp, idx) => {
+            const monthData = getMonthlyPayment(emp, month);
+            const totalDays = getDaysInMonth(month);
+            const salary = parseFloat(emp.salary || 0);
+            const perDay = totalDays > 0 ? (salary / totalDays) : 0;
+            const attCache = attendanceCache[`${emp._id}_${month}`];
+            const present = attCache ? attCache.present : (monthData.presentDays ?? totalDays);
+            const absent = attCache ? attCache.absent : (monthData.absentDays ?? 0);
+            const upad = monthData.upad ?? 0;
+            const payable = (perDay * present) - upad;
+            totalPayable += payable;
+
+            const isDone = monthData.paymentStatus === 'Done';
+            const isDeactive = emp.status === 'Deactive';
+            const rowClass = isDeactive ? 'row-deactive' : isDone ? 'row-done' : (idx % 2 === 0 ? 'row-even' : 'row-odd');
+
+            const payStatusBadge = isDone ? 'badge-green' : 'badge-orange';
+            const empStatusBadge = isDeactive ? 'badge-red' : 'badge-green';
+
+            tableHtml += `
+                <tr class="${rowClass}">
+                    <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+                    <td style="text-align: center;">${month}</td>
+                    <td style="text-align: center; font-weight: bold; color: #2563eb;">${emp.empId || ''}</td>
+                    <td style="font-weight: bold;">${emp.name || ''}</td>
+                    <td style="font-family: monospace;">&nbsp;${emp.bankDetails?.accountNumber || '—'}</td>
+                    <td style="text-align: center;">${emp.bankDetails?.ifscCode || '—'}</td>
+                    <td class="money">₹${salary.toLocaleString('en-IN')}</td>
+                    <td style="text-align: center;">${totalDays}</td>
+                    <td style="text-align: center; font-weight: bold; color: #16a34a;">${present}</td>
+                    <td style="text-align: center; font-weight: bold; color: ${absent > 0 ? '#dc2626' : '#16a34a'};">${absent}</td>
+                    <td class="money">₹${perDay.toFixed(2)}</td>
+                    <td class="money" style="color: #9333ea;">₹${upad.toLocaleString('en-IN')}</td>
+                    <td class="money" style="font-size: 12px; color: #16a34a;">₹${payable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td style="text-align: center;">${monthData.paymentMode}</td>
+                    <td style="text-align: center;"><span class="${payStatusBadge}">${monthData.paymentStatus}</span></td>
+                    <td style="text-align: center;"><span class="${empStatusBadge}">${emp.status || 'Active'}</span></td>
+                </tr>
+            `;
+        });
+
+        tableHtml += `
+                <tr style="background-color: #cbd5e1; font-weight: bold; font-size: 13px;">
+                    <td colspan="6" style="text-align: right; padding: 10px; color: #0f172a;">TOTALS:</td>
+                    <td class="money" style="font-size: 13px; color: #0f172a;">₹${totalSalary.toLocaleString('en-IN')}</td>
+                    <td colspan="5"></td>
+                    <td class="money" style="font-size: 13px; color: #15803d;">₹${totalPayable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td colspan="3"></td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        `;
+
+        const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Employee_Payment_Report_${month}.xls`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     const exportPaymentReportToCSV = () => {
@@ -1206,9 +1384,17 @@ const EmployeeMasterForm = () => {
             return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
         });
 
-        const headers = ['SR. NO.', 'Month', 'Employee ID', 'Name', 'Bank A/C No', 'IFSC Code', 'Monthly Salary (INR)', 'Food Allowance', 'Payment Mode', 'Payment Status', 'Employee Status'];
+        const headers = ['SR. NO.', 'Month', 'Employee ID', 'Name', 'Bank A/C No', 'IFSC Code', 'Monthly Salary (INR)', 'Total Days', 'Present', 'Absent', 'Per Day Salary', 'UPAD', 'Payable Salary', 'Payment Mode', 'Payment Status', 'Employee Status'];
         const rows = reportRows.map((emp, idx) => {
             const monthData = getMonthlyPayment(emp, month);
+            const totalDays = getDaysInMonth(month);
+            const salary = parseFloat(emp.salary || 0);
+            const perDay = totalDays > 0 ? (salary / totalDays) : 0;
+            const attCache = attendanceCache[`${emp._id}_${month}`];
+            const present = attCache ? attCache.present : (monthData.presentDays ?? totalDays);
+            const absent = attCache ? attCache.absent : (monthData.absentDays ?? 0);
+            const upad = monthData.upad ?? 0;
+            const payable = (perDay * present) - upad;
             return [
                 idx + 1,
                 month,
@@ -1216,8 +1402,13 @@ const EmployeeMasterForm = () => {
                 emp.name || '',
                 emp.bankDetails?.accountNumber || '',
                 emp.bankDetails?.ifscCode || '',
-                emp.salary || 0,
-                emp.foodAllowance || 'Food',
+                salary,
+                totalDays,
+                present,
+                absent,
+                perDay.toFixed(2),
+                upad,
+                payable.toFixed(2),
                 monthData.paymentMode,
                 monthData.paymentStatus,
                 emp.status || 'Active',
@@ -1238,6 +1429,49 @@ const EmployeeMasterForm = () => {
         URL.revokeObjectURL(url);
     };
 
+    const UpadInputCell = ({ empId, initialUpad, onSave }) => {
+        const [val, setVal] = useState(initialUpad ?? 0);
+
+        useEffect(() => {
+            setVal(initialUpad ?? 0);
+        }, [initialUpad]);
+
+        const handleBlurOrSubmit = () => {
+            const numVal = parseFloat(val) || 0;
+            if (numVal !== (initialUpad ?? 0)) {
+                onSave(empId, 'upad', numVal);
+            }
+        };
+
+        return (
+            <VStack spacing={1} align="center">
+                <Text fontSize="9px" color="purple.600" fontWeight="extrabold" letterSpacing="0.5px">UPAD (₹)</Text>
+                <Input
+                    size="sm"
+                    h="28px"
+                    w="85px"
+                    textAlign="center"
+                    fontWeight="bold"
+                    fontSize="xs"
+                    color="purple.800"
+                    bg="purple.50"
+                    borderColor="purple.200"
+                    borderRadius="lg"
+                    _hover={{ borderColor: "purple.400", bg: "purple.100" }}
+                    _focus={{ borderColor: "purple.600", bg: "white", boxShadow: "0 0 0 1px #805AD5" }}
+                    value={val}
+                    onChange={(e) => setVal(e.target.value)}
+                    onBlur={handleBlurOrSubmit}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.target.blur();
+                        }
+                    }}
+                />
+            </VStack>
+        );
+    };
+
     const handleUpdatePaymentField = async (employeeId, field, value) => {
         try {
             const res = await api.put(`/employee-master/${employeeId}/monthly-payment`, {
@@ -1245,11 +1479,20 @@ const EmployeeMasterForm = () => {
                 [field]: value
             });
             if (res.data.success) {
-                toast({ title: "Updated", description: `Changed payment ${field === 'paymentMode' ? 'mode' : 'status'} successfully.`, status: "success", duration: 2000 });
+                toast.closeAll();
+                toast({
+                    title: "Updated",
+                    description: field === 'upad' ? `UPAD saved as ₹${value.toLocaleString()}` : `Payment details updated.`,
+                    status: "success",
+                    duration: 1500,
+                    position: "bottom-right",
+                    isClosable: true
+                });
                 fetchEmployees();
             }
         } catch (error) {
-            toast({ title: "Error", description: error.response?.data?.message || "Failed to update record", status: "error", duration: 3000 });
+            toast.closeAll();
+            toast({ title: "Error", description: error.response?.data?.message || "Failed to update record", status: "error", duration: 3000, position: "bottom-right" });
         }
     };
 
@@ -1309,7 +1552,7 @@ const EmployeeMasterForm = () => {
                             </HStack>
                         </Stack>
                     </Box>
-                    <CardBody p={{ base: 4, md: 10 }}>
+                    <CardBody p={{ base: 3, md: 5 }}>
                         <Tabs index={employeeActiveTab} onChange={(idx) => setEmployeeActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
                             <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
                                 {tabConfig.map((tab, idx) => (
@@ -1630,9 +1873,36 @@ const EmployeeMasterForm = () => {
                                 <TabPanel p={0}>
                                     {/* Employee List View */}
                                     <Box mt={4}>
-                            <Flex justify="space-between" align="center" mb={4}>
-                                <Heading size="md" color="blue.700" display="flex" alignItems="center">
-                                    <Icon as={FaUsers} mr={2} /> Registered Employees ({filteredEmployees.length})
+                            <Flex justify="space-between" align="center" mb={5} wrap="wrap" gap={3}>
+                                <HStack spacing={2} bg="gray.100" p={1.5} borderRadius="2xl" border="1px solid" borderColor="gray.200">
+                                    <Button
+                                        size="sm"
+                                        borderRadius="xl"
+                                        colorScheme={employeeViewSubTab === 'active' ? 'blue' : 'gray'}
+                                        variant={employeeViewSubTab === 'active' ? 'solid' : 'ghost'}
+                                        onClick={() => setEmployeeViewSubTab('active')}
+                                        leftIcon={<Icon as={FaCheckCircle} />}
+                                        shadow={employeeViewSubTab === 'active' ? 'sm' : 'none'}
+                                        px={5}
+                                    >
+                                        Active Employees ({activeEmployeesCount})
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        borderRadius="xl"
+                                        colorScheme={employeeViewSubTab === 'deactive' ? 'red' : 'gray'}
+                                        variant={employeeViewSubTab === 'deactive' ? 'solid' : 'ghost'}
+                                        onClick={() => setEmployeeViewSubTab('deactive')}
+                                        leftIcon={<Icon as={FaTimes} />}
+                                        shadow={employeeViewSubTab === 'deactive' ? 'sm' : 'none'}
+                                        px={5}
+                                    >
+                                        Deactive Employees ({deactiveEmployeesCount})
+                                    </Button>
+                                </HStack>
+
+                                <Heading size="md" color={employeeViewSubTab === 'active' ? 'blue.700' : 'red.700'} display="flex" alignItems="center">
+                                    <Icon as={FaUsers} mr={2} /> {employeeViewSubTab === 'active' ? 'Active' : 'Deactive'} Records ({filteredEmployees.length})
                                 </Heading>
                             </Flex>
 
@@ -1741,16 +2011,16 @@ const EmployeeMasterForm = () => {
                                                         <Text fontSize="10px" opacity={0.7} mt={1}>{employees.filter(e => getMonthlyPayment(e, reportMonthFilter).paymentStatus !== 'Done').length} Pending</Text>
                                                     </Box>
                                                     <Box bgGradient="linear(to-br, purple.500, purple.700)" p={4} borderRadius="2xl" color="white" boxShadow="md">
-                                                        <Text fontSize="10px" fontWeight="black" opacity={0.8} textTransform="uppercase">Active Staff</Text>
-                                                        <Heading size="md" mt={1}>{employees.filter(e => e.status === 'Active').length}</Heading>
-                                                        <Text fontSize="10px" opacity={0.7} mt={1}>🍱 Food: {employees.filter(e => e.foodAllowance === 'Food').length} | 🚫 No Food: {employees.filter(e => e.foodAllowance === 'Without Food').length}</Text>
+                                                        <Text fontSize="10px" fontWeight="black" opacity={0.8} textTransform="uppercase">Staff Status</Text>
+                                                        <Heading size="md" mt={1}>✅ {employees.filter(e => e.status === 'Active').length} Active</Heading>
+                                                        <Text fontSize="10px" opacity={0.8} mt={1}>❌ Deactive: {employees.filter(e => e.status === 'Deactive').length} | Total: {employees.length}</Text>
                                                     </Box>
                                                 </SimpleGrid>
 
                                                 {/* Filter Bar */}
                                                 <Box bg="gray.50" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.100">
                                                     <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={3} textTransform="uppercase">🔍 Filter & Export — {reportMonthFilter}</Text>
-                                                    <SimpleGrid columns={{ base: 2, md: 6 }} spacing={3} alignItems="flex-end">
+                                                    <SimpleGrid columns={{ base: 2, md: 5 }} spacing={3} alignItems="flex-end">
                                                         <Box>
                                                             <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>MONTH</Text>
                                                             <Input
@@ -1791,14 +2061,6 @@ const EmployeeMasterForm = () => {
                                                             </Select>
                                                         </Box>
                                                         <Box>
-                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>FOOD</Text>
-                                                            <Select bg="white" size="sm" borderRadius="lg" value={reportFoodFilter} onChange={(e) => setReportFoodFilter(e.target.value)}>
-                                                                <option value="All">All</option>
-                                                                <option value="Food">🍱 Food</option>
-                                                                <option value="Without Food">🚫 No Food</option>
-                                                            </Select>
-                                                        </Box>
-                                                        <Box>
                                                             <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>EMP STATUS</Text>
                                                             <Select bg="white" size="sm" borderRadius="lg" value={reportStatusFilter} onChange={(e) => setReportStatusFilter(e.target.value)}>
                                                                 <option value="All">All</option>
@@ -1807,9 +2069,12 @@ const EmployeeMasterForm = () => {
                                                             </Select>
                                                         </Box>
                                                     </SimpleGrid>
-                                                    <HStack mt={3} spacing={2} justify="flex-end">
+                                                    <HStack mt={3} spacing={2.5} justify="flex-end" wrap="wrap">
+                                                        <Button leftIcon={<Icon as={FaFileExcel} />} colorScheme="green" variant="solid" borderRadius="xl" onClick={exportPaymentReportToExcel} size="sm" shadow="sm">
+                                                            Export Colorful Excel (.xls)
+                                                        </Button>
                                                         <Button leftIcon={<Icon as={FaCopy} />} colorScheme="blue" variant="outline" borderRadius="xl" onClick={exportPaymentReportToCSV} size="sm">
-                                                            Export CSV ({reportFiltered.length})
+                                                            Export CSV
                                                         </Button>
                                                         <Button leftIcon={<Icon as={FaPrint} />} colorScheme="purple" variant="solid" borderRadius="xl" onClick={() => window.print()} size="sm">
                                                             Print
@@ -1817,126 +2082,215 @@ const EmployeeMasterForm = () => {
                                                     </HStack>
                                                 </Box>
 
-                                                {/* Payment Report Table — no horizontal scroll */}
+                                                {/* Integrated Table & Footer Container */}
                                                 <Box bg="white" borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm" overflow="hidden">
-                                                    <Table variant="simple" size="sm">
-                                                        <Thead>
-                                                            <Tr bgGradient="linear(to-r, blue.600, blue.800)">
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">#</Th>
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">EMP ID</Th>
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">NAME</Th>
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">BANK A/C NO</Th>
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">IFSC CODE</Th>
-                                                                <Th color="white" py={4} fontSize="10px" isNumeric whiteSpace="nowrap">SALARY</Th>
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">FOOD</Th>
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">PAY TYPE</Th>
-                                                                <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">STATUS</Th>
-                                                                <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">EMP STATUS</Th>
-                                                            </Tr>
-                                                        </Thead>
-                                                        <Tbody>
-                                                            {reportFiltered.length === 0 ? (
-                                                                <Tr>
-                                                                    <Td colSpan={10} textAlign="center" py={10} color="gray.400">
-                                                                        <VStack spacing={2}>
-                                                                            <Icon as={FaUsers} w={8} h={8} color="gray.200" />
-                                                                            <Text fontSize="sm">No records match current filters</Text>
-                                                                        </VStack>
-                                                                    </Td>
+                                                    <Box overflowX="auto" w="full" sx={{
+                                                        '&::-webkit-scrollbar': { height: '8px' },
+                                                        '&::-webkit-scrollbar-track': { bg: 'gray.50' },
+                                                        '&::-webkit-scrollbar-thumb': { bg: 'blue.200', borderRadius: 'full' },
+                                                        '&::-webkit-scrollbar-thumb:hover': { bg: 'blue.300' }
+                                                    }}>
+                                                        <Table variant="simple" size="sm" sx={{ 'th, td': { px: { base: 2, md: 2.5 }, py: 3 } }}>
+                                                            <Thead>
+                                                                <Tr bgGradient="linear(to-r, blue.600, blue.800)">
+                                                                    <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">#</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">EMPLOYEE</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">BANK ACCOUNT DETAILS</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">SALARY / DAYS</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">PRESENT</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">ABSENT</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">UPAD</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" isNumeric whiteSpace="nowrap">PAYABLE</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">PAY TYPE</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">STATUS</Th>
                                                                 </Tr>
-                                                            ) : reportFiltered.map((emp, idx) => {
-                                                                const monthData = getMonthlyPayment(emp, reportMonthFilter);
-                                                                const isDone = monthData.paymentStatus === 'Done';
-                                                                const isDeactive = emp.status === 'Deactive';
-                                                                const rowBg = isDeactive ? 'red.50' : isDone ? 'green.50' : idx % 2 === 0 ? 'white' : 'gray.50';
-                                                                return (
-                                                                    <Tr key={emp._id} bg={rowBg} _hover={{ bg: isDone ? 'green.100' : isDeactive ? 'red.100' : 'blue.50' }} transition="background 0.15s">
-                                                                        <Td fontSize="xs" fontWeight="bold" color="gray.500" whiteSpace="nowrap">{idx + 1}</Td>
-                                                                        <Td fontSize="xs" fontWeight="bold" color="blue.600" whiteSpace="nowrap">{emp.empId}</Td>
-                                                                        <Td>
-                                                                            <HStack spacing={2}>
-                                                                                <Avatar size="xs" src={emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : undefined} name={emp.name} />
-                                                                                <Text fontSize="xs" fontWeight="bold" whiteSpace="normal" wordBreak="break-word">{emp.name}</Text>
-                                                                            </HStack>
-                                                                        </Td>
-                                                                        <Td fontSize="xs" color="gray.700" whiteSpace="nowrap">{emp.bankDetails?.accountNumber || '-'}</Td>
-                                                                        <Td fontSize="xs" color="gray.700" whiteSpace="nowrap">{emp.bankDetails?.ifscCode || '-'}</Td>
-                                                                        <Td isNumeric whiteSpace="nowrap">
-                                                                            <Text fontSize="xs" fontWeight="black" color="green.700">₹{parseFloat(emp.salary || 0).toLocaleString()}</Text>
-                                                                        </Td>
-                                                                        <Td whiteSpace="nowrap">
-                                                                            <Badge size="sm" colorScheme={emp.foodAllowance === 'Food' ? 'green' : 'gray'} borderRadius="full" px={2} fontSize="9px">
-                                                                                {emp.foodAllowance === 'Food' ? '🍱 Food' : '🚫 No Food'}
-                                                                            </Badge>
-                                                                        </Td>
-                                                                        <Td whiteSpace="nowrap">
-                                                                            <Select
-                                                                                size="xs"
-                                                                                borderRadius="lg"
-                                                                                value={monthData.paymentMode}
-                                                                                onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentMode', e.target.value)}
-                                                                                w="100px"
-                                                                                fontSize="xs"
-                                                                                bg={monthData.paymentMode === 'UPI' ? 'purple.50' : monthData.paymentMode === 'Cheque' ? 'orange.50' : 'blue.50'}
-                                                                                border="1px solid"
-                                                                                borderColor={monthData.paymentMode === 'UPI' ? 'purple.200' : monthData.paymentMode === 'Cheque' ? 'orange.200' : 'blue.200'}
-                                                                            >
-                                                                                <option value="Cash">💵 Cash</option>
-                                                                                <option value="Cheque">✍️ Cheque</option>
-                                                                                <option value="UPI">📱 UPI</option>
-                                                                            </Select>
-                                                                        </Td>
-                                                                        <Td whiteSpace="nowrap">
-                                                                            <Select
-                                                                                size="xs"
-                                                                                borderRadius="lg"
-                                                                                value={monthData.paymentStatus}
-                                                                                onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentStatus', e.target.value)}
-                                                                                w="105px"
-                                                                                fontSize="xs"
-                                                                                fontWeight="bold"
-                                                                                color={isDone ? 'green.700' : 'orange.700'}
-                                                                                bg={isDone ? 'green.50' : 'orange.50'}
-                                                                                border="1px solid"
-                                                                                borderColor={isDone ? 'green.200' : 'orange.200'}
-                                                                            >
-                                                                                <option value="Pending">⏳ Pending</option>
-                                                                                <option value="Done">✅ Done</option>
-                                                                            </Select>
-                                                                        </Td>
-                                                                        <Td textAlign="center" whiteSpace="nowrap">
-                                                                            <Badge
-                                                                                colorScheme={isDeactive ? 'red' : 'green'}
-                                                                                variant="solid"
-                                                                                borderRadius="full"
-                                                                                px={3}
-                                                                                fontSize="9px"
-                                                                            >
-                                                                                {isDeactive ? '❌ Deactive' : '✅ Active'}
-                                                                            </Badge>
+                                                            </Thead>
+                                                            <Tbody>
+                                                                {reportFiltered.length === 0 ? (
+                                                                    <Tr>
+                                                                        <Td colSpan={10} textAlign="center" py={10} color="gray.400">
+                                                                            <VStack spacing={2}>
+                                                                                <Icon as={FaUsers} w={8} h={8} color="gray.200" />
+                                                                                <Text fontSize="sm">No records match current filters</Text>
+                                                                            </VStack>
                                                                         </Td>
                                                                     </Tr>
-                                                                );
-                                                            })}
-                                                        </Tbody>
-                                                    </Table>
-                                                </Box>
-
-                                                {reportFiltered.length > 0 && (
-                                                    <Box bg="blue.50" p={3} borderRadius="xl" border="1px solid" borderColor="blue.100">
-                                                        <HStack justify="space-between" wrap="wrap" spacing={4}>
-                                                            <Text fontSize="xs" color="blue.700" fontWeight="bold">
-                                                                Showing {reportFiltered.length} of {employees.length} employees · Month: {reportMonthFilter}
-                                                            </Text>
-                                                            <Text fontSize="xs" color="blue.700" fontWeight="bold">
-                                                                Total: ₹{reportFiltered.reduce((a, e) => a + parseFloat(e.salary || 0), 0).toLocaleString()}
-                                                            </Text>
-                                                        </HStack>
+                                                                ) : reportFiltered.map((emp, idx) => {
+                                                                    const monthData = getMonthlyPayment(emp, reportMonthFilter);
+                                                                    const isDone = monthData.paymentStatus === 'Done';
+                                                                    const isDeactive = emp.status === 'Deactive';
+                                                                    const rowBg = isDeactive ? 'red.50' : isDone ? 'green.50' : idx % 2 === 0 ? 'white' : 'gray.50';
+                                                                    const totalDays = getDaysInMonth(reportMonthFilter);
+                                                                    const salary = parseFloat(emp.salary || 0);
+                                                                    const perDay = totalDays > 0 ? salary / totalDays : 0;
+                                                                    const upad = monthData.upad ?? 0;
+                                                                    // Pull from real attendance cache
+                                                                    const attCache = attendanceCache[`${emp._id}_${reportMonthFilter}`];
+                                                                    const present = attCache ? attCache.present : null;
+                                                                    const absent = attCache ? attCache.absent : null;
+                                                                    const effectivePresent = present !== null ? present : totalDays;
+                                                                    const payable = (perDay * effectivePresent) - upad;
+                                                                    return (
+                                                                        <Tr key={emp._id} bg={rowBg} _hover={{ bg: isDone ? 'green.100' : isDeactive ? 'red.100' : 'blue.50' }} transition="background 0.15s">
+                                                                            <Td fontSize="xs" fontWeight="bold" color="gray.500" whiteSpace="nowrap">{idx + 1}</Td>
+                                                                            {/* Employee */}
+                                                                            <Td py={3}>
+                                                                                <HStack spacing={2.5}>
+                                                                                    <Avatar size="sm" src={emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : undefined} name={emp.name} />
+                                                                                    <VStack align="start" spacing={0.5}>
+                                                                                        <HStack spacing={1.5} wrap="wrap">
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.800">{emp.name}</Text>
+                                                                                            <Badge colorScheme="blue" variant="subtle" fontSize="9px">{emp.empId}</Badge>
+                                                                                            {isDeactive ? (
+                                                                                                <Badge colorScheme="red" variant="solid" fontSize="8px" px={1.5} borderRadius="sm">Deactive</Badge>
+                                                                                            ) : null}
+                                                                                        </HStack>
+                                                                                        {emp.phone && <Text fontSize="10px" color="gray.500">📱 {emp.phone}</Text>}
+                                                                                    </VStack>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            {/* Bank Details */}
+                                                                            <Td py={3}>
+                                                                                {emp.bankDetails?.accountNumber || emp.bankDetails?.ifscCode ? (
+                                                                                    <Box bg="whiteAlpha.800" p={2} borderRadius="lg" border="1px solid" borderColor="gray.200" minW="140px" shadow="2xs">
+                                                                                        {emp.bankDetails?.bankName && (
+                                                                                            <Text fontSize="10px" fontWeight="800" color="blue.600" textTransform="uppercase" mb={0.5}>
+                                                                                                🏦 {emp.bankDetails.bankName}
+                                                                                            </Text>
+                                                                                        )}
+                                                                                        <Text fontSize="xs" fontFamily="mono" fontWeight="800" color="gray.800" letterSpacing="0.5px">
+                                                                                            A/C: {emp.bankDetails?.accountNumber || '—'}
+                                                                                        </Text>
+                                                                                        {emp.bankDetails?.ifscCode && (
+                                                                                            <Badge colorScheme="purple" variant="subtle" fontSize="9px" borderRadius="sm" mt={1}>
+                                                                                                IFSC: {emp.bankDetails.ifscCode}
+                                                                                            </Badge>
+                                                                                        )}
+                                                                                    </Box>
+                                                                                ) : (
+                                                                                    <Badge colorScheme="orange" variant="subtle" fontSize="10px" py={1} px={2} borderRadius="md">
+                                                                                        ⚠️ No Bank Details
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </Td>
+                                                                            {/* Salary Breakdown */}
+                                                                            <Td py={3}>
+                                                                                <VStack align="stretch" spacing={1} minW="95px">
+                                                                                    <HStack justify="space-between">
+                                                                                        <Text fontSize="9px" color="gray.400" fontWeight="bold">SALARY</Text>
+                                                                                        <Text fontSize="xs" fontWeight="black" color="green.700">₹{salary.toLocaleString()}</Text>
+                                                                                    </HStack>
+                                                                                    <HStack justify="space-between">
+                                                                                        <Text fontSize="9px" color="gray.400" fontWeight="bold">TOTAL DAYS</Text>
+                                                                                        <Badge colorScheme="gray" variant="subtle" fontSize="9px">{totalDays}d</Badge>
+                                                                                    </HStack>
+                                                                                    <HStack justify="space-between">
+                                                                                        <Text fontSize="9px" color="gray.400" fontWeight="bold">PER DAY</Text>
+                                                                                        <Text fontSize="xs" fontWeight="bold" color="blue.600">₹{perDay.toFixed(1)}</Text>
+                                                                                    </HStack>
+                                                                                </VStack>
+                                                                            </Td>
+                                                                            {/* Present — from real attendance */}
+                                                                            <Td py={3} textAlign="center">
+                                                                                {attendanceLoading ? (
+                                                                                    <Badge colorScheme="gray" variant="subtle" fontSize="9px">…</Badge>
+                                                                                ) : present !== null ? (
+                                                                                    <Badge colorScheme="green" variant="solid" fontSize="xs" px={2.5} py={0.5} borderRadius="md">
+                                                                                        {present}
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Badge colorScheme="gray" variant="outline" fontSize="9px">No Data</Badge>
+                                                                                )}
+                                                                            </Td>
+                                                                            {/* Absent — from real attendance */}
+                                                                            <Td py={3} textAlign="center">
+                                                                                {attendanceLoading ? (
+                                                                                    <Badge colorScheme="gray" variant="subtle" fontSize="9px">…</Badge>
+                                                                                ) : absent !== null ? (
+                                                                                    <Badge colorScheme={absent > 0 ? 'red' : 'green'} variant="solid" fontSize="xs" px={2.5} py={0.5} borderRadius="md">
+                                                                                        {absent}
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Badge colorScheme="gray" variant="outline" fontSize="9px">No Data</Badge>
+                                                                                )}
+                                                                            </Td>
+                                                                            {/* UPAD - editable */}
+                                                                            <Td py={3}>
+                                                                                <UpadInputCell empId={emp._id} initialUpad={upad} onSave={handleUpdatePaymentField} />
+                                                                            </Td>
+                                                                            {/* Payable */}
+                                                                            <Td py={3} isNumeric>
+                                                                                <VStack align="flex-end" spacing={0.5}>
+                                                                                    <Text fontSize="9px" color="gray.400" fontWeight="bold">PAYABLE</Text>
+                                                                                    <Text fontSize="sm" fontWeight="black" color={isDone ? 'green.600' : 'orange.600'}>
+                                                                                        ₹{payable.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                                                    </Text>
+                                                                                </VStack>
+                                                                            </Td>
+                                                                            {/* Pay Mode */}
+                                                                            <Td whiteSpace="nowrap">
+                                                                                <Select
+                                                                                    size="xs"
+                                                                                    borderRadius="lg"
+                                                                                    value={monthData.paymentMode}
+                                                                                    onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentMode', e.target.value)}
+                                                                                    w="90px"
+                                                                                    fontSize="xs"
+                                                                                    bg={monthData.paymentMode === 'UPI' ? 'purple.50' : monthData.paymentMode === 'Cheque' ? 'orange.50' : 'blue.50'}
+                                                                                    border="1px solid"
+                                                                                    borderColor={monthData.paymentMode === 'UPI' ? 'purple.200' : monthData.paymentMode === 'Cheque' ? 'orange.200' : 'blue.200'}
+                                                                                >
+                                                                                    <option value="Cash">💵 Cash</option>
+                                                                                    <option value="Cheque">✍️ Cheque</option>
+                                                                                    <option value="UPI">📱 UPI</option>
+                                                                                </Select>
+                                                                            </Td>
+                                                                            {/* Pay Status */}
+                                                                            <Td whiteSpace="nowrap">
+                                                                                <Select
+                                                                                    size="xs"
+                                                                                    borderRadius="lg"
+                                                                                    value={monthData.paymentStatus}
+                                                                                    onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentStatus', e.target.value)}
+                                                                                    w="100px"
+                                                                                    fontSize="xs"
+                                                                                    fontWeight="bold"
+                                                                                    color={isDone ? 'green.700' : 'orange.700'}
+                                                                                    bg={isDone ? 'green.50' : 'orange.50'}
+                                                                                    border="1px solid"
+                                                                                    borderColor={isDone ? 'green.200' : 'orange.200'}
+                                                                                >
+                                                                                    <option value="Pending">⏳ Pending</option>
+                                                                                    <option value="Done">✅ Done</option>
+                                                                                </Select>
+                                                                            </Td>
+                                                                        </Tr>
+                                                                    );
+                                                                })}
+                                                            </Tbody>
+                                                        </Table>
                                                     </Box>
-                                                )}
+
+                                                    {reportFiltered.length > 0 && (
+                                                        <Box bg="blue.50" p={3.5} borderTop="1px solid" borderColor="blue.100">
+                                                            <HStack justify="space-between" wrap="wrap" spacing={4}>
+                                                                <Text fontSize="xs" color="blue.700" fontWeight="bold">
+                                                                    Showing {reportFiltered.length} of {employees.length} employees · Month: {reportMonthFilter}
+                                                                </Text>
+                                                                <Text fontSize="xs" color="blue.700" fontWeight="bold">
+                                                                    Total: ₹{reportFiltered.reduce((a, e) => a + parseFloat(e.salary || 0), 0).toLocaleString()}
+                                                                </Text>
+                                                            </HStack>
+                                                        </Box>
+                                                    )}
+                                                </Box>
                                             </VStack>
                                         );
                                     })()}
+                                </TabPanel>
+
+                                <TabPanel pt={6}>
+                                    <AdminLoginReportView />
                                 </TabPanel>
 
                             </TabPanels>

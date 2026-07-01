@@ -3,6 +3,28 @@ import api from '../api/axios';
 
 const AuthContext = createContext();
 
+const getCoordinates = () => {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            resolve({ latitude: null, longitude: null });
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                });
+            },
+            (error) => {
+                console.warn("Location access denied or failed:", error);
+                resolve({ latitude: null, longitude: null });
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    });
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -61,7 +83,8 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (email, password) => {
         try {
-            const response = await api.post('/auth/login', { email, password });
+            const { latitude, longitude } = await getCoordinates();
+            const response = await api.post('/auth/login', { email, password, latitude, longitude });
             const { token, user: userData } = response.data;
 
             // Save to storage
@@ -91,7 +114,7 @@ export const AuthProvider = ({ children }) => {
             return { success: true };
         } catch (error) {
             console.error("Login Error", error);
-            return { success: false, message: error.response?.data?.message || 'Login failed' };
+            return { success: false, message: error.response?.data?.msg || error.response?.data?.message || 'Login failed' };
         }
     };
 
@@ -166,7 +189,8 @@ export const AuthProvider = ({ children }) => {
 
     const sendAdminOtp = async (email) => {
         try {
-            const response = await api.post('/auth/send-admin-otp', { email });
+            const { latitude, longitude } = await getCoordinates();
+            const response = await api.post('/auth/send-admin-otp', { email, latitude, longitude });
             return { success: true, ...response.data };
         } catch (error) {
             return { success: false, message: error.response?.data?.msg || 'Failed to send OTP', status: error.response?.status };
@@ -175,7 +199,8 @@ export const AuthProvider = ({ children }) => {
 
     const verifyAdminOtp = async (email, otp) => {
         try {
-            const response = await api.post('/auth/verify-admin-otp', { email, otp });
+            const { latitude, longitude } = await getCoordinates();
+            const response = await api.post('/auth/verify-admin-otp', { email, otp, latitude, longitude });
             const { token, user: userData } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(userData));
@@ -216,7 +241,8 @@ export const AuthProvider = ({ children }) => {
 
     const login2FA = async (email, token) => {
         try {
-            const response = await api.post('/auth/login-2fa', { email, token });
+            const { latitude, longitude } = await getCoordinates();
+            const response = await api.post('/auth/login-2fa', { email, token, latitude, longitude });
             const { token: authToken, user: userData } = response.data;
             localStorage.setItem('token', authToken);
             localStorage.setItem('user', JSON.stringify(userData));
