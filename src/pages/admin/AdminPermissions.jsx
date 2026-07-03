@@ -69,45 +69,50 @@ const AdminPermissions = () => {
             };
 
             // 2. Propagate parent-to-child permissions recursively
-            const propagateParentToChild = (parentKey, isEnabled) => {
+            const propagateParentToChild = (parentKey, isEnabled, propagateType) => {
                 PERMISSION_MODULES.forEach(mod => {
                     if (mod.subTabs && mod.subTabs.length > 0) {
                         const children = mod.subTabs.filter(s => s.parentKey === parentKey);
                         children.forEach(child => {
-                            if (type === 'read') {
+                            if (propagateType === 'read') {
                                 if (!isEnabled) {
                                     next[child.key] = { read: false, write: false };
-                                    propagateParentToChild(child.key, false);
-                                } else {
-                                    next[child.key] = { ...next[child.key], read: true };
-                                    propagateParentToChild(child.key, true);
+                                    propagateParentToChild(child.key, false, 'read');
                                 }
-                            } else if (type === 'write') {
+                                // When enabling read on parent, do NOT auto-enable children (user must opt-in each child)
+                            } else if (propagateType === 'write') {
                                 if (!isEnabled) {
                                     next[child.key] = { ...next[child.key], write: false };
-                                    propagateParentToChild(child.key, false);
+                                    propagateParentToChild(child.key, false, 'write');
                                 }
                             }
                         });
                     }
                 });
             };
-            propagateParentToChild(key, value);
+            propagateParentToChild(key, value, type);
 
-            // 3. Propagate child-to-parent permissions recursively (force enabling parent read if child read is enabled)
+            // 3. Propagate child-to-parent permissions recursively
+            // When a child read is ENABLED → force all ancestors to also have read=true
+            // When a child write is ENABLED → force all ancestors to also have read=true (write needs read on ancestors)
             const propagateChildToParent = (childKey) => {
+                // Build a flat lookup: key -> parentKey across all modules
+                let parentKey = null;
                 PERMISSION_MODULES.forEach(mod => {
                     if (mod.subTabs && mod.subTabs.length > 0) {
                         const targetSub = mod.subTabs.find(s => s.key === childKey);
                         if (targetSub && targetSub.parentKey) {
-                            const parentKey = targetSub.parentKey;
-                            if (type === 'read' && value) {
-                                next[parentKey] = { ...next[parentKey], read: true };
-                                propagateChildToParent(parentKey);
-                            }
+                            parentKey = targetSub.parentKey;
                         }
                     }
                 });
+                if (!parentKey) return;
+
+                if (value) {
+                    // Enabling read or write on child → ensure all ancestor reads are enabled
+                    next[parentKey] = { ...next[parentKey], read: true };
+                    propagateChildToParent(parentKey);
+                }
             };
             propagateChildToParent(key);
 
@@ -240,16 +245,28 @@ const AdminPermissions = () => {
                                     >
                                         Read Access
                                     </Checkbox>
-                                    <Checkbox 
-                                        colorScheme="red" 
-                                        size={depth === 0 ? "md" : "sm"}
-                                        isChecked={(permissions[item.key]?.write && isParentRead && permissions[item.key]?.read) || false}
-                                        isDisabled={!permissions[item.key]?.read || !isParentRead}
-                                        onChange={(e) => handlePermissionChange(item.key, 'write', e.target.checked)}
-                                        visibility={(moduleConfig && moduleConfig.mainTabKey && item.key === moduleConfig.mainTabKey && moduleConfig.mainTabKey !== 'products') ? 'hidden' : 'visible'}
-                                    >
-                                        Write / Modify
-                                    </Checkbox>
+                                    {(moduleConfig && moduleConfig.mainTabKey && item.key === moduleConfig.mainTabKey && moduleConfig.mainTabKey !== 'products') ? (
+                                        <Checkbox
+                                            colorScheme="red"
+                                            size={depth === 0 ? "md" : "sm"}
+                                            isChecked={false}
+                                            isDisabled={true}
+                                            opacity={0.45}
+                                            title="Write access for the main tab is controlled by sub-module permissions below"
+                                        >
+                                            Write / Modify
+                                        </Checkbox>
+                                    ) : (
+                                        <Checkbox 
+                                            colorScheme="red" 
+                                            size={depth === 0 ? "md" : "sm"}
+                                            isChecked={(permissions[item.key]?.write && isParentRead && permissions[item.key]?.read) || false}
+                                            isDisabled={!permissions[item.key]?.read || !isParentRead}
+                                            onChange={(e) => handlePermissionChange(item.key, 'write', e.target.checked)}
+                                        >
+                                            Write / Modify
+                                        </Checkbox>
+                                    )}
                                 </HStack>
                             </Flex>
                             {hasChildren && renderPermissionTree(items, item.key, depth + 1, moduleConfig)}
