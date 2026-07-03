@@ -7,7 +7,7 @@ import {
     Flex, Spinner, Center, Tooltip, CloseButton, Image, List, ListItem, ListIcon,
     Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverArrow, Portal,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-    useDisclosure, Switch
+    useDisclosure, Switch, Alert, AlertIcon, AlertTitle, AlertDescription
 } from '@chakra-ui/react';
 import { 
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
@@ -17,8 +17,25 @@ import {
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
+import ModulePermissionBar from '../components/admin/ModulePermissionBar';
+import { useAuth } from '../context/AuthContext';
+import { hasPermission } from '../utils/permissions';
 
-const EmployeeExpensesModule = () => {
+const EmployeeExpensesModule = ({ isInsideServices = false }) => {
+    const { user } = useAuth();
+    
+    const canReadModule = hasPermission(user, 'employeeExpense', 'read');
+    const canReadTransfer = hasPermission(user, 'employeeExpense_transfer', 'read');
+    const canWriteTransferCreate = hasPermission(user, 'employeeExpense_transfer_create', 'write');
+    const canReadTransferView = hasPermission(user, 'employeeExpense_transfer_view', 'read');
+    const canWriteTransferView = hasPermission(user, 'employeeExpense_transfer_view', 'write');
+    const canReadTransferAttendance = hasPermission(user, 'employeeExpense_transfer_attendance', 'read');
+    const canWriteTransferAttendance = hasPermission(user, 'employeeExpense_transfer_attendance', 'write');
+    const canReadDaily = hasPermission(user, 'employeeExpense_daily', 'read');
+    const canWriteDaily = hasPermission(user, 'employeeExpense_daily', 'write');
+    const canReadReport = hasPermission(user, 'employeeExpense_report', 'read');
+    const canWriteReport = hasPermission(user, 'employeeExpense_report', 'write');
+
     const [employees, setEmployees] = useState([]);
     const [clients, setClients] = useState([]);
     const [sites, setSites] = useState([]);
@@ -39,11 +56,18 @@ const EmployeeExpensesModule = () => {
             if (eRes.data.success) setEmployees(eRes.data.data);
             if (cRes.data.success) setClients(cRes.data.data);
             if (sRes.data.success) setSites(sRes.data.data);
-        } catch (err) { console.error(err); }
-        finally { setLoading(false); }
+        } catch (err) {
+            console.error("Failed to fetch initial data", err);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        if (canReadModule) {
+            fetchData(); 
+        }
+    }, [canReadModule]);
 
     const [selectedExpenseEmployee, setSelectedExpenseEmployee] = useState({ id: '', name: '' });
     const [reportType, setReportType] = useState('Ledger');
@@ -64,9 +88,77 @@ const EmployeeExpensesModule = () => {
     const [globalStartDate, setGlobalStartDate] = useState(currentMonthStart);
     const [globalEndDate, setGlobalEndDate] = useState(currentDate);
 
+    const tabs = useMemo(() => {
+        const list = [];
+        if (canReadTransfer) {
+            list.push({
+                key: 'transfer',
+                label: 'Money Transfer',
+                icon: FaExchangeAlt,
+                component: <MoneyTransferSection 
+                    employees={employees} 
+                    onRefresh={fetchData} 
+                    canWriteCreate={canWriteTransferCreate}
+                    canReadView={canReadTransferView}
+                    canWriteView={canWriteTransferView}
+                    canReadAttendance={canReadTransferAttendance}
+                    canWriteAttendance={canWriteTransferAttendance}
+                />
+            });
+        }
+        if (canReadDaily) {
+            list.push({
+                key: 'daily',
+                label: 'Daily Expenses',
+                icon: FaPlus,
+                component: <DailyExpensesSection 
+                    employees={employees} 
+                    clients={clients} 
+                    sites={sites} 
+                    loading={loading}
+                    onRefresh={fetchData} 
+                    onUpdateEmployee={updateSingleEmployee}
+                    canWrite={canWriteDaily}
+                />
+            });
+        }
+        if (canReadReport) {
+            list.push({
+                key: 'report',
+                label: 'Daily Report',
+                icon: FaChartBar,
+                component: <DailyReportSection employees={employees} />
+            });
+        }
+        return list;
+    }, [
+        canReadTransfer, canWriteTransferCreate, canReadTransferView, canWriteTransferView, 
+        canReadTransferAttendance, canWriteTransferAttendance, canReadDaily, canWriteDaily, 
+        canReadReport, employees, clients, sites, loading
+    ]);
+
+    if (!canReadModule) {
+        return (
+            <Box py={{ base: 4, md: 10 }} bg="gray.50" minH="100vh">
+                <Container maxW="container.xl" px={{ base: 2, md: 4 }}>
+                    <Center minH="40vh" bg="white" borderRadius="2xl" shadow="sm" p={8}>
+                        <VStack spacing={4}>
+                            <Icon as={FaUserSlash} w={12} h={12} color="red.400" />
+                            <Text fontSize="lg" fontWeight="bold">Access Denied</Text>
+                            <Text color="gray.500" textAlign="center">
+                                You do not have permission to view the Employee Expenses module.
+                            </Text>
+                        </VStack>
+                    </Center>
+                </Container>
+            </Box>
+        );
+    }
+
     return (
         <Box py={{ base: 4, md: 10 }} bg="gray.50" minH="100vh">
             <Container maxW="container.xl" px={{ base: 2, md: 4 }}>
+                {!isInsideServices && <ModulePermissionBar moduleGroupKey="employeeExpenseGroup" />}
                 <VStack spacing={{ base: 4, md: 8 }} align="stretch">
                     {/* Module Header */}
                     <Flex justify="space-between" align="center" bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" flexWrap="wrap" gap={3}>
@@ -82,70 +174,46 @@ const EmployeeExpensesModule = () => {
                     </Flex>
 
                     {/* Navigation Tabs */}
-                    <Tabs variant="unstyled" defaultIndex={0} isLazy>
-                        <Box overflowX="auto" pb={1}>
-                        <TabList bg="white" p={1.5} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" display="inline-flex" minW="max-content">
-                            <Tab 
-                                _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
-                                borderRadius="xl" 
-                                px={{ base: 4, md: 8 }}
-                                py={{ base: 2, md: 3 }}
-                                fontWeight="bold" 
-                                color="gray.500"
-                                fontSize={{ base: 'sm', md: 'md' }}
-                                transition="all 0.3s"
-                                whiteSpace="nowrap"
-                            >
-                                <Icon as={FaExchangeAlt} mr={{ base: 1, md: 2 }} /> Money Transfer
-                            </Tab>
-                            <Tab 
-                                _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
-                                borderRadius="xl" 
-                                px={{ base: 4, md: 8 }}
-                                py={{ base: 2, md: 3 }}
-                                fontWeight="bold" 
-                                color="gray.500"
-                                fontSize={{ base: 'sm', md: 'md' }}
-                                transition="all 0.3s"
-                                whiteSpace="nowrap"
-                            >
-                                <Icon as={FaPlus} mr={{ base: 1, md: 2 }} /> Daily Expenses
-                            </Tab>
-                            <Tab 
-                                _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
-                                borderRadius="xl" 
-                                px={{ base: 4, md: 8 }}
-                                py={{ base: 2, md: 3 }}
-                                fontWeight="bold" 
-                                color="gray.500"
-                                fontSize={{ base: 'sm', md: 'md' }}
-                                transition="all 0.3s"
-                                whiteSpace="nowrap"
-                            >
-                                <Icon as={FaChartBar} mr={{ base: 1, md: 2 }} /> Daily Report
-                            </Tab>
-                        </TabList>
+                    {tabs.length === 0 ? (
+                        <Box bg="white" p={10} borderRadius="2xl" textAlign="center" shadow="sm" border="1px solid" borderColor="gray.100">
+                            <VStack spacing={3}>
+                                <Icon as={FaUserSlash} w={10} h={10} color="orange.400" />
+                                <Text fontSize="md" fontWeight="bold" color="gray.600">No Authorized Tabs Available</Text>
+                                <Text fontSize="xs" color="gray.400">Please contact your administrator to grant access to the sub-sections of this module.</Text>
+                            </VStack>
                         </Box>
+                    ) : (
+                        <Tabs variant="unstyled" defaultIndex={0} isLazy>
+                            <Box overflowX="auto" pb={1}>
+                                <TabList bg="white" p={1.5} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" display="inline-flex" minW="max-content">
+                                    {tabs.map((t, idx) => (
+                                        <Tab 
+                                            key={t.key}
+                                            _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
+                                            borderRadius="xl" 
+                                            px={{ base: 4, md: 8 }}
+                                            py={{ base: 2, md: 3 }}
+                                            fontWeight="bold" 
+                                            color="gray.500"
+                                            fontSize={{ base: 'sm', md: 'md' }}
+                                            transition="all 0.3s"
+                                            whiteSpace="nowrap"
+                                        >
+                                            <Icon as={t.icon} mr={{ base: 1, md: 2 }} /> {t.label}
+                                        </Tab>
+                                    ))}
+                                </TabList>
+                            </Box>
 
-                        <TabPanels mt={8}>
-                            <TabPanel p={0}>
-                                <MoneyTransferSection employees={employees} onRefresh={fetchData} />
-                            </TabPanel>
-                            <TabPanel p={0}>
-                                <DailyExpensesSection 
-                                    employees={employees} 
-                                    clients={clients} 
-                                    sites={sites} 
-                                    loading={loading}
-                                    onRefresh={fetchData} 
-                                    onUpdateEmployee={updateSingleEmployee}
-                                />
-                            </TabPanel>
-                            <TabPanel p={0}>
-                                <DailyReportSection employees={employees} />
-                            </TabPanel>
-                        </TabPanels>
-                    </Tabs>
+                            <TabPanels mt={8}>
+                                {tabs.map((t, idx) => (
+                                    <TabPanel key={t.key} p={0}>
+                                        {t.component}
+                                    </TabPanel>
+                                ))}
+                            </TabPanels>
+                        </Tabs>
+                    )}
                 </VStack>
             </Container>
         </Box>
@@ -156,9 +224,15 @@ const EmployeeExpensesModule = () => {
 const _getCurrFY = () => { const t = new Date(); return t.getMonth() < 3 ? t.getFullYear()-1 : t.getFullYear(); };
 
 const DailyReportSection = ({ employees = [] }) => {
+    const { user } = useAuth();
+    const canReadLast5Days = hasPermission(user, 'employeeExpense_report_last5days', 'read');
+    const canReadAdvanced = hasPermission(user, 'employeeExpense_report_advanced', 'read');
+
     const [data, setData]               = useState([]);
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [lastRefreshed, setLastRefreshed]   = useState(null);
+    const [selectedDetailEntry, setSelectedDetailEntry] = useState(null);
+    const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
 
     // ── Custom report state ──────────────────────────────────────
     const _today = new Date();
@@ -187,6 +261,7 @@ const DailyReportSection = ({ employees = [] }) => {
     }[s] || { bg:'#f8fafc', color:'#94a3b8', label: s || '—' });
 
     const fetchSummary = async () => {
+        if (!canReadLast5Days) return;
         setSummaryLoading(true);
         try {
             const res = await api.get('/employee-expense/report/daily-summary');
@@ -194,7 +269,7 @@ const DailyReportSection = ({ employees = [] }) => {
         } catch (e) { console.error(e); }
         finally { setSummaryLoading(false); }
     };
-    useEffect(() => { fetchSummary(); }, []);
+    useEffect(() => { fetchSummary(); }, [canReadLast5Days]);
 
     const fmtMonthFn = (d) => { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
 
@@ -202,254 +277,390 @@ const DailyReportSection = ({ employees = [] }) => {
         <VStack spacing={8} align="stretch">
 
             {/* ════════ SECTION 1 — Last 5 Days ════════ */}
-            <Box>
-                <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={3}>
-                    <VStack align="start" spacing={0}>
-                        <Heading size="sm" color="gray.800" fontWeight="800">⚡ Last 5 Days — All Employees</Heading>
-                        <Text fontSize="xs" color="gray.400">
-                            Auto-loaded · Dates ascending
-                            {lastRefreshed && ` · ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`}
-                        </Text>
-                    </VStack>
-                    <Button size="sm" leftIcon={<Icon as={FaClipboardList}/>} colorScheme="blue" variant="outline" borderRadius="lg" onClick={fetchSummary} isLoading={summaryLoading}>
-                        Refresh
-                    </Button>
-                </Flex>
-
-                {summaryLoading ? (
-                    <Center py={16}><Spinner size="lg" color="blue.400" thickness="3px" /></Center>
-                ) : !data.length ? (
-                    <Center py={14}>
-                        <VStack spacing={2}>
-                            <Icon as={FaChartBar} w={9} h={9} color="gray.200"/>
-                            <Text color="gray.400" fontSize="sm">No entries found in last 5 days</Text>
+            {canReadLast5Days && (
+                <Box>
+                    <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={3}>
+                        <VStack align="start" spacing={0}>
+                            <Heading size="sm" color="gray.800" fontWeight="800">⚡ Last 5 Days — All Employees</Heading>
+                            <Text fontSize="xs" color="gray.400">
+                                Auto-loaded · Dates ascending
+                                {lastRefreshed && ` · ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`}
+                            </Text>
                         </VStack>
-                    </Center>
-                ) : (
-                    <VStack spacing={3} align="stretch">
-                        {data.map((emp) => {
-                            const groupedMap = {};
-                            (emp.entries || []).forEach(e => {
-                                const dk = new Date(e.date).toISOString().split('T')[0];
-                                if (!groupedMap[dk]) groupedMap[dk] = { ...e };
-                                else {
-                                    groupedMap[dk].totalDebit = (groupedMap[dk].totalDebit||0) + (e.totalDebit||0);
-                                    groupedMap[dk].totalCredit = (groupedMap[dk].totalCredit||0) + (e.totalCredit||0);
-                                    if ((!groupedMap[dk].attendance || groupedMap[dk].attendance === '-') && e.attendance && e.attendance !== '-') groupedMap[dk].attendance = e.attendance;
-                                    if (e.siteNames && !groupedMap[dk].siteNames?.includes(e.siteNames)) groupedMap[dk].siteNames = groupedMap[dk].siteNames ? `${groupedMap[dk].siteNames} | ${e.siteNames}` : e.siteNames;
-                                    if (groupedMap[dk].category !== e.category) groupedMap[dk].category = 'Combined';
-                                }
-                            });
-                            const asc = Object.values(groupedMap).sort((a,b)=>new Date(a.date)-new Date(b.date));
-                            const totD = asc.reduce((s,e)=>s+(e.totalDebit||0),0);
-                            const totC = asc.reduce((s,e)=>s+(e.totalCredit||0),0);
-                            const initials = emp.empName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                        <Button size="sm" leftIcon={<Icon as={FaClipboardList}/>} colorScheme="blue" variant="outline" borderRadius="lg" onClick={fetchSummary} isLoading={summaryLoading}>
+                            Refresh
+                        </Button>
+                    </Flex>
 
-                            return (
-                                <Box key={emp.empId} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.100" shadow="sm" overflow="hidden">
-                                    {/* — Employee header — */}
-                                    <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
-                                        <HStack spacing={3}>
-                                            <Flex w={7} h={7} borderRadius="md" bg="blue.500" align="center" justify="center" color="white" fontWeight="800" fontSize="xs" flexShrink={0}>
-                                                {initials}
-                                            </Flex>
-                                            <Text fontWeight="700" fontSize="sm" color="gray.800">{emp.empName}</Text>
-                                            <Badge colorScheme="gray" variant="subtle" borderRadius="full" fontSize="9px">{asc.length} entries</Badge>
-                                        </HStack>
-                                    </Flex>
+                    {summaryLoading ? (
+                        <Center py={16}><Spinner size="lg" color="blue.400" thickness="3px" /></Center>
+                    ) : !data.length ? (
+                        <Center py={14}>
+                            <VStack spacing={2}>
+                                <Icon as={FaChartBar} w={9} h={9} color="gray.200"/>
+                                <Text color="gray.400" fontSize="sm">No entries found in last 5 days</Text>
+                            </VStack>
+                        </Center>
+                    ) : (
+                        <VStack spacing={3} align="stretch">
+                            {data.map((emp) => {
+                                const groupedMap = {};
+                                (emp.entries || []).forEach(e => {
+                                    const dk = new Date(e.date).toISOString().split('T')[0];
+                                    if (!groupedMap[dk]) groupedMap[dk] = { ...e };
+                                    else {
+                                        groupedMap[dk].totalDebit = (groupedMap[dk].totalDebit||0) + (e.totalDebit||0);
+                                        groupedMap[dk].totalCredit = (groupedMap[dk].totalCredit||0) + (e.totalCredit||0);
+                                        if ((!groupedMap[dk].attendance || groupedMap[dk].attendance === '-') && e.attendance && e.attendance !== '-') groupedMap[dk].attendance = e.attendance;
+                                        if (e.siteNames && !groupedMap[dk].siteNames?.includes(e.siteNames)) groupedMap[dk].siteNames = groupedMap[dk].siteNames ? `${groupedMap[dk].siteNames} | ${e.siteNames}` : e.siteNames;
+                                        if (groupedMap[dk].category !== e.category) groupedMap[dk].category = 'Combined';
+                                    }
+                                });
+                                const asc = Object.values(groupedMap).sort((a,b)=>new Date(a.date)-new Date(b.date));
+                                const totD = asc.reduce((s,e)=>s+(e.totalDebit||0),0);
+                                const totC = asc.reduce((s,e)=>s+(e.totalCredit||0),0);
+                                const initials = emp.empName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 
-                                    {/* — Column headers — */}
-                                    <Flex px={4} py={1.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100">
-                                        <Text flex="0 0 100px" fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Date</Text>
-                                        <Text flex="0 0 90px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Attendance</Text>
-                                        <Text flex={1}         fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Site / Note</Text>
-                                        <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right">Credit</Text>
-                                        <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
-                                        <Text flex="0 0 65px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="center" ml={2}>Type</Text>
-                                    </Flex>
-
-                                    {/* — Rows — */}
-                                    {asc.map((entry, idx) => {
-                                        const att = attStyle(entry.attendance);
-                                        const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
-                                        const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
-                                        return (
-                                            <Flex
-                                                key={idx}
-                                                px={4} py={2.5}
-                                                align="center"
-                                                bg={idx%2===0 ? 'white' : 'gray.50'}
-                                                borderLeft="3px solid"
-                                                borderLeftColor={hasDebitOnly ? 'red.300' : hasCreditOnly ? 'green.300' : 'transparent'}
-                                                borderBottom={idx < asc.length-1 ? "1px solid" : "none"}
-                                                borderColor="gray.50"
-                                                _hover={{ bg:'blue.50' }}
-                                                transition="background 0.15s"
-                                                flexWrap={{ base:'wrap', md:'nowrap' }}
-                                                gap={1}
-                                            >
-                                                <Text flex="0 0 100px" fontSize="xs" fontWeight="600" color="gray.700">{fmtDate(entry.date)}</Text>
-                                                <Box flex="0 0 90px">
-                                                    {entry.attendance && entry.attendance !== '-' ? (
-                                                        <Box display="inline-flex" px={2} py={0.5} borderRadius="md" bg={att.bg} fontSize="10px" fontWeight="700" color={att.color} whiteSpace="nowrap">
-                                                            {att.label}
-                                                        </Box>
-                                                    ) : <Text fontSize="xs" color="gray.300">—</Text>}
-                                                </Box>
-                                                <Box flex={1} minW={0}>
-                                                    <Text fontSize="xs" color={entry.siteNames ? 'gray.600' : 'gray.300'} noOfLines={1}>
-                                                        {entry.siteNames || '—'}
-                                                    </Text>
-                                                    {entry.attendanceRemark && !entry.attendanceRemark.toLowerCase().includes('auto-marked') && !entry.attendanceRemark.toLowerCase().includes('auto marked') && (
-                                                        <Text fontSize="9px" color="orange.400">{entry.attendanceRemark}</Text>
-                                                    )}
-                                                </Box>
-                                                <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalCredit>0 ? 'green.500' : 'gray.200'} textAlign="right">
-                                                    {entry.totalCredit>0 ? fmtAmt(entry.totalCredit) : '—'}
-                                                </Text>
-                                                <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalDebit>0 ? 'red.500' : 'gray.200'} textAlign="right" ml={2}>
-                                                    {entry.totalDebit>0 ? fmtAmt(entry.totalDebit) : '—'}
-                                                </Text>
-                                                <Box flex="0 0 65px" ml={2} textAlign="center">
-                                                    <Badge colorScheme={entry.category==='Transfer' ? 'purple' : entry.category==='Combined' ? 'teal' : 'blue'} variant="subtle" borderRadius="md" fontSize="9px">
-                                                        {entry.category==='Transfer' ? 'Transfer' : entry.category==='Combined' ? 'Combined' : 'Expense'}
-                                                    </Badge>
-                                                </Box>
-                                            </Flex>
-                                        );
-                                    })}
-
-                                    {/* — Totals footer — */}
-                                    {(totD > 0 || totC > 0) && (
-                                        <Flex px={4} py={2} bg="blue.50" borderTop="1px solid" borderColor="blue.100" align="center" justify="flex-end" gap={6}>
-                                            <Text fontSize="10px" color="gray.500" fontWeight="600" flex={1}>5-Day Total</Text>
-                                            {totC > 0 && <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)} Credit</Text>}
-                                            {totD > 0 && <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)} Debit</Text>}
+                                return (
+                                    <Box key={emp.empId} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.100" shadow="sm" overflow="hidden">
+                                        {/* — Employee header — */}
+                                        <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
+                                            <HStack spacing={3}>
+                                                <Flex w={7} h={7} borderRadius="md" bg="blue.500" align="center" justify="center" color="white" fontWeight="800" fontSize="xs" flexShrink={0}>
+                                                    {initials}
+                                                </Flex>
+                                                <Text fontWeight="700" fontSize="sm" color="gray.800">{emp.empName}</Text>
+                                                <Badge colorScheme="gray" variant="subtle" borderRadius="full" fontSize="9px">{asc.length} entries</Badge>
+                                            </HStack>
                                         </Flex>
-                                    )}
-                                </Box>
-                            );
-                        })}
-                    </VStack>
-                )}
-            </Box>
+
+                                        {/* — Column headers — */}
+                                        <Flex px={4} py={1.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100">
+                                            <Text flex="0 0 100px" fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Date</Text>
+                                            <Text flex="0 0 90px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Attendance</Text>
+                                            <Text flex={1}         fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Site / Note</Text>
+                                            <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right">Credit</Text>
+                                            <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
+                                        </Flex>
+
+                                        {/* — Rows — */}
+                                        {asc.map((entry, idx) => {
+                                            const att = attStyle(entry.attendance);
+                                            const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
+                                            const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
+                                            return (
+                                                <Flex
+                                                    key={idx}
+                                                    px={4} py={2.5}
+                                                    align="center"
+                                                    bg={idx%2===0 ? 'white' : 'gray.50'}
+                                                    borderLeft="3px solid"
+                                                    borderLeftColor={hasDebitOnly ? 'red.300' : hasCreditOnly ? 'green.300' : 'transparent'}
+                                                    borderBottom={idx < asc.length-1 ? "1px solid" : "none"}
+                                                    borderColor="gray.50"
+                                                    _hover={{ bg:'blue.50' }}
+                                                    transition="background 0.15s"
+                                                    flexWrap={{ base:'wrap', md:'nowrap' }}
+                                                    gap={1}
+                                                    cursor="pointer"
+                                                    onClick={() => {
+                                                        setSelectedDetailEntry({
+                                                            ...entry,
+                                                            empName: emp.empName
+                                                        });
+                                                        onDetailOpen();
+                                                    }}
+                                                >
+                                                    <Text flex="0 0 100px" fontSize="xs" fontWeight="600" color="gray.700">{fmtDate(entry.date)}</Text>
+                                                    <Box flex="0 0 90px">
+                                                        {entry.attendance && entry.attendance !== '-' ? (
+                                                            <Box display="inline-flex" px={2} py={0.5} borderRadius="md" bg={att.bg} fontSize="10px" fontWeight="700" color={att.color} whiteSpace="nowrap">
+                                                                {att.label}
+                                                            </Box>
+                                                        ) : <Text fontSize="xs" color="gray.300">—</Text>}
+                                                    </Box>
+                                                    <Box flex={1} minW={0}>
+                                                        <Text fontSize="xs" color={entry.siteNames ? 'gray.600' : 'gray.300'} noOfLines={1}>
+                                                            {entry.siteNames || '—'}
+                                                        </Text>
+                                                        {entry.attendanceRemark && !entry.attendanceRemark.toLowerCase().includes('auto-marked') && !entry.attendanceRemark.toLowerCase().includes('auto marked') && (
+                                                            <Text fontSize="9px" color="orange.400">{entry.attendanceRemark}</Text>
+                                                        )}
+                                                    </Box>
+                                                    <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalCredit>0 ? 'green.500' : 'gray.200'} textAlign="right">
+                                                        {entry.totalCredit>0 ? fmtAmt(entry.totalCredit) : '—'}
+                                                    </Text>
+                                                    <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalDebit>0 ? 'red.500' : 'gray.200'} textAlign="right" ml={2}>
+                                                        {entry.totalDebit>0 ? fmtAmt(entry.totalDebit) : '—'}
+                                                    </Text>
+                                                </Flex>
+                                            );
+                                        })}
+
+                                        {/* — Totals footer — */}
+                                        {(totD > 0 || totC > 0) && (
+                                            <Flex px={4} py={2} bg="blue.50" borderTop="1px solid" borderColor="blue.100" align="center" justify="flex-end" gap={6}>
+                                                <Text fontSize="10px" color="gray.500" fontWeight="600" flex={1}>5-Day Total</Text>
+                                                {totC > 0 && <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)} Credit</Text>}
+                                                {totD > 0 && <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)} Debit</Text>}
+                                            </Flex>
+                                        )}
+                                    </Box>
+                                );
+                            })}
+                        </VStack>
+                    )}
+                </Box>
+            )}
 
             {/* ════════ Divider ════════ */}
-            <Flex align="center" gap={3}>
-                <Divider borderColor="gray.200" />
-                <Text fontSize="10px" color="gray.400" fontWeight="700" whiteSpace="nowrap" letterSpacing="widest">ADVANCED REPORTS</Text>
-                <Divider borderColor="gray.200" />
-            </Flex>
+            {canReadLast5Days && canReadAdvanced && (
+                <Flex align="center" gap={3}>
+                    <Divider borderColor="gray.200" />
+                    <Text fontSize="10px" color="gray.400" fontWeight="700" whiteSpace="nowrap" letterSpacing="widest">ADVANCED REPORTS</Text>
+                    <Divider borderColor="gray.200" />
+                </Flex>
+            )}
 
             {/* ════════ SECTION 2 — Custom Reports ════════ */}
-            <Box bg="white" p={{ base:4, md:6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                <Heading size="sm" mb={5} color="gray.700">Custom Date Range &amp; Report Selection</Heading>
-                <Flex direction={{ base:'column', md:'row' }} gap={4} align={{ base:'stretch', md:'flex-end' }} mb={6} flexWrap="wrap">
+            {canReadAdvanced && (
+                <Box bg="white" p={{ base:4, md:6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                    <Heading size="sm" mb={5} color="gray.700">Custom Date Range &amp; Report Selection</Heading>
+                    <Flex direction={{ base:'column', md:'row' }} gap={4} align={{ base:'stretch', md:'flex-end' }} mb={6} flexWrap="wrap">
 
-                    {/* Financial Year */}
-                    <FormControl w="auto">
-                        <FormLabel fontWeight="bold" fontSize="sm">Financial Year</FormLabel>
-                        <Popover placement="bottom-start">
-                            <PopoverTrigger>
-                                <Button w="auto" minW="150px" bg="white" color="gray.800" _hover={{bg:'gray.50'}} borderRadius="md" shadow="sm" size="md" fontWeight="bold" border="1px solid" borderColor="gray.200" justifyContent="space-between" rightIcon={<Icon as={FaCalendarAlt} color="blue.500"/>}>
-                                    <Box flex="1" textAlign="left">{selectedFY ? `${selectedFY}-${parseInt(selectedFY)+1} (FY)` : 'Custom Date'}</Box>
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100" zIndex={100}>
-                                <PopoverBody p={4} maxH="350px" overflowY="auto">
-                                    <HStack justify="space-between" mb={4} px={2}>
-                                        <IconButton size="sm" variant="ghost" icon={<FaChevronLeft/>} onClick={()=>setFyPageStart(p=>p-12)}/>
-                                        <Text fontWeight="bold" fontSize="sm">{fyPageStart} – {fyPageStart+11}</Text>
-                                        <IconButton size="sm" variant="ghost" icon={<FaChevronRight/>} onClick={()=>setFyPageStart(p=>p+12)}/>
-                                    </HStack>
-                                    <SimpleGrid columns={2} spacing={2}>
-                                        {Array.from({length:12},(_,i)=>fyPageStart+i).map(y=>(
-                                            <Button key={y} size="sm" borderRadius="lg" colorScheme={selectedFY===y.toString()?'blue':'gray'} variant={selectedFY===y.toString()?'solid':'ghost'} onClick={()=>{setSelectedFY(y.toString());setSelectedMonth('');setGlobalStartDate(`${y}-04-01`);setGlobalEndDate(`${y+1}-03-31`);}}>
-                                                {y}-{y+1}
-                                            </Button>
-                                        ))}
-                                    </SimpleGrid>
-                                </PopoverBody>
-                            </PopoverContent>
-                        </Popover>
-                    </FormControl>
+                        {/* Financial Year */}
+                        <FormControl w="auto">
+                            <FormLabel fontWeight="bold" fontSize="sm">Financial Year</FormLabel>
+                            <Popover placement="bottom-start">
+                                <PopoverTrigger>
+                                    <Button w="auto" minW="150px" bg="white" color="gray.800" _hover={{bg:'gray.50'}} borderRadius="md" shadow="sm" size="md" fontWeight="bold" border="1px solid" borderColor="gray.200" justifyContent="space-between" rightIcon={<Icon as={FaCalendarAlt} color="blue.500"/>}>
+                                        <Box flex="1" textAlign="left">{selectedFY ? `${selectedFY}-${parseInt(selectedFY)+1} (FY)` : 'Custom Date'}</Box>
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100" zIndex={100}>
+                                    <PopoverBody p={4} maxH="350px" overflowY="auto">
+                                        <HStack justify="space-between" mb={4} px={2}>
+                                            <IconButton size="sm" variant="ghost" icon={<FaChevronLeft/>} onClick={()=>setFyPageStart(p=>p-12)}/>
+                                            <Text fontWeight="bold" fontSize="sm">{fyPageStart} – {fyPageStart+11}</Text>
+                                            <IconButton size="sm" variant="ghost" icon={<FaChevronRight/>} onClick={()=>setFyPageStart(p=>p+12)}/>
+                                        </HStack>
+                                        <SimpleGrid columns={2} spacing={2}>
+                                            {Array.from({length:12},(_,i)=>fyPageStart+i).map(y=>(
+                                                <Button key={y} size="sm" borderRadius="lg" colorScheme={selectedFY===y.toString()?'blue':'gray'} variant={selectedFY===y.toString()?'solid':'ghost'} onClick={()=>{setSelectedFY(y.toString());setSelectedMonth('');setGlobalStartDate(`${y}-04-01`);setGlobalEndDate(`${y+1}-03-31`);}}>
+                                                    {y}-{y+1}
+                                                </Button>
+                                            ))}
+                                        </SimpleGrid>
+                                    </PopoverBody>
+                                </PopoverContent>
+                            </Popover>
+                        </FormControl>
 
-                    {/* Month */}
-                    <FormControl w="auto">
-                        <FormLabel fontWeight="bold" fontSize="sm">Month</FormLabel>
-                        <Select bg="white" size="md" value={selectedMonth} onChange={e=>{
-                            setSelectedMonth(e.target.value);
-                            if(e.target.value){
-                                const mi=parseInt(e.target.value);
-                                let yr=new Date().getFullYear();
-                                if(selectedFY) yr=mi<3?parseInt(selectedFY)+1:parseInt(selectedFY);
-                                setGlobalStartDate(fmtMonthFn(new Date(yr,mi,1)));
-                                setGlobalEndDate(fmtMonthFn(new Date(yr,mi+1,0)));
-                            }
-                        }}>
-                            <option value="">Custom Month</option>
-                            {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m,i)=>(
-                                <option key={i} value={i}>{m}</option>
-                            ))}
-                        </Select>
-                    </FormControl>
+                        {/* Month */}
+                        <FormControl w="auto">
+                            <FormLabel fontWeight="bold" fontSize="sm">Month</FormLabel>
+                            <Select bg="white" size="md" value={selectedMonth} onChange={e=>{
+                                setSelectedMonth(e.target.value);
+                                if(e.target.value){
+                                    const mi=parseInt(e.target.value);
+                                    let yr=new Date().getFullYear();
+                                    if(selectedFY) yr=mi<3?parseInt(selectedFY)+1:parseInt(selectedFY);
+                                    setGlobalStartDate(fmtMonthFn(new Date(yr,mi,1)));
+                                    setGlobalEndDate(fmtMonthFn(new Date(yr,mi+1,0)));
+                                }
+                            }}>
+                                <option value="">Custom Month</option>
+                                {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m,i)=>(
+                                    <option key={i} value={i}>{m}</option>
+                                ))}
+                            </Select>
+                        </FormControl>
 
-                    {/* From */}
-                    <FormControl w="auto">
-                        <FormLabel fontWeight="bold" fontSize="sm">From Date</FormLabel>
-                        <Input type="date" size="md" bg="white" value={globalStartDate} onChange={e=>{setGlobalStartDate(e.target.value);setSelectedFY('');setSelectedMonth('');}}/>
-                    </FormControl>
+                        {/* From */}
+                        <FormControl w="auto">
+                            <FormLabel fontWeight="bold" fontSize="sm">From Date</FormLabel>
+                            <Input type="date" size="md" bg="white" value={globalStartDate} onChange={e=>{setGlobalStartDate(e.target.value);setSelectedFY('');setSelectedMonth('');}}/>
+                        </FormControl>
 
-                    {/* To */}
-                    <FormControl w="auto">
-                        <FormLabel fontWeight="bold" fontSize="sm">To Date</FormLabel>
-                        <Input type="date" size="md" bg="white" value={globalEndDate} onChange={e=>{setGlobalEndDate(e.target.value||_todayStr);setSelectedFY('');setSelectedMonth('');}}/>
-                    </FormControl>
+                        {/* To */}
+                        <FormControl w="auto">
+                            <FormLabel fontWeight="bold" fontSize="sm">To Date</FormLabel>
+                            <Input type="date" size="md" bg="white" value={globalEndDate} onChange={e=>{setGlobalEndDate(e.target.value||_todayStr);setSelectedFY('');setSelectedMonth('');}}/>
+                        </FormControl>
 
-                    {/* Report Type */}
-                    <FormControl w="auto" flex={1}>
-                        <FormLabel fontWeight="bold" fontSize="sm">Report Type</FormLabel>
-                        <Select value={reportType} bg="white" size="md" onChange={e=>{
-                            setReportType(e.target.value);
-                            if(['Food','Fuel','ClientSite'].includes(e.target.value)) setSelectedExpEmp({id:'ALL',name:'All Employees'});
-                            else setSelectedExpEmp({id:'',name:''});
-                        }}>
-                            <option value="Ledger">Employee Ledger</option>
-                            <option value="Food">Global Food Report</option>
-                            <option value="Fuel">Global Fuel Report</option>
-                            <option value="ClientSite">Client &amp; Site Wise Report</option>
-                            <option value="EmployeeSiteLedger">Employee Client &amp; Site Ledger</option>
-                        </Select>
-                    </FormControl>
+                        {/* Report Type */}
+                        <FormControl w="auto" flex={1}>
+                            <FormLabel fontWeight="bold" fontSize="sm">Report Type</FormLabel>
+                            <Select value={reportType} bg="white" size="md" onChange={e=>{
+                                setReportType(e.target.value);
+                                if(['Food','Fuel','ClientSite'].includes(e.target.value)) setSelectedExpEmp({id:'ALL',name:'All Employees'});
+                                else setSelectedExpEmp({id:'',name:''});
+                            }}>
+                                <option value="Ledger">Employee Ledger</option>
+                                <option value="Food">Global Food Report</option>
+                                <option value="Fuel">Global Fuel Report</option>
+                                <option value="ClientSite">Client &amp; Site Wise Report</option>
+                                <option value="EmployeeSiteLedger">Employee Client &amp; Site Ledger</option>
+                            </Select>
+                        </FormControl>
 
-                    {/* Employee */}
-                    <FormControl w="auto" flex={1} isDisabled={isAllEmp}>
-                        <FormLabel fontWeight="bold" fontSize="sm">Select Employee</FormLabel>
-                        <Select placeholder={isAllEmp ? "All Employees Included" : "-- Select Employee --"} value={isAllEmp ? 'ALL' : selectedExpEmp.id} bg={isAllEmp ? 'gray.100' : 'white'} size="md" onChange={e=>{const emp=employees.find(x=>x._id===e.target.value);setSelectedExpEmp({id:emp?._id||'',name:emp?.name||''});}}>
-                            {isAllEmp && <option value="ALL" hidden>All Employees</option>}
-                            {employees.map(emp=>(<option key={emp._id} value={emp._id}>{emp.name}</option>))}
-                        </Select>
-                    </FormControl>
-                </Flex>
+                        {/* Employee */}
+                        <FormControl w="auto" flex={1} isDisabled={isAllEmp}>
+                            <FormLabel fontWeight="bold" fontSize="sm">Select Employee</FormLabel>
+                            <Select placeholder={isAllEmp ? "All Employees Included" : "-- Select Employee --"} value={isAllEmp ? 'ALL' : selectedExpEmp.id} bg={isAllEmp ? 'gray.100' : 'white'} size="md" onChange={e=>{const emp=employees.find(x=>x._id===e.target.value);setSelectedExpEmp({id:emp?._id||'',name:emp?.name||''});}}>
+                                {isAllEmp && <option value="ALL" hidden>All Employees</option>}
+                                {employees.map(emp=>(<option key={emp._id} value={emp._id}>{emp.name}</option>))}
+                            </Select>
+                        </FormControl>
+                    </Flex>
 
-                {/* Report Output */}
-                {((selectedExpEmp.id && selectedExpEmp.id !== 'ALL') || isAllEmp) ? (
-                    <AdminEmployeeExpenses
-                        employeeId={isAllEmp ? 'ALL' : selectedExpEmp.id}
-                        employeeName={isAllEmp ? 'All Employees' : selectedExpEmp.name}
-                        externalReportType={reportType}
-                        globalStartDate={globalStartDate}
-                        globalEndDate={globalEndDate}
-                    />
-                ) : (
-                    <Center py={12}>
-                        <VStack spacing={2}>
-                            <Icon as={FaChartBar} w={9} h={9} color="gray.200"/>
-                            <Text color="gray.400" fontSize="sm">Select an employee to view their report</Text>
+                    {/* Report Output */}
+                    {((selectedExpEmp.id && selectedExpEmp.id !== 'ALL') || isAllEmp) ? (
+                        <AdminEmployeeExpenses
+                            employeeId={isAllEmp ? 'ALL' : selectedExpEmp.id}
+                            employeeName={isAllEmp ? 'All Employees' : selectedExpEmp.name}
+                            externalReportType={reportType}
+                            globalStartDate={globalStartDate}
+                            globalEndDate={globalEndDate}
+                        />
+                    ) : (
+                        <Center py={12}>
+                            <VStack spacing={2}>
+                                <Icon as={FaChartBar} w={9} h={9} color="gray.200"/>
+                                <Text color="gray.400" fontSize="sm">Select an employee to view their report</Text>
+                            </VStack>
+                        </Center>
+                    )}
+                </Box>
+            )}
+
+            {!canReadLast5Days && !canReadAdvanced && (
+                <Center py={14} bg="white" borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                    <VStack spacing={3}>
+                        <Icon as={FaChartBar} w={10} h={10} color="orange.400" />
+                        <Text fontSize="md" fontWeight="bold" color="gray.600">No Authorized Reports Available</Text>
+                        <Text fontSize="xs" color="gray.400">Please contact your administrator to grant access to specific report sub-sections.</Text>
+                    </VStack>
+                </Center>
+            )}
+
+            {/* Expense Detail Modal */}
+            <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="md" isCentered>
+                <ModalOverlay bg="blackAlpha.300" backdropFilter="blur(3px)" />
+                <ModalContent borderRadius="xl" overflow="hidden">
+                    <ModalHeader borderBottom="1px solid" borderColor="gray.100" py={4} bg="gray.50">
+                        <VStack align="stretch" spacing={0}>
+                            <Text fontSize="md" fontWeight="800" color="gray.800">Day Expense Details</Text>
+                            {selectedDetailEntry && (
+                                <Text fontSize="xs" color="gray.500" fontWeight="500">
+                                    {selectedDetailEntry.empName} — {fmtDate(selectedDetailEntry.date)}
+                                </Text>
+                            )}
                         </VStack>
-                    </Center>
-                )}
-            </Box>
+                    </ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody py={5}>
+                        {selectedDetailEntry && selectedDetailEntry.details ? (
+                            <VStack spacing={4} align="stretch">
+                                {/* Fixed Expenses Section */}
+                                <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2}>Fixed Expenses</Text>
+                                    <SimpleGrid columns={2} spacing={2.5}>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" color="gray.600">Breakfast:</Text>
+                                            <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.breakfast || 0}</Text>
+                                        </HStack>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" color="gray.600">Lunch:</Text>
+                                            <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.lunch || 0}</Text>
+                                        </HStack>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" color="gray.600">Dinner:</Text>
+                                            <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.dinner || 0}</Text>
+                                        </HStack>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" color="gray.600">Fuel / Petrol:</Text>
+                                            <VStack align="end" spacing={0}>
+                                                <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.petrol || 0}</Text>
+                                                {selectedDetailEntry.details.fuelType && (
+                                                    <Badge size="xs" colorScheme="orange" fontSize="9px" py={0} px={1}>
+                                                        {selectedDetailEntry.details.fuelType}
+                                                    </Badge>
+                                                )}
+                                            </VStack>
+                                        </HStack>
+                                    </SimpleGrid>
+                                </Box>
+
+                                {/* Other Expenses Section */}
+                                <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2}>Other Expenses</Text>
+                                    {selectedDetailEntry.details.otherExpensesList && selectedDetailEntry.details.otherExpensesList.length > 0 ? (
+                                        <VStack align="stretch" spacing={1.5}>
+                                            {selectedDetailEntry.details.otherExpensesList.map((oe, idx) => (
+                                                <HStack key={idx} justify="space-between" fontSize="xs">
+                                                    <Text color="gray.600">{oe.name || 'Other Expense'}:</Text>
+                                                    <Text fontWeight="700" color="gray.800">₹{oe.amount || 0}</Text>
+                                                </HStack>
+                                            ))}
+                                        </VStack>
+                                    ) : (
+                                        <Text fontSize="xs" color="gray.400" fontStyle="italic">No other expenses</Text>
+                                    )}
+                                </Box>
+
+                                {/* Peer Transfers Section */}
+                                <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2}>Peer Transfers</Text>
+                                    <VStack align="stretch" spacing={2}>
+                                        {selectedDetailEntry.details.givenTo && selectedDetailEntry.details.givenTo.length > 0 && (
+                                            <Box>
+                                                <Text fontSize="11px" fontWeight="600" color="blue.600" mb={1}>Given To:</Text>
+                                                {selectedDetailEntry.details.givenTo.map((g, idx) => (
+                                                    <HStack key={idx} justify="space-between" fontSize="xs" pl={2}>
+                                                        <Text color="gray.600">{g.employeeName}</Text>
+                                                        <Text fontWeight="700" color="blue.700">₹{g.amount}</Text>
+                                                    </HStack>
+                                                ))}
+                                            </Box>
+                                        )}
+                                        {selectedDetailEntry.details.receivedFrom && selectedDetailEntry.details.receivedFrom.length > 0 && (
+                                            <Box>
+                                                <Text fontSize="11px" fontWeight="600" color="green.600" mb={1}>Received From:</Text>
+                                                {selectedDetailEntry.details.receivedFrom.map((r, idx) => (
+                                                    <HStack key={idx} justify="space-between" fontSize="xs" pl={2}>
+                                                        <Text color="gray.600">{r.employeeName}</Text>
+                                                        <Text fontWeight="700" color="green.700">₹{r.amount}</Text>
+                                                    </HStack>
+                                                ))}
+                                            </Box>
+                                        )}
+                                        {(!selectedDetailEntry.details.givenTo || selectedDetailEntry.details.givenTo.length === 0) &&
+                                         (!selectedDetailEntry.details.receivedFrom || selectedDetailEntry.details.receivedFrom.length === 0) && (
+                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">No peer transfers</Text>
+                                        )}
+                                    </VStack>
+                                </Box>
+
+                                {/* Notes Section */}
+                                {selectedDetailEntry.details.notes && (
+                                    <Box bg="orange.50" p={3} borderRadius="lg" border="1px solid" borderColor="orange.100">
+                                        <Text fontSize="xs" fontWeight="700" color="orange.700" textTransform="uppercase" mb={1}>Notes</Text>
+                                        <Text fontSize="xs" color="gray.700">{selectedDetailEntry.details.notes}</Text>
+                                    </Box>
+                                )}
+                            </VStack>
+                        ) : (
+                            <Center py={6}>
+                                <Text fontSize="xs" color="gray.400">No details available for this day.</Text>
+                            </Center>
+                        )}
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" py={3} borderTop="1px solid" borderColor="gray.100">
+                        <Button size="sm" colorScheme="blue" onClick={onDetailClose}>Close</Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
 
         </VStack>
     );
@@ -457,7 +668,7 @@ const DailyReportSection = ({ employees = [] }) => {
 
 // ── Daily Expenses Module ──────────────────────────────────────────────
 
-const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, onUpdateEmployee }) => {
+const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, onUpdateEmployee, canWrite = true }) => {
     const toast = useToast();
     const [isSaving, setIsSaving] = useState(false);
     
@@ -979,6 +1190,17 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 
     return (
         <VStack spacing={8} align="stretch">
+            {!canWrite && (
+                <Alert status="warning" borderRadius="2xl" shadow="md">
+                    <AlertIcon />
+                    <Box>
+                        <AlertTitle>Read-Only Mode</AlertTitle>
+                        <AlertDescription fontSize="xs">
+                            You do not have write/modify permissions for daily expenses. Saving, adding, or deleting is disabled.
+                        </AlertDescription>
+                    </Box>
+                </Alert>
+            )}
             {/* Top Filter & Employee Balance Info */}
             <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="gray.100">
                 <CardBody p={6}>
@@ -1669,6 +1891,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                     leftIcon={<FaCheckCircle />}
                                     isLoading={isSaving}
                                     onClick={handleSubmit}
+                                    isDisabled={!canWrite}
                                     _hover={{ transform: 'translateY(-2px)' }}
                                 >
                                     Submit Daily Expenses
@@ -2142,7 +2365,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 };
 
 // ── Attendance Sub-Module for Unscheduled Employees ────────────────────────
-const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate }) => {
+const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, canWrite = true }) => {
     const toast = useToast();
     const [attendanceMap, setAttendanceMap] = useState({});
     const [remarks, setRemarks] = useState({});
@@ -2245,6 +2468,17 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
     return (
         <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="orange.100" overflow="hidden">
             <CardBody p={0}>
+                {!canWrite && (
+                    <Alert status="warning" borderRadius="0">
+                        <AlertIcon />
+                        <Box>
+                            <AlertTitle>Read-Only Mode</AlertTitle>
+                            <AlertDescription fontSize="xs">
+                                You do not have write/modify permissions for unscheduled attendance. Saving is disabled.
+                            </AlertDescription>
+                        </Box>
+                    </Alert>
+                )}
                 <Box bg="linear-gradient(135deg, #f6ad55 0%, #ed8936 100%)" px={6} py={4}>
                     <HStack justify="space-between">
                         <HStack spacing={3}>
@@ -2314,6 +2548,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
                                                     colorScheme={status === 'Present' ? 'green' : 'gray'}
                                                     variant={status === 'Present' ? 'solid' : 'outline'}
                                                     onClick={() => setStatus(emp._id, status === 'Present' ? '' : 'Present')}
+                                                    isDisabled={!canWrite}
                                                     minW="60px"
                                                 >
                                                     {status === 'Present' ? '✓ P' : 'P'}
@@ -2326,6 +2561,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
                                                     colorScheme={status === 'Absent' ? 'red' : 'gray'}
                                                     variant={status === 'Absent' ? 'solid' : 'outline'}
                                                     onClick={() => setStatus(emp._id, status === 'Absent' ? '' : 'Absent')}
+                                                    isDisabled={!canWrite}
                                                     minW="60px"
                                                 >
                                                     {status === 'Absent' ? '✓ A' : 'A'}
@@ -2339,7 +2575,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
                                                     onChange={e => setRemark(emp._id, e.target.value)}
                                                     borderRadius="lg"
                                                     maxW="180px"
-                                                    isDisabled={!status}
+                                                    isDisabled={!status || !canWrite}
                                                 />
                                             </Td>
                                         </Tr>
@@ -2358,6 +2594,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
                             isLoading={isSaving}
                             loadingText="Saving..."
                             onClick={handleSaveAttendance}
+                            isDisabled={!canWrite}
                         >
                             Save Attendance
                         </Button>
@@ -2369,7 +2606,15 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate })
 };
 
 // ── Money Transfer Module (Corrected Balance Logic) ────────────────────────
-const MoneyTransferSection = ({ employees, onRefresh }) => {
+const MoneyTransferSection = ({ 
+    employees, 
+    onRefresh, 
+    canWriteCreate = true,
+    canReadView = true,
+    canWriteView = true,
+    canReadAttendance = true,
+    canWriteAttendance = true
+}) => {
     const toast = useToast();
     const [stagedEntries, setStagedEntries] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
@@ -2569,6 +2814,17 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
 
     return (
         <VStack spacing={8} align="stretch">
+            {!canWriteCreate && (
+                <Alert status="warning" borderRadius="2xl" shadow="md">
+                    <AlertIcon />
+                    <Box>
+                        <AlertTitle>Read-Only Mode (Create Transfer)</AlertTitle>
+                        <AlertDescription fontSize="xs">
+                            You do not have write/modify permissions to create money transfers. Saving or adding staged transfers is disabled.
+                        </AlertDescription>
+                    </Box>
+                </Alert>
+            )}
             {/* Entry Form - One Row Layout */}
             <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="gray.100" overflow="hidden">
                 <CardBody p={6} bg="white">
@@ -2637,7 +2893,7 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                             </InputGroup>
                         </FormControl>
 
-                        <Button colorScheme="blue" size="lg" borderRadius="xl" onClick={handleAddEntry} leftIcon={editIndex > -1 ? <FaCheckCircle /> : <FaPlus />} shadow="lg">
+                        <Button colorScheme="blue" size="lg" borderRadius="xl" onClick={handleAddEntry} leftIcon={editIndex > -1 ? <FaCheckCircle /> : <FaPlus />} isDisabled={!canWriteCreate} shadow="lg">
                             {editIndex > -1 ? 'Update' : 'Add'}
                         </Button>
                     </SimpleGrid>
@@ -2677,8 +2933,8 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                                             <Td isNumeric fontWeight="black" fontSize="lg">₹{entry.amount.toLocaleString()}</Td>
                                             <Td>
                                                 <HStack justify="center" spacing={4}>
-                                                    <IconButton size="sm" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(idx)} borderRadius="lg" isDisabled={editIndex > -1 && editIndex !== idx} />
-                                                    <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => handleRemove(idx)} borderRadius="lg" isDisabled={editIndex > -1 && editIndex !== idx} />
+                                                    <IconButton size="sm" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(idx)} borderRadius="lg" isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)} />
+                                                    <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => handleRemove(idx)} borderRadius="lg" isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)} />
                                                 </HStack>
                                             </Td>
                                         </Tr>
@@ -2688,79 +2944,85 @@ const MoneyTransferSection = ({ employees, onRefresh }) => {
                         </TableContainer>
                     </Card>
 
-                    <Button mt={8} colorScheme="green" size="xl" w="full" h="70px" borderRadius="2xl" onClick={handleSubmitAll} isLoading={isSaving} leftIcon={<FaCheckCircle />} fontSize="xl" shadow="2xl">
+                    <Button mt={8} colorScheme="green" size="xl" w="full" h="70px" borderRadius="2xl" onClick={handleSubmitAll} isLoading={isSaving} isDisabled={!canWriteCreate} leftIcon={<FaCheckCircle />} fontSize="xl" shadow="2xl">
                         Save & Commit All {stagedEntries.length} Transfers
                     </Button>
                 </Box>
             )}
 
             {/* ── Attendance Panel for Unscheduled Employees ── */}
-            <UnscheduledAttendancePanel
-                employees={employees}
-                daySchedules={daySchedules}
-                attendanceDate={transferDate}
-            />
+            {canReadAttendance && (
+                <UnscheduledAttendancePanel
+                    employees={employees}
+                    daySchedules={daySchedules}
+                    attendanceDate={transferDate}
+                    canWrite={canWriteAttendance}
+                />
+            )}
 
             {/* Committed Transfers List */}
-            <Box mt={8} w="full">
-                <HStack justify="space-between" mb={4} px={2}>
-                    <VStack align="start" spacing={0}>
-                        <Heading size="md" color="teal.700">Committed Money Transfers</Heading>
-                        <Text fontSize="xs" color="gray.400">Transfers already saved & recorded in the database for this date.</Text>
-                    </VStack>
-                    <Badge colorScheme="teal" fontSize="md" px={4} py={1} borderRadius="full">Saved Items: {committedTransfers.length}</Badge>
-                </HStack>
-
-                {committedTransfers.length === 0 ? (
-                    <Center py={10} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
-                        <VStack spacing={2}>
-                            <Icon as={FaMoneyBillWave} w={8} h={8} color="gray.300" />
-                            <Text color="gray.400" fontSize="sm">No saved transfers found for this date.</Text>
+            {canReadView && (
+                <Box mt={8} w="full">
+                    <HStack justify="space-between" mb={4} px={2}>
+                        <VStack align="start" spacing={0}>
+                            <Heading size="md" color="teal.700">Committed Money Transfers</Heading>
+                            <Text fontSize="xs" color="gray.400">Transfers already saved & recorded in the database for this date.</Text>
                         </VStack>
-                    </Center>
-                ) : (
-                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                        <TableContainer overflowX="auto">
-                            <Table variant="simple">
-                                <Thead bg="teal.50">
-                                    <Tr>
-                                        <Th color="teal.700">Employee From (Sender)</Th>
-                                        <Th color="teal.700">Employee To (Receiver)</Th>
-                                        <Th isNumeric color="teal.700">Amount</Th>
-                                        <Th textAlign="center" color="teal.700">Actions</Th>
-                                    </Tr>
-                                </Thead>
-                                <Tbody bg="white">
-                                    {committedTransfers.map((t) => (
-                                        <Tr key={t._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
-                                            <Td fontWeight="bold" color="red.500">
-                                                <HStack><Icon as={FaUserTie} /><Text>{t.giver?.name || 'Unknown'}</Text></HStack>
-                                            </Td>
-                                            <Td fontWeight="bold" color="green.500">
-                                                <HStack><Icon as={FaUserTie} /><Text>{t.taker?.name || 'Unknown'}</Text></HStack>
-                                            </Td>
-                                            <Td isNumeric fontWeight="black" fontSize="lg" color="teal.600">₹{t.amount?.toLocaleString()}</Td>
-                                            <Td>
-                                                <HStack justify="center">
-                                                    <IconButton
-                                                        size="sm"
-                                                        colorScheme="red"
-                                                        variant="ghost"
-                                                        icon={<Icon as={FaTrash} />}
-                                                        aria-label="Delete Transfer"
-                                                        onClick={() => handleDeleteCommittedTransfer(t._id)}
-                                                        borderRadius="lg"
-                                                    />
-                                                </HStack>
-                                            </Td>
+                        <Badge colorScheme="teal" fontSize="md" px={4} py={1} borderRadius="full">Saved Items: {committedTransfers.length}</Badge>
+                    </HStack>
+
+                    {committedTransfers.length === 0 ? (
+                        <Center py={10} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
+                            <VStack spacing={2}>
+                                <Icon as={FaMoneyBillWave} w={8} h={8} color="gray.300" />
+                                <Text color="gray.400" fontSize="sm">No saved transfers found for this date.</Text>
+                            </VStack>
+                        </Center>
+                    ) : (
+                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                            <TableContainer overflowX="auto">
+                                <Table variant="simple">
+                                    <Thead bg="teal.50">
+                                        <Tr>
+                                            <Th color="teal.700">Employee From (Sender)</Th>
+                                            <Th color="teal.700">Employee To (Receiver)</Th>
+                                            <Th isNumeric color="teal.700">Amount</Th>
+                                            <Th textAlign="center" color="teal.700">Actions</Th>
                                         </Tr>
-                                    ))}
-                                </Tbody>
-                            </Table>
-                        </TableContainer>
-                    </Card>
-                )}
-            </Box>
+                                    </Thead>
+                                    <Tbody bg="white">
+                                        {committedTransfers.map((t) => (
+                                            <Tr key={t._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
+                                                <Td fontWeight="bold" color="red.500">
+                                                    <HStack><Icon as={FaUserTie} /><Text>{t.giver?.name || 'Unknown'}</Text></HStack>
+                                                </Td>
+                                                <Td fontWeight="bold" color="green.500">
+                                                    <HStack><Icon as={FaUserTie} /><Text>{t.taker?.name || 'Unknown'}</Text></HStack>
+                                                </Td>
+                                                <Td isNumeric fontWeight="black" fontSize="lg" color="teal.600">₹{t.amount?.toLocaleString()}</Td>
+                                                <Td>
+                                                    <HStack justify="center">
+                                                        <IconButton
+                                                            size="sm"
+                                                            colorScheme="red"
+                                                            variant="ghost"
+                                                            icon={<Icon as={FaTrash} />}
+                                                            aria-label="Delete Transfer"
+                                                            onClick={() => handleDeleteCommittedTransfer(t._id)}
+                                                            isDisabled={!canWriteView}
+                                                            borderRadius="lg"
+                                                        />
+                                                    </HStack>
+                                                </Td>
+                                            </Tr>
+                                        ))}
+                                    </Tbody>
+                                </Table>
+                            </TableContainer>
+                        </Card>
+                    )}
+                </Box>
+            )}
         </VStack>
     );
 };

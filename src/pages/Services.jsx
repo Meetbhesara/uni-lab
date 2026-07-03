@@ -25,6 +25,9 @@ import InvoiceReport from './admin/InvoiceReport';
 import AdminLoginReportView from '../components/admin/AdminLoginReportView';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { hasPermission } from '../utils/permissions';
+import ModulePermissionBar from '../components/admin/ModulePermissionBar';
+
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
@@ -733,6 +736,7 @@ const VehicleMasterForm = () => {
 
 const EmployeeMasterForm = () => {
     const toast = useToast();
+    const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [pincodeLoading1, setPincodeLoading1] = useState(false);
     const [pincodeLoading2, setPincodeLoading2] = useState(false);
@@ -787,11 +791,11 @@ const EmployeeMasterForm = () => {
     const cancelRef = React.useRef();
 
     const tabConfig = [
-        { id: 'form', label: 'Form', permission: 'canViewForm' },
-        { id: 'view', label: 'View', permission: 'canViewList' },
-        { id: 'payment', label: 'Payment Report', permission: 'canViewList' },
-        { id: 'adminReport', label: 'Admin Login Report', permission: 'canViewList' },
-    ];
+        { id: 'form', label: 'Form', permission: 'employeeMaster_form' },
+        { id: 'view', label: 'View', permission: 'employeeMaster_view' },
+        { id: 'payment', label: 'Payment Report', permission: 'employeeMaster_payment' },
+        { id: 'adminReport', label: 'Admin Login Report', permission: 'employeeMaster_adminReport' },
+    ].filter(tab => hasPermission(user, tab.permission, 'read'));
     const [employeeActiveTab, setEmployeeActiveTab] = useState(0);
 
     const [reportSearchQuery, setReportSearchQuery] = useState('');
@@ -1553,18 +1557,28 @@ const EmployeeMasterForm = () => {
                         </Stack>
                     </Box>
                     <CardBody p={{ base: 3, md: 5 }}>
-                        <Tabs index={employeeActiveTab} onChange={(idx) => setEmployeeActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
-                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
-                                {tabConfig.map((tab, idx) => (
-                                    <Tab key={tab.id} fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>
-                                        {tab.label}
-                                    </Tab>
-                                ))}
-                            </TabList>
+                        {tabConfig.length === 0 ? (
+                            <Center py={14} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
+                                <VStack spacing={3}>
+                                    <Icon as={FaUserTie} w={10} h={10} color="orange.400" />
+                                    <Text fontSize="md" fontWeight="bold" color="gray.600">No Authorized Sections Available</Text>
+                                    <Text fontSize="xs" color="gray.400">Please contact your administrator to grant access to employee master features.</Text>
+                                </VStack>
+                            </Center>
+                        ) : (
+                            <Tabs index={employeeActiveTab} onChange={(idx) => setEmployeeActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
+                                <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                    {tabConfig.map((tab, idx) => (
+                                        <Tab key={tab.id} fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>
+                                            {tab.label}
+                                        </Tab>
+                                    ))}
+                                </TabList>
 
-                            <TabPanels>
-                                {/* ── Tab 1: Form ── */}
-                                <TabPanel p={0}>
+                                <TabPanels>
+                                    {/* ── Tab 1: Form ── */}
+                                    {tabConfig.some(t => t.id === 'form') && (
+                                        <TabPanel p={0}>
                                     <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
                             <VStack spacing={8} align="stretch">
 
@@ -1868,9 +1882,11 @@ const EmployeeMasterForm = () => {
                             </VStack>
                         </form>
                                 </TabPanel>
+                            )}
 
                                 {/* ── Tab 2: View (List) ── */}
-                                <TabPanel p={0}>
+                                {tabConfig.some(t => t.id === 'view') && (
+                                    <TabPanel p={0}>
                                     {/* Employee List View */}
                                     <Box mt={4}>
                             <Flex justify="space-between" align="center" mb={5} wrap="wrap" gap={3}>
@@ -1978,9 +1994,11 @@ const EmployeeMasterForm = () => {
                             )}
                                     </Box>
                                 </TabPanel>
+                            )}
 
                                 {/* ── Tab 3: Payment Report ── */}
-                                <TabPanel p={0}>
+                                {tabConfig.some(t => t.id === 'payment') && (
+                                    <TabPanel p={0}>
                                     {(() => {
                                         const reportFiltered = employees.filter(emp => {
                                             const monthData = getMonthlyPayment(emp, reportMonthFilter);
@@ -2288,13 +2306,18 @@ const EmployeeMasterForm = () => {
                                         );
                                     })()}
                                 </TabPanel>
+                            )}
 
+                            {/* ── Tab 4: Admin Login Report ── */}
+                            {tabConfig.some(t => t.id === 'adminReport') && (
                                 <TabPanel pt={6}>
                                     <AdminLoginReportView />
                                 </TabPanel>
+                            )}
 
                             </TabPanels>
                         </Tabs>
+                    )}
 
                         {/* Standardized Employee View Modal */}
                         <Modal isOpen={!!viewEmployee} onClose={() => setViewEmployee(null)} size="4xl" isCentered motionPreset="slideInBottom">
@@ -4879,6 +4902,7 @@ const CompletionModal = ({ isOpen, onClose, schedule, onComplete, isLoading }) =
 };
 
 const InstrumentMasterForm = () => {
+    const { user } = useAuth();
     const toast = useToast();
     const [isLoading, setIsLoading] = useState(false);
     const [instruments, setInstruments] = useState([]);
@@ -4891,6 +4915,15 @@ const InstrumentMasterForm = () => {
 
     const [formData, setFormData] = useState({ model: '', serialNo: '', instrumentName: '', notes: '' });
 
+    // Group States
+    const [groups, setGroups] = useState([]);
+    const [groupEditId, setGroupEditId] = useState(null);
+    const [groupNextId, setGroupNextId] = useState('');
+    const [groupFormData, setGroupFormData] = useState({ name: '', instruments: [] });
+    const [isGroupLoading, setIsGroupLoading] = useState(false);
+    const [selectedInstrumentIds, setSelectedInstrumentIds] = useState([]);
+    const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+
     const fetchInstruments = async () => {
         try {
             const res = await api.get('/instrument-master');
@@ -4898,7 +4931,143 @@ const InstrumentMasterForm = () => {
         } catch (err) { console.error(err); }
     };
 
-    useEffect(() => { fetchInstruments(); }, []);
+    const fetchGroups = async () => {
+        try {
+            const res = await api.get('/instrument-master/groups');
+            if (res.data.success) setGroups(res.data.data);
+        } catch (err) { console.error(err); }
+    };
+
+    const fetchNextGroupId = async () => {
+        try {
+            const res = await api.get('/instrument-master/groups/next-id');
+            if (res.data.success) setGroupNextId(res.data.nextGroupId);
+        } catch (err) { console.error(err); }
+    };
+
+    useEffect(() => {
+        fetchInstruments();
+        fetchGroups();
+        fetchNextGroupId();
+    }, []);
+
+    const handleGroupChange = (e) => {
+        const { name, value } = e.target;
+        setGroupFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleGroupInstrumentToggle = (instId) => {
+        setGroupFormData(prev => {
+            const current = prev.instruments;
+            if (current.includes(instId)) {
+                return { ...prev, instruments: current.filter(id => id !== instId) };
+            } else {
+                return { ...prev, instruments: [...current, instId] };
+            }
+        });
+    };
+
+    const handleMainInstrumentToggle = (instId) => {
+        setSelectedInstrumentIds(prev => {
+            if (prev.includes(instId)) {
+                return prev.filter(id => id !== instId);
+            } else {
+                return [...prev, instId];
+            }
+        });
+    };
+
+    const handleGroupClear = () => {
+        setGroupEditId(null);
+        setGroupFormData({ name: '', instruments: [] });
+        setSelectedInstrumentIds([]);
+        setIsGroupModalOpen(false);
+        fetchNextGroupId();
+    };
+
+    const handleGroupEdit = (grp) => {
+        setGroupEditId(grp._id);
+        const mappedInsts = grp.instruments?.map(i => i._id || i) || [];
+        setGroupFormData({
+            name: grp.name || '',
+            instruments: mappedInsts
+        });
+        setSelectedInstrumentIds(mappedInsts);
+        setIsGroupModalOpen(true);
+    };
+
+    const handleStartCreateGroup = () => {
+        if (selectedInstrumentIds.length === 0) {
+            toast({ title: 'Select Instruments', description: 'Please select at least one instrument to group.', status: 'warning', duration: 2000 });
+            return;
+        }
+        setGroupEditId(null);
+        setGroupFormData({
+            name: '',
+            instruments: selectedInstrumentIds
+        });
+        fetchNextGroupId();
+        setIsGroupModalOpen(true);
+    };
+
+    const handleGroupDelete = async (id) => {
+        if (!window.confirm('Delete this group?')) return;
+        try {
+            await api.delete(`/instrument-master/groups/${id}`);
+            toast({ title: 'Group Deleted', status: 'info', duration: 2000 });
+            fetchGroups();
+            fetchInstruments();
+            if (groupEditId === id) handleGroupClear();
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
+        }
+    };
+
+    const handleGroupSubmit = async (e) => {
+        e.preventDefault();
+        if (!groupFormData.name.trim()) {
+            toast({ title: 'Validation Error', description: 'Group name is required', status: 'warning', duration: 2000 });
+            return;
+        }
+        setIsGroupLoading(true);
+        try {
+            if (groupEditId) {
+                const res = await api.put(`/instrument-master/groups/${groupEditId}`, {
+                    name: groupFormData.name,
+                    instruments: groupFormData.instruments
+                });
+                if (res.data.success) {
+                    toast({ title: 'Success', description: 'Group updated successfully', status: 'success', duration: 2000 });
+                    handleGroupClear();
+                    fetchGroups();
+                    fetchInstruments();
+                }
+            } else {
+                const res = await api.post('/instrument-master/groups', {
+                    name: groupFormData.name,
+                    instruments: groupFormData.instruments
+                });
+                if (res.data.success) {
+                    toast({ title: 'Success', description: 'Group created successfully', status: 'success', duration: 2000 });
+                    handleGroupClear();
+                    fetchGroups();
+                    fetchInstruments();
+                }
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Failed to save group', status: 'error', duration: 3000 });
+        } finally {
+            setIsGroupLoading(false);
+        }
+    };
+
+    const getAvailableInstrumentsForGroup = () => {
+        const otherGroupInstIds = groups
+            .filter(g => g._id !== groupEditId)
+            .flatMap(g => g.instruments?.map(i => i._id || i) || []);
+
+        return instruments.filter(inst => !otherGroupInstIds.includes(inst._id));
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -4994,6 +5163,12 @@ const InstrumentMasterForm = () => {
         }
     };
 
+    const tabConfig = [
+        { id: 'form', label: 'Form', permission: 'instrumentMaster_form' },
+        { id: 'view', label: 'View', permission: 'instrumentMaster_view' },
+        { id: 'groups', label: 'Groups', permission: 'instrumentMaster_groups' }
+    ].filter(t => hasPermission(user, t.permission, 'read'));
+
     return (
         <Box py={8} bg="gray.100" minH="100vh">
             <Container maxW="container.md">
@@ -5008,14 +5183,25 @@ const InstrumentMasterForm = () => {
                     </Box>
 
                     <CardBody px={8} py={7}>
-                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
-                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
-                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>Form</Tab>
-                                <Tab fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>View</Tab>
-                            </TabList>
-                            <TabPanels>
-                                <TabPanel p={0}>
-                        <form onSubmit={handleSubmit}>
+                        {tabConfig.length === 0 ? (
+                            <Center py={10}>
+                                <VStack spacing={3}>
+                                    <Icon as={FaWrench} w={12} h={12} color="red.400" />
+                                    <Text fontWeight="bold" color="gray.600">Access Denied</Text>
+                                    <Text fontSize="sm" color="gray.500" textAlign="center">You do not have permission to access any sections of the Instrument Master.</Text>
+                                </VStack>
+                            </Center>
+                        ) : (
+                            <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
+                                <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.100">
+                                    {tabConfig.map((t) => (
+                                        <Tab key={t.id} fontWeight="bold" borderRadius="xl" px={6} py={3} _selected={{ color: 'white', bg: 'blue.500', shadow: 'md' }}>{t.label}</Tab>
+                                    ))}
+                                </TabList>
+                                <TabPanels>
+                                    {tabConfig.some(t => t.id === 'form') && (
+                                        <TabPanel p={0}>
+                                            <form onSubmit={handleSubmit}>
                             <VStack spacing={6} align="stretch">
 
                                 <SimpleGrid columns={{ base: 1, md: 3 }} spacing={5}>
@@ -5117,7 +5303,9 @@ const InstrumentMasterForm = () => {
                             </VStack>
                         </form>
                                 </TabPanel>
-                                <TabPanel p={0}>
+                                    )}
+                                    {tabConfig.some(t => t.id === 'view') && (
+                                        <TabPanel p={0}>
 
                 {/* Instrument Table List */}
                 <Box mt={4}>
@@ -5195,9 +5383,136 @@ const InstrumentMasterForm = () => {
                         </Table>
                     </Box>
                 </Box>
-                                </TabPanel>
-                            </TabPanels>
-                        </Tabs>
+                                        </TabPanel>
+                                    )}
+                                    {tabConfig.some(t => t.id === 'groups') && (
+                                        <TabPanel p={0}>
+                                    <VStack spacing={8} align="stretch">
+                                        {/* Instrument Selection Card */}
+                                        <Card variant="outline" borderRadius="xl" p={6} border="1px solid" borderColor="gray.200" bg="white">
+                                            <Heading size="sm" mb={2} color="blue.700">
+                                                Select Instruments to Group
+                                            </Heading>
+                                            <Text fontSize="xs" color="gray.500" mb={4}>
+                                                Choose one or more available instruments from the list below, then click "Create Group" to group them.
+                                            </Text>
+                                            <VStack spacing={4} align="stretch">
+                                                {getAvailableInstrumentsForGroup().length === 0 ? (
+                                                    <Box py={4} textAlign="center" bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.200">
+                                                        <Text fontSize="sm" color="gray.400" italic>No available instruments. All instruments are either already grouped or none exist.</Text>
+                                                    </Box>
+                                                ) : (
+                                                    <Box border="1px solid" borderColor="gray.200" borderRadius="xl" p={4} maxH="250px" overflowY="auto" bg="gray.50">
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
+                                                            {getAvailableInstrumentsForGroup().map(inst => {
+                                                                const isChecked = selectedInstrumentIds.includes(inst._id);
+                                                                return (
+                                                                    <Checkbox
+                                                                        key={inst._id}
+                                                                        isChecked={isChecked}
+                                                                        onChange={() => handleMainInstrumentToggle(inst._id)}
+                                                                        colorScheme="blue"
+                                                                    >
+                                                                        <Text fontSize="sm">
+                                                                            {inst.instrumentName || 'Unnamed'} ({inst.serialNo})
+                                                                        </Text>
+                                                                    </Checkbox>
+                                                                );
+                                                            })}
+                                                        </SimpleGrid>
+                                                    </Box>
+                                                )}
+
+                                                <HStack justify="flex-end">
+                                                    <Button
+                                                        colorScheme="blue"
+                                                        onClick={handleStartCreateGroup}
+                                                        disabled={selectedInstrumentIds.length === 0}
+                                                        isDisabled={selectedInstrumentIds.length === 0}
+                                                        borderRadius="xl"
+                                                        px={8}
+                                                        shadow="md"
+                                                    >
+                                                        Create Group ({selectedInstrumentIds.length})
+                                                    </Button>
+                                                </HStack>
+                                            </VStack>
+                                        </Card>
+
+                                        {/* Groups List */}
+                                        <Box overflowX="auto" border="1px solid" borderColor="gray.200" borderRadius="2xl" bg="white">
+                                            <Table variant="simple" size="sm">
+                                                <Thead bg="gray.50">
+                                                    <Tr>
+                                                        <Th py={4} color="gray.700">Group ID</Th>
+                                                        <Th py={4} color="gray.700">Group Name</Th>
+                                                        <Th py={4} color="gray.700">Instruments</Th>
+                                                        <Th py={4} color="gray.700" textAlign="center">Actions</Th>
+                                                    </Tr>
+                                                </Thead>
+                                                <Tbody>
+                                                    {groups.map(grp => (
+                                                        <Tr key={grp._id}>
+                                                            <Td py={3}>
+                                                                <Badge colorScheme="blue" borderRadius="md" px={2} py={0.5}>
+                                                                    {grp.groupId}
+                                                                </Badge>
+                                                            </Td>
+                                                            <Td py={3} fontWeight="bold">{grp.name}</Td>
+                                                            <Td py={3}>
+                                                                <HStack spacing={1} wrap="wrap">
+                                                                    {grp.instruments && grp.instruments.length > 0 ? (
+                                                                        grp.instruments.map(inst => (
+                                                                            <Badge key={inst._id} colorScheme="gray" variant="solid" borderRadius="md" px={2}>
+                                                                                {inst.instrumentName || 'Unnamed'} ({inst.serialNo})
+                                                                            </Badge>
+                                                                        ))
+                                                                    ) : (
+                                                                        <Text fontSize="xs" color="gray.400">Empty Group</Text>
+                                                                    )}
+                                                                </HStack>
+                                                            </Td>
+                                                            <Td py={3} textAlign="center">
+                                                                <HStack justify="center" spacing={2}>
+                                                                    <IconButton
+                                                                        aria-label="Edit Group"
+                                                                        icon={<Icon as={FaEdit} />}
+                                                                        size="sm"
+                                                                        colorScheme="blue"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleGroupEdit(grp)}
+                                                                    />
+                                                                    <IconButton
+                                                                        aria-label="Delete Group"
+                                                                        icon={<Icon as={FaTrash} />}
+                                                                        size="sm"
+                                                                        colorScheme="red"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleGroupDelete(grp._id)}
+                                                                    />
+                                                                </HStack>
+                                                            </Td>
+                                                        </Tr>
+                                                    ))}
+                                                    {groups.length === 0 && (
+                                                        <Tr>
+                                                            <Td colSpan={4} textAlign="center" py={8} color="gray.400">
+                                                                <VStack spacing={2}>
+                                                                    <Icon as={FaWrench} w={8} h={8} opacity={0.2} />
+                                                                    <Text fontSize="sm">No groups created yet.</Text>
+                                                                </VStack>
+                                                            </Td>
+                                                        </Tr>
+                                                    )}
+                                                </Tbody>
+                                            </Table>
+                                        </Box>
+                                    </VStack>
+                                        </TabPanel>
+                                    )}
+                                </TabPanels>
+                            </Tabs>
+                        )}
                     </CardBody>
                 </Card>
 
@@ -5263,6 +5578,98 @@ const InstrumentMasterForm = () => {
                             <Box p={5} bg="gray.50" textAlign="right">
                                 <Button colorScheme="blue" borderRadius="full" px={10} shadow="lg" onClick={() => setViewInstrument(null)}>Close</Button>
                             </Box>
+                        </Box>
+                    </Box>
+                )}
+
+                {/* ── Group Details Modal ── */}
+                {isGroupModalOpen && (
+                    <Box
+                        position="fixed" top={0} left={0} right={0} bottom={0}
+                        bg="blackAlpha.700"
+                        zIndex={10000}
+                        display="flex" alignItems="center" justifyContent="center" p={4}
+                        onClick={handleGroupClear}
+                        className="uni-modal-overlay"
+                    >
+                        <Box
+                            bg="white" borderRadius="3xl" maxW="600px" w="full" boxShadow="2xl"
+                            overflow="hidden" onClick={(e) => e.stopPropagation()}
+                            className="uni-modal-box"
+                        >
+                            <Box bgGradient="linear(to-r, blue.800, blue.600)" p={6} color="white">
+                                <HStack justify="space-between">
+                                    <HStack spacing={4}>
+                                        <Icon as={FaWrench} w={8} h={8} />
+                                        <VStack align="start" spacing={0}>
+                                            <Heading size="md">{groupEditId ? 'Edit Group' : 'Create Group'}</Heading>
+                                            <Text fontSize="xs" opacity={0.8}>Group ID is auto-generated. Please name the group below.</Text>
+                                        </VStack>
+                                    </HStack>
+                                    <IconButton aria-label="Close" icon={<Icon as={FaTimes} />} size="md" variant="ghost" color="white" onClick={handleGroupClear} />
+                                </HStack>
+                            </Box>
+
+                            <form onSubmit={handleGroupSubmit}>
+                                <Box p={8}>
+                                    <VStack spacing={6} align="stretch">
+                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                            <FormControl isReadOnly>
+                                                <FormLabel fontSize="sm" fontWeight="bold" color="gray.700">Group ID</FormLabel>
+                                                <Input value={groupEditId ? (groups.find(g => g._id === groupEditId)?.groupId || '') : groupNextId} borderRadius="xl" bg="gray.100" />
+                                            </FormControl>
+                                            <FormControl isRequired>
+                                                <FormLabel fontSize="sm" fontWeight="bold" color="gray.700">Group Name</FormLabel>
+                                                <Input name="name" value={groupFormData.name} onChange={handleGroupChange} placeholder="e.g. Total Station Group A" borderRadius="xl" bg="gray.50" />
+                                            </FormControl>
+                                        </SimpleGrid>
+
+                                        <FormControl>
+                                            <FormLabel fontSize="sm" fontWeight="bold" color="gray.700" mb={2}>Group Instruments</FormLabel>
+                                            <Box border="1px solid" borderColor="gray.200" borderRadius="xl" p={4} maxH="200px" overflowY="auto" bg="gray.50">
+                                                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+                                                    {/* Show all instruments that are currently in the group OR are free (available) */}
+                                                    {getAvailableInstrumentsForGroup().concat(
+                                                        instruments.filter(inst => groupFormData.instruments.includes(inst._id) && !getAvailableInstrumentsForGroup().some(ai => ai._id === inst._id))
+                                                    ).map(inst => {
+                                                        const isChecked = groupFormData.instruments.includes(inst._id);
+                                                        return (
+                                                            <Checkbox
+                                                                key={inst._id}
+                                                                isChecked={isChecked}
+                                                                onChange={() => handleGroupInstrumentToggle(inst._id)}
+                                                                colorScheme="blue"
+                                                            >
+                                                                <Text fontSize="sm">
+                                                                    {inst.instrumentName || 'Unnamed'} ({inst.serialNo})
+                                                                </Text>
+                                                            </Checkbox>
+                                                        );
+                                                    })}
+                                                </SimpleGrid>
+                                            </Box>
+                                        </FormControl>
+                                    </VStack>
+                                </Box>
+
+                                <Box p={5} bg="gray.50" textAlign="right">
+                                    <HStack justify="flex-end" spacing={3}>
+                                        <Button onClick={handleGroupClear} variant="ghost" borderRadius="full" px={6}>
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            colorScheme="blue"
+                                            isLoading={isGroupLoading}
+                                            borderRadius="full"
+                                            px={10}
+                                            shadow="lg"
+                                        >
+                                            {groupEditId ? 'Update Group' : 'Save Group'}
+                                        </Button>
+                                    </HStack>
+                                </Box>
+                            </form>
                         </Box>
                     </Box>
                 )}
@@ -5353,6 +5760,18 @@ const Services = () => {
     const isAdmin = user && user.isAdmin;
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+    const adminServiceTabs = [
+        { key: 'vehicleMaster', groupKey: 'vehicleMasterGroup', label: 'Vehicle Master', icon: FaTruck, colorScheme: 'purple', component: <VehicleMasterForm /> },
+        { key: 'employeeMaster', groupKey: 'employeeMasterGroup', label: 'Employee Master', icon: FaUserTie, colorScheme: 'blue', component: <EmployeeMasterForm /> },
+        { key: 'clientMaster', groupKey: 'clientMasterGroup', label: 'Client Master', icon: FaHandshake, colorScheme: 'orange', component: <ClientMasterForm /> },
+        { key: 'siteMaster', groupKey: 'siteMasterGroup', label: 'Site Master', icon: FaMap, colorScheme: 'teal', component: <SiteMasterForm /> },
+        { key: 'scheduleMaster', groupKey: 'scheduleMasterGroup', label: 'Scheduler', icon: FaCalendarAlt, colorScheme: 'green', component: <ScheduleMasterForm /> },
+        { key: 'instrumentMaster', groupKey: 'instrumentMasterGroup', label: 'Instruments', icon: FaWrench, colorScheme: 'blue', component: <InstrumentMasterForm /> },
+        { key: 'employeeExpense', groupKey: 'employeeExpenseGroup', label: 'Employee Ledger', icon: FaMoneyBillWave, colorScheme: 'blue', component: <EmployeeExpensesModule isInsideServices={true} /> },
+        { key: 'draftingWork', groupKey: 'otherServicesGroup', subFilter: 'draftingWork', label: 'Drafting Work', icon: FaFolderOpen, colorScheme: 'purple', component: <AdminDraftingWork isInsideServices={true} /> },
+        { key: 'invoiceReport', groupKey: 'otherServicesGroup', subFilter: 'invoiceReport', label: 'Invoice Report', icon: FaFileInvoiceDollar, colorScheme: 'blue', component: <InvoiceReport isInsideServices={true} /> },
+    ].filter(t => hasPermission(user, t.key, 'read'));
+
     return (
         <Box>
             {isAdmin ? (
@@ -5370,70 +5789,33 @@ const Services = () => {
                                 {isSidebarOpen ? 'Hide Menu' : 'Show Menu'}
                             </Button>
                         </Flex>
-                        <Tabs isLazy variant="soft-rounded" colorScheme="purple" orientation="vertical" w="full">
-                            {isSidebarOpen && (
-                                <TabList bg="white" p={4} borderRadius="2xl" boxShadow="md" mr={4} minW="180px" gap={2}>
-                                    <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaTruck} mr={2} /> Vehicle Master
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'blue.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaUserTie} mr={2} /> Employee Master
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'orange.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaHandshake} mr={2} /> Client Master
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'teal.500' }} px={8} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaMap} mr={2} /> Site Master
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'green.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaCalendarAlt} mr={2} /> Scheduler
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'blue.700' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaWrench} mr={2} /> Instruments
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaMoneyBillWave} mr={2} /> Employee Ledger
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'purple.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaFolderOpen} mr={2} /> Drafting Work
-                                    </Tab>
-                                    <Tab _selected={{ color: 'white', bg: 'blue.500' }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
-                                        <Icon as={FaFileInvoiceDollar} mr={2} /> Invoice Report
-                                    </Tab>
-                                </TabList>
-                            )}
+                        {adminServiceTabs.length === 0 ? (
+                            <Box bg="white" p={10} borderRadius="2xl" textAlign="center" boxShadow="md">
+                                <Text fontSize="lg" fontWeight="bold" color="gray.600">No Authorized Modules Available</Text>
+                                <Text fontSize="sm" color="gray.400" mt={1}>Please contact your Super Admin if you require access to these administrative modules.</Text>
+                            </Box>
+                        ) : (
+                            <Tabs isLazy variant="soft-rounded" colorScheme="purple" orientation="vertical" w="full">
+                                {isSidebarOpen && (
+                                    <TabList bg="white" p={4} borderRadius="2xl" boxShadow="md" mr={4} minW="180px" gap={2}>
+                                        {adminServiceTabs.map((t) => (
+                                            <Tab key={t.key} _selected={{ color: 'white', bg: `${t.colorScheme}.500` }} px={6} py={3} fontWeight="bold" ml={0} textAlign="left" justifyContent="start">
+                                                <Icon as={t.icon} mr={2} /> {t.label}
+                                            </Tab>
+                                        ))}
+                                    </TabList>
+                                )}
 
-                            <TabPanels flex={1} w="full">
-                                <TabPanel p={0}>
-                                    <VehicleMasterForm />
-                                </TabPanel>
-                                <TabPanel p={0}>
-                                    <EmployeeMasterForm />
-                                </TabPanel>
-                                <TabPanel p={0}>
-                                    <ClientMasterForm />
-                                </TabPanel>
-                                <TabPanel p={0}>
-                                    <SiteMasterForm />
-                                </TabPanel>
-                                <TabPanel p={0}>
-                                    <ScheduleMasterForm />
-                                </TabPanel>
-                                <TabPanel p={0}>
-                                    <InstrumentMasterForm />
-                                </TabPanel>
-
-                                <TabPanel p={0}>
-                                    <EmployeeExpensesModule />
-                                </TabPanel>
-                                <TabPanel p={0}>
-                                    <AdminDraftingWork />
-                                </TabPanel>
-                                <TabPanel p={0}>
-                                    <InvoiceReport />
-                                </TabPanel>
-                            </TabPanels>
-                        </Tabs>
+                                <TabPanels flex={1} w="full">
+                                    {adminServiceTabs.map((t) => (
+                                        <TabPanel key={t.key} p={0}>
+                                            <ModulePermissionBar moduleGroupKey={t.groupKey} subModuleFilterKey={t.subFilter} />
+                                            {t.component}
+                                        </TabPanel>
+                                    ))}
+                                </TabPanels>
+                            </Tabs>
+                        )}
                     </Container>
                 </Box>
             ) : (

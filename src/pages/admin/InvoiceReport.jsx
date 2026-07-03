@@ -14,8 +14,10 @@ import {
     FaListUl
 } from 'react-icons/fa';
 import api from '../../api/axios';
+import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const formatDate = (dateStr) => {
@@ -56,8 +58,9 @@ const rowStyle = (s) => {
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
-const InvoiceReport = () => {
+const InvoiceReport = ({ isInsideServices = false }) => {
     const toast = useToast();
+
     
     // Group Details popup state
     const [selectedGroup, setSelectedGroup] = useState(null);
@@ -276,6 +279,7 @@ const InvoiceReport = () => {
     return (
         <Box py={6} bg="gray.50" minH="100vh">
             <Container maxW="container.xl">
+                {!isInsideServices && <ModulePermissionBar moduleGroupKey="otherServicesGroup" subModuleFilterKey="invoiceReport" />}
                 <VStack spacing={6} align="stretch">
 
                     {/* ── Header ── */}

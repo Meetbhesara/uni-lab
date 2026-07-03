@@ -11,6 +11,8 @@ import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
 import { hasPermission } from '../../utils/permissions';
+import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
+
 
 const PRODUCT_CATEGORIES = [
     "CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT",
@@ -72,6 +74,10 @@ const AdminProducts = () => {
     const isSuperAdmin = user.isSuperAdmin;
     const canWrite = hasPermission(user, 'products', 'write');
     const canShowStock = hasPermission(user, 'showStock', 'read');
+    const canShowSellingPrice = hasPermission(user, 'showSellingPrice', 'read');
+    const canShowDealerPrice = hasPermission(user, 'showDealerPrice', 'read');
+    const canShowVendors = hasPermission(user, 'showVendors', 'read');
+
 
     const getGroupedAndSortedProducts = () => {
         const groups = {};
@@ -483,6 +489,7 @@ const AdminProducts = () => {
             borderRadius="2xl"
             boxShadow="0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
         >
+            <ModulePermissionBar moduleGroupKey="productsGroup" />
             <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={10} direction={{ base: 'column', md: 'row' }} gap={6}>
                 <Stack spacing={1}>
                     <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
@@ -564,9 +571,10 @@ const AdminProducts = () => {
                                     <Thead bg="white">
                                         <Tr borderBottom="2px solid" borderBottomColor="gray.50">
                                             <Th py={4}>Product Info</Th>
-                                            <Th py={4}>Vendor</Th>
-                                            <Th py={4}>Pricing</Th>
+                                            {canShowVendors && <Th py={4}>Vendor</Th>}
+                                            {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && <Th py={4}>Pricing</Th>}
                                             <Th py={4}>Videos</Th>
+
                                             {canShowStock && <Th py={4}>Stock</Th>}
                                             <Th py={4} textAlign="right">Actions</Th>
                                         </Tr>
@@ -594,40 +602,44 @@ const AdminProducts = () => {
                                                         </Stack>
                                                     </Flex>
                                                 </Td>
-                                                <Td>
-                                                    <Flex wrap="wrap" gap={1} maxW="150px">
-                                                        {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
-                                                            product.vendors.map((v, i) => (
-                                                                <Badge key={i} variant="subtle" colorScheme="blue" borderRadius="full" px={2} fontSize="10px">
-                                                                    {v.name || 'N/A'}
+                                                {canShowVendors && (
+                                                    <Td>
+                                                        <Flex wrap="wrap" gap={1} maxW="150px">
+                                                            {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                                                product.vendors.map((v, i) => (
+                                                                    <Badge key={i} variant="subtle" colorScheme="blue" borderRadius="full" px={2} fontSize="10px">
+                                                                        {v.name || 'N/A'}
+                                                                    </Badge>
+                                                                ))
+                                                            ) : (
+                                                                <Badge variant="subtle" colorScheme="blue" borderRadius="full" px={3}>
+                                                                    {product.vendor || 'N/A'}
                                                                 </Badge>
-                                                            ))
-                                                        ) : (
-                                                            <Badge variant="subtle" colorScheme="blue" borderRadius="full" px={3}>
-                                                                {product.vendor || 'N/A'}
-                                                            </Badge>
-                                                        )}
-                                                    </Flex>
-                                                </Td>
-                                                <Td>
-                                                    <Stack spacing={0}>
-                                                        <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd || 'N/A'}</Text>
-                                                        <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice || 'N/A'}</Text>
-                                                        {isSuperAdmin && (
-                                                            <Flex direction="column" gap={1} mt={1}>
-                                                                {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
-                                                                    product.vendors.map((v, i) => (
-                                                                        <Text key={i} fontSize="xs" color="gray.500">
-                                                                            {v.name || 'Unknown'}: ₹{v.price ?? '0'}
-                                                                        </Text>
-                                                                    ))
-                                                                ) : (
-                                                                    <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
-                                                                )}
-                                                            </Flex>
-                                                        )}
-                                                    </Stack>
-                                                </Td>
+                                                            )}
+                                                        </Flex>
+                                                    </Td>
+                                                )}
+                                                {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && (
+                                                    <Td>
+                                                        <Stack spacing={0}>
+                                                            {canShowSellingPrice && <Text fontWeight="bold" color="brand.600">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd || 'N/A'}</Text>}
+                                                            {canShowDealerPrice && <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice || 'N/A'}</Text>}
+                                                            {canShowVendors && (
+                                                                <Flex direction="column" gap={1} mt={1}>
+                                                                    {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                                                        product.vendors.map((v, i) => (
+                                                                            <Text key={i} fontSize="xs" color="gray.500">
+                                                                                {v.name || 'Unknown'}: ₹{v.price ?? '0'}
+                                                                            </Text>
+                                                                        ))
+                                                                    ) : (
+                                                                        <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
+                                                                    )}
+                                                                </Flex>
+                                                            )}
+                                                        </Stack>
+                                                    </Td>
+                                                )}
                                                 <Td>
                                                     {((product.localVideos && product.localVideos.length > 0) || (product.videoLinks && product.videoLinks.length > 0)) ? (
                                                         <Badge colorScheme="purple" borderRadius="md" px={2} py={1} display="inline-flex" alignItems="center" gap={1}>
@@ -806,70 +818,75 @@ const AdminProducts = () => {
                                     </Stack>
                                 </Box>
 
-                                <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
-                                    <Flex align="center" gap={2} mb={4} color="brand.600">
-                                        <FiDollarSign /> <Text fontWeight="700" fontSize="sm">COMMERCIALS</Text>
-                                    </Flex>
-                                    <Stack spacing={4}>
-                                        <SimpleGrid columns={2} spacing={4}>
-                                            <FormControl isInvalid={!!formErrors.sellingPriceStart}>
-                                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (START)</FormLabel>
-                                                <InputGroup size="md">
-                                                    <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceStart} onChange={(e) => {
-                                                        setFormData({ ...formData, sellingPriceStart: e.target.value });
-                                                        if (formErrors.sellingPriceStart) setFormErrors({ ...formErrors, sellingPriceStart: '' });
-                                                    }} />
-                                                </InputGroup>
-                                                <FormErrorMessage fontSize="10px">{formErrors.sellingPriceStart}</FormErrorMessage>
-                                            </FormControl>
-                                            <FormControl isInvalid={!!formErrors.sellingPriceEnd}>
-                                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (END)</FormLabel>
-                                                <InputGroup size="md">
-                                                    <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceEnd} onChange={(e) => {
-                                                        setFormData({ ...formData, sellingPriceEnd: e.target.value });
-                                                        if (formErrors.sellingPriceEnd) setFormErrors({ ...formErrors, sellingPriceEnd: '' });
-                                                    }} />
-                                                </InputGroup>
-                                                <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
-                                            </FormControl>
-                                        </SimpleGrid>
-                                        <SimpleGrid columns={{ base: 1, md: 1 }} spacing={4}>
-                                            <FormControl isInvalid={!!formErrors.dealerPrice}>
-                                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
-                                                <InputGroup size="md">
-                                                    <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.dealerPrice} onChange={(e) => {
-                                                        setFormData({ ...formData, dealerPrice: e.target.value });
-                                                        if (formErrors.dealerPrice) setFormErrors({ ...formErrors, dealerPrice: '' });
-                                                    }} />
-                                                </InputGroup>
-                                                <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
-                                            </FormControl>
-                                        </SimpleGrid>
+                                {(canShowSellingPrice || canShowDealerPrice || canShowStock || canShowVendors) && (
+                                    <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
+                                        <Flex align="center" gap={2} mb={4} color="brand.600">
+                                            <FiDollarSign /> <Text fontWeight="700" fontSize="sm">COMMERCIALS</Text>
+                                        </Flex>
+                                        <Stack spacing={4}>
+                                            {canShowSellingPrice && (
+                                                <SimpleGrid columns={2} spacing={4}>
+                                                    <FormControl isInvalid={!!formErrors.sellingPriceStart}>
+                                                        <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (START)</FormLabel>
+                                                        <InputGroup size="md">
+                                                            <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                            <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceStart} onChange={(e) => {
+                                                                setFormData({ ...formData, sellingPriceStart: e.target.value });
+                                                                if (formErrors.sellingPriceStart) setFormErrors({ ...formErrors, sellingPriceStart: '' });
+                                                            }} />
+                                                        </InputGroup>
+                                                        <FormErrorMessage fontSize="10px">{formErrors.sellingPriceStart}</FormErrorMessage>
+                                                    </FormControl>
+                                                    <FormControl isInvalid={!!formErrors.sellingPriceEnd}>
+                                                        <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (END)</FormLabel>
+                                                        <InputGroup size="md">
+                                                            <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                            <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.sellingPriceEnd} onChange={(e) => {
+                                                                setFormData({ ...formData, sellingPriceEnd: e.target.value });
+                                                                if (formErrors.sellingPriceEnd) setFormErrors({ ...formErrors, sellingPriceEnd: '' });
+                                                            }} />
+                                                        </InputGroup>
+                                                        <FormErrorMessage fontSize="10px">{formErrors.sellingPriceEnd}</FormErrorMessage>
+                                                    </FormControl>
+                                                </SimpleGrid>
+                                            )}
+                                            {canShowDealerPrice && (
+                                                <SimpleGrid columns={{ base: 1, md: 1 }} spacing={4}>
+                                                    <FormControl isInvalid={!!formErrors.dealerPrice}>
+                                                        <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
+                                                        <InputGroup size="md">
+                                                            <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                            <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.dealerPrice} onChange={(e) => {
+                                                                setFormData({ ...formData, dealerPrice: e.target.value });
+                                                                if (formErrors.dealerPrice) setFormErrors({ ...formErrors, dealerPrice: '' });
+                                                            }} />
+                                                        </InputGroup>
+                                                        <FormErrorMessage fontSize="10px">{formErrors.dealerPrice}</FormErrorMessage>
+                                                    </FormControl>
+                                                </SimpleGrid>
+                                            )}
 
-                                        {canShowStock && (
-                                            <FormControl isInvalid={!!formErrors.stock}>
-                                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500">INVENTORY STOCK</FormLabel>
-                                                <InputGroup size="md">
-                                                    <InputLeftElement pointerEvents='none' children={<Box as={FiPackage} color="gray.400" />} />
-                                                    <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" placeholder="e.g. 10" value={formData.stock} onChange={(e) => {
-                                                        setFormData({ ...formData, stock: e.target.value });
-                                                        if (formErrors.stock) setFormErrors({ ...formErrors, stock: '' });
-                                                    }} />
-                                                </InputGroup>
-                                                <FormErrorMessage fontSize="10px">{formErrors.stock}</FormErrorMessage>
-                                            </FormControl>
-                                        )}
+                                            {canShowStock && (
+                                                <FormControl isInvalid={!!formErrors.stock}>
+                                                    <FormLabel fontSize="xs" fontWeight="700" color="gray.500">INVENTORY STOCK</FormLabel>
+                                                    <InputGroup size="md">
+                                                        <InputLeftElement pointerEvents='none' children={<Box as={FiPackage} color="gray.400" />} />
+                                                        <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" placeholder="e.g. 10" value={formData.stock} onChange={(e) => {
+                                                            setFormData({ ...formData, stock: e.target.value });
+                                                            if (formErrors.stock) setFormErrors({ ...formErrors, stock: '' });
+                                                        }} />
+                                                    </InputGroup>
+                                                    <FormErrorMessage fontSize="10px">{formErrors.stock}</FormErrorMessage>
+                                                </FormControl>
+                                            )}
 
-                                        {isSuperAdmin && (
-                                            <Box border="1px dashed" borderColor="gray.200" p={4} borderRadius="xl" bg="gray.50">
-                                                <Flex justify="space-between" align="center" mb={4}>
-                                                    <Text fontSize="sm" fontWeight="bold" color="brand.600">Vendors & Purchase Prices</Text>
-                                                    <Button size="sm" colorScheme="brand" variant="outline" onClick={() => {
-                                                        setFormData(prev => ({ ...prev, vendors: [...prev.vendors, { name: '', price: '' }] }));
-                                                    }}>
+                                            {canShowVendors && (
+                                                <Box border="1px dashed" borderColor="gray.200" p={4} borderRadius="xl" bg="gray.50">
+                                                    <Flex justify="space-between" align="center" mb={4}>
+                                                        <Text fontSize="sm" fontWeight="bold" color="brand.600">Vendors & Purchase Prices</Text>
+                                                        <Button size="sm" colorScheme="brand" variant="outline" onClick={() => {
+                                                            setFormData(prev => ({ ...prev, vendors: [...prev.vendors, { name: '', price: '' }] }));
+                                                        }}>
                                                         + Add
                                                     </Button>
                                                 </Flex>
@@ -927,10 +944,12 @@ const AdminProducts = () => {
                                                     )}
                                                 </Stack>
                                             </Box>
-                                        )}
-                                    </Stack>
-                                </Box>
+                                            )}
+                                        </Stack>
+                                    </Box>
+                                )}
                             </Stack>
+
 
                             {/* Right Column: Photos & Specs */}
                             <Stack spacing={6}>

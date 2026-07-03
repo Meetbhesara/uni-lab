@@ -6,8 +6,10 @@ import {
     FaFolderOpen, FaUpload, FaSearch, FaFilter, FaEye, FaDownload, FaHistory, FaTasks, FaCheckCircle, FaClock, FaFilePdf, FaFileImage, FaFileAlt, FaTrash, FaEnvelope, FaMapMarkedAlt, FaArrowLeft
 } from 'react-icons/fa';
 import axios from 'axios';
+import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
 
 // Use environment variable for real NAS deployment
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 const API_URL = API_BASE_URL.endsWith('/api') ? API_BASE_URL : `${API_BASE_URL}/api`;
 const getCollectedDocCategory = (doc) => {
@@ -35,8 +37,9 @@ const getCollectedDocCategory = (doc) => {
     return 'Reports'; // Default fallback
 };
 
-const AdminDraftingWork = () => {
+const AdminDraftingWork = ({ isInsideServices = false }) => {
     const bgColor = useColorModeValue('gray.50', 'gray.900');
+
     const cardBg = useColorModeValue('white', 'gray.800');
     const toast = useToast();
 
@@ -614,6 +617,7 @@ const AdminDraftingWork = () => {
     return (
         <Box bg={bgColor} minH="calc(100vh - 80px)" p={{ base: 4, md: 8 }}>
             <Container maxW="container.xl" p={0}>
+                {!isInsideServices && <ModulePermissionBar moduleGroupKey="otherServicesGroup" subModuleFilterKey="draftingWork" />}
                 {/* Header */}
                 <Flex justify="space-between" align="center" mb={8} flexWrap="wrap" gap={4}>
                     <HStack spacing={4}>

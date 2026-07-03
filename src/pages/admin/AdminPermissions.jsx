@@ -3,98 +3,7 @@ import { Box, Flex, Text, Heading, VStack, HStack, Select, Spinner, useToast, Ch
 import { FiSave, FiUser, FiLock } from 'react-icons/fi';
 import api from '../../api/axios';
 
-const PERMISSION_MODULES = [
-    {
-        key: 'productsGroup',
-        label: 'Products Module',
-        mainTabKey: 'products',
-        subTabs: [
-            { key: 'products', label: 'Main Tab Access' },
-            { key: 'showStock', label: 'Show/Manage Stock' }
-        ]
-    },
-    {
-        key: 'enquiriesGroup',
-        label: 'Enquiries Module',
-        mainTabKey: 'enquiries',
-        subTabs: [
-            { key: 'enquiries', label: 'Main Tab Access' },
-            { key: 'incomingEnquiries', label: 'Incoming Enquiries' },
-            { key: 'outboundQuotations', label: 'Outbound Quotations' },
-            { key: 'processedHistory', label: 'Processed (History)' }
-        ]
-    },
-    {
-        key: 'vehicleMasterGroup',
-        label: 'Vehicle Master Module',
-        mainTabKey: 'vehicleMaster',
-        subTabs: [
-            { key: 'vehicleMaster', label: 'Main Tab Access' },
-            { key: 'vehicleMaster_form', label: 'Register Vehicle Form' },
-            { key: 'vehicleMaster_view', label: 'View Registered Vehicles' }
-        ]
-    },
-    {
-        key: 'employeeMasterGroup',
-        label: 'Employee Master Module',
-        mainTabKey: 'employeeMaster',
-        subTabs: [
-            { key: 'employeeMaster', label: 'Main Tab Access' },
-            { key: 'employeeMaster_form', label: 'Register Employee Form' },
-            { key: 'employeeMaster_view', label: 'View Registered Employees' }
-        ]
-    },
-    {
-        key: 'clientMasterGroup',
-        label: 'Client Master Module',
-        mainTabKey: 'clientMaster',
-        subTabs: [
-            { key: 'clientMaster', label: 'Main Tab Access' },
-            { key: 'clientMaster_form', label: 'Register Client Form' },
-            { key: 'clientMaster_view', label: 'View Registered Clients' }
-        ]
-    },
-    {
-        key: 'siteMasterGroup',
-        label: 'Site Master Module',
-        mainTabKey: 'siteMaster',
-        subTabs: [
-            { key: 'siteMaster', label: 'Main Tab Access' },
-            { key: 'siteMaster_form', label: 'Register Site Form' },
-            { key: 'siteMaster_view', label: 'View Registered Sites' }
-        ]
-    },
-    {
-        key: 'scheduleMasterGroup',
-        label: 'Schedule Master Module',
-        mainTabKey: 'scheduleMaster',
-        subTabs: [
-            { key: 'scheduleMaster', label: 'Main Tab Access' },
-            { key: 'scheduleMaster_form', label: 'Schedule Visit Form' },
-            { key: 'scheduleMaster_view', label: 'Scheduler View' },
-            { key: 'scheduleMaster_report', label: 'Site Allocation Report' }
-        ]
-    },
-    {
-        key: 'instrumentMasterGroup',
-        label: 'Instrument Master Module',
-        mainTabKey: 'instrumentMaster',
-        subTabs: [
-            { key: 'instrumentMaster', label: 'Main Tab Access' },
-            { key: 'instrumentMaster_form', label: 'Register Instrument Form' },
-            { key: 'instrumentMaster_view', label: 'View Registered Instruments' }
-        ]
-    },
-    {
-        key: 'otherServicesGroup',
-        label: 'Other Services & Reports',
-        subTabs: [
-            { key: 'employeeExpense', label: 'Employee Ledger' },
-            { key: 'draftingWork', label: 'Drafting Work' },
-            { key: 'invoiceReport', label: 'Invoice Report' }
-        ]
-    }
-];
+import { PERMISSION_MODULES } from '../../utils/permissionModules';
 
 const AdminPermissions = () => {
     const [admins, setAdmins] = useState([]);
@@ -151,7 +60,7 @@ const AdminPermissions = () => {
         setPermissions(prev => {
             const next = { ...prev };
             
-            // 1. Update the target key
+            // 1. Update the target key itself
             next[key] = {
                 ...next[key],
                 [type]: value,
@@ -159,21 +68,61 @@ const AdminPermissions = () => {
                 ...(type === 'read' && !value ? { write: false } : {})
             };
 
-            // 2. Smart Toggle Logic for "Main Tab" based on SubTabs
+            // 2. Propagate parent-to-child permissions recursively
+            const propagateParentToChild = (parentKey, isEnabled) => {
+                PERMISSION_MODULES.forEach(mod => {
+                    if (mod.subTabs && mod.subTabs.length > 0) {
+                        const children = mod.subTabs.filter(s => s.parentKey === parentKey);
+                        children.forEach(child => {
+                            if (type === 'read') {
+                                if (!isEnabled) {
+                                    next[child.key] = { read: false, write: false };
+                                    propagateParentToChild(child.key, false);
+                                } else {
+                                    next[child.key] = { ...next[child.key], read: true };
+                                    propagateParentToChild(child.key, true);
+                                }
+                            } else if (type === 'write') {
+                                if (!isEnabled) {
+                                    next[child.key] = { ...next[child.key], write: false };
+                                    propagateParentToChild(child.key, false);
+                                }
+                            }
+                        });
+                    }
+                });
+            };
+            propagateParentToChild(key, value);
+
+            // 3. Propagate child-to-parent permissions recursively (force enabling parent read if child read is enabled)
+            const propagateChildToParent = (childKey) => {
+                PERMISSION_MODULES.forEach(mod => {
+                    if (mod.subTabs && mod.subTabs.length > 0) {
+                        const targetSub = mod.subTabs.find(s => s.key === childKey);
+                        if (targetSub && targetSub.parentKey) {
+                            const parentKey = targetSub.parentKey;
+                            if (type === 'read' && value) {
+                                next[parentKey] = { ...next[parentKey], read: true };
+                                propagateChildToParent(parentKey);
+                            }
+                        }
+                    }
+                });
+            };
+            propagateChildToParent(key);
+
+            // 4. Smart Toggle Logic for the "Main Tab" based on all SubTabs (including children)
             PERMISSION_MODULES.forEach(mod => {
                 if (mod.mainTabKey && mod.subTabs && mod.subTabs.length > 0) {
                     const mainTabKey = mod.mainTabKey;
                     
-                    // If the changed key is a sub-tab of this module (and NOT the main tab itself)
+                    // If the changed key is any subtab (but NOT the main tab itself)
                     if (key !== mainTabKey && mod.subTabs.some(s => s.key === key)) {
-                        
-                        // Check if ANY subtab (excluding the main tab) is TRUE for 'read'
+                        // Check if ANY subtab (excluding the main tab itself) is enabled for read
                         const anySubTabTrue = mod.subTabs.filter(s => s.key !== mainTabKey).some(sub => {
-                            if (sub.key === key) return type === 'read' ? value : next[key]?.read;
                             return next[sub.key]?.read === true;
                         });
 
-                        // Automatically update the Main Tab!
                         if (anySubTabTrue) {
                             next[mainTabKey] = { ...next[mainTabKey], read: true };
                         } else {
@@ -215,6 +164,100 @@ const AdminPermissions = () => {
         } finally {
             setSaving(false);
         }
+    };
+
+    const renderPermissionTree = (items, parentKey = null, depth = 0, moduleConfig = null) => {
+        const levelItems = items.filter(s => {
+            if (parentKey === null) {
+                return !s.parentKey;
+            }
+            return s.parentKey === parentKey;
+        });
+
+        if (levelItems.length === 0) return null;
+
+        return (
+            <VStack align="stretch" spacing={2} w="full" pl={depth > 0 ? 8 : 0} position="relative" py={1}>
+                {depth > 0 && (
+                    <Box 
+                        position="absolute" 
+                        left="18px"
+                        top="0" 
+                        bottom="20px" 
+                        width="2px" 
+                        borderLeft="2px dashed" 
+                        borderColor="gray.300"
+                    />
+                )}
+                {levelItems.map(item => {
+                    const hasChildren = items.some(s => s.parentKey === item.key);
+                    const isParentRead = item.parentKey ? (permissions[item.parentKey]?.read || false) : true;
+                    const isItemRead = (permissions[item.key]?.read && isParentRead) || false;
+
+                    return (
+                        <VStack key={item.key} align="stretch" spacing={2} w="full">
+                            <Flex 
+                                justify="space-between" 
+                                align="center" 
+                                p={depth === 0 ? 3 : 2.5} 
+                                bg={depth === 0 ? "white" : "gray.50"} 
+                                borderRadius="md" 
+                                borderLeft={depth === 0 ? "4px solid" : "none"} 
+                                borderLeftColor="brand.400"
+                                border="1px solid"
+                                borderColor="gray.100"
+                                position="relative"
+                                opacity={isParentRead ? 1 : 0.6}
+                            >
+                                {depth > 0 && (
+                                    <Box 
+                                        position="absolute" 
+                                        left="-20px" 
+                                        top="50%" 
+                                        width="20px" 
+                                        height="2px" 
+                                        borderBottom="2px dashed" 
+                                        borderColor="gray.300"
+                                    />
+                                )}
+                                <HStack spacing={2}>
+                                    {depth > 0 && <Text color="gray.400" fontFamily="monospace">└─</Text>}
+                                    <Text 
+                                        fontWeight={depth === 0 ? "medium" : "normal"} 
+                                        fontSize={depth === 0 ? "md" : "sm"} 
+                                        color="gray.700"
+                                    >
+                                        {item.label}
+                                    </Text>
+                                </HStack>
+                                <HStack spacing={6}>
+                                    <Checkbox 
+                                        colorScheme="brand" 
+                                        size={depth === 0 ? "md" : "sm"}
+                                        isChecked={isItemRead}
+                                        isDisabled={!isParentRead}
+                                        onChange={(e) => handlePermissionChange(item.key, 'read', e.target.checked)}
+                                    >
+                                        Read Access
+                                    </Checkbox>
+                                    <Checkbox 
+                                        colorScheme="red" 
+                                        size={depth === 0 ? "md" : "sm"}
+                                        isChecked={(permissions[item.key]?.write && isParentRead && permissions[item.key]?.read) || false}
+                                        isDisabled={!permissions[item.key]?.read || !isParentRead}
+                                        onChange={(e) => handlePermissionChange(item.key, 'write', e.target.checked)}
+                                        visibility={(moduleConfig && moduleConfig.mainTabKey && item.key === moduleConfig.mainTabKey && moduleConfig.mainTabKey !== 'products') ? 'hidden' : 'visible'}
+                                    >
+                                        Write / Modify
+                                    </Checkbox>
+                                </HStack>
+                            </Flex>
+                            {hasChildren && renderPermissionTree(items, item.key, depth + 1, moduleConfig)}
+                        </VStack>
+                    );
+                })}
+            </VStack>
+        );
     };
 
     if (loading) return <Flex justify="center" p={10}><Spinner size="xl" color="brand.500" /></Flex>;
@@ -318,30 +361,7 @@ const AdminPermissions = () => {
                                                     </HStack>
                                                 </Flex>
                                             ) : (
-                                                // Module with subtabs
-                                                module.subTabs.map(sub => (
-                                                    <Flex key={sub.key} justify="space-between" align="center" p={3} bg="gray.50" borderRadius="md" borderLeft="4px" borderLeftColor="brand.400">
-                                                        <Text fontWeight="medium" color="gray.700">{sub.label}</Text>
-                                                        <HStack spacing={6}>
-                                                            <Checkbox 
-                                                                colorScheme="brand" 
-                                                                isChecked={permissions[sub.key]?.read || false}
-                                                                onChange={(e) => handlePermissionChange(sub.key, 'read', e.target.checked)}
-                                                            >
-                                                                Read Access
-                                                            </Checkbox>
-                                                            <Checkbox 
-                                                                colorScheme="red" 
-                                                                isChecked={permissions[sub.key]?.write || false}
-                                                                isDisabled={!permissions[sub.key]?.read}
-                                                                onChange={(e) => handlePermissionChange(sub.key, 'write', e.target.checked)}
-                                                                visibility={(module.mainTabKey && sub.key === module.mainTabKey && module.mainTabKey !== 'products') ? 'hidden' : 'visible'}
-                                                            >
-                                                                Write / Modify
-                                                            </Checkbox>
-                                                        </HStack>
-                                                    </Flex>
-                                                ))
+                                                renderPermissionTree(module.subTabs, null, 0, module)
                                             )}
                                         </VStack>
                                     </AccordionPanel>

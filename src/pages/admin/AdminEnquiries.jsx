@@ -4,6 +4,10 @@ import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, 
 import { FaWhatsapp, FaChevronLeft } from 'react-icons/fa';
 import api from '../../api/axios';
 import { DEMO_ENQUIRIES, DEMO_QUOTATIONS } from '../../data/mockData';
+import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
+import { hasPermission } from '../../utils/permissions';
+
+
 
 const AdminEnquiries = () => {
     const [enquiries, setEnquiries] = useState([]);
@@ -94,7 +98,9 @@ const AdminEnquiries = () => {
     ];
 
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const isSuperAdmin = user.email === 'iatulkanak@gmail.com';
+    const isSuperAdmin = user.isSuperAdmin || user.email === 'iatulkanak@gmail.com';
+    const canShowDealerPrice = hasPermission(user, 'showDealerPrice', 'read');
+
 
     const toast = useToast();
 
@@ -790,6 +796,7 @@ const AdminEnquiries = () => {
 
     return (
         <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100">
+            <ModulePermissionBar moduleGroupKey="enquiriesGroup" />
             <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={8} direction={{ base: 'column', md: 'row' }} gap={4}>
                 <Stack spacing={1}>
                     <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
@@ -1188,7 +1195,8 @@ const AdminEnquiries = () => {
                                 <Box>
                                     <Flex justify="space-between" align="center" mb={3}>
                                         <Text fontWeight="bold" color="brand.600">Products & Pricing</Text>
-                                        {isSuperAdmin && (
+                                        {(isSuperAdmin || canShowDealerPrice) && (
+
                                             <Checkbox
                                                 colorScheme="brand"
                                                 isChecked={isGlobalDealerPrice}
@@ -1263,7 +1271,7 @@ const AdminEnquiries = () => {
                                                         bg="white"
                                                     />
                                                     <Box mt={1} fontSize="10px" color="gray.500">
-                                                        {isSuperAdmin && isGlobalDealerPrice
+                                                        {(isSuperAdmin || canShowDealerPrice) && isGlobalDealerPrice
                                                             ? `Dealer: ₹${item.dealerPrice || 0}`
                                                             : `Sell: ₹${item.sellingPriceStart || 0} - ${item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'}`
                                                         }
