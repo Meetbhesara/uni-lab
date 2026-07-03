@@ -780,7 +780,9 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             if (s.dayStatus === 'Rejected') return false;
             
             const opId = String(s.operative?._id || s.operative || '');
-            return opId === targetId;
+            const isOp = opId === targetId;
+            const isHelper = (s.helpers || []).some(h => String(h?._id || h) === targetId);
+            return isOp || isHelper;
         });
     }, [daySchedules, selectedEmployeeId]);
 
@@ -804,8 +806,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     setAttendanceRemark('Schedule was rejected or skipped');
                 }
             } else {
-                setAttendance('Absent');
-                setAttendanceRemark('No schedule assigned');
+                setAttendance('Present');
+                setAttendanceRemark('Unscheduled Duty');
             }
         }
     }, [employeeSchedules, date, selectedEmployeeId]);
