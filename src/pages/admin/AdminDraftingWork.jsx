@@ -505,6 +505,18 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
         fetchDrafts();
     }, [filterClient, filterSite, filterScheduleDate]);
 
+    useEffect(() => {
+        const handleRealtimeUpdate = (e) => {
+            const type = e.detail?.type;
+            // Refresh on schedule, drafting, client or expense changes since they all affect this view
+            if (!type || ['schedule', 'drafting', 'client', 'expense'].includes(type)) {
+                fetchDrafts();
+            }
+        };
+        window.addEventListener('app-realtime-update', handleRealtimeUpdate);
+        return () => window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
+    }, [filterClient, filterSite, filterScheduleDate]);
+
     const getFileIcon = (type) => {
         switch (type?.toLowerCase()) {
             case 'pdf': return FaFilePdf;

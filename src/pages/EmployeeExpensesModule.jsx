@@ -759,6 +759,25 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         fetchCommittedExpenses();
     }, [selectedEmployeeId, date]);
 
+    useEffect(() => {
+        const handleRealtimeUpdate = () => {
+            fetchData();
+            // Re-run schedule fetch if available
+            try {
+                const fetchDaySchedulesFunc = async () => {
+                    const res = await api.get('/schedule-master', { params: { date } });
+                    if (res.data.success) {
+                        setDaySchedules(res.data.data || []);
+                    }
+                };
+                fetchDaySchedulesFunc();
+            } catch (e) {}
+            fetchCommittedExpenses();
+        };
+        window.addEventListener('app-realtime-update', handleRealtimeUpdate);
+        return () => window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
+    }, [date, selectedEmployeeId]);
+
     // Filter employees down to scheduled operatives on this date (excluding rejected)
     const scheduledEmployees = useMemo(() => {
         const ids = new Set();
@@ -790,6 +809,9 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     useEffect(() => {
         if (!date || !selectedEmployeeId) return;
 
+        // If we have saved/committed expenses for this date, do NOT overwrite its saved attendance
+        if (committedExpenses && committedExpenses.length > 0) return;
+
         const selectedDate = new Date(date);
         selectedDate.setHours(0, 0, 0, 0);
         const today = new Date();
@@ -806,11 +828,15 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     setAttendanceRemark('Schedule was rejected or skipped');
                 }
             } else {
-                setAttendance('Present');
-                setAttendanceRemark('Unscheduled Duty');
+                setAttendance('Absent');
+                setAttendanceRemark('Unscheduled');
             }
+        } else {
+            // Future dates: default to Absent because the work day hasn't arrived/happened yet
+            setAttendance('Absent');
+            setAttendanceRemark('Future Date');
         }
-    }, [employeeSchedules, date, selectedEmployeeId]);
+    }, [employeeSchedules, date, selectedEmployeeId, committedExpenses]);
 
     // Active schedule fallback for headers and non-multiple logic
     const activeSchedule = employeeSchedules.length > 0 ? employeeSchedules[0] : null;

@@ -7,6 +7,7 @@ import { FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut, FiGlobe, FiArrow
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
+import { useRealtimeSync } from '../../utils/useRealtimeSync';
 
 const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: null },
@@ -189,6 +190,8 @@ const AdminLayout = () => {
     useEffect(() => {
         if (refreshUser) refreshUser();
     }, [location.pathname]);
+
+    useRealtimeSync(user);
 
     if (loading) return null;
     if (!user || !user.isAdmin) return null;

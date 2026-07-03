@@ -64,57 +64,64 @@ const AdminDashboard = () => {
     const [adminForm, setAdminForm] = useState({ name: '', email: '', phone: '', permissions: defaultPermissions });
     const [adminLoading, setAdminLoading] = useState(false);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            let pCount = 0;
-            try {
-                const prodRes = await api.get('/products');
-                const pData = prodRes.data.products || prodRes.data.data || prodRes.data;
-                pCount = Array.isArray(pData) ? pData.length : 0;
-            } catch (err) {
-                pCount = DEMO_PRODUCTS.length;
-            }
+    const fetchData = async () => {
+        let pCount = 0;
+        try {
+            const prodRes = await api.get('/products');
+            const pData = prodRes.data.products || prodRes.data.data || prodRes.data;
+            pCount = Array.isArray(pData) ? pData.length : 0;
+        } catch (err) {
+            pCount = DEMO_PRODUCTS.length;
+        }
 
-            try {
-                const [quoteRes, enqRes] = await Promise.all([
-                    api.get('/quotations'),
-                    api.get('/enquiries')
-                ]);
-                const qData = quoteRes.data.quotations || quoteRes.data.data || quoteRes.data || [];
-                const eData = enqRes.data.enquiries || enqRes.data.data || enqRes.data || [];
-                setStats(prev => ({
-                    ...prev,
-                    products: pCount,
-                    totalEnquiries: Array.isArray(eData) ? eData.length : 0,
-                    pendingEnquiries: Array.isArray(eData) ? eData.filter(e => !e.isSeen).length : 0,
-                    doneQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Done').length : 0,
-                    rejectedQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Reject').length : 0,
-                }));
-            } catch (err) {
-                setStats(prev => ({ ...prev, products: pCount, totalEnquiries: DEMO_ENQUIRIES.length, pendingEnquiries: 0, doneQuotations: 0, rejectedQuotations: 0 }));
-            } finally {
-                setLoading(false);
-            }
-        };
+        try {
+            const [quoteRes, enqRes] = await Promise.all([
+                api.get('/quotations'),
+                api.get('/enquiries')
+            ]);
+            const qData = quoteRes.data.quotations || quoteRes.data.data || quoteRes.data || [];
+            const eData = enqRes.data.enquiries || enqRes.data.data || enqRes.data || [];
+            setStats(prev => ({
+                ...prev,
+                products: pCount,
+                totalEnquiries: Array.isArray(eData) ? eData.length : 0,
+                pendingEnquiries: Array.isArray(eData) ? eData.filter(e => !e.isSeen).length : 0,
+                doneQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Done').length : 0,
+                rejectedQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Reject').length : 0,
+            }));
+        } catch (err) {
+            setStats(prev => ({ ...prev, products: pCount, totalEnquiries: DEMO_ENQUIRIES.length, pendingEnquiries: 0, doneQuotations: 0, rejectedQuotations: 0 }));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            setUsersLoading(true);
+            const res = await api.get('/auth/users');
+            const data = res.data.users || res.data || [];
+            setUsers(Array.isArray(data) ? data : []);
+            setStats(prev => ({ ...prev, totalUsers: res.data.total || data.length }));
+        } catch (err) {
+            console.error('Failed to fetch users:', err);
+        } finally {
+            setUsersLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchData();
+        fetchUsers();
     }, []);
 
-    // Fetch regular users
     useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                setUsersLoading(true);
-                const res = await api.get('/auth/users');
-                const data = res.data.users || res.data || [];
-                setUsers(Array.isArray(data) ? data : []);
-                setStats(prev => ({ ...prev, totalUsers: res.data.total || data.length }));
-            } catch (err) {
-                console.error('Failed to fetch users:', err);
-            } finally {
-                setUsersLoading(false);
-            }
+        const handleRealtimeUpdate = () => {
+            fetchData();
+            fetchUsers();
         };
-        fetchUsers();
+        window.addEventListener('app-realtime-update', handleRealtimeUpdate);
+        return () => window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
     }, []);
 
     const handleCreateAdmin = async () => {

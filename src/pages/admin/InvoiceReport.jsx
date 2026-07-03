@@ -113,6 +113,17 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
     useEffect(() => { fetchVisitSchedules(); }, [fetchVisitSchedules]);
 
+    useEffect(() => {
+        const handleRealtimeUpdate = (e) => {
+            const type = e.detail?.type;
+            if (!type || ['schedule', 'expense'].includes(type)) {
+                fetchVisitSchedules();
+            }
+        };
+        window.addEventListener('app-realtime-update', handleRealtimeUpdate);
+        return () => window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
+    }, [fetchVisitSchedules]);
+
     // Mark invoice as completed / revert to pending for a single schedule
     const toggleInvoiceStatus = async (schedule) => {
         const next = schedule.invoiceStatus === 'Completed' ? 'Pending' : 'Completed';
