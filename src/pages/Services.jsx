@@ -3742,6 +3742,7 @@ const SiteMasterForm = () => {
 
 const ScheduleMasterForm = () => {
     const toast = useToast();
+    const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [clients, setClients] = useState([]);
     const [sites, setSites] = useState([]);
@@ -3761,6 +3762,13 @@ const ScheduleMasterForm = () => {
     const [showSiteList, setShowSiteList] = useState(false);
     const [selectedClientName, setSelectedClientName] = useState('');
     const [selectedSiteName, setSelectedSiteName] = useState('');
+
+    // Permission-gated inner tabs
+    const scheduleInnerTabs = [
+        { key: 'scheduleMaster_form', label: 'Schedule Site Visit Form', icon: FaCalendarAlt, color: 'teal.600' },
+        { key: 'scheduleMaster_view', label: 'Scheduler View', icon: FaListUl, color: 'gray.800' },
+        { key: 'scheduleMaster_report', label: 'Site Allocation Report', icon: FaMapMarkedAlt, color: 'blue.600' },
+    ].filter(t => hasPermission(user, t.key, 'read'));
 
     const [formData, setFormData] = useState({
         client: '', site: '', scheduleDate: '', endDate: '', includeSundays: false, workForAppley: '',
@@ -3785,20 +3793,29 @@ const ScheduleMasterForm = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            try {
-                const [cRes, eRes, vRes, iRes, lRes] = await Promise.all([
-                    api.get('/client-master'),
-                    api.get('/employee-master'),
-                    api.get('/vehicle-master'),
-                    api.get('/instrument-master'),
-                    api.get('/site-master/ledgers')
-                ]);
-                if (cRes.data.success) setClients(cRes.data.data);
-                if (eRes.data.success) setEmployees(eRes.data.data);
-                if (vRes.data.success) setVehicles(vRes.data.data);
-                if (iRes.data.success) setInstrList(iRes.data.data);
-                if (lRes.data.success) setLedgers(lRes.data.data);
-            } catch (err) { console.error(err); }
+            // Use allSettled so that a failure in one API call does not block
+            // the others from loading (e.g. ledgers failing must NOT empty the clients list)
+            const [cRes, eRes, vRes, iRes, lRes] = await Promise.allSettled([
+                api.get('/client-master'),
+                api.get('/employee-master'),
+                api.get('/vehicle-master'),
+                api.get('/instrument-master'),
+                api.get('/site-master/ledgers')
+            ]);
+            if (cRes.status === 'fulfilled' && cRes.value.data.success) setClients(cRes.value.data.data);
+            else if (cRes.status === 'rejected') console.error('Failed to load clients:', cRes.reason);
+
+            if (eRes.status === 'fulfilled' && eRes.value.data.success) setEmployees(eRes.value.data.data);
+            else if (eRes.status === 'rejected') console.error('Failed to load employees:', eRes.reason);
+
+            if (vRes.status === 'fulfilled' && vRes.value.data.success) setVehicles(vRes.value.data.data);
+            else if (vRes.status === 'rejected') console.error('Failed to load vehicles:', vRes.reason);
+
+            if (iRes.status === 'fulfilled' && iRes.value.data.success) setInstrList(iRes.value.data.data);
+            else if (iRes.status === 'rejected') console.error('Failed to load instruments:', iRes.reason);
+
+            if (lRes.status === 'fulfilled' && lRes.value.data.success) setLedgers(lRes.value.data.data);
+            else if (lRes.status === 'rejected') console.error('Failed to load ledgers:', lRes.reason);
         };
         fetchData();
     }, []);
@@ -4033,13 +4050,15 @@ const ScheduleMasterForm = () => {
             <Container maxW="container.xl">
                 <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
                     <TabList mb={6} bg="white" p={2} borderRadius="2xl" boxShadow="sm" overflowX="auto">
-                        <Tab _selected={{ color: 'white', bg: 'teal.600' }} px={6} borderRadius="xl" fontWeight="bold" whiteSpace="nowrap"><Icon as={FaCalendarAlt} mr={2} /> Schedule Site Visit Form</Tab>
-                        <Tab _selected={{ color: 'white', bg: 'gray.800' }} px={6} borderRadius="xl" fontWeight="bold" whiteSpace="nowrap"><Icon as={FaListUl} mr={2} /> Scheduler View</Tab>
-                        <Tab _selected={{ color: 'white', bg: 'blue.600' }} px={6} borderRadius="xl" fontWeight="bold" whiteSpace="nowrap"><Icon as={FaMapMarkedAlt} mr={2} /> Site Allocation Report</Tab>
+                        {scheduleInnerTabs.map(t => (
+                            <Tab key={t.key} _selected={{ color: 'white', bg: t.color }} px={6} borderRadius="xl" fontWeight="bold" whiteSpace="nowrap">
+                                <Icon as={t.icon} mr={2} /> {t.label}
+                            </Tab>
+                        ))}
                     </TabList>
                     <TabPanels>
                         {/* ── TAB 1: Form ── */}
-                        <TabPanel p={0}>
+                        {scheduleInnerTabs.some(t => t.key === 'scheduleMaster_form') && (<TabPanel p={0}>
                             <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
                         <Box bg={editId ? 'purple.600' : 'teal.600'} px={7} py={5} color="white">
                             <HStack justify="space-between">
@@ -4181,10 +4200,10 @@ const ScheduleMasterForm = () => {
                             </form>
                         </CardBody>
                     </Card>
-                </TabPanel>
+                </TabPanel>)}
 
                 {/* ── TAB 2: Schedule Viewer ── */}
-                <TabPanel p={0}>
+                {scheduleInnerTabs.some(t => t.key === 'scheduleMaster_view') && (<TabPanel p={0}>
                     <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
                         <Box bg="gray.800" px={7} py={5} color="white">
                             <HStack justify="space-between">
@@ -4303,12 +4322,12 @@ const ScheduleMasterForm = () => {
                             )}
                         </CardBody>
                     </Card>
-                </TabPanel>
+                </TabPanel>)}
 
                 {/* ── TAB 3: Site Allocation Report ── */}
-                <TabPanel p={0}>
+                {scheduleInnerTabs.some(t => t.key === 'scheduleMaster_report') && (<TabPanel p={0}>
                     <AdminSiteAllocation />
-                </TabPanel>
+                </TabPanel>)}
             </TabPanels>
         </Tabs>
     </Container>

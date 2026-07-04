@@ -2414,9 +2414,12 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
         return ids;
     }, [daySchedules]);
 
-    // Employees NOT in the scheduler for this date
+    // Employees NOT in the scheduler for this date — and who are Active
     const unscheduledEmployees = useMemo(() => {
-        return employees.filter(e => !scheduledIds.has(String(e._id)));
+        return employees.filter(e =>
+            e.status !== 'Deactive' &&           // ← exclude deactivated employees
+            !scheduledIds.has(String(e._id))
+        );
     }, [employees, scheduledIds]);
 
     // Fetch existing attendance for this date
