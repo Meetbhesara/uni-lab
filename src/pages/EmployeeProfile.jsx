@@ -73,28 +73,29 @@ const EmployeeProfile = () => {
     const [unauthorized, setUnauthorized] = useState(false);
     const [sessionExpiry, setSessionExpiry] = useState(null);
 
-    const doLogout = (reason = '') => {
+    const doLogout = () => {
+        sessionStorage.removeItem('employeeToken');
+        sessionStorage.removeItem('employeeData');
         localStorage.removeItem('employeeToken');
         localStorage.removeItem('employeeData');
-        navigate('/employee/login', { state: { reason } });
+        navigate('/');
     };
 
     useEffect(() => {
-        const token = localStorage.getItem('employeeToken');
+        const token = sessionStorage.getItem('employeeToken') || localStorage.getItem('employeeToken');
         if (!token) { navigate('/employee/login'); return; }
 
-        // ── Midnight Auto-Logout ──────────────────────────────────────────
+        // ── Midnight Auto-Logout (Redirects to Home page) ──────────────────
         const scheduleMidnightLogout = () => {
             const now = new Date();
             const midnight = new Date();
             midnight.setHours(24, 0, 0, 0); // next midnight
             const msUntilMidnight = midnight.getTime() - now.getTime();
 
-            // Format "Session until midnight"
             setSessionExpiry('midnight');
 
             const timer = setTimeout(() => {
-                doLogout('expired');
+                doLogout();
             }, msUntilMidnight);
 
             return timer;
@@ -108,22 +109,36 @@ const EmployeeProfile = () => {
             const isAfterMidnight = now.getHours() === 0 && now.getMinutes() < 5;
             if (isAfterMidnight) {
                 clearTimeout(midnightTimer);
-                doLogout('expired');
+                doLogout();
             }
         }, 60 * 60 * 1000); // every hour
+
+        const handleGlobalSessionExpire = () => doLogout();
+        window.addEventListener('auth-session-expired', handleGlobalSessionExpire);
 
         return () => {
             clearTimeout(midnightTimer);
             clearInterval(hourlyCheck);
+            window.removeEventListener('auth-session-expired', handleGlobalSessionExpire);
         };
         // ─────────────────────────────────────────────────────────────────
     }, [navigate]);
 
     useEffect(() => {
-        const token = localStorage.getItem('employeeToken');
-        const cached = localStorage.getItem('employeeData');
+        const token = sessionStorage.getItem('employeeToken') || localStorage.getItem('employeeToken');
+        const cached = sessionStorage.getItem('employeeData') || localStorage.getItem('employeeData');
 
-        if (!token) return;
+        if (sessionStorage.getItem('employeeToken')) {
+            // Active session
+        } else if (token) {
+            // Browser was closed -> wipe residual localStorage token to force re-login
+            localStorage.removeItem('employeeToken');
+            localStorage.removeItem('employeeData');
+            navigate('/employee/login');
+            return;
+        } else {
+            return;
+        }
 
         // Load cached immediately for instant render
         if (cached) {
@@ -138,11 +153,13 @@ const EmployeeProfile = () => {
                 });
                 if (res.data.success) {
                     setEmployee(res.data.data);
-                    localStorage.setItem('employeeData', JSON.stringify(res.data.data));
+                    sessionStorage.setItem('employeeData', JSON.stringify(res.data.data));
                 }
             } catch (err) {
                 if (err.response?.status === 401 || err.response?.status === 403) {
                     setUnauthorized(true);
+                    sessionStorage.removeItem('employeeToken');
+                    sessionStorage.removeItem('employeeData');
                     localStorage.removeItem('employeeToken');
                     localStorage.removeItem('employeeData');
                 }

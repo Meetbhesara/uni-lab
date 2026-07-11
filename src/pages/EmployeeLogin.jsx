@@ -55,8 +55,10 @@ const EmployeeLogin = () => {
         try {
             const res = await api.post('/employee-auth/verify-otp', { phone: phone.trim(), otp });
             if (res.data.success) {
-                localStorage.setItem('employeeToken', res.data.token);
-                localStorage.setItem('employeeData', JSON.stringify(res.data.employee));
+                sessionStorage.setItem('employeeToken', res.data.token);
+                sessionStorage.setItem('employeeData', JSON.stringify(res.data.employee));
+                localStorage.removeItem('employeeToken');
+                localStorage.removeItem('employeeData');
                 navigate('/employee/profile');
             }
         } catch (err) {

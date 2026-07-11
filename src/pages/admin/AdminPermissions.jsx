@@ -92,6 +92,32 @@ const AdminPermissions = () => {
                 ...(type === 'write' && value ? { read: true } : {})
             };
 
+            // ── GATE MODULES: Dashboard & Products ──
+            // Parent Read gates child Read, parent Write gates child Write.
+            // Parent OFF → children cleared. Parent ON → children unchanged (user controls manually).
+            // Children never affect parent.
+            const INDEPENDENT_GROUPS = ['dashboardGroup', 'productsGroup'];
+            const isIndependent = PERMISSION_MODULES.some(mod =>
+                INDEPENDENT_GROUPS.includes(mod.key) &&
+                (mod.mainTabKey === key || mod.subTabs.some(s => s.key === key))
+            );
+            if (isIndependent) {
+                if (!value) {
+                    const clearChildren = (parentKey) => {
+                        getChildren(parentKey).forEach(childKey => {
+                            if (type === 'read') {
+                                next[childKey] = { read: false, write: false };
+                            } else if (type === 'write') {
+                                next[childKey] = { ...next[childKey], write: false };
+                            }
+                            clearChildren(childKey);
+                        });
+                    };
+                    clearChildren(key);
+                }
+                return next;
+            }
+
             // 2. Propagate DOWN from parent to all descendants
             const propagateDown = (parentK, propType, isEnabled) => {
                 getChildren(parentK).forEach(childKey => {
@@ -135,11 +161,18 @@ const AdminPermissions = () => {
                         next[parentKey] = { ...next[parentKey], write: true };
                     }
                     propagateUp(parentKey, propType, true);
+                } else if (propType === 'read') {
+                    // Disabling read on child → check if any sibling still has read
+                    const siblings = getChildren(parentKey).filter(k => k !== childKey);
+                    const anyRead = siblings.some(sk => next[sk]?.read === true);
+                    if (!anyRead) {
+                        next[parentKey] = { ...next[parentKey], read: false, write: false };
+                        propagateUp(parentKey, 'read', false);
+                    }
                 } else if (propType === 'write') {
                     // Disabling write on child → check if any sibling still has write
                     const siblings = getChildren(parentKey).filter(k => k !== childKey);
                     const anyWrite = siblings.some(sk => next[sk]?.write === true);
-                    // Also check if parent itself has explicit write we should preserve
                     if (!anyWrite) {
                         next[parentKey] = { ...next[parentKey], write: false };
                         propagateUp(parentKey, 'write', false);
@@ -179,6 +212,10 @@ const AdminPermissions = () => {
 
         if (levelItems.length === 0) return null;
 
+        // Independent modules: parent state has no effect on children
+        const INDEPENDENT_GROUPS = ['dashboardGroup', 'productsGroup'];
+        const isIndependent = moduleConfig && INDEPENDENT_GROUPS.includes(moduleConfig.key);
+
         return (
             <VStack align="stretch" spacing={2} w="full" pl={depth > 0 ? 8 : 0} position="relative" py={1}>
                 {depth > 0 && (
@@ -194,8 +231,25 @@ const AdminPermissions = () => {
                 )}
                 {levelItems.map(item => {
                     const hasChildren = items.some(s => s.parentKey === item.key);
-                    const isParentRead = item.parentKey ? (permissions[item.parentKey]?.read || false) : true;
-                    const isItemRead = (permissions[item.key]?.read && isParentRead) || false;
+                    const parentPerms = item.parentKey ? (permissions[item.parentKey] || {}) : null;
+
+                    // Gate model: parent Read gates child Read, parent Write gates child Write
+                    const effectiveParentRead = isIndependent
+                        ? (parentPerms ? (parentPerms.read || false) : true)
+                        : (item.parentKey ? (permissions[item.parentKey]?.read || false) : true);
+
+                    const effectiveParentWrite = isIndependent
+                        ? (parentPerms ? (parentPerms.write || false) : true)
+                        : true;
+
+                    const isItemRead = permissions[item.key]?.read || false;
+
+                    const isReadDisabled  = !effectiveParentRead;
+                    const isWriteDisabled = isIndependent
+                        ? (!isItemRead || !effectiveParentWrite)
+                        : !((permissions[item.key]?.read && effectiveParentRead) || false);
+
+                    const isWriteChecked = (permissions[item.key]?.write && isItemRead) || false;
 
                     return (
                         <VStack key={item.key} align="stretch" spacing={2} w="full">
@@ -210,7 +264,7 @@ const AdminPermissions = () => {
                                 border="1px solid"
                                 borderColor="gray.100"
                                 position="relative"
-                                opacity={isParentRead ? 1 : 0.6}
+                                opacity={effectiveParentRead ? 1 : 0.6}
                             >
                                 {depth > 0 && (
                                     <Box 
@@ -238,7 +292,7 @@ const AdminPermissions = () => {
                                         colorScheme="brand" 
                                         size={depth === 0 ? "md" : "sm"}
                                         isChecked={isItemRead}
-                                        isDisabled={!isParentRead}
+                                        isDisabled={isReadDisabled}
                                         onChange={(e) => handlePermissionChange(item.key, 'read', e.target.checked)}
                                     >
                                         Read Access
@@ -246,8 +300,8 @@ const AdminPermissions = () => {
                                     <Checkbox 
                                         colorScheme="red" 
                                         size={depth === 0 ? "md" : "sm"}
-                                        isChecked={(permissions[item.key]?.write && isItemRead) || false}
-                                        isDisabled={!isItemRead}
+                                        isChecked={isWriteChecked}
+                                        isDisabled={isWriteDisabled}
                                         onChange={(e) => handlePermissionChange(item.key, 'write', e.target.checked)}
                                     >
                                         Write / Modify

@@ -44,11 +44,21 @@ const AdminLoginReportView = () => {
         }
     };
 
+    const getDayHeaderInfo = (dayNum) => {
+        if (!month) return { dateStr: `${dayNum}`, dayName: '', csvHeader: `${dayNum}` };
+        const [year, m] = month.split('-');
+        const dateObj = new Date(parseInt(year), parseInt(m) - 1, dayNum);
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+        const dateStr = dateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+        const csvHeader = `${dateStr} (${dayName})`;
+        return { dateStr, dayName, csvHeader };
+    };
+
     const handleExportCSV = () => {
         if (!reportData.length) return;
 
         // Build headers
-        const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`).join(',');
+        const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => getDayHeaderInfo(i + 1).csvHeader).join(',');
         let csv = `Admin Name,Email,Phone,Present Days,Absent Days,Attendance %,${dayHeaders}\n`;
 
         reportData.forEach(admin => {
@@ -103,7 +113,9 @@ const AdminLoginReportView = () => {
                         <th style="width: 80px;">Rate</th>`;
 
         for (let i = 1; i <= daysInMonth; i++) {
-            html += `<th style="width: 90px;">Day ${i}</th>`;
+            const { dateStr, dayName } = getDayHeaderInfo(i);
+            const dayLabel = `${dateStr}<br/><span style="font-size: 10px; color: #E9D8FD;">${dayName}</span>`;
+            html += `<th style="width: 95px;">${dayLabel}</th>`;
         }
 
         html += `   </tr>
@@ -130,7 +142,7 @@ const AdminLoginReportView = () => {
                 let content = '-';
                 if (d.status === 'Present') {
                     cellClass = 'present';
-                    content = `PRESENT<br/><span style="font-size: 10px; color: #234E52;">${d.firstLogin}</span>`;
+                    content = `PRESENT<br/><span style="font-size: 10px; color: #234E52;">In: ${d.firstLogin}<br/>Out: ${d.logoutTime || d.lastLogin}</span>`;
                 } else if (d.status === 'Absent') {
                     cellClass = 'absent';
                     content = 'ABSENT';
@@ -235,11 +247,17 @@ const AdminLoginReportView = () => {
                                 <Th color="white" py={3} textAlign="center" w="80px">Present</Th>
                                 <Th color="white" py={3} textAlign="center" w="80px">Absent</Th>
                                 <Th color="white" py={3} textAlign="center" w="80px">Rate</Th>
-                                {Array.from({ length: daysInMonth }, (_, i) => (
-                                    <Th key={i} color="white" py={3} textAlign="center" minW="85px" fontSize="10px">
-                                        Day {i + 1}
-                                    </Th>
-                                ))}
+                                {Array.from({ length: daysInMonth }, (_, i) => {
+                                    const { dateStr, dayName } = getDayHeaderInfo(i + 1);
+                                    return (
+                                        <Th key={i} color="white" py={2} px={1} textAlign="center" minW="85px">
+                                            <VStack spacing={0}>
+                                                <Text fontSize="11px" fontWeight="extrabold" lineHeight="1.2">{dateStr}</Text>
+                                                <Text fontSize="9px" color="purple.200" fontWeight="bold">{dayName}</Text>
+                                            </VStack>
+                                        </Th>
+                                    );
+                                })}
                             </Tr>
                         </Thead>
                         <Tbody>
@@ -265,16 +283,24 @@ const AdminLoginReportView = () => {
                                     {admin.dailyAttendance.map(d => {
                                         if (d.status === 'Present') {
                                             return (
-                                                <Td key={d.day} textAlign="center" bg="green.50" borderRight="1px" borderColor="green.100">
-                                                    <Tooltip label={`First Login: ${d.firstLogin} | Last Login: ${d.lastLogin} (${d.loginCount} logins)`}>
+                                                <Td key={d.day} textAlign="center" bg="green.50" borderRight="1px" borderColor="green.100" p={1.5}>
+                                                    <Tooltip label={`Login Time: ${d.firstLogin} | Logout Time: ${d.logoutTime || d.lastLogin} (${d.loginCount} session${d.loginCount > 1 ? 's' : ''})`}>
                                                         <Box>
-                                                            <Badge colorScheme="green" fontSize="9px" px={1.5} py={0.5} borderRadius="md">
+                                                            <Badge colorScheme="green" fontSize="9px" px={1.5} py={0.5} borderRadius="md" mb={1}>
                                                                 PRESENT
                                                             </Badge>
-                                                            <HStack justify="center" spacing={1} mt={0.5}>
-                                                                <Icon as={FiClock} w={2.5} h={2.5} color="green.700" />
-                                                                <Text fontSize="8px" fontWeight="bold" color="green.800">{d.firstLogin}</Text>
-                                                            </HStack>
+                                                            <VStack spacing={0.5} align="center">
+                                                                <HStack justify="center" spacing={1}>
+                                                                    <Icon as={FiClock} w={2.5} h={2.5} color="green.700" />
+                                                                    <Text fontSize="8px" fontWeight="extrabold" color="green.800">In: {d.firstLogin}</Text>
+                                                                </HStack>
+                                                                <HStack justify="center" spacing={1}>
+                                                                    <Icon as={FiClock} w={2.5} h={2.5} color={d.logoutTime?.includes('Active') ? 'blue.600' : 'red.600'} />
+                                                                    <Text fontSize="8px" fontWeight="extrabold" color={d.logoutTime?.includes('Active') ? 'blue.700' : 'red.700'}>
+                                                                        Out: {d.logoutTime || d.lastLogin}
+                                                                    </Text>
+                                                                </HStack>
+                                                            </VStack>
                                                         </Box>
                                                     </Tooltip>
                                                 </Td>

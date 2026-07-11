@@ -1,5 +1,15 @@
 export const PERMISSION_MODULES = [
     {
+        key: 'dashboardGroup',
+        label: 'Dashboard Module',
+        mainTabKey: 'dashboard',
+        subTabs: [
+            { key: 'dashboard', label: 'Main Tab Access (Dashboard Overview & Stats)' },
+            { key: 'dashboard_admins', label: 'Admin Accounts View/Manage', parentKey: 'dashboard' },
+            { key: 'dashboard_users', label: 'Registered Users View/Manage', parentKey: 'dashboard' }
+        ]
+    },
+    {
         key: 'productsGroup',
         label: 'Products Module',
         mainTabKey: 'products',

@@ -2418,6 +2418,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     const unscheduledEmployees = useMemo(() => {
         return employees.filter(e =>
             e.status !== 'Deactive' &&           // ← exclude deactivated employees
+            !e.isLinkedAdmin &&                  // ← exclude employees linked to an Admin user account
             !scheduledIds.has(String(e._id))
         );
     }, [employees, scheduledIds]);

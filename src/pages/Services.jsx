@@ -7,7 +7,7 @@ import {
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer,
-    NumberInput, NumberInputField
+    NumberInput, NumberInputField, Spinner
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
@@ -784,6 +784,25 @@ const EmployeeMasterForm = () => {
     const [employees, setEmployees] = useState([]);
     const [editId, setEditId] = useState('');
     const [viewEmployee, setViewEmployee] = useState(null);
+    const [selectedReportEmployee, setSelectedReportEmployee] = useState(null);
+    const [attendanceDetailList, setAttendanceDetailList] = useState([]);
+    const [attendanceDetailLoading, setAttendanceDetailLoading] = useState(false);
+
+    const handleRowClick = async (emp) => {
+        setSelectedReportEmployee(emp);
+        setAttendanceDetailLoading(true);
+        try {
+            const res = await api.get(`/employee-master/${emp._id}/attendance-detail?month=${reportMonthFilter}`);
+            if (res.data.success) {
+                setAttendanceDetailList(res.data.data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch detailed attendance", err);
+            setAttendanceDetailList([]);
+        } finally {
+            setAttendanceDetailLoading(false);
+        }
+    };
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
     const [employeeViewSubTab, setEmployeeViewSubTab] = useState('active'); // 'active' or 'deactive'
@@ -1238,7 +1257,7 @@ const EmployeeMasterForm = () => {
     };
 
     const getMonthlyPayment = (emp, month) => {
-        return emp.monthlyPayments?.find(p => p.month === month) || { paymentMode: 'Cash', paymentStatus: 'Pending', presentDays: null, absentDays: null, upad: 0 };
+        return emp.monthlyPayments?.find(p => p.month === month) || { paymentMode: 'Cash', paymentStatus: 'Pending', presentDays: null, absentDays: null, upad: 0, incentive: 0 };
     };
 
     // Returns total days in the given YYYY-MM string
@@ -1285,10 +1304,10 @@ const EmployeeMasterForm = () => {
         <body>
             <table>
                 <tr>
-                    <td colspan="16" class="title-banner">EMPLOYEE MONTHLY PAYMENT REPORT — ${month}</td>
+                    <td colspan="17" class="title-banner">EMPLOYEE MONTHLY PAYMENT REPORT — ${month}</td>
                 </tr>
                 <tr>
-                    <td colspan="16" style="background-color: #e2e8f0; font-weight: bold; padding: 8px; color: #1e293b;">Generated On: ${new Date().toLocaleDateString()} | Total Employees: ${reportRows.length}</td>
+                    <td colspan="17" style="background-color: #e2e8f0; font-weight: bold; padding: 8px; color: #1e293b;">Generated On: ${new Date().toLocaleDateString()} | Total Employees: ${reportRows.length}</td>
                 </tr>
                 <tr></tr>
                 <tr>
@@ -1304,6 +1323,7 @@ const EmployeeMasterForm = () => {
                     <th>Absent</th>
                     <th>Per Day Salary (₹)</th>
                     <th>UPAD (₹)</th>
+                    <th>Incentive (₹)</th>
                     <th>Payable Salary (₹)</th>
                     <th>Payment Mode</th>
                     <th>Payment Status</th>
@@ -1320,7 +1340,8 @@ const EmployeeMasterForm = () => {
             const present = attCache ? attCache.present : (monthData.presentDays ?? totalDays);
             const absent = attCache ? attCache.absent : (monthData.absentDays ?? 0);
             const upad = monthData.upad ?? 0;
-            const payable = (perDay * present) - upad;
+            const incentive = monthData.incentive ?? 0;
+            const payable = (perDay * present) - upad + incentive;
             totalPayable += payable;
 
             const isDone = monthData.paymentStatus === 'Done';
@@ -1344,6 +1365,7 @@ const EmployeeMasterForm = () => {
                     <td style="text-align: center; font-weight: bold; color: ${absent > 0 ? '#dc2626' : '#16a34a'};">${absent}</td>
                     <td class="money">₹${perDay.toFixed(2)}</td>
                     <td class="money" style="color: #9333ea;">₹${upad.toLocaleString('en-IN')}</td>
+                    <td class="money" style="color: #16a34a;">₹${incentive.toLocaleString('en-IN')}</td>
                     <td class="money" style="font-size: 12px; color: #16a34a;">₹${payable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                     <td style="text-align: center;">${monthData.paymentMode}</td>
                     <td style="text-align: center;"><span class="${payStatusBadge}">${monthData.paymentStatus}</span></td>
@@ -1356,7 +1378,7 @@ const EmployeeMasterForm = () => {
                 <tr style="background-color: #cbd5e1; font-weight: bold; font-size: 13px;">
                     <td colspan="6" style="text-align: right; padding: 10px; color: #0f172a;">TOTALS:</td>
                     <td class="money" style="font-size: 13px; color: #0f172a;">₹${totalSalary.toLocaleString('en-IN')}</td>
-                    <td colspan="5"></td>
+                    <td colspan="6"></td>
                     <td class="money" style="font-size: 13px; color: #15803d;">₹${totalPayable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                     <td colspan="3"></td>
                 </tr>
@@ -1388,7 +1410,7 @@ const EmployeeMasterForm = () => {
             return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
         });
 
-        const headers = ['SR. NO.', 'Month', 'Employee ID', 'Name', 'Bank A/C No', 'IFSC Code', 'Monthly Salary (INR)', 'Total Days', 'Present', 'Absent', 'Per Day Salary', 'UPAD', 'Payable Salary', 'Payment Mode', 'Payment Status', 'Employee Status'];
+        const headers = ['SR. NO.', 'Month', 'Employee ID', 'Name', 'Bank A/C No', 'IFSC Code', 'Monthly Salary (INR)', 'Total Days', 'Present', 'Absent', 'Per Day Salary', 'UPAD', 'Incentive', 'Payable Salary', 'Payment Mode', 'Payment Status', 'Employee Status'];
         const rows = reportRows.map((emp, idx) => {
             const monthData = getMonthlyPayment(emp, month);
             const totalDays = getDaysInMonth(month);
@@ -1398,7 +1420,8 @@ const EmployeeMasterForm = () => {
             const present = attCache ? attCache.present : (monthData.presentDays ?? totalDays);
             const absent = attCache ? attCache.absent : (monthData.absentDays ?? 0);
             const upad = monthData.upad ?? 0;
-            const payable = (perDay * present) - upad;
+            const incentive = monthData.incentive ?? 0;
+            const payable = (perDay * present) - upad + incentive;
             return [
                 idx + 1,
                 month,
@@ -1412,6 +1435,7 @@ const EmployeeMasterForm = () => {
                 absent,
                 perDay.toFixed(2),
                 upad,
+                incentive,
                 payable.toFixed(2),
                 monthData.paymentMode,
                 monthData.paymentStatus,
@@ -1427,6 +1451,170 @@ const EmployeeMasterForm = () => {
         const link = document.createElement("a");
         link.setAttribute("href", url);
         link.setAttribute("download", `Employee_Payment_Report_${month}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const exportBankExcel = () => {
+        const month = reportMonthFilter;
+        const reportRows = employees.filter(emp => {
+            const monthData = getMonthlyPayment(emp, month);
+            const matchesSearch = emp.name?.toLowerCase().includes(reportSearchQuery.toLowerCase()) || emp.empId?.toLowerCase().includes(reportSearchQuery.toLowerCase());
+            const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
+            const matchesStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
+            const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
+            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
+            return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
+        });
+
+        const validRows = reportRows.filter(emp => emp.bankDetails?.accountNumber);
+        if (validRows.length === 0) {
+            toast({
+                title: "No Data",
+                description: "No employees with bank details found in the current filtered list.",
+                status: "warning",
+                duration: 3000,
+                position: "bottom-right",
+                isClosable: true
+            });
+            return;
+        }
+
+        toast({
+            title: "Exporting Bank Excel",
+            description: `Exporting bank details for ${validRows.length} employees.`,
+            status: "info",
+            duration: 2000,
+            position: "bottom-right",
+            isClosable: true
+        });
+
+        // Format date as DD-MM-YYYY
+        const today = new Date();
+        const valueDate = today.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+
+        const debitAccount = '201000478211';
+
+        // Helper to get short month name
+        const getMonthName = (monthStr) => {
+            if (!monthStr) return '';
+            const [y, m] = monthStr.split('-');
+            const date = new Date(y, parseInt(m) - 1, 1);
+            return date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+        };
+        const getYear = (monthStr) => {
+            if (!monthStr) return '';
+            return monthStr.split('-')[0];
+        };
+
+        const yearMonth = month.replace('-', '');
+        const narration = `Salary for ${getMonthName(month)} ${getYear(month)}`.slice(0, 20);
+
+        const headersList = [
+            { name: 'Transaction Type', width: 130, align: 'left' },
+            { name: 'Beneficiary Code', width: 120, align: 'left' },
+            { name: 'Value Date', width: 100, align: 'left' },
+            { name: 'Debit A/C Number', width: 140, align: 'left' },
+            { name: 'Transaction Amount', width: 130, align: 'left' },
+            { name: 'Beneficiary Name', width: 180, align: 'left' },
+            { name: 'Beneficiary A/c No.', width: 150, align: 'center' },
+            { name: 'IFSC Code', width: 110, align: 'center' },
+            { name: 'Bene Email ID', width: 180, align: 'left' },
+            { name: 'bene Mobile No', width: 120, align: 'left' },
+            { name: 'Customer Ref No.', width: 130, align: 'left' },
+            { name: 'Payment Narration', width: 180, align: 'left' }
+        ];
+
+        let tableHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta charset="utf-8" />
+            <style>
+                table { border-collapse: collapse; width: 100%; font-family: Calibri, Arial, sans-serif; }
+                th { background-color: #C55A11; color: #FFFFFF; font-weight: bold; border: 1px solid #7F7F7F; text-align: left; font-size: 11pt; padding: 12px 10px; white-space: normal; }
+                td { border: 1px solid #7F7F7F; font-size: 11pt; padding: 8px 10px; vertical-align: middle; white-space: nowrap; color: #000000; text-align: left; }
+                .text { mso-number-format:"\\@"; }
+            </style>
+        </head>
+        <body>
+            <table>
+                <thead>
+                    <tr>
+                        ${headersList.map(h => `<th width="${h.width}" style="background-color: #C55A11; color: #FFFFFF; font-weight: bold; padding: 12px 10px; border: 1px solid #7F7F7F; text-align: ${h.align}; font-size: 11pt; white-space: normal;">${h.name}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        validRows.forEach((emp) => {
+            const monthData = getMonthlyPayment(emp, month);
+            const totalDays = getDaysInMonth(month);
+            const salary = parseFloat(emp.salary || 0);
+            const perDay = totalDays > 0 ? (salary / totalDays) : 0;
+            const attCache = attendanceCache[`${emp._id}_${month}`];
+            const present = attCache ? attCache.present : (monthData.presentDays ?? totalDays);
+            const upad = monthData.upad ?? 0;
+            const incentive = monthData.incentive ?? 0;
+            const payable = (perDay * present) - upad + incentive;
+            const amount = Math.round(payable);
+
+            const bankAccount = emp.bankDetails?.accountNumber || '';
+            const ifsc = emp.bankDetails?.ifscCode || '';
+            const cleanEmpId = (emp.empId || '').replace(/[^a-zA-Z0-9]/g, '');
+            const customerRef = `${yearMonth}${cleanEmpId}`.slice(0, 15);
+
+            let txType = 'N';
+            if (ifsc.toUpperCase().startsWith('INDB')) {
+                txType = 'I';
+            } else if (amount >= 200000) {
+                txType = 'R';
+            } else {
+                txType = 'N';
+            }
+
+            let cleanPhone = emp.phone ? emp.phone.replace(/\D/g, '') : '';
+            if (cleanPhone.startsWith('0')) {
+                cleanPhone = cleanPhone.substring(1);
+            }
+            if (cleanPhone && !cleanPhone.startsWith('91')) {
+                cleanPhone = '91' + cleanPhone;
+            }
+            cleanPhone = cleanPhone.slice(0, 12);
+
+            const emailVal = emp.email ? emp.email.slice(0, 70) : '';
+
+            tableHtml += `
+                <tr>
+                    <td>${txType}</td>
+                    <td></td>
+                    <td class="text">${valueDate}</td>
+                    <td class="text">${debitAccount}</td>
+                    <td style="font-weight: bold;" class="text">${amount}</td>
+                    <td>${(emp.name || '').toUpperCase().slice(0, 35)}</td>
+                    <td style="text-align: center;" class="text">${bankAccount}</td>
+                    <td style="text-align: center;" class="text">${ifsc}</td>
+                    <td>${emailVal}</td>
+                    <td class="text">${cleanPhone}</td>
+                    <td class="text">${customerRef}</td>
+                    <td>${narration}</td>
+                </tr>
+            `;
+        });
+
+        tableHtml += `
+                </tbody>
+            </table>
+        </body>
+        </html>
+        `;
+
+        const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `salary.xls`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -1476,6 +1664,49 @@ const EmployeeMasterForm = () => {
         );
     };
 
+    const IncentiveInputCell = ({ empId, initialIncentive, onSave }) => {
+        const [val, setVal] = useState(initialIncentive ?? 0);
+
+        useEffect(() => {
+            setVal(initialIncentive ?? 0);
+        }, [initialIncentive]);
+
+        const handleBlurOrSubmit = () => {
+            const numVal = parseFloat(val) || 0;
+            if (numVal !== (initialIncentive ?? 0)) {
+                onSave(empId, 'incentive', numVal);
+            }
+        };
+
+        return (
+            <VStack spacing={1} align="center">
+                <Text fontSize="9px" color="green.600" fontWeight="extrabold" letterSpacing="0.5px">INCENTIVE (₹)</Text>
+                <Input
+                    size="sm"
+                    h="28px"
+                    w="85px"
+                    textAlign="center"
+                    fontWeight="bold"
+                    fontSize="xs"
+                    color="green.800"
+                    bg="green.50"
+                    borderColor="green.200"
+                    borderRadius="lg"
+                    _hover={{ borderColor: "green.400", bg: "green.100" }}
+                    _focus={{ borderColor: "green.600", bg: "white", boxShadow: "0 0 0 1px #38A169" }}
+                    value={val}
+                    onChange={(e) => setVal(e.target.value)}
+                    onBlur={handleBlurOrSubmit}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.target.blur();
+                        }
+                    }}
+                />
+            </VStack>
+        );
+    };
+
     const handleUpdatePaymentField = async (employeeId, field, value) => {
         try {
             const res = await api.put(`/employee-master/${employeeId}/monthly-payment`, {
@@ -1486,7 +1717,7 @@ const EmployeeMasterForm = () => {
                 toast.closeAll();
                 toast({
                     title: "Updated",
-                    description: field === 'upad' ? `UPAD saved as ₹${value.toLocaleString()}` : `Payment details updated.`,
+                    description: field === 'upad' ? `UPAD saved as ₹${value.toLocaleString()}` : field === 'incentive' ? `Incentive saved as ₹${value.toLocaleString()}` : `Payment details updated.`,
                     status: "success",
                     duration: 1500,
                     position: "bottom-right",
@@ -2091,6 +2322,9 @@ const EmployeeMasterForm = () => {
                                                         <Button leftIcon={<Icon as={FaFileExcel} />} colorScheme="green" variant="solid" borderRadius="xl" onClick={exportPaymentReportToExcel} size="sm" shadow="sm">
                                                             Export Colorful Excel (.xls)
                                                         </Button>
+                                                        <Button leftIcon={<Icon as={FaFileExcel} />} colorScheme="orange" variant="solid" borderRadius="xl" onClick={exportBankExcel} size="sm" shadow="sm">
+                                                            Download salary.xls
+                                                        </Button>
                                                         <Button leftIcon={<Icon as={FaCopy} />} colorScheme="blue" variant="outline" borderRadius="xl" onClick={exportPaymentReportToCSV} size="sm">
                                                             Export CSV
                                                         </Button>
@@ -2118,6 +2352,7 @@ const EmployeeMasterForm = () => {
                                                                     <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">PRESENT</Th>
                                                                     <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">ABSENT</Th>
                                                                     <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">UPAD</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">INCENTIVE</Th>
                                                                     <Th color="white" py={4} fontSize="10px" isNumeric whiteSpace="nowrap">PAYABLE</Th>
                                                                     <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">PAY TYPE</Th>
                                                                     <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">STATUS</Th>
@@ -2126,7 +2361,7 @@ const EmployeeMasterForm = () => {
                                                             <Tbody>
                                                                 {reportFiltered.length === 0 ? (
                                                                     <Tr>
-                                                                        <Td colSpan={10} textAlign="center" py={10} color="gray.400">
+                                                                        <Td colSpan={11} textAlign="center" py={10} color="gray.400">
                                                                             <VStack spacing={2}>
                                                                                 <Icon as={FaUsers} w={8} h={8} color="gray.200" />
                                                                                 <Text fontSize="sm">No records match current filters</Text>
@@ -2142,14 +2377,15 @@ const EmployeeMasterForm = () => {
                                                                     const salary = parseFloat(emp.salary || 0);
                                                                     const perDay = totalDays > 0 ? salary / totalDays : 0;
                                                                     const upad = monthData.upad ?? 0;
+                                                                    const incentive = monthData.incentive ?? 0;
                                                                     // Pull from real attendance cache
                                                                     const attCache = attendanceCache[`${emp._id}_${reportMonthFilter}`];
                                                                     const present = attCache ? attCache.present : null;
                                                                     const absent = attCache ? attCache.absent : null;
                                                                     const effectivePresent = present !== null ? present : totalDays;
-                                                                    const payable = (perDay * effectivePresent) - upad;
+                                                                    const payable = (perDay * effectivePresent) - upad + incentive;
                                                                     return (
-                                                                        <Tr key={emp._id} bg={rowBg} _hover={{ bg: isDone ? 'green.100' : isDeactive ? 'red.100' : 'blue.50' }} transition="background 0.15s">
+                                                                        <Tr key={emp._id} bg={rowBg} _hover={{ bg: isDone ? 'green.100' : isDeactive ? 'red.100' : 'blue.50' }} transition="background 0.15s" onClick={() => handleRowClick(emp)} cursor="pointer">
                                                                             <Td fontSize="xs" fontWeight="bold" color="gray.500" whiteSpace="nowrap">{idx + 1}</Td>
                                                                             {/* Employee */}
                                                                             <Td py={3}>
@@ -2233,8 +2469,12 @@ const EmployeeMasterForm = () => {
                                                                                 )}
                                                                             </Td>
                                                                             {/* UPAD - editable */}
-                                                                            <Td py={3}>
+                                                                            <Td py={3} onClick={(e) => e.stopPropagation()}>
                                                                                 <UpadInputCell empId={emp._id} initialUpad={upad} onSave={handleUpdatePaymentField} />
+                                                                            </Td>
+                                                                            {/* INCENTIVE - editable */}
+                                                                            <Td py={3} onClick={(e) => e.stopPropagation()}>
+                                                                                <IncentiveInputCell empId={emp._id} initialIncentive={incentive} onSave={handleUpdatePaymentField} />
                                                                             </Td>
                                                                             {/* Payable */}
                                                                             <Td py={3} isNumeric>
@@ -2246,12 +2486,13 @@ const EmployeeMasterForm = () => {
                                                                                 </VStack>
                                                                             </Td>
                                                                             {/* Pay Mode */}
-                                                                            <Td whiteSpace="nowrap">
+                                                                            <Td whiteSpace="nowrap" onClick={(e) => e.stopPropagation()}>
                                                                                 <Select
                                                                                     size="xs"
                                                                                     borderRadius="lg"
                                                                                     value={monthData.paymentMode}
                                                                                     onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentMode', e.target.value)}
+                                                                                    onClick={(e) => e.stopPropagation()}
                                                                                     w="90px"
                                                                                     fontSize="xs"
                                                                                     bg={monthData.paymentMode === 'UPI' ? 'purple.50' : monthData.paymentMode === 'Cheque' ? 'orange.50' : 'blue.50'}
@@ -2264,12 +2505,13 @@ const EmployeeMasterForm = () => {
                                                                                 </Select>
                                                                             </Td>
                                                                             {/* Pay Status */}
-                                                                            <Td whiteSpace="nowrap">
+                                                                            <Td whiteSpace="nowrap" onClick={(e) => e.stopPropagation()}>
                                                                                 <Select
                                                                                     size="xs"
                                                                                     borderRadius="lg"
                                                                                     value={monthData.paymentStatus}
                                                                                     onChange={(e) => handleUpdatePaymentField(emp._id, 'paymentStatus', e.target.value)}
+                                                                                    onClick={(e) => e.stopPropagation()}
                                                                                     w="100px"
                                                                                     fontSize="xs"
                                                                                     fontWeight="bold"
@@ -2434,6 +2676,89 @@ const EmployeeMasterForm = () => {
                                 </ModalBody>
                                 <ModalFooter bg="gray.50">
                                     <Button colorScheme="blue" px={10} borderRadius="full" shadow="lg" onClick={() => setViewEmployee(null)}>Close Profile</Button>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
+
+                        {/* Date-Wise Attendance Detail Modal */}
+                        <Modal isOpen={!!selectedReportEmployee} onClose={() => setSelectedReportEmployee(null)} size="3xl" isCentered motionPreset="slideInBottom">
+                            <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
+                            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
+                                <ModalHeader p={0}>
+                                    <Box bgGradient="linear(to-r, purple.800, purple.600)" p={6} color="white">
+                                        <HStack justify="space-between" spacing={4}>
+                                            <HStack spacing={4}>
+                                                <Avatar
+                                                    size="md"
+                                                    src={selectedReportEmployee?.photo?.url ? `${API_BASE_URL}${selectedReportEmployee.photo.url}` : undefined}
+                                                    name={selectedReportEmployee?.name}
+                                                    borderRadius="xl"
+                                                    border="2px solid white"
+                                                />
+                                                <VStack align="start" spacing={0}>
+                                                    <Heading size="sm">Attendance Detail: {selectedReportEmployee?.name}</Heading>
+                                                    <Text fontSize="xs" opacity={0.8}>{selectedReportEmployee?.empId} • {reportMonthFilter}</Text>
+                                                </VStack>
+                                            </HStack>
+                                            <ModalCloseButton position="static" borderRadius="full" />
+                                        </HStack>
+                                    </Box>
+                                </ModalHeader>
+
+                                <ModalBody p={6} maxH="60vh" overflowY="auto">
+                                    {attendanceDetailLoading ? (
+                                        <Center py={10}>
+                                            <VStack spacing={3}>
+                                                <Spinner size="xl" color="purple.500" thickness="4px" />
+                                                <Text color="gray.500" fontSize="sm" fontWeight="bold">Fetching attendance records...</Text>
+                                            </VStack>
+                                        </Center>
+                                    ) : (
+                                        <Table variant="simple" size="sm">
+                                            <Thead>
+                                                <Tr bg="gray.100">
+                                                    <Th fontSize="10px">DATE</Th>
+                                                    <Th fontSize="10px">DAY</Th>
+                                                    <Th fontSize="10px">ATTENDANCE</Th>
+                                                    <Th fontSize="10px">SITES WORKED</Th>
+                                                    <Th fontSize="10px">REMARK / NOTES</Th>
+                                                </Tr>
+                                            </Thead>
+                                            <Tbody>
+                                                {attendanceDetailList.length === 0 ? (
+                                                    <Tr>
+                                                        <Td colSpan={5} textAlign="center" py={6} color="gray.400">
+                                                            No logs found for this month.
+                                                        </Td>
+                                                    </Tr>
+                                                ) : (
+                                                    attendanceDetailList.map((row) => {
+                                                        const att = row.attendance;
+                                                        const scheme = att === 'Present' ? 'green' : 
+                                                                       att === 'Absent' ? 'red' : 
+                                                                       att === 'Half Day' ? 'orange' : 
+                                                                       att === 'Scheduled' ? 'blue' : 'gray';
+                                                        return (
+                                                            <Tr key={row.date} _hover={{ bg: "gray.50" }} transition="background 0.1s">
+                                                                <Td fontSize="xs" fontWeight="semibold">{row.date.split('-')[2]}-{row.date.split('-')[1]}-{row.date.split('-')[0]}</Td>
+                                                                <Td fontSize="xs" fontWeight="semibold" color="gray.600">{row.dayName}</Td>
+                                                                <Td>
+                                                                    <Badge colorScheme={scheme} variant="solid" fontSize="10px" px={2} py={0.5} borderRadius="md">
+                                                                        {att}
+                                                                    </Badge>
+                                                                </Td>
+                                                                <Td fontSize="xs" maxW="200px" isTruncated title={row.sites}>{row.sites || '—'}</Td>
+                                                                <Td fontSize="xs" color="gray.600" maxW="250px" isTruncated title={row.remark}>{row.remark}</Td>
+                                                            </Tr>
+                                                        );
+                                                    })
+                                                )}
+                                            </Tbody>
+                                        </Table>
+                                    )}
+                                </ModalBody>
+                                <ModalFooter bg="gray.50" justify="flex-end">
+                                    <Button colorScheme="purple" px={10} borderRadius="full" shadow="lg" onClick={() => setSelectedReportEmployee(null)}>Close</Button>
                                 </ModalFooter>
                             </ModalContent>
                         </Modal>

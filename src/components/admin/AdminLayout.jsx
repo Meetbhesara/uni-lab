@@ -10,7 +10,7 @@ import { hasPermission } from '../../utils/permissions';
 import { useRealtimeSync } from '../../utils/useRealtimeSync';
 
 const LinkItems = [
-    { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: null },
+    { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: 'dashboard' },
     { name: 'Admin Login Report', icon: FiFileText, path: '/admin/login-report', permissionKey: null },
     { name: 'Products (Admin)', icon: FiBox, path: '/admin/products', permissionKey: 'products' },
     { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries', permissionKey: 'enquiries' },
@@ -96,7 +96,7 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                     }}
                     onClick={() => {
                         logout();
-                        navigate('/login');
+                        navigate('/');
                     }}>
                     <Icon mr="4" fontSize="16" as={FiLogOut} />
                     <Text fontWeight="bold">Logout</Text>

@@ -21,7 +21,8 @@ const LoginForm = () => {
       const data = await res.json();
 
       if (data.success && data.isAdmin) {
-        localStorage.setItem("token", data.token);
+        sessionStorage.setItem("token", data.token);
+        localStorage.removeItem("token");
         navigate("/dashboard");
       } else {
         setError("Invalid credentials or not admin user.");

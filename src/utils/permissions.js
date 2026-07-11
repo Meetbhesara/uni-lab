@@ -1,4 +1,8 @@
 const PARENT_PERMISSIONS = {
+    // Dashboard
+    'dashboard_admins': 'dashboard',
+    'dashboard_users': 'dashboard',
+
     // Products
     'showStock': 'products',
     'showSellingPrice': 'products',

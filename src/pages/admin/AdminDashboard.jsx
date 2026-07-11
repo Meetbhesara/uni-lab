@@ -1,21 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText,
     Icon, Spinner, Text, FormControl, FormLabel, Input, Button, Flex,
     useToast, Table, Thead, Tbody, Tr, Th, Td, Badge, Avatar, Stack,
-    InputGroup, InputLeftElement, Tooltip, Tag, TagLabel
+    InputGroup, InputLeftElement, Tooltip, Tag, TagLabel, Tabs, TabList,
+    TabPanels, Tab, TabPanel, AlertDialog, AlertDialogBody, AlertDialogFooter,
+    AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, IconButton
 } from '@chakra-ui/react';
-import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar } from 'react-icons/fi';
+import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar, FiTrash2, FiShield, FiUser } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import { DEMO_PRODUCTS, DEMO_ENQUIRIES } from '../../data/mockData';
+import { hasPermission } from '../../utils/permissions';
+
 
 const MotionBox = motion(Box);
 
 const AdminDashboard = () => {
     const { user, createAdmin } = useAuth();
     const toast = useToast();
+
+    const canReadDashboard = hasPermission(user, 'dashboard', 'read');
+    const canReadAdmins = hasPermission(user, 'dashboard_admins', 'read');
+    const canWriteAdmins = hasPermission(user, 'dashboard_admins', 'write');
+    const canReadUsers = hasPermission(user, 'dashboard_users', 'read');
+    const canWriteUsers = hasPermission(user, 'dashboard_users', 'write');
 
     const [stats, setStats] = useState({
         products: 0,
@@ -32,7 +42,20 @@ const AdminDashboard = () => {
     const [usersLoading, setUsersLoading] = useState(true);
     const [userSearch, setUserSearch] = useState('');
 
+    // Admins state
+    const [admins, setAdmins] = useState([]);
+    const [adminsLoading, setAdminsLoading] = useState(true);
+    const [adminSearch, setAdminSearch] = useState('');
+
+    // Delete modal state
+    const [deleteAccountModal, setDeleteAccountModal] = useState({ isOpen: false, user: null, type: '' });
+    const [isDeleting, setIsDeleting] = useState(false);
+    const cancelRef = useRef();
+
     const defaultPermissions = {
+        dashboard: { read: true, write: true },
+        dashboard_admins: { read: true, write: true },
+        dashboard_users: { read: true, write: true },
         products: { read: true, write: true },
         enquiries: { read: true, write: true },
         incomingEnquiries: { read: true, write: true },
@@ -70,7 +93,7 @@ const AdminDashboard = () => {
             const prodRes = await api.get('/products');
             const pData = prodRes.data.products || prodRes.data.data || prodRes.data;
             pCount = Array.isArray(pData) ? pData.length : 0;
-        } catch (err) {
+        } catch {
             pCount = DEMO_PRODUCTS.length;
         }
 
@@ -89,36 +112,46 @@ const AdminDashboard = () => {
                 doneQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Done').length : 0,
                 rejectedQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Reject').length : 0,
             }));
-        } catch (err) {
+        } catch {
             setStats(prev => ({ ...prev, products: pCount, totalEnquiries: DEMO_ENQUIRIES.length, pendingEnquiries: 0, doneQuotations: 0, rejectedQuotations: 0 }));
         } finally {
             setLoading(false);
         }
     };
 
-    const fetchUsers = async () => {
+    const fetchUsersAndAdmins = async () => {
         try {
             setUsersLoading(true);
-            const res = await api.get('/auth/users');
-            const data = res.data.users || res.data || [];
-            setUsers(Array.isArray(data) ? data : []);
-            setStats(prev => ({ ...prev, totalUsers: res.data.total || data.length }));
+            setAdminsLoading(true);
+            const [uRes, aRes] = await Promise.all([
+                api.get('/auth/users'),
+                api.get('/auth/admins')
+            ]);
+            const uData = uRes.data.users || uRes.data || [];
+            setUsers(Array.isArray(uData) ? uData : []);
+            setStats(prev => ({ ...prev, totalUsers: uRes.data.total || uData.length }));
+
+            const aData = aRes.data.admins || aRes.data || [];
+            // Note: not take if isSuperAdmin=true then not show
+            const cleanAdmins = (Array.isArray(aData) ? aData : []).filter(a => !a.isSuperAdmin);
+            setAdmins(cleanAdmins);
         } catch (err) {
-            console.error('Failed to fetch users:', err);
+            console.error('Failed to fetch users/admins:', err);
         } finally {
             setUsersLoading(false);
+            setAdminsLoading(false);
         }
     };
 
     useEffect(() => {
         fetchData();
-        fetchUsers();
+        fetchUsersAndAdmins();
     }, []);
 
     useEffect(() => {
         const handleRealtimeUpdate = () => {
             fetchData();
-            fetchUsers();
+            fetchUsersAndAdmins();
         };
         window.addEventListener('app-realtime-update', handleRealtimeUpdate);
         return () => window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
@@ -140,8 +173,36 @@ const AdminDashboard = () => {
         if (res.success) {
             toast({ title: '✅ Admin Created!', description: res.msg, status: 'success' });
             setAdminForm({ name: '', email: '', phone: '', permissions: defaultPermissions });
+            fetchUsersAndAdmins();
         } else {
             toast({ title: 'Failed', description: res.message, status: 'error' });
+        }
+    };
+
+    const confirmDeleteAccount = (account, type) => {
+        setDeleteAccountModal({ isOpen: true, user: account, type });
+    };
+
+    const handleDeleteAccount = async () => {
+        if (!deleteAccountModal.user) return;
+        setIsDeleting(true);
+        try {
+            const res = await api.delete(`/auth/${deleteAccountModal.type}/${deleteAccountModal.user._id}`);
+            if (res.data?.success || res.status === 200) {
+                toast({
+                    title: '✅ Account Removed',
+                    description: `${deleteAccountModal.user.name || deleteAccountModal.user.contactPersonName || 'Account'} has been permanently deleted.`,
+                    status: 'success'
+                });
+                fetchUsersAndAdmins();
+                setDeleteAccountModal({ isOpen: false, user: null, type: '' });
+            } else {
+                toast({ title: 'Failed to delete account', description: res.data?.message || 'Error occurred', status: 'error' });
+            }
+        } catch (err) {
+            toast({ title: 'Failed to delete account', description: err.response?.data?.message || err.message, status: 'error' });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -155,6 +216,17 @@ const AdminDashboard = () => {
             (u.phone || '').includes(q) ||
             (u.companyName || '').toLowerCase().includes(q) ||
             (u.contactPersonName || '').toLowerCase().includes(q)
+        );
+    });
+
+    // Filter admins by search
+    const filteredAdmins = admins.filter(a => {
+        if (!adminSearch) return true;
+        const q = adminSearch.toLowerCase();
+        return (
+            (a.name || '').toLowerCase().includes(q) ||
+            (a.email || '').toLowerCase().includes(q) ||
+            (a.phone || '').includes(q)
         );
     });
 
@@ -181,6 +253,7 @@ const AdminDashboard = () => {
 
     return (
         <Box>
+
             {/* Page Title */}
             <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100" mb={8}>
                 <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text" mb={2}>
@@ -285,7 +358,7 @@ const AdminDashboard = () => {
                 </Box>
             )}
 
-            {/* ── Registered Users Panel ───────────────────────────────────── */}
+            {/* ── Admins & Registered Users Management (Separate Tabs) ────── */}
             <MotionBox
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -298,146 +371,398 @@ const AdminDashboard = () => {
                 overflow="hidden"
                 mb={8}
             >
-                {/* Panel Header */}
-                <Flex
-                    px={6} py={4}
-                    bg="linear-gradient(135deg, #6B46C1 0%, #553C9A 100%)"
-                    align="center"
-                    justify="space-between"
-                    wrap="wrap"
-                    gap={3}
-                >
-                    <Flex align="center" gap={3}>
-                        <Box p={2} bg="whiteAlpha.200" borderRadius="lg">
-                            <Icon as={FiUsers} w={5} h={5} color="white" />
-                        </Box>
+                <Tabs variant="enclosed" colorScheme="purple" isLazy>
+                    <Flex
+                        px={6} pt={5} pb={2}
+                        bg="linear-gradient(135deg, #6B46C1 0%, #553C9A 100%)"
+                        align="center"
+                        justify="space-between"
+                        wrap="wrap"
+                        gap={4}
+                    >
                         <Box>
-                            <Text fontWeight="800" fontSize="md" color="white">Registered Users</Text>
-                            <Text fontSize="xs" color="whiteAlpha.700">All website clients (non-admin)</Text>
+                            <Heading fontSize="lg" fontWeight="800" color="white" mb={1}>
+                                User & Admin Accounts
+                            </Heading>
+                            <Text fontSize="xs" color="whiteAlpha.800">
+                                Separate view for internal administrators and registered website clients.
+                            </Text>
                         </Box>
-                    </Flex>
-                    <Flex align="center" gap={3}>
-                        <Badge bg="whiteAlpha.300" color="white" borderRadius="full" px={3} py={1} fontSize="sm" fontWeight="700">
-                            {filteredUsers.length} {filteredUsers.length === 1 ? 'User' : 'Users'}
-                        </Badge>
-                        <InputGroup size="sm" maxW="220px" bg="whiteAlpha.200" borderRadius="lg">
-                            <InputLeftElement pointerEvents="none">
-                                <Icon as={FiSearch} color="whiteAlpha.700" />
-                            </InputLeftElement>
-                            <Input
-                                placeholder="Search users..."
-                                value={userSearch}
-                                onChange={e => setUserSearch(e.target.value)}
-                                border="none"
-                                color="white"
-                                _placeholder={{ color: 'whiteAlpha.600' }}
-                                _focus={{ boxShadow: 'none', bg: 'whiteAlpha.300' }}
-                                borderRadius="lg"
-                            />
-                        </InputGroup>
-                    </Flex>
-                </Flex>
 
-                {/* Table */}
-                {usersLoading ? (
-                    <Flex justify="center" align="center" py={16}>
-                        <Spinner size="lg" color="purple.500" thickness="3px" />
+                        <TabList borderBottom="none" gap={2}>
+                            <Tab
+                                bg="whiteAlpha.200"
+                                color="white"
+                                _selected={{ bg: 'white', color: 'purple.700', fontWeight: '800', boxShadow: 'md' }}
+                                borderRadius="xl"
+                                py={2.5}
+                                px={5}
+                                fontSize="sm"
+                                transition="all 0.2s"
+                                border="none"
+                            >
+                                <Flex align="center" gap={2}>
+                                    <Icon as={FiShield} w={4} h={4} />
+                                    <Text>Admins</Text>
+                                    <Badge bg={admins.length ? 'purple.500' : 'gray.400'} color="white" borderRadius="full" px={2}>
+                                        {admins.length}
+                                    </Badge>
+                                </Flex>
+                            </Tab>
+                            <Tab
+                                bg="whiteAlpha.200"
+                                color="white"
+                                _selected={{ bg: 'white', color: 'purple.700', fontWeight: '800', boxShadow: 'md' }}
+                                borderRadius="xl"
+                                py={2.5}
+                                px={5}
+                                fontSize="sm"
+                                transition="all 0.2s"
+                                border="none"
+                            >
+                                <Flex align="center" gap={2}>
+                                    <Icon as={FiUsers} w={4} h={4} />
+                                    <Text>Registered Users</Text>
+                                    <Badge bg={filteredUsers.length ? 'blue.500' : 'gray.400'} color="white" borderRadius="full" px={2}>
+                                        {users.length}
+                                    </Badge>
+                                </Flex>
+                            </Tab>
+                        </TabList>
                     </Flex>
-                ) : filteredUsers.length === 0 ? (
-                    <Flex direction="column" align="center" justify="center" py={16} color="gray.400">
-                        <Icon as={FiUsers} w={12} h={12} mb={3} />
-                        <Text fontWeight="600">No registered users found</Text>
-                        <Text fontSize="sm" mt={1}>
-                            {userSearch ? `No results for "${userSearch}"` : 'Users who register on the website will appear here'}
-                        </Text>
-                    </Flex>
-                ) : (
-                    <Box overflowX="auto">
-                        <Table variant="simple" size="sm">
-                            <Thead bg="gray.50">
-                                <Tr>
-                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">#</Th>
-                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">USER</Th>
-                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">CONTACT</Th>
-                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">COMPANY</Th>
-                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">GST</Th>
-                                    <Th py={3} fontSize="10px" color="gray.500" letterSpacing="wider">JOINED</Th>
-                                </Tr>
-                            </Thead>
-                            <Tbody>
-                                {filteredUsers.map((u, idx) => (
-                                    <Tr
-                                        key={u._id || idx}
-                                        _hover={{ bg: 'purple.50' }}
-                                        transition="background 0.15s"
-                                        borderBottom="1px solid"
-                                        borderColor="gray.100"
-                                    >
-                                        <Td py={3}>
-                                            <Text fontSize="xs" color="gray.400" fontWeight="600">
-                                                {idx + 1}
-                                            </Text>
-                                        </Td>
-                                        <Td py={3}>
-                                            <Flex align="center" gap={3}>
-                                                <Avatar
-                                                    size="sm"
-                                                    name={getInitials(u)}
-                                                    bg={`${getColor(idx)}.400`}
-                                                    color="white"
-                                                    fontWeight="700"
-                                                    fontSize="xs"
-                                                />
-                                                <Stack spacing={0}>
-                                                    <Text fontWeight="700" fontSize="sm" color="gray.800">
-                                                        {u.contactPersonName || u.name || '—'}
-                                                    </Text>
-                                                    <Text fontSize="xs" color="gray.400">{u.email}</Text>
-                                                </Stack>
-                                            </Flex>
-                                        </Td>
-                                        <Td py={3}>
-                                            <Stack spacing={1}>
-                                                <Flex align="center" gap={1}>
-                                                    <Icon as={FiPhone} w={3} h={3} color="green.400" />
-                                                    <Text fontSize="xs" fontWeight="600" color="gray.700">{u.phone || '—'}</Text>
-                                                </Flex>
-                                                <Flex align="center" gap={1}>
-                                                    <Icon as={FiMail} w={3} h={3} color="blue.400" />
-                                                    <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="160px">{u.email || '—'}</Text>
-                                                </Flex>
-                                            </Stack>
-                                        </Td>
-                                        <Td py={3}>
-                                            <Flex align="center" gap={1}>
-                                                <Icon as={FiBriefcase} w={3} h={3} color="orange.400" />
-                                                <Text fontSize="xs" fontWeight="600" color="gray.700" noOfLines={1} maxW="140px">
-                                                    {u.companyName || '—'}
-                                                </Text>
-                                            </Flex>
-                                        </Td>
-                                        <Td py={3}>
-                                            {u.gstNumber ? (
-                                                <Tag size="sm" colorScheme="green" borderRadius="full">
-                                                    <TagLabel fontSize="10px" fontWeight="700">{u.gstNumber}</TagLabel>
-                                                </Tag>
-                                            ) : (
-                                                <Text fontSize="xs" color="gray.400">—</Text>
-                                            )}
-                                        </Td>
-                                        <Td py={3}>
-                                            <Flex align="center" gap={1}>
-                                                <Icon as={FiCalendar} w={3} h={3} color="gray.400" />
-                                                <Text fontSize="xs" color="gray.500">{formatDate(u.createdAt)}</Text>
-                                            </Flex>
-                                        </Td>
-                                    </Tr>
-                                ))}
-                            </Tbody>
-                        </Table>
-                    </Box>
-                )}
+
+                    <TabPanels p={0}>
+                        {/* ── TAB 1: ADMINS PANEL (Excludes Super Admin) ── */}
+                        <TabPanel p={0}>
+                            <Box px={6} pt={4}>
+                            </Box>
+                            {!canReadAdmins ? (
+                                <Flex direction="column" align="center" justify="center" py={16} color="gray.400">
+                                    <Icon as={FiShield} w={12} h={12} mb={3} />
+                                    <Text fontWeight="600">Access Restricted</Text>
+                                    <Text fontSize="sm" mt={1}>You do not have read permissions for Admin Accounts.</Text>
+                                </Flex>
+                            ) : (
+                                <>
+                            <Flex px={6} py={3} bg="purple.50" align="center" justify="space-between" wrap="wrap" gap={3} borderBottom="1px solid" borderColor="purple.100">
+                                <Text fontSize="xs" fontWeight="700" color="purple.800">
+                                    {filteredAdmins.length} {filteredAdmins.length === 1 ? 'Admin User' : 'Admin Users'} (Excluding Super Admin)
+                                </Text>
+                                <InputGroup size="sm" maxW="240px" bg="white" borderRadius="lg" boxShadow="xs">
+                                    <InputLeftElement pointerEvents="none">
+                                        <Icon as={FiSearch} color="gray.400" />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="Search admins..."
+                                        value={adminSearch}
+                                        onChange={e => setAdminSearch(e.target.value)}
+                                        borderRadius="lg"
+                                        borderColor="purple.200"
+                                        _focus={{ borderColor: 'purple.500', boxShadow: 'none' }}
+                                    />
+                                </InputGroup>
+                            </Flex>
+
+                            {adminsLoading ? (
+                                <Flex justify="center" align="center" py={16}>
+                                    <Spinner size="lg" color="purple.500" thickness="3px" />
+                                </Flex>
+                            ) : filteredAdmins.length === 0 ? (
+                                <Flex direction="column" align="center" justify="center" py={16} color="gray.400">
+                                    <Icon as={FiShield} w={12} h={12} mb={3} />
+                                    <Text fontWeight="600">No admin users found</Text>
+                                    <Text fontSize="sm" mt={1}>
+                                        {adminSearch ? `No results for "${adminSearch}"` : 'No sub-admin accounts created yet.'}
+                                    </Text>
+                                </Flex>
+                            ) : (
+                                <Box overflowX="auto">
+                                    <Table variant="simple" size="sm">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th py={3} fontSize="10px" color="gray.500">#</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">ADMIN USER</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">CONTACT</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">ROLE</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">JOINED</Th>
+                                                {user?.isSuperAdmin && <Th py={3} fontSize="10px" color="gray.500" textAlign="center">ACTIONS</Th>}
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {filteredAdmins.map((a, idx) => (
+                                                <Tr
+                                                    key={a._id || idx}
+                                                    _hover={{ bg: 'purple.50' }}
+                                                    transition="background 0.15s"
+                                                    borderBottom="1px solid"
+                                                    borderColor="gray.100"
+                                                >
+                                                    <Td py={3}>
+                                                        <Text fontSize="xs" color="gray.400" fontWeight="600">{idx + 1}</Text>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Flex align="center" gap={3}>
+                                                            <Avatar
+                                                                size="sm"
+                                                                name={getInitials(a)}
+                                                                bg={`${getColor(idx)}.500`}
+                                                                color="white"
+                                                                fontWeight="700"
+                                                                fontSize="xs"
+                                                            />
+                                                            <Stack spacing={0}>
+                                                                <Text fontWeight="700" fontSize="sm" color="gray.800">
+                                                                    {a.name || '—'}
+                                                                </Text>
+                                                                <Text fontSize="xs" color="gray.400">{a.email}</Text>
+                                                            </Stack>
+                                                        </Flex>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Stack spacing={1}>
+                                                            <Flex align="center" gap={1}>
+                                                                <Icon as={FiPhone} w={3} h={3} color="green.400" />
+                                                                <Text fontSize="xs" fontWeight="600" color="gray.700">{a.phone || '—'}</Text>
+                                                            </Flex>
+                                                            <Flex align="center" gap={1}>
+                                                                <Icon as={FiMail} w={3} h={3} color="blue.400" />
+                                                                <Text fontSize="xs" color="gray.500" noOfLines={1}>{a.email || '—'}</Text>
+                                                            </Flex>
+                                                        </Stack>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Badge colorScheme="purple" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="800">
+                                                            SUB-ADMIN
+                                                        </Badge>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Flex align="center" gap={1}>
+                                                            <Icon as={FiCalendar} w={3} h={3} color="gray.400" />
+                                                            <Text fontSize="xs" color="gray.500">{formatDate(a.createdAt)}</Text>
+                                                        </Flex>
+                                                    </Td>
+                                                    {user?.isSuperAdmin && (
+                                                        <Td py={3} textAlign="center">
+                                                            <Tooltip label="Remove Admin Account" placement="top">
+                                                                <IconButton
+                                                                    icon={<Icon as={FiTrash2} />}
+                                                                    size="sm"
+                                                                    colorScheme="red"
+                                                                    variant="ghost"
+                                                                    borderRadius="lg"
+                                                                    _hover={{ bg: 'red.50', color: 'red.600' }}
+                                                                    onClick={() => confirmDeleteAccount(a, 'admins')}
+                                                                    aria-label="Delete Admin"
+                                                                />
+                                                            </Tooltip>
+                                                        </Td>
+                                                    )}
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                            )}
+                            </>
+                            )}
+                        </TabPanel>
+
+                        {/* ── TAB 2: REGISTERED USERS PANEL ── */}
+                        <TabPanel p={0}>
+                            <Box px={6} pt={4}>
+                            </Box>
+                            {!canReadUsers ? (
+                                <Flex direction="column" align="center" justify="center" py={16} color="gray.400">
+                                    <Icon as={FiUsers} w={12} h={12} mb={3} />
+                                    <Text fontWeight="600">Access Restricted</Text>
+                                    <Text fontSize="sm" mt={1}>You do not have read permissions for Registered Users.</Text>
+                                </Flex>
+                            ) : (
+                                <>
+                            <Flex px={6} py={3} bg="gray.50" align="center" justify="space-between" wrap="wrap" gap={3} borderBottom="1px solid" borderColor="gray.200">
+                                <Text fontSize="xs" fontWeight="700" color="gray.700">
+                                    {filteredUsers.length} {filteredUsers.length === 1 ? 'Registered Client' : 'Registered Clients'}
+                                </Text>
+                                <InputGroup size="sm" maxW="240px" bg="white" borderRadius="lg" boxShadow="xs">
+                                    <InputLeftElement pointerEvents="none">
+                                        <Icon as={FiSearch} color="gray.400" />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="Search users..."
+                                        value={userSearch}
+                                        onChange={e => setUserSearch(e.target.value)}
+                                        borderRadius="lg"
+                                        borderColor="gray.200"
+                                        _focus={{ borderColor: 'blue.500', boxShadow: 'none' }}
+                                    />
+                                </InputGroup>
+                            </Flex>
+
+                            {usersLoading ? (
+                                <Flex justify="center" align="center" py={16}>
+                                    <Spinner size="lg" color="purple.500" thickness="3px" />
+                                </Flex>
+                            ) : filteredUsers.length === 0 ? (
+                                <Flex direction="column" align="center" justify="center" py={16} color="gray.400">
+                                    <Icon as={FiUsers} w={12} h={12} mb={3} />
+                                    <Text fontWeight="600">No registered users found</Text>
+                                    <Text fontSize="sm" mt={1}>
+                                        {userSearch ? `No results for "${userSearch}"` : 'Users who register on the website will appear here'}
+                                    </Text>
+                                </Flex>
+                            ) : (
+                                <Box overflowX="auto">
+                                    <Table variant="simple" size="sm">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th py={3} fontSize="10px" color="gray.500">#</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">USER</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">CONTACT</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">COMPANY</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">GST</Th>
+                                                <Th py={3} fontSize="10px" color="gray.500">JOINED</Th>
+                                                {user?.isSuperAdmin && <Th py={3} fontSize="10px" color="gray.500" textAlign="center">ACTIONS</Th>}
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {filteredUsers.map((u, idx) => (
+                                                <Tr
+                                                    key={u._id || idx}
+                                                    _hover={{ bg: 'blue.50' }}
+                                                    transition="background 0.15s"
+                                                    borderBottom="1px solid"
+                                                    borderColor="gray.100"
+                                                >
+                                                    <Td py={3}>
+                                                        <Text fontSize="xs" color="gray.400" fontWeight="600">{idx + 1}</Text>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Flex align="center" gap={3}>
+                                                            <Avatar
+                                                                size="sm"
+                                                                name={getInitials(u)}
+                                                                bg={`${getColor(idx)}.400`}
+                                                                color="white"
+                                                                fontWeight="700"
+                                                                fontSize="xs"
+                                                            />
+                                                            <Stack spacing={0}>
+                                                                <Text fontWeight="700" fontSize="sm" color="gray.800">
+                                                                    {u.contactPersonName || u.name || '—'}
+                                                                </Text>
+                                                                <Text fontSize="xs" color="gray.400">{u.email}</Text>
+                                                            </Stack>
+                                                        </Flex>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Stack spacing={1}>
+                                                            <Flex align="center" gap={1}>
+                                                                <Icon as={FiPhone} w={3} h={3} color="green.400" />
+                                                                <Text fontSize="xs" fontWeight="600" color="gray.700">{u.phone || '—'}</Text>
+                                                            </Flex>
+                                                            <Flex align="center" gap={1}>
+                                                                <Icon as={FiMail} w={3} h={3} color="blue.400" />
+                                                                <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="160px">{u.email || '—'}</Text>
+                                                            </Flex>
+                                                        </Stack>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Flex align="center" gap={1}>
+                                                            <Icon as={FiBriefcase} w={3} h={3} color="orange.400" />
+                                                            <Text fontSize="xs" fontWeight="600" color="gray.700" noOfLines={1} maxW="140px">
+                                                                {u.companyName || '—'}
+                                                            </Text>
+                                                        </Flex>
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        {u.gstNumber ? (
+                                                            <Tag size="sm" colorScheme="green" borderRadius="full">
+                                                                <TagLabel fontSize="10px" fontWeight="700">{u.gstNumber}</TagLabel>
+                                                            </Tag>
+                                                        ) : (
+                                                            <Text fontSize="xs" color="gray.400">—</Text>
+                                                        )}
+                                                    </Td>
+                                                    <Td py={3}>
+                                                        <Flex align="center" gap={1}>
+                                                            <Icon as={FiCalendar} w={3} h={3} color="gray.400" />
+                                                            <Text fontSize="xs" color="gray.500">{formatDate(u.createdAt)}</Text>
+                                                        </Flex>
+                                                    </Td>
+                                                    {user?.isSuperAdmin && (
+                                                        <Td py={3} textAlign="center">
+                                                            <Tooltip label="Remove Client Account" placement="top">
+                                                                <IconButton
+                                                                    icon={<Icon as={FiTrash2} />}
+                                                                    size="sm"
+                                                                    colorScheme="red"
+                                                                    variant="ghost"
+                                                                    borderRadius="lg"
+                                                                    _hover={{ bg: 'red.50', color: 'red.600' }}
+                                                                    onClick={() => confirmDeleteAccount(u, 'users')}
+                                                                    aria-label="Delete User"
+                                                                />
+                                                            </Tooltip>
+                                                        </Td>
+                                                    )}
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                            )}
+                            </>
+                            )}
+                        </TabPanel>
+                    </TabPanels>
+                </Tabs>
             </MotionBox>
+
+            {/* Delete Account Pop-up Confirmation (AlertDialog) */}
+            <AlertDialog
+                isOpen={deleteAccountModal.isOpen}
+                leastDestructiveRef={cancelRef}
+                onClose={() => setDeleteAccountModal({ isOpen: false, user: null, type: '' })}
+                isCentered
+            >
+                <AlertDialogOverlay backdropFilter="blur(4px)" bg="blackAlpha.600">
+                    <AlertDialogContent borderRadius="2xl" p={2} boxShadow="2xl">
+                        <AlertDialogHeader fontSize="lg" fontWeight="800" color="red.600" display="flex" alignItems="center" gap={2}>
+                            <Icon as={FiTrash2} w={6} h={6} />
+                            Remove {deleteAccountModal.type === 'admins' ? 'Admin' : 'User'} Account?
+                        </AlertDialogHeader>
+
+                        <AlertDialogBody fontSize="sm" color="gray.600" py={4}>
+                            Are you sure you want to permanently remove the account for{' '}
+                            <Text as="span" fontWeight="800" color="gray.800">
+                                {deleteAccountModal.user?.name || deleteAccountModal.user?.contactPersonName || deleteAccountModal.user?.companyName || deleteAccountModal.user?.email}
+                            </Text>?
+                            <Text mt={3} p={3} bg="red.50" borderRadius="xl" color="red.700" fontSize="xs" fontWeight="700" border="1px solid" borderColor="red.100">
+                                ⚠️ This action cannot be undone. All access privileges associated with this account will be immediately revoked.
+                            </Text>
+                        </AlertDialogBody>
+
+                        <AlertDialogFooter gap={3} pt={2}>
+                            <Button ref={cancelRef} onClick={() => setDeleteAccountModal({ isOpen: false, user: null, type: '' })} borderRadius="xl" size="sm" px={5} fontWeight="600" variant="outline">
+                                Cancel
+                            </Button>
+                            <Button
+                                colorScheme="red"
+                                onClick={handleDeleteAccount}
+                                isLoading={isDeleting}
+                                loadingText="Removing..."
+                                borderRadius="xl"
+                                size="sm"
+                                px={6}
+                                fontWeight="700"
+                                boxShadow="sm"
+                            >
+                                Yes, Remove Account
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </Box>
     );
 };

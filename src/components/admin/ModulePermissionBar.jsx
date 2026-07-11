@@ -25,6 +25,10 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
         subTabs: []
     };
 
+    // Modules where parent & child are fully independent — no linking at all
+    const INDEPENDENT_GROUPS = ['dashboardGroup', 'productsGroup'];
+    const isIndependentModule = INDEPENDENT_GROUPS.includes(moduleGroupKey);
+
     const subTabsToRender = subModuleFilterKey
         ? moduleConfig.subTabs.filter(s => s.key === subModuleFilterKey)
         : moduleConfig.subTabs;
@@ -83,36 +87,76 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
             next[key] = {
                 ...next[key],
                 [type]: value,
+                // If read is turned OFF, write must also turn OFF
                 ...(type === 'read' && !value ? { write: false } : {})
             };
 
-            // 1. Propagate parent-to-child permissions recursively
+            // ── GATE MODULES: Dashboard & Products ──
+            // Parent Read/Write gates (unlocks) children, but does NOT auto-enable them.
+            // When parent goes OFF → children are cleared. When parent goes ON → children stay as-is.
+            // Children never affect parent.
+            const INDEPENDENT_GROUPS = ['dashboardGroup', 'productsGroup'];
+            const isIndependent = PERMISSION_MODULES.some(mod =>
+                INDEPENDENT_GROUPS.includes(mod.key) &&
+                (mod.mainTabKey === key || mod.subTabs.some(s => s.key === key))
+            );
+            if (isIndependent) {
+                // Only propagate DISABLE downward (not enable)
+                if (!value) {
+                    const clearChildren = (parentKey) => {
+                        PERMISSION_MODULES.forEach(mod => {
+                            if (mod.subTabs && mod.subTabs.length > 0) {
+                                mod.subTabs.filter(s => s.parentKey === parentKey).forEach(child => {
+                                    if (type === 'read') {
+                                        next[child.key] = { read: false, write: false };
+                                    } else if (type === 'write') {
+                                        next[child.key] = { ...next[child.key], write: false };
+                                    }
+                                    clearChildren(child.key);
+                                });
+                            }
+                        });
+                    };
+                    clearChildren(key);
+                }
+                return next;
+            }
+
+            // ── ALL OTHER MODULES: full bidirectional parent↔child linking ──
+
+            // 1. Parent → Children (both directions: ON enables all, OFF disables all)
             const propagateParentToChild = (parentKey, isEnabled) => {
                 PERMISSION_MODULES.forEach(mod => {
                     if (mod.subTabs && mod.subTabs.length > 0) {
                         const children = mod.subTabs.filter(s => s.parentKey === parentKey);
                         children.forEach(child => {
                             if (type === 'read') {
-                                if (!isEnabled) {
-                                    next[child.key] = { read: false, write: false };
-                                    propagateParentToChild(child.key, false);
-                                } else {
+                                if (isEnabled) {
+                                    // Parent read ON → turn ON all children read
                                     next[child.key] = { ...next[child.key], read: true };
-                                    propagateParentToChild(child.key, true);
+                                } else {
+                                    // Parent read OFF → force all children read+write OFF
+                                    next[child.key] = { read: false, write: false };
                                 }
                             } else if (type === 'write') {
-                                if (!isEnabled) {
+                                if (isEnabled) {
+                                    // Parent write ON → turn ON children write (only if they have read)
+                                    if (next[child.key]?.read) {
+                                        next[child.key] = { ...next[child.key], write: true };
+                                    }
+                                } else {
+                                    // Parent write OFF → force all children write OFF
                                     next[child.key] = { ...next[child.key], write: false };
-                                    propagateParentToChild(child.key, false);
                                 }
                             }
+                            propagateParentToChild(child.key, isEnabled);
                         });
                     }
                 });
             };
             propagateParentToChild(key, value);
 
-            // 2. Propagate child-to-parent permissions recursively (force enabling parent read if child read is enabled)
+            // 2. Children → Parent (if all siblings off, parent turns off; if any on, parent turns on)
             const propagateChildToParent = (childKey) => {
                 PERMISSION_MODULES.forEach(mod => {
                     if (mod.subTabs && mod.subTabs.length > 0) {
@@ -120,8 +164,29 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                         if (targetSub && targetSub.parentKey) {
                             const parentKey = targetSub.parentKey;
                             if (type === 'read' && value) {
+                                // Child read ON → parent read must be ON
                                 next[parentKey] = { ...next[parentKey], read: true };
                                 propagateChildToParent(parentKey);
+                            } else if (type === 'read' && !value) {
+                                // Child read OFF → if no sibling has read, parent read+write OFF
+                                const siblings = mod.subTabs.filter(s => s.parentKey === parentKey && s.key !== childKey);
+                                const anyRead = siblings.some(sk => next[sk.key]?.read === true);
+                                if (!anyRead) {
+                                    next[parentKey] = { ...next[parentKey], read: false, write: false };
+                                    propagateChildToParent(parentKey);
+                                }
+                            } else if (type === 'write' && value) {
+                                // Child write ON → parent write must be ON
+                                next[parentKey] = { ...next[parentKey], write: true };
+                                propagateChildToParent(parentKey);
+                            } else if (type === 'write' && !value) {
+                                // Child write OFF → if no sibling has write, parent write OFF
+                                const siblings = mod.subTabs.filter(s => s.parentKey === parentKey && s.key !== childKey);
+                                const anyWrite = siblings.some(sk => next[sk.key]?.write === true);
+                                if (!anyWrite) {
+                                    next[parentKey] = { ...next[parentKey], write: false };
+                                    propagateChildToParent(parentKey);
+                                }
                             }
                         }
                     }
@@ -129,27 +194,45 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
             };
             propagateChildToParent(key);
 
-            // 3. Sync main tab if applicable
+            // 3. Main tab sync
             PERMISSION_MODULES.forEach(mod => {
                 if (mod.mainTabKey && mod.subTabs && mod.subTabs.length > 0) {
                     const mainTabKey = mod.mainTabKey;
+                    // Sub-tab changed → sync main tab state
                     if (key !== mainTabKey && mod.subTabs.some(s => s.key === key)) {
-                        const anySubTabTrue = mod.subTabs.filter(s => s.key !== mainTabKey).some(sub => {
+                        const anySubRead = mod.subTabs.filter(s => s.key !== mainTabKey).some(sub => {
                             if (sub.key === key) return type === 'read' ? value : next[key]?.read;
                             return next[sub.key]?.read === true;
                         });
-                        if (anySubTabTrue) {
-                            next[mainTabKey] = { ...next[mainTabKey], read: true };
-                        } else if (key !== 'showStock') {
-                            next[mainTabKey] = { ...next[mainTabKey], read: false, write: false };
+                        const anySubWrite = mod.subTabs.filter(s => s.key !== mainTabKey).some(sub => {
+                            if (sub.key === key) return type === 'write' ? value : next[key]?.write;
+                            return next[sub.key]?.write === true;
+                        });
+                        next[mainTabKey] = anySubRead
+                            ? { ...next[mainTabKey], read: true }
+                            : { ...next[mainTabKey], read: false, write: false };
+                        if (!anySubWrite) {
+                            next[mainTabKey] = { ...next[mainTabKey], write: false };
                         }
                     }
+                    // Main tab changed → cascade down to all sub-tabs
                     if (key === mainTabKey && type === 'read') {
                         mod.subTabs.forEach(sub => {
+                            next[sub.key] = value
+                                ? { ...next[sub.key], read: true }   // ON  → all children read ON
+                                : { read: false, write: false };       // OFF → all children OFF
+                        });
+                    }
+                    if (key === mainTabKey && type === 'write') {
+                        mod.subTabs.forEach(sub => {
                             if (value) {
-                                next[sub.key] = { ...next[sub.key], read: true };
+                                // ON → enable write for sub-tabs that already have read
+                                if (next[sub.key]?.read) {
+                                    next[sub.key] = { ...next[sub.key], write: true };
+                                }
                             } else {
-                                next[sub.key] = { read: false, write: false };
+                                // OFF → force all sub-tabs write OFF
+                                next[sub.key] = { ...next[sub.key], write: false };
                             }
                         });
                     }
@@ -159,6 +242,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
             return next;
         });
     };
+
 
     const renderPermissionTree = (items, parentKey = null, depth = 0) => {
         const levelItems = items.filter(s => {
@@ -185,8 +269,28 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                 )}
                 {levelItems.map(item => {
                     const hasChildren = items.some(s => s.parentKey === item.key);
-                    const isParentRead = item.parentKey ? (permissions[item.parentKey]?.read || false) : true;
-                    const isItemRead = (permissions[item.key]?.read && isParentRead) || false;
+                    const parentPerms = item.parentKey ? (permissions[item.parentKey] || {}) : null;
+
+                    // Gate model for independent modules: parent Read gates child Read, parent Write gates child Write
+                    const effectiveParentRead = isIndependentModule
+                        ? (parentPerms ? (parentPerms.read || false) : true)
+                        : (item.parentKey ? (permissions[item.parentKey]?.read || false) : true);
+
+                    const effectiveParentWrite = isIndependentModule
+                        ? (parentPerms ? (parentPerms.write || false) : true)
+                        : true; // not used for non-independent
+
+                    const isItemRead = permissions[item.key]?.read || false;
+
+                    const isWriteChecked = (permissions[item.key]?.write && isItemRead) || false;
+
+                    const isReadDisabled  = isIndependentModule
+                        ? !effectiveParentRead
+                        : !effectiveParentRead;
+
+                    const isWriteDisabled = isIndependentModule
+                        ? (!isItemRead || !effectiveParentWrite)
+                        : (!permissions[item.key]?.read || !effectiveParentRead);
 
                     return (
                         <VStack key={item.key} align="stretch" spacing={2} w="full">
@@ -199,7 +303,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                                 border="1px solid"
                                 borderColor="gray.200"
                                 position="relative"
-                                opacity={isParentRead ? 1 : 0.6}
+                                opacity={(isIndependentModule ? effectiveParentRead : effectiveParentRead) ? 1 : 0.6}
                                 _hover={depth === 0 ? { borderColor: 'purple.300', shadow: 'sm' } : {}}
                                 transition="all 0.2s"
                             >
@@ -229,7 +333,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                                         colorScheme="purple" 
                                         size={depth === 0 ? "md" : "sm"}
                                         isChecked={isItemRead}
-                                        isDisabled={!isParentRead}
+                                        isDisabled={isReadDisabled}
                                         onChange={(e) => handlePermissionChange(item.key, 'read', e.target.checked)}
                                     >
                                         <Text fontSize={depth === 0 ? "xs" : "10px"} fontWeight="semibold">Read</Text>
@@ -237,8 +341,8 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                                     <Checkbox 
                                         colorScheme="red" 
                                         size={depth === 0 ? "md" : "sm"}
-                                        isChecked={(permissions[item.key]?.write && isParentRead && permissions[item.key]?.read) || false}
-                                        isDisabled={!permissions[item.key]?.read || !isParentRead}
+                                        isChecked={isWriteChecked}
+                                        isDisabled={isWriteDisabled}
                                         onChange={(e) => handlePermissionChange(item.key, 'write', e.target.checked)}
                                     >
                                         <Text fontSize={depth === 0 ? "xs" : "10px"} fontWeight="semibold">Write/Modify</Text>

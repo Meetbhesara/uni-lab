@@ -29,51 +29,130 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // Dynamic daily logout check (12:00 AM reset)
+    // ── Dynamic Daily & Midnight Auto-Logout (12:00 AM reset) ──────────────────
     useEffect(() => {
         const checkSessionExpiry = () => {
-            const token = localStorage.getItem('token');
-            const lastLoginStr = localStorage.getItem('lastLoginAt');
-            if (!token || !lastLoginStr) return;
+            const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+            const lastLoginStr = sessionStorage.getItem('lastLoginAt') || localStorage.getItem('lastLoginAt');
+            if (!token || !lastLoginStr) return false;
 
             const lastLogin = new Date(parseInt(lastLoginStr));
-            const todayMidnight = new Date().setHours(0, 0, 0, 0);
+            const todayMidnight = new Date();
+            todayMidnight.setHours(0, 0, 0, 0);
 
-            // If last login was before the most recent midnight, logout
-            if (lastLogin.getTime() < todayMidnight) {
-                console.log("Session expired for the day. Automatic logout triggered.");
+            // If last login was before today's 12:00 AM midnight, trigger auto logout
+            if (lastLogin.getTime() < todayMidnight.getTime()) {
+                console.log("Session expired at midnight. Automatic logout triggered, redirecting to Home page.");
                 logout();
+                return true;
             }
+            return false;
         };
 
-        checkSessionExpiry();
-        // Periodically refresh the check every hour to catch midnight crossovers
-        const interval = setInterval(checkSessionExpiry, 3600000);
-        return () => clearInterval(interval);
-    }, []);
+        // Check immediately on mount/update
+        if (checkSessionExpiry()) return;
+
+        // Schedule exact timeout to trigger precisely at next midnight (12:00:00 AM tonight)
+        const scheduleMidnightTimer = () => {
+            const now = new Date();
+            const nextMidnight = new Date();
+            nextMidnight.setHours(24, 0, 0, 0); // exact next midnight
+            const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+            return setTimeout(() => {
+                console.log("Midnight reached! Automatic logout triggered, redirecting to Home page.");
+                logout();
+            }, msUntilMidnight);
+        };
+
+        let midnightTimer = scheduleMidnightTimer();
+
+        // Safety interval check (in case tab sleeps/wakes across midnight)
+        const interval = setInterval(() => {
+            const expired = checkSessionExpiry();
+            if (expired) {
+                clearTimeout(midnightTimer);
+            } else {
+                clearTimeout(midnightTimer);
+                midnightTimer = scheduleMidnightTimer();
+            }
+        }, 15 * 60 * 1000); // Check every 15 minutes
+
+        // Also check whenever user switches back to the tab or wakes up computer
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                checkSessionExpiry();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Listen for 401 Unauthorized errors from API interceptors
+        const handleSessionExpired = () => {
+            console.log("401 Unauthorized detected. Triggering auto logout, redirecting to Home page.");
+            logout();
+        };
+        window.addEventListener('auth-session-expired', handleSessionExpired);
+
+        return () => {
+            clearTimeout(midnightTimer);
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('auth-session-expired', handleSessionExpired);
+        };
+    }, [user]);
 
     useEffect(() => {
-        // Check local storage for token/user on load
-        const token = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
+        // Check session storage on load (sessionStorage is cleared when browser/window is closed)
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        const storedUser = sessionStorage.getItem('user') || localStorage.getItem('user');
 
-        if (token) {
+        // If sessionStorage is empty but localStorage has token, we require re-login if browser was closed
+        // By using sessionStorage primarily for login state, closing the browser forces re-login
+        if (sessionStorage.getItem('token')) {
             if (storedUser) {
-                setUser(JSON.parse(storedUser));
+                try { setUser(JSON.parse(storedUser)); } catch (e) {}
             }
             refreshUser(); // Background sync on load
         } else {
+            // Browser was closed and re-opened or first visit -> wipe old localStorage sessions to require re-login
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('lastLoginAt');
             setLoading(false);
         }
     }, []);
 
+    useEffect(() => {
+        if (!user?.isAdmin) return;
+        const handleBeforeUnload = () => {
+            const currentToken = sessionStorage.getItem('token');
+            if (currentToken) {
+                const baseUrl = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : 'http://localhost:5001/api';
+                try {
+                    fetch(`${baseUrl}/auth/logout`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
+                        keepalive: true
+                    }).catch(() => {});
+                } catch (e) {}
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('unload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('unload', handleBeforeUnload);
+        };
+    }, [user]);
+
     const refreshUser = async () => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
         if (!token) return;
         try {
             const res = await api.get('/auth/me');
             setUser(res.data);
-            localStorage.setItem('user', JSON.stringify(res.data));
+            sessionStorage.setItem('user', JSON.stringify(res.data));
         } catch (err) {
             console.error('Failed to sync latest user data', err);
         } finally {
@@ -107,9 +186,12 @@ export const AuthProvider = ({ children }) => {
 
 
 
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(userObj));
-            localStorage.setItem('lastLoginAt', Date.now().toString());
+            sessionStorage.setItem('token', token);
+            sessionStorage.setItem('user', JSON.stringify(userObj));
+            sessionStorage.setItem('lastLoginAt', Date.now().toString());
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('lastLoginAt');
             setUser(userObj);
             return { success: true };
         } catch (error) {
@@ -122,9 +204,12 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await api.post('/auth/phone-login', { phone });
             const { token, user: userData } = response.data;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(userData));
-            localStorage.setItem('lastLoginAt', Date.now().toString());
+            sessionStorage.setItem('token', token);
+            sessionStorage.setItem('user', JSON.stringify(userData));
+            sessionStorage.setItem('lastLoginAt', Date.now().toString());
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('lastLoginAt');
             setUser(userData);
             return { success: true, user: userData };
         } catch (error) {
@@ -136,9 +221,12 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await api.post('/auth/phone-register', data);
             const { token, user: userData } = response.data;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(userData));
-            localStorage.setItem('lastLoginAt', Date.now().toString());
+            sessionStorage.setItem('token', token);
+            sessionStorage.setItem('user', JSON.stringify(userData));
+            sessionStorage.setItem('lastLoginAt', Date.now().toString());
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('lastLoginAt');
             setUser(userData);
             return { success: true, user: userData };
         } catch (error) {
@@ -160,9 +248,12 @@ export const AuthProvider = ({ children }) => {
             const response = await api.post('/auth/verify-otp', { phone, otp });
             const { token, user: userData } = response.data;
             if (token) {
-                localStorage.setItem('token', token);
-                localStorage.setItem('user', JSON.stringify(userData));
-                localStorage.setItem('lastLoginAt', Date.now().toString());
+                sessionStorage.setItem('token', token);
+                sessionStorage.setItem('user', JSON.stringify(userData));
+                sessionStorage.setItem('lastLoginAt', Date.now().toString());
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                localStorage.removeItem('lastLoginAt');
                 setUser(userData);
             }
             return { success: true, user: userData };
@@ -171,11 +262,25 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const logout = () => {
+    const logout = (options = { redirect: true }) => {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        if (token && options.redirect !== false) {
+            try {
+                api.post('/auth/logout').catch(() => {});
+            } catch (e) {}
+        }
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
+        sessionStorage.removeItem('lastLoginAt');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('lastLoginAt');
-        setUser(null);
+        if (options.redirect !== false) {
+            setUser(null);
+            if (window.location.pathname !== '/') {
+                window.location.href = '/';
+            }
+        }
     };
 
     const register = async (name, email, password, contact) => {
@@ -202,9 +307,12 @@ export const AuthProvider = ({ children }) => {
             const { latitude, longitude } = await getCoordinates();
             const response = await api.post('/auth/verify-admin-otp', { email, otp, latitude, longitude });
             const { token, user: userData } = response.data;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(userData));
-            localStorage.setItem('lastLoginAt', Date.now().toString());
+            sessionStorage.setItem('token', token);
+            sessionStorage.setItem('user', JSON.stringify(userData));
+            sessionStorage.setItem('lastLoginAt', Date.now().toString());
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('lastLoginAt');
             setUser(userData);
             return { success: true, user: userData };
         } catch (error) {
@@ -244,9 +352,12 @@ export const AuthProvider = ({ children }) => {
             const { latitude, longitude } = await getCoordinates();
             const response = await api.post('/auth/login-2fa', { email, token, latitude, longitude });
             const { token: authToken, user: userData } = response.data;
-            localStorage.setItem('token', authToken);
-            localStorage.setItem('user', JSON.stringify(userData));
-            localStorage.setItem('lastLoginAt', Date.now().toString());
+            sessionStorage.setItem('token', authToken);
+            sessionStorage.setItem('user', JSON.stringify(userData));
+            sessionStorage.setItem('lastLoginAt', Date.now().toString());
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('lastLoginAt');
             setUser(userData);
             return { success: true, user: userData };
         } catch (error) {
