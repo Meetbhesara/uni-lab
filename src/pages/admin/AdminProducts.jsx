@@ -69,8 +69,8 @@ const AdminProducts = () => {
         onWhatsappOpen();
     };
 
-    // Super Admin Check
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    // Super Admin Check — read from sessionStorage first (auth system stores here), fallback to localStorage
+    const user = JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
     const isSuperAdmin = user.isSuperAdmin;
     const canWrite = hasPermission(user, 'products', 'write');
     const canShowStock = hasPermission(user, 'showStock', 'read');
