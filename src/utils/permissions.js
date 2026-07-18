@@ -50,6 +50,7 @@ const PARENT_PERMISSIONS = {
     'employeeExpense_transfer_create': 'employeeExpense_transfer',
     'employeeExpense_transfer_view': 'employeeExpense_transfer',
     'employeeExpense_transfer_attendance': 'employeeExpense_transfer',
+    'employeeExpense_transfer_customAccount': 'employeeExpense_transfer',
 
     // Daily Report Sub-modules
     'employeeExpense_report_last5days': 'employeeExpense_report',

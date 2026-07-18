@@ -5,7 +5,7 @@ import {
     Card, CardBody, SimpleGrid, Flex, Spinner, Center, useToast,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter,
     ModalCloseButton, useDisclosure, Tooltip, Tag, Divider, InputGroup, InputLeftElement,
-    Checkbox
+    Checkbox, Tabs, TabList, Tab, TabPanels, TabPanel, Textarea, RadioGroup, Radio, GridItem,
 } from '@chakra-ui/react';
 import {
     FaFileInvoiceDollar, FaEye, FaCheckCircle, FaClock, FaSearch,
@@ -15,6 +15,7 @@ import {
 } from 'react-icons/fa';
 import api from '../../api/axios';
 import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
+import { generateInvoiceHtml } from '../../utils/invoiceHtmlGenerator';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
@@ -65,6 +66,17 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     // Group Details popup state
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [selectedEntryForDocs, setSelectedEntryForDocs] = useState(null);
+    const [selectedEntries, setSelectedEntries] = useState([]);
+    // Tabs & Invoice Form state
+    const [activeTab, setActiveTab] = useState(0);
+    const [invoiceForm, setInvoiceForm] = useState({ 
+        isOpen: false, type: '', entries: [], entryConfigs: {}, 
+        companyName: 'UNIQUE ENGINEERING', 
+        invoiceId: '',
+        buyerDetails: { name: '', address: '', gstin: '', stateName: '', stateCode: '24', contactPerson: '', contact: '' },
+        shipToDetails: { name: '', address: '', gstin: '', stateName: '', stateCode: '24', contactPerson: '', contact: '' },
+        description: '', targetGroup: null 
+    });
 
     const [schedules, setSchedules] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -72,7 +84,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
     // Filters
     const [search, setSearch] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
     const [filterLedger, setFilterLedger] = useState('');
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
@@ -84,7 +95,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             const params = new URLSearchParams();
             if (filterDateFrom) params.append('startDate', filterDateFrom);
             if (filterDateTo) params.append('endDate', filterDateTo);
-            if (filterStatus) params.append('invoiceStatus', filterStatus);
 
             const res = await api.get(`/schedule-master?${params.toString()}`);
             if (res.data.success) {
@@ -103,13 +113,15 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 });
                 
                 setSchedules(formattedSchedules);
+                // By default, select all pending entries across all schedules
+                setSelectedEntries(formattedSchedules.filter(s => s.invoiceStatus !== 'Completed').map(s => s._id));
             }
         } catch (err) {
             toast({ title: 'Failed to load schedules', status: 'error', duration: 3000 });
         } finally {
             setLoading(false);
         }
-    }, [filterDateFrom, filterDateTo, filterStatus]);
+    }, [filterDateFrom, filterDateTo]);
 
     useEffect(() => { fetchVisitSchedules(); }, [fetchVisitSchedules]);
 
@@ -192,7 +204,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         return hasCoreDocs;
     });
 
-    // Filter client-side by search text and ledger
+    // Filter client-side by search text, ledger, and active tab status
     const displayed = validSchedules.filter(s => {
         const q = search.toLowerCase();
         const matchSearch = !q ||
@@ -200,7 +212,13 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             s.site?.siteName?.toLowerCase().includes(q) ||
             s.operative?.name?.toLowerCase().includes(q);
         const matchLedger = !filterLedger || s.ledger === filterLedger;
-        return matchSearch && matchLedger;
+        
+        const stat = s.invoiceStatus || 'Pending';
+        const normalizedStat = stat === 'Completed' ? 'Final' : stat;
+        const targetStatus = ['Pending', 'Proforma', 'Final', 'Closed'][activeTab];
+        const matchTab = normalizedStat === targetStatus;
+
+        return matchSearch && matchLedger && matchTab;
     });
 
     const stats = {
@@ -270,6 +288,12 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             // Find latest entry date
             const sortedAll = [...g.entries].sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
             g.latestEntryDate = sortedAll[0]?.scheduleDate || null;
+            
+            // Find PDFs and IDs
+            g.proformaInvoicePdf = g.entries.find(e => e.proformaInvoicePdf)?.proformaInvoicePdf || null;
+            g.finalInvoicePdf = g.entries.find(e => e.finalInvoicePdf)?.finalInvoicePdf || null;
+            g.proformaInvoiceId = g.entries.find(e => e.proformaInvoiceId)?.proformaInvoiceId || null;
+            g.finalInvoiceId = g.entries.find(e => e.finalInvoiceId)?.finalInvoiceId || null;
         });
 
         // Sort: Pending groups first (ordered by earliestPendingDate asc), Completed groups next (ordered by latestEntryDate desc)
@@ -286,6 +310,152 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
         return list;
     }, [displayed]);
+
+    const validateAndPrepareInvoice = (type, targetGroup) => {
+        const group = targetGroup || selectedGroup;
+        if (!group || !group.site) return;
+        const entriesToInvoice = group.entries.filter(e => selectedEntries.includes(e._id));
+        
+        if (entriesToInvoice.length === 0) {
+            toast({ title: 'No entries selected', status: 'warning', duration: 2000 });
+            return;
+        }
+
+        const siteLedgers = group.site.ledgerItems || [];
+        if (siteLedgers.length === 0) {
+             toast({ title: `Validation Failed: No ledgers configured for Site '${group.site.siteName}'. Please update the Site Master.`, status: 'error', duration: 5000 });
+             return;
+        }
+
+        const initialConfigs = {};
+        entriesToInvoice.forEach(entry => {
+            let defaultLedger = '';
+            let defaultRate = 0;
+            
+            const match = siteLedgers.find(l => l.ledger === entry.ledger);
+            if (match) {
+                defaultLedger = match.ledger;
+                defaultRate = match.amount;
+            } else if (siteLedgers.length > 0) {
+                defaultLedger = siteLedgers[0].ledger;
+                defaultRate = siteLedgers[0].amount;
+            }
+            
+            initialConfigs[entry._id] = {
+                ledger: defaultLedger,
+                rate: defaultRate,
+                qty: 1,
+                instrument: 'Total Station'
+            };
+        });
+
+        // Determine next Invoice ID
+        let maxId = 0;
+        const prefix = type === 'PROFORMA' ? 'PRM/' : 'INV/';
+        schedules.forEach(s => {
+            let idStr = type === 'PROFORMA' ? s.proformaInvoiceId : s.finalInvoiceId;
+            if (!idStr && s.invoiceDetails?.invoiceId) {
+                idStr = s.invoiceDetails.invoiceId;
+            }
+            if (idStr && idStr.startsWith(prefix)) {
+                const parts = idStr.split('/');
+                if (parts.length > 1) {
+                    const num = parseInt(parts[1], 10);
+                    if (!isNaN(num) && num > maxId) maxId = num;
+                }
+            }
+        });
+        const nextInvoiceId = `${prefix}${String(maxId + 1).padStart(4, '0')}`;
+
+        setInvoiceForm({
+            isOpen: true,
+            type,
+            entries: entriesToInvoice,
+            entryConfigs: initialConfigs,
+            companyName: 'UNIQUE ENGINEERING',
+            buyerDetails: {
+                name: group.client?.clientName || 'NA',
+                address: group.client?.clientAddress || 'NA',
+                gstin: group.client?.gstNo || 'NA',
+                stateName: group.client?.state || 'Gujarat',
+                stateCode: '24',
+                contactPerson: group.client?.contactPerson?.name || 'NA',
+                contact: group.client?.contactPerson?.phone || (group.client?.contactNumbers?.[0] || 'NA'),
+            },
+            shipToDetails: {
+                name: group.client?.clientName || group.site?.siteName || 'NA',
+                address: group.site?.siteAddress || 'NA',
+                gstin: group.client?.gstNo || 'NA',
+                stateName: group.site?.stateName || group.client?.state || 'Gujarat',
+                stateCode: group.site?.stateCode || '24',
+                contactPerson: group.site?.contactPersons?.[0]?.name || group.client?.contactPerson?.name || 'NA',
+                contact: group.site?.contactPersons?.[0]?.phone || group.site?.contactPhone || 'NA',
+            },
+            invoiceId: nextInvoiceId,
+            description: '',
+            targetGroup: group
+        });
+    };
+
+    const handleSubmitInvoiceForm = async () => {
+        try {
+            setLoading(true);
+            
+            // Build the pdf HTML
+            const pdfHtml = generateInvoiceHtml(invoiceForm, invoiceForm.entries, invoiceForm.type);
+            
+            // Call generate-invoice endpoint
+            const res = await api.post('/schedule-master/generate-invoice', {
+                entryIds: invoiceForm.entries.map(e => e._id),
+                invoiceType: invoiceForm.type === 'PROFORMA' ? 'proforma' : 'final',
+                invoiceId: invoiceForm.invoiceId,
+                invoiceDetails: {
+                    invoiceId: invoiceForm.invoiceId,
+                    companyName: invoiceForm.companyName,
+                    buyerDetails: invoiceForm.buyerDetails,
+                    shipToDetails: invoiceForm.shipToDetails,
+                    description: invoiceForm.description,
+                    entryConfigs: invoiceForm.entryConfigs,
+                    generatedAt: new Date().toISOString()
+                },
+                pdfHtml
+            });
+
+            if (res.data.success) {
+                toast({ title: 'Invoice Generated successfully!', status: 'success' });
+            } else {
+                toast({ title: 'Warning', description: res.data.message, status: 'warning' });
+            }
+            setInvoiceForm(prev => ({ ...prev, isOpen: false }));
+            setSelectedGroup(null);
+            fetchVisitSchedules();
+        } catch (error) {
+            toast({ title: 'Failed to generate invoice', status: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleStatusMove = async (group, newStatus) => {
+        try {
+            setLoading(true);
+            const entriesToMove = group.entries.filter(e => selectedEntries.includes(e._id));
+            if(entriesToMove.length === 0) {
+                toast({title: 'No entries selected', status:'warning'});
+                return;
+            }
+            for (const entry of entriesToMove) {
+                await api.patch(`/schedule-master/invoice-status/${entry._id}`, { invoiceStatus: newStatus });
+            }
+            toast({ title: `Moved to ${newStatus}`, status: 'success' });
+            setSelectedGroup(null);
+            fetchVisitSchedules();
+        } catch(e) {
+            toast({ title: 'Error moving entries', status: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <Box py={6} bg="gray.50" minH="100vh">
@@ -338,10 +508,20 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                         ))}
                     </SimpleGrid>
 
+                    {/* ── Tabs ── */}
+                    <Tabs variant="soft-rounded" colorScheme="blue" index={activeTab} onChange={(idx) => { setActiveTab(idx); setSelectedGroup(null); }}>
+                        <TabList bg="white" p={2} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                            <Tab fontWeight="bold">⏳ Pending</Tab>
+                            <Tab fontWeight="bold">📄 Proforma</Tab>
+                            <Tab fontWeight="bold">✅ Final Invoice</Tab>
+                            <Tab fontWeight="bold">🔒 Closed</Tab>
+                        </TabList>
+                    </Tabs>
+
                     {/* ── Filters ── */}
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
                         <CardBody p={5}>
-                            <SimpleGrid columns={{ base: 1, md: 5 }} spacing={4} alignItems="flex-end">
+                            <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4} alignItems="flex-end">
                                 <InputGroup>
                                     <InputLeftElement><Icon as={FaSearch} color="gray.400" /></InputLeftElement>
                                     <Input
@@ -352,10 +532,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         bg="gray.50"
                                     />
                                 </InputGroup>
-                                <Select placeholder="All Bill Status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} borderRadius="xl" bg="gray.50">
-                                    <option value="Pending">Pending</option>
-                                    <option value="Completed">Completed</option>
-                                </Select>
                                 <Select placeholder="All Ledger Types" value={filterLedger} onChange={e => setFilterLedger(e.target.value)} borderRadius="xl" bg="gray.50">
                                     <option value="Full Day">Full Day</option>
                                     <option value="Half Day">Half Day</option>
@@ -505,6 +681,35 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                         </Td>
                                                         <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
                                                             <HStack justify="flex-end" spacing={2}>
+                                                                {activeTab === 0 && (
+                                                                    <>
+                                                                        <Button size="xs" colorScheme="purple" variant="outline" onClick={() => validateAndPrepareInvoice('PROFORMA', group)}>Proforma</Button>
+                                                                        <Button size="xs" colorScheme="green" variant="solid" onClick={() => validateAndPrepareInvoice('FINAL', group)}>Final</Button>
+                                                                    </>
+                                                                )}
+                                                                {activeTab === 1 && (
+                                                                    <Button size="xs" colorScheme="green" variant="solid" onClick={() => validateAndPrepareInvoice('FINAL', group)}>Final Invoice</Button>
+                                                                )}
+                                                                {activeTab === 2 && (
+                                                                    <Button size="xs" colorScheme="gray" variant="solid" onClick={() => handleStatusMove(group, 'Closed')}>Mark Closed</Button>
+                                                                )}
+                                                                {activeTab === 3 && (
+                                                                    <Badge colorScheme="gray">Archived</Badge>
+                                                                )}
+                                                                {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
+                                                                    <Tooltip label="View Generated Invoice PDF" placement="top">
+                                                                        <IconButton
+                                                                            as="a"
+                                                                            href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
+                                                                            target="_blank"
+                                                                            icon={<FaFilePdf />}
+                                                                            size="sm"
+                                                                            colorScheme="red"
+                                                                            variant="solid"
+                                                                            borderRadius="full"
+                                                                        />
+                                                                    </Tooltip>
+                                                                )}
                                                                 <IconButton
                                                                     aria-label="View Details"
                                                                     icon={<FaListUl />}
@@ -580,9 +785,14 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             <Td py={3}>
                                                                 <Checkbox
                                                                     colorScheme="green"
-                                                                    isChecked={isEntryCompleted}
-                                                                    onChange={() => toggleInvoiceStatus(entry)}
-                                                                    isDisabled={updatingId === entry._id}
+                                                                    isChecked={selectedEntries.includes(entry._id)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            setSelectedEntries(prev => [...prev, entry._id]);
+                                                                        } else {
+                                                                            setSelectedEntries(prev => prev.filter(id => id !== entry._id));
+                                                                        }
+                                                                    }}
                                                                 />
                                                             </Td>
                                                             <Td py={3} fontWeight="bold" color="gray.700">
@@ -740,6 +950,237 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                     </ModalBody>
                     <ModalFooter>
                         <Button colorScheme="blue" borderRadius="full" px={8} onClick={() => { setSelectedGroup(null); setSelectedEntryForDocs(null); }}>Close</Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+            <Modal isOpen={invoiceForm.isOpen} onClose={() => setInvoiceForm(prev => ({ ...prev, isOpen: false }))} size="6xl" isCentered>
+                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl">
+                    <ModalHeader bg={invoiceForm.type === 'PROFORMA' ? 'purple.500' : 'green.500'} color="white">
+                        Configure {invoiceForm.type === 'PROFORMA' ? 'Proforma' : 'Final'} Invoice
+                    </ModalHeader>
+                    <ModalCloseButton color="white" />
+                    <ModalBody p={6}>
+                        <VStack spacing={6} align="stretch">
+                            <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                <Text fontSize="md" fontWeight="black" mb={4} color="blue.700" textTransform="uppercase">1. Company & Description</Text>
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                                    <Box>
+                                        <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">Billing Company Selection</Text>
+                                        <RadioGroup 
+                                            value={invoiceForm.companyName} 
+                                            onChange={(val) => setInvoiceForm(prev => ({ ...prev, companyName: val }))}
+                                        >
+                                            <HStack spacing={6}>
+                                                <Radio value="UNIQUE ENGINEERING" colorScheme="blue" size="lg">
+                                                    <Text fontWeight="semibold">Unique Engineering</Text>
+                                                </Radio>
+                                                <Radio value="UNIQUE INSPECTION" colorScheme="purple" size="lg" isDisabled>
+                                                    <Text fontWeight="semibold" textDecoration="line-through">Unique Inspection</Text>
+                                                </Radio>
+                                                <Radio value="UNIQUE LAB INSTRUMENT" colorScheme="purple" size="lg">
+                                                    <Text fontWeight="semibold">Unique Lab Instrument</Text>
+                                                </Radio>
+                                            </HStack>
+                                        </RadioGroup>
+                                    </Box>
+                                    <Box>
+                                        <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">Invoice No.</Text>
+                                        <Input 
+                                            value={invoiceForm.invoiceId} 
+                                            onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceId: e.target.value }))}
+                                            bg="white"
+                                            fontWeight="bold"
+                                            color="blue.600"
+                                            borderRadius="md"
+                                        />
+                                    </Box>
+                                </SimpleGrid>
+                            </Box>
+
+                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                                {/* Buyer Section */}
+                                <Box bg="gray.50" p={5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                    <Text fontSize="md" fontWeight="black" mb={4} color="purple.700" textTransform="uppercase">Buyer (Bill To)</Text>
+                                    <VStack spacing={3} align="stretch">
+                                        <InputGroup size="sm">
+                                            <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Name:</Text></InputLeftElement>
+                                            <Input pl="100px" bg="white" value={invoiceForm.buyerDetails.name} onChange={(e) => setInvoiceForm(prev => ({ ...prev, buyerDetails: { ...prev.buyerDetails, name: e.target.value } }))} />
+                                        </InputGroup>
+                                        <InputGroup size="sm">
+                                            <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Address:</Text></InputLeftElement>
+                                            <Textarea pl="100px" bg="white" minH="80px" py={1} value={invoiceForm.buyerDetails.address} onChange={(e) => setInvoiceForm(prev => ({ ...prev, buyerDetails: { ...prev.buyerDetails, address: e.target.value } }))} />
+                                        </InputGroup>
+                                        <InputGroup size="sm">
+                                            <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">GSTIN/UIN:</Text></InputLeftElement>
+                                            <Input pl="100px" bg="white" value={invoiceForm.buyerDetails.gstin} onChange={(e) => setInvoiceForm(prev => ({ ...prev, buyerDetails: { ...prev.buyerDetails, gstin: e.target.value } }))} />
+                                        </InputGroup>
+                                        <HStack spacing={2}>
+                                            <InputGroup size="sm">
+                                                <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">State:</Text></InputLeftElement>
+                                                <Input pl="100px" bg="white" value={invoiceForm.buyerDetails.stateName} onChange={(e) => setInvoiceForm(prev => ({ ...prev, buyerDetails: { ...prev.buyerDetails, stateName: e.target.value } }))} />
+                                            </InputGroup>
+                                            <InputGroup size="sm" w="150px">
+                                                <InputLeftElement w="50px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Code:</Text></InputLeftElement>
+                                                <Input pl="50px" bg="white" value={invoiceForm.buyerDetails.stateCode} onChange={(e) => setInvoiceForm(prev => ({ ...prev, buyerDetails: { ...prev.buyerDetails, stateCode: e.target.value } }))} />
+                                            </InputGroup>
+                                        </HStack>
+                                        <HStack spacing={2}>
+                                            <InputGroup size="sm">
+                                                <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Contact Person:</Text></InputLeftElement>
+                                                <Input pl="100px" bg="white" value={invoiceForm.buyerDetails.contactPerson} onChange={(e) => setInvoiceForm(prev => ({ ...prev, buyerDetails: { ...prev.buyerDetails, contactPerson: e.target.value } }))} />
+                                            </InputGroup>
+                                            <InputGroup size="sm">
+                                                <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Contact #:</Text></InputLeftElement>
+                                                <Input pl="100px" bg="white" value={invoiceForm.buyerDetails.contact} onChange={(e) => setInvoiceForm(prev => ({ ...prev, buyerDetails: { ...prev.buyerDetails, contact: e.target.value } }))} />
+                                            </InputGroup>
+                                        </HStack>
+                                    </VStack>
+                                </Box>
+
+                                {/* Consignee Section */}
+                                <Box bg="gray.50" p={5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                    <Text fontSize="md" fontWeight="black" mb={4} color="teal.700" textTransform="uppercase">Consignee (Ship To)</Text>
+                                    <VStack spacing={3} align="stretch">
+                                        <InputGroup size="sm">
+                                            <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Name:</Text></InputLeftElement>
+                                            <Input pl="100px" bg="white" value={invoiceForm.shipToDetails.name} onChange={(e) => setInvoiceForm(prev => ({ ...prev, shipToDetails: { ...prev.shipToDetails, name: e.target.value } }))} />
+                                        </InputGroup>
+                                        <InputGroup size="sm">
+                                            <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Address:</Text></InputLeftElement>
+                                            <Textarea pl="100px" bg="white" minH="80px" py={1} value={invoiceForm.shipToDetails.address} onChange={(e) => setInvoiceForm(prev => ({ ...prev, shipToDetails: { ...prev.shipToDetails, address: e.target.value } }))} />
+                                        </InputGroup>
+                                        <InputGroup size="sm">
+                                            <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">GSTIN/UIN:</Text></InputLeftElement>
+                                            <Input pl="100px" bg="white" value={invoiceForm.shipToDetails.gstin} onChange={(e) => setInvoiceForm(prev => ({ ...prev, shipToDetails: { ...prev.shipToDetails, gstin: e.target.value } }))} />
+                                        </InputGroup>
+                                        <HStack spacing={2}>
+                                            <InputGroup size="sm">
+                                                <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">State:</Text></InputLeftElement>
+                                                <Input pl="100px" bg="white" value={invoiceForm.shipToDetails.stateName} onChange={(e) => setInvoiceForm(prev => ({ ...prev, shipToDetails: { ...prev.shipToDetails, stateName: e.target.value } }))} />
+                                            </InputGroup>
+                                            <InputGroup size="sm" w="150px">
+                                                <InputLeftElement w="50px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Code:</Text></InputLeftElement>
+                                                <Input pl="50px" bg="white" value={invoiceForm.shipToDetails.stateCode} onChange={(e) => setInvoiceForm(prev => ({ ...prev, shipToDetails: { ...prev.shipToDetails, stateCode: e.target.value } }))} />
+                                            </InputGroup>
+                                        </HStack>
+                                        <HStack spacing={2}>
+                                            <InputGroup size="sm">
+                                                <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Contact Person:</Text></InputLeftElement>
+                                                <Input pl="100px" bg="white" value={invoiceForm.shipToDetails.contactPerson} onChange={(e) => setInvoiceForm(prev => ({ ...prev, shipToDetails: { ...prev.shipToDetails, contactPerson: e.target.value } }))} />
+                                            </InputGroup>
+                                            <InputGroup size="sm">
+                                                <InputLeftElement w="100px"><Text fontSize="xs" fontWeight="bold" color="gray.500">Contact #:</Text></InputLeftElement>
+                                                <Input pl="100px" bg="white" value={invoiceForm.shipToDetails.contact} onChange={(e) => setInvoiceForm(prev => ({ ...prev, shipToDetails: { ...prev.shipToDetails, contact: e.target.value } }))} />
+                                            </InputGroup>
+                                        </HStack>
+                                    </VStack>
+                                </Box>
+                            </SimpleGrid>
+
+                            <Box mt={2}>
+                                <Text fontSize="md" fontWeight="bold" mb={3} color="gray.700">Invoice Items (Select Ledgers & Quantities)</Text>
+                                <TableContainer border="1px solid" borderColor="gray.200" borderRadius="lg">
+                                    <Table size="sm" variant="simple">
+                                        <Thead bg="gray.100">
+                                            <Tr>
+                                                <Th>Date</Th>
+                                                <Th>Operative</Th>
+                                                <Th>Instrument</Th>
+                                                <Th>Service Ledger</Th>
+                                                <Th>Rate (₹)</Th>
+                                                <Th>Quantity</Th>
+                                                <Th isNumeric>Amount (₹)</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {invoiceForm.entries.map(entry => {
+                                                const conf = invoiceForm.entryConfigs[entry._id] || {};
+                                                return (
+                                                    <Tr key={entry._id}>
+                                                        <Td>{formatDate(entry.scheduleDate)}</Td>
+                                                        <Td>{entry.operative?.name || 'Unassigned'}</Td>
+                                                        <Td>
+                                                            <Select 
+                                                                size="sm" 
+                                                                value={conf.instrument} 
+                                                                onChange={(e) => setInvoiceForm(prev => ({
+                                                                    ...prev,
+                                                                    entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, instrument: e.target.value } }
+                                                                }))}
+                                                            >
+                                                                <option value="Total Station">Total Station</option>
+                                                                <option value="DGPS">DGPS</option>
+                                                                <option value="Auto Level">Auto Level</option>
+                                                                <option value="Drone">Drone</option>
+                                                                <option value="Other">Other</option>
+                                                            </Select>
+                                                        </Td>
+                                                        <Td>
+                                                            <Select 
+                                                                size="sm" 
+                                                                value={conf.ledger} 
+                                                                onChange={(e) => {
+                                                                    const selectedLedger = invoiceForm.targetGroup?.site?.ledgerItems?.find(l => l.ledger === e.target.value);
+                                                                    setInvoiceForm(prev => ({
+                                                                        ...prev,
+                                                                        entryConfigs: {
+                                                                            ...prev.entryConfigs,
+                                                                            [entry._id]: { ...conf, ledger: e.target.value, rate: selectedLedger ? selectedLedger.amount : 0 }
+                                                                        }
+                                                                    }))
+                                                                }}
+                                                            >
+                                                                {invoiceForm.targetGroup?.site?.ledgerItems?.map(l => (
+                                                                    <option key={l.ledger} value={l.ledger}>{l.ledger}</option>
+                                                                ))}
+                                                            </Select>
+                                                        </Td>
+                                                        <Td>
+                                                            <Input 
+                                                                size="sm" 
+                                                                type="number" 
+                                                                w="100px"
+                                                                value={conf.rate} 
+                                                                onChange={(e) => setInvoiceForm(prev => ({
+                                                                    ...prev,
+                                                                    entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, rate: Number(e.target.value) } }
+                                                                }))} 
+                                                            />
+                                                        </Td>
+                                                        <Td>
+                                                            <Input 
+                                                                size="sm" 
+                                                                type="number" 
+                                                                w="80px"
+                                                                value={conf.qty} 
+                                                                onChange={(e) => setInvoiceForm(prev => ({
+                                                                    ...prev,
+                                                                    entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, qty: Number(e.target.value) } }
+                                                                }))} 
+                                                            />
+                                                        </Td>
+                                                        <Td isNumeric fontWeight="bold" color="blue.600">
+                                                            {conf.rate * conf.qty}
+                                                        </Td>
+                                                    </Tr>
+                                                )
+                                            })}
+                                        </Tbody>
+                                    </Table>
+                                </TableContainer>
+                            </Box>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50">
+                        <Button variant="ghost" mr={3} onClick={() => setInvoiceForm(prev => ({ ...prev, isOpen: false }))}>Cancel</Button>
+                        <Button 
+                            colorScheme={invoiceForm.type === 'PROFORMA' ? 'purple' : 'green'} 
+                            onClick={handleSubmitInvoiceForm}
+                            isLoading={loading}
+                        >
+                            Submit & Generate {invoiceForm.type === 'PROFORMA' ? 'Proforma' : 'Final'}
+                        </Button>
                     </ModalFooter>
                 </ModalContent>
             </Modal>

@@ -194,6 +194,8 @@ const AdminPermissions = () => {
             
             // Update local admin state so it doesn't revert if re-selected
             setAdmins(prev => prev.map(a => a._id === selectedAdmin._id ? { ...a, permissions } : a));
+            // Keep selectedAdmin in sync so its .permissions field is always fresh
+            setSelectedAdmin(prev => ({ ...prev, permissions }));
         } catch (err) {
             console.error(err);
             toast({ title: 'Failed to update permissions', status: 'error', isClosable: true });

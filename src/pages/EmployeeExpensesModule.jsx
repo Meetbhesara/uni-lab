@@ -31,6 +31,8 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
     const canWriteTransferView = hasPermission(user, 'employeeExpense_transfer_view', 'write');
     const canReadTransferAttendance = hasPermission(user, 'employeeExpense_transfer_attendance', 'read');
     const canWriteTransferAttendance = hasPermission(user, 'employeeExpense_transfer_attendance', 'write');
+    const canReadTransferCustomAccount = hasPermission(user, 'employeeExpense_transfer_customAccount', 'read');
+    const canWriteTransferCustomAccount = hasPermission(user, 'employeeExpense_transfer_customAccount', 'write');
     const canReadDaily = hasPermission(user, 'employeeExpense_daily', 'read');
     const canWriteDaily = hasPermission(user, 'employeeExpense_daily', 'write');
     const canReadReport = hasPermission(user, 'employeeExpense_report', 'read');
@@ -39,54 +41,49 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
     const [employees, setEmployees] = useState([]);
     const [clients, setClients] = useState([]);
     const [sites, setSites] = useState([]);
-    const [loading, setLoading] = useState(false);
-
-    const updateSingleEmployee = (updatedEmp) => {
-        setEmployees(prev => prev.map(emp => emp._id === updatedEmp._id ? updatedEmp : emp));
-    };
+    const [loading, setLoading] = useState(true);
+    const [fuelType, setFuelType] = useState('Petrol');
+    const toast = useToast();
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [eRes, cRes, sRes] = await Promise.all([
-                api.get('/employee-master?t=' + Date.now()),
-                api.get('/client-master?t=' + Date.now()),
-                api.get('/site-master?t=' + Date.now())
+            const [empRes, cliRes, siteRes] = await Promise.all([
+                api.get('/employee-master'),
+                api.get('/client-master'),
+                api.get('/site-master')
             ]);
-            if (eRes.data.success) setEmployees(eRes.data.data);
-            if (cRes.data.success) setClients(cRes.data.data);
-            if (sRes.data.success) setSites(sRes.data.data);
-        } catch (err) {
-            console.error("Failed to fetch initial data", err);
+            if (empRes.data.success) setEmployees(empRes.data.data);
+            if (cliRes.data.success) setClients(cliRes.data.data);
+            if (siteRes.data.success) setSites(siteRes.data.data);
+        } catch (error) {
+            console.error("Failed to fetch data for Employee Expenses Module", error);
+            toast({
+                title: 'Error fetching data',
+                description: error.message || 'Something went wrong',
+                status: 'error',
+                duration: 3000,
+                position: 'top-right'
+            });
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => { 
+    const updateSingleEmployee = async () => {
+        try {
+            const empRes = await api.get('/employee-master');
+            if (empRes.data.success) setEmployees(empRes.data.data);
+        } catch (error) {
+            console.error("Failed to refresh employees", error);
+        }
+    };
+
+    useEffect(() => {
         if (canReadModule) {
-            fetchData(); 
+            fetchData();
         }
     }, [canReadModule]);
-
-    const [selectedExpenseEmployee, setSelectedExpenseEmployee] = useState({ id: '', name: '' });
-    const [reportType, setReportType] = useState('Ledger');
-    
-    // Default to Current Financial Year
-    const getCurrentFY = () => {
-        const today = new Date();
-        return today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
-    };
-    
-    const today = new Date();
-    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-    const currentDate = today.toISOString().split('T')[0];
-    
-    const [selectedFY, setSelectedFY] = useState('');
-    const [selectedMonth, setSelectedMonth] = useState('');
-    const [fyPageStart, setFyPageStart] = useState(Math.floor(getCurrentFY() / 12) * 12);
-    const [globalStartDate, setGlobalStartDate] = useState(currentMonthStart);
-    const [globalEndDate, setGlobalEndDate] = useState(currentDate);
 
     const tabs = useMemo(() => {
         const list = [];
@@ -103,6 +100,8 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
                     canWriteView={canWriteTransferView}
                     canReadAttendance={canReadTransferAttendance}
                     canWriteAttendance={canWriteTransferAttendance}
+                    canReadCustomAccount={canReadTransferCustomAccount}
+                    canWriteCustomAccount={canWriteTransferCustomAccount}
                 />
             });
         }
@@ -133,8 +132,8 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
         return list;
     }, [
         canReadTransfer, canWriteTransferCreate, canReadTransferView, canWriteTransferView, 
-        canReadTransferAttendance, canWriteTransferAttendance, canReadDaily, canWriteDaily, 
-        canReadReport, employees, clients, sites, loading
+        canReadTransferAttendance, canWriteTransferAttendance, canReadTransferCustomAccount, canWriteTransferCustomAccount,
+        canReadDaily, canWriteDaily, canReadReport, employees, clients, sites, loading
     ]);
 
     if (!canReadModule) {
@@ -730,6 +729,45 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         } catch (err) {
             console.error("Failed to fetch committed expenses", err);
             setCommittedExpenses([]);
+        }
+    };
+
+    const handleDeleteExpense = async (expenseId) => {
+        if (!window.confirm("Are you sure you want to delete this expense record? This will revert the employee's balance and reset schedule quantities.")) {
+            return;
+        }
+        try {
+            const res = await api.delete(`/employee-expense/${expenseId}`);
+            if (res.data.success) {
+                toast({
+                    title: 'Expense Deleted',
+                    description: res.data.message || 'The expense record was deleted successfully.',
+                    status: 'success',
+                    duration: 3000,
+                    isClosable: true,
+                });
+                // Refresh the committed expenses list
+                await fetchCommittedExpenses();
+                // Also trigger parent callback to refresh details (if any)
+                if (onRefresh) onRefresh();
+            } else {
+                toast({
+                    title: 'Delete Failed',
+                    description: res.data.message || 'Could not delete expense record.',
+                    status: 'error',
+                    duration: 4000,
+                    isClosable: true,
+                });
+            }
+        } catch (err) {
+            console.error("Error deleting expense:", err);
+            toast({
+                title: 'Error',
+                description: err.response?.data?.message || 'An error occurred while deleting the expense.',
+                status: 'error',
+                duration: 4000,
+                isClosable: true,
+            });
         }
     };
 
@@ -2008,7 +2046,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                 </Td>
                                                 <Td isNumeric fontWeight="black" fontSize="lg" color="blue.600">₹{exp.totalExpense?.toLocaleString()}</Td>
                                                 <Td>
-                                                    <HStack justify="center">
+                                                    <HStack justify="center" spacing={1}>
                                                         <IconButton 
                                                             size="sm" 
                                                             colorScheme="blue" 
@@ -2020,6 +2058,16 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 setIsViewModalOpen(true);
                                                             }}
                                                             aria-label="View Details"
+                                                        />
+                                                        <IconButton 
+                                                            size="sm" 
+                                                            colorScheme="red" 
+                                                            variant="ghost" 
+                                                            icon={<FaTrash />} 
+                                                            borderRadius="lg"
+                                                            onClick={() => handleDeleteExpense(exp._id)}
+                                                            aria-label="Delete Expense"
+                                                            isDisabled={!canWrite}
                                                         />
                                                     </HStack>
                                                 </Td>
@@ -2399,11 +2447,14 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     const [remarks, setRemarks] = useState({});
     const [isSaving, setIsSaving] = useState(false);
     const [savedAttendance, setSavedAttendance] = useState([]);
+    const [adminLoggedInEmpIds, setAdminLoggedInEmpIds] = useState(new Set());
+    const [isLinkedAdminMap, setIsLinkedAdminMap] = useState({});
 
     // Compute IDs of all scheduled operatives + helpers
     const scheduledIds = useMemo(() => {
         const ids = new Set();
         daySchedules.forEach(s => {
+            if (s.dayStatus === 'Rejected' || s.dayStatus === 'Skipped' || s.dayStatus === 'Paused') return;
             const opId = s.operative?._id || s.operative;
             if (opId) ids.add(String(opId));
             (s.helpers || []).forEach(h => {
@@ -2416,12 +2467,18 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
 
     // Employees NOT in the scheduler for this date — and who are Active
     const unscheduledEmployees = useMemo(() => {
-        return employees.filter(e =>
-            e.status !== 'Deactive' &&           // ← exclude deactivated employees
-            !e.isLinkedAdmin &&                  // ← exclude employees linked to an Admin user account
-            !scheduledIds.has(String(e._id))
-        );
-    }, [employees, scheduledIds]);
+        return employees.filter(e => {
+            if (e.status === 'Deactive') return false;           // exclude deactivated employees
+            if (scheduledIds.has(String(e._id))) return false;     // exclude scheduled employees
+            
+            // If employee is linked to an Admin user account, check if they logged into the admin portal today
+            const isAdmin = e.isLinkedAdmin || isLinkedAdminMap[String(e._id)];
+            if (isAdmin && adminLoggedInEmpIds.has(String(e._id))) {
+                return false;                                      // exclude admins who already marked Present via Admin Login
+            }
+            return true;
+        });
+    }, [employees, scheduledIds, adminLoggedInEmpIds, isLinkedAdminMap]);
 
     // Fetch existing attendance for this date
     useEffect(() => {
@@ -2431,6 +2488,8 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                 const res = await api.get(`/employee-expense/attendance?date=${attendanceDate}`);
                 if (res.data.success) {
                     setSavedAttendance(res.data.data || []);
+                    setAdminLoggedInEmpIds(new Set(res.data.adminLoggedInEmpIds || []));
+                    setIsLinkedAdminMap(res.data.isLinkedAdminMap || {});
                     // Pre-fill map from saved
                     const map = {};
                     const rem = {};
@@ -2645,7 +2704,9 @@ const MoneyTransferSection = ({
     canReadView = true,
     canWriteView = true,
     canReadAttendance = true,
-    canWriteAttendance = true
+    canWriteAttendance = true,
+    canReadCustomAccount = true,
+    canWriteCustomAccount = true
 }) => {
     const toast = useToast();
     const [stagedEntries, setStagedEntries] = useState([]);
@@ -2661,6 +2722,9 @@ const MoneyTransferSection = ({
 
     const [daySchedules, setDaySchedules] = useState([]);
     const [committedTransfers, setCommittedTransfers] = useState([]);
+    const [transferAccounts, setTransferAccounts] = useState([]);
+    const [newAccountName, setNewAccountName] = useState('');
+    const [isAddingAccount, setIsAddingAccount] = useState(false);
 
     const isMatchingDate = (dateVal, targetDateStr) => {
         if (!dateVal || !targetDateStr) return false;
@@ -2677,6 +2741,52 @@ const MoneyTransferSection = ({
         return dObj >= dStart && dObj < nextDay;
     };
 
+    const fetchTransferAccounts = async () => {
+        try {
+            const res = await api.get('/money-transfer-account');
+            if (res.data.success) {
+                setTransferAccounts(res.data.data || []);
+            }
+        } catch (err) {
+            console.error("Failed to fetch transfer accounts", err);
+        }
+    };
+
+    const handleAddTransferAccount = async () => {
+        if (!newAccountName || !newAccountName.trim()) {
+            toast({ title: 'Error', description: 'Please enter a name for the bank or custom account', status: 'error' });
+            return;
+        }
+        setIsAddingAccount(true);
+        try {
+            const res = await api.post('/money-transfer-account', { name: newAccountName.trim() });
+            if (res.data.success) {
+                toast({ title: 'Account Added', description: `Added "${newAccountName.trim()}" starting with ₹0 balance.`, status: 'success' });
+                setNewAccountName('');
+                await fetchTransferAccounts();
+                if (onRefresh) onRefresh();
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: err.response?.data?.message || 'Failed to add account', status: 'error' });
+        } finally {
+            setIsAddingAccount(false);
+        }
+    };
+
+    const handleDeleteTransferAccount = async (id, name) => {
+        if (!window.confirm(`Are you sure you want to remove custom account "${name}"?`)) return;
+        try {
+            const res = await api.delete(`/money-transfer-account/${id}`);
+            if (res.data.success) {
+                toast({ title: 'Account Removed', status: 'success' });
+                await fetchTransferAccounts();
+                if (onRefresh) onRefresh();
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: 'Failed to remove account', status: 'error' });
+        }
+    };
+
     const fetchCommittedTransfers = async () => {
         try {
             const res = await api.get('/employee-transfer');
@@ -2690,6 +2800,10 @@ const MoneyTransferSection = ({
             console.error("Failed to fetch committed transfers", err);
         }
     };
+
+    useEffect(() => {
+        fetchTransferAccounts();
+    }, []);
 
     useEffect(() => {
         if (!transferDate) return;
@@ -2729,6 +2843,9 @@ const MoneyTransferSection = ({
         employees.forEach(emp => {
             balances[emp._id] = emp.totalAmount || 0;
         });
+        transferAccounts.forEach(acc => {
+            balances[acc._id] = acc.totalAmount || 0;
+        });
 
         stagedEntries.forEach((entry, index) => {
             if (index === editIndex) return; 
@@ -2737,7 +2854,7 @@ const MoneyTransferSection = ({
         });
 
         return balances;
-    }, [employees, stagedEntries, editIndex]);
+    }, [employees, transferAccounts, stagedEntries, editIndex]);
 
     const handleAddEntry = () => {
         const { employee1, employee2, amount } = formData;
@@ -2758,14 +2875,18 @@ const MoneyTransferSection = ({
             return;
         }
 
-        const e1 = employees.find(e => e._id === employee1);
-        const e2 = employees.find(e => e._id === employee2);
+        const allEntities = [...employees, ...transferAccounts];
+        const e1 = allEntities.find(e => e._id === employee1);
+        const e2 = allEntities.find(e => e._id === employee2);
+
+        const isE1Bank = transferAccounts.some(a => a._id === employee1);
+        const isE2Bank = transferAccounts.some(a => a._id === employee2);
 
         const newEntry = {
             employee1,
             employee2,
-            employee1Name: e1?.name,
-            employee2Name: e2?.name,
+            employee1Name: e1?.name ? `${e1.name}${isE1Bank ? ' (BANK)' : ''}` : '',
+            employee2Name: e2?.name ? `${e2.name}${isE2Bank ? ' (BANK)' : ''}` : '',
             amount: numAmount,
             date: transferDate
         };
@@ -2814,10 +2935,9 @@ const MoneyTransferSection = ({
             const res = await api.post('/employee-transfer/bulk', { transfers });
             if (res.data.success) {
                 toast({ title: 'Success', description: `${stagedEntries.length} transfers saved`, status: 'success', isClosable: true });
-                // Refresh first
                 await onRefresh();
                 await fetchCommittedTransfers();
-                // Then clear
+                await fetchTransferAccounts();
                 setStagedEntries([]);
             }
         } catch (err) {
@@ -2838,6 +2958,7 @@ const MoneyTransferSection = ({
                 toast({ title: 'Transfer Deleted', description: 'Reverted sender & receiver balances.', status: 'success' });
                 await onRefresh();
                 await fetchCommittedTransfers();
+                await fetchTransferAccounts();
             }
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error' });
@@ -2857,6 +2978,95 @@ const MoneyTransferSection = ({
                     </Box>
                 </Alert>
             )}
+
+            {/* Custom Accounts Management for Money Transfer */}
+            {canReadCustomAccount && (
+            <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="blue.100" bg="blue.50" overflow="hidden">
+                <CardBody p={5}>
+                    <VStack align="stretch" spacing={4}>
+                        <Flex justify="space-between" align={{ base: 'start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap={4}>
+                            <VStack align="start" spacing={1}>
+                                <HStack>
+                                    <Icon as={FaBuilding} color="blue.600" />
+                                    <Text fontSize="md" fontWeight="black" color="blue.800">Custom Names / Bank Accounts (Starts with ₹0)</Text>
+                                </HStack>
+                                <Text fontSize="xs" color="blue.600">
+                                    Add banks, petty cash, or custom names to use right inside Sender & Receiver without adding to Employee Master.
+                                </Text>
+                            </VStack>
+                            <HStack spacing={2} w={{ base: 'full', md: 'auto' }}>
+                                <Input
+                                    placeholder="Enter Bank or Account Name..."
+                                    value={newAccountName}
+                                    onChange={(e) => setNewAccountName(e.target.value)}
+                                    bg="white"
+                                    size="md"
+                                    borderRadius="xl"
+                                    w={{ base: 'full', md: '260px' }}
+                                    isDisabled={!canWriteCustomAccount}
+                                />
+                                <Button
+                                    colorScheme="blue"
+                                    size="md"
+                                    borderRadius="xl"
+                                    onClick={handleAddTransferAccount}
+                                    isLoading={isAddingAccount}
+                                    isDisabled={!canWriteCustomAccount}
+                                    leftIcon={<FaPlus />}
+                                    px={6}
+                                >
+                                    Add Account
+                                </Button>
+                            </HStack>
+                        </Flex>
+
+                        {transferAccounts.length > 0 && (
+                            <Box pt={2} borderTop="1px dashed" borderColor="blue.200">
+                                <Text fontSize="2xs" fontWeight="black" color="blue.700" textTransform="uppercase" mb={2}>Configured Custom Accounts / Banks:</Text>
+                                <HStack spacing={2} flexWrap="wrap" gap={2}>
+                                    {transferAccounts.map(acc => (
+                                        <Badge
+                                            key={acc._id}
+                                            colorScheme="blue"
+                                            variant="subtle"
+                                            px={3}
+                                            py={1.5}
+                                            borderRadius="xl"
+                                            fontSize="xs"
+                                            display="flex"
+                                            alignItems="center"
+                                            gap={2}
+                                            bg="white"
+                                            border="1px solid"
+                                            borderColor="blue.200"
+                                            shadow="xs"
+                                        >
+                                            <Icon as={FaBuilding} color="blue.500" />
+                                            <Text fontWeight="bold">{acc.name}</Text>
+                                            <Text color={tempBalances[acc._id] >= 0 ? 'green.600' : 'red.500'} fontWeight="black">
+                                                (₹{tempBalances[acc._id]?.toLocaleString()})
+                                            </Text>
+                                            {canWriteCustomAccount && (
+                                                <Icon
+                                                    as={FaTrash}
+                                                    color="red.400"
+                                                    cursor="pointer"
+                                                    _hover={{ color: 'red.600' }}
+                                                    onClick={() => handleDeleteTransferAccount(acc._id, acc.name)}
+                                                    title="Remove account"
+                                                />
+                                            )}
+                                        </Badge>
+                                    ))}
+                                </HStack>
+                            </Box>
+                        )}
+                    </VStack>
+                </CardBody>
+            </Card>
+            )}
+
+
             {/* Entry Form - One Row Layout */}
             <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="gray.100" overflow="hidden">
                 <CardBody p={6} bg="white">
@@ -2887,6 +3097,11 @@ const MoneyTransferSection = ({
                                 border="1px solid"
                                 borderColor="gray.200"
                             >
+                                {transferAccounts.map(a => (
+                                    <option key={a._id} value={a._id} disabled={a._id === formData.employee2}>
+                                        {a.name} (BANK) (₹{tempBalances[a._id]?.toLocaleString()})
+                                    </option>
+                                ))}
                                 {employees.filter(e => e.status !== 'Deactive' || e._id === formData.employee1).map(e => (
                                     <option key={e._id} value={e._id} disabled={e._id === formData.employee2}>
                                         {e.name} (₹{tempBalances[e._id]?.toLocaleString()})
@@ -2909,6 +3124,11 @@ const MoneyTransferSection = ({
                                 border="1px solid"
                                 borderColor="gray.200"
                             >
+                                {transferAccounts.map(a => (
+                                    <option key={a._id} value={a._id} disabled={a._id === formData.employee1}>
+                                        {a.name} (BANK) (₹{tempBalances[a._id]?.toLocaleString()})
+                                    </option>
+                                ))}
                                 {employees.filter(e => e.status !== 'Deactive' || e._id === formData.employee2).map(e => (
                                     <option key={e._id} value={e._id} disabled={e._id === formData.employee1}>
                                         {e.name} (₹{tempBalances[e._id]?.toLocaleString()})
@@ -3016,8 +3236,8 @@ const MoneyTransferSection = ({
                                 <Table variant="simple">
                                     <Thead bg="teal.50">
                                         <Tr>
-                                            <Th color="teal.700">Employee From (Sender)</Th>
-                                            <Th color="teal.700">Employee To (Receiver)</Th>
+                                            <Th color="teal.700">Sender (From)</Th>
+                                            <Th color="teal.700">Receiver (To)</Th>
                                             <Th isNumeric color="teal.700">Amount</Th>
                                             <Th textAlign="center" color="teal.700">Actions</Th>
                                         </Tr>
@@ -3026,10 +3246,16 @@ const MoneyTransferSection = ({
                                         {committedTransfers.map((t) => (
                                             <Tr key={t._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
                                                 <Td fontWeight="bold" color="red.500">
-                                                    <HStack><Icon as={FaUserTie} /><Text>{t.giver?.name || 'Unknown'}</Text></HStack>
+                                                    <HStack>
+                                                        <Icon as={transferAccounts?.some(a => String(a._id) === String(t.giver?._id || t.giver)) ? FaBuilding : FaUserTie} />
+                                                        <Text>{t.giver?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.giver?._id || t.giver)) ? ' (BANK)' : ''}</Text>
+                                                    </HStack>
                                                 </Td>
                                                 <Td fontWeight="bold" color="green.500">
-                                                    <HStack><Icon as={FaUserTie} /><Text>{t.taker?.name || 'Unknown'}</Text></HStack>
+                                                    <HStack>
+                                                        <Icon as={transferAccounts?.some(a => String(a._id) === String(t.taker?._id || t.taker)) ? FaBuilding : FaUserTie} />
+                                                        <Text>{t.taker?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.taker?._id || t.taker)) ? ' (BANK)' : ''}</Text>
+                                                    </HStack>
                                                 </Td>
                                                 <Td isNumeric fontWeight="black" fontSize="lg" color="teal.600">₹{t.amount?.toLocaleString()}</Td>
                                                 <Td>

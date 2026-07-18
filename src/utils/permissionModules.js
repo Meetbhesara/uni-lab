@@ -106,6 +106,7 @@ export const PERMISSION_MODULES = [
             { key: 'employeeExpense_transfer_create', label: 'Create Transfer', parentKey: 'employeeExpense_transfer' },
             { key: 'employeeExpense_transfer_view', label: 'View Committed Transfers', parentKey: 'employeeExpense_transfer' },
             { key: 'employeeExpense_transfer_attendance', label: 'Unscheduled Attendance', parentKey: 'employeeExpense_transfer' },
+            { key: 'employeeExpense_transfer_customAccount', label: 'Custom Bank Account Management', parentKey: 'employeeExpense_transfer' },
             { key: 'employeeExpense_daily', label: 'Daily Expenses Access', parentKey: 'employeeExpense' },
             { key: 'employeeExpense_report', label: 'Daily Report & Ledger', parentKey: 'employeeExpense' },
             { key: 'employeeExpense_report_last5days', label: 'Last 5 Days Report', parentKey: 'employeeExpense_report' },

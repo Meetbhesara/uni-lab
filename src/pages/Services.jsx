@@ -14,7 +14,7 @@ import {
     FaUserTie, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope, FaIdCard, FaCamera,
     FaHandshake, FaFingerprint, FaIdBadge, FaMap,
     FaCalendarAlt, FaUsers, FaStar, FaEdit, FaEye, FaWrench, FaTag, FaFileInvoiceDollar, FaMapMarkedAlt, FaMoneyBillWave, FaTimes, FaFileAlt, FaUndo, FaListUl,
-    FaSearch, FaCar, FaFolderOpen, FaCopy, FaPrint, FaFileExcel
+    FaSearch, FaCar, FaFolderOpen, FaCopy, FaPrint, FaFileExcel, FaPlus
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -2350,6 +2350,7 @@ const EmployeeMasterForm = () => {
                                                                     <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">BANK ACCOUNT DETAILS</Th>
                                                                     <Th color="white" py={4} fontSize="10px" whiteSpace="nowrap">SALARY / DAYS</Th>
                                                                     <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">PRESENT</Th>
+                                                                    <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">PENDING</Th>
                                                                     <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">ABSENT</Th>
                                                                     <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">UPAD</Th>
                                                                     <Th color="white" py={4} fontSize="10px" textAlign="center" whiteSpace="nowrap">INCENTIVE</Th>
@@ -2361,7 +2362,7 @@ const EmployeeMasterForm = () => {
                                                             <Tbody>
                                                                 {reportFiltered.length === 0 ? (
                                                                     <Tr>
-                                                                        <Td colSpan={11} textAlign="center" py={10} color="gray.400">
+                                                                        <Td colSpan={12} textAlign="center" py={10} color="gray.400">
                                                                             <VStack spacing={2}>
                                                                                 <Icon as={FaUsers} w={8} h={8} color="gray.200" />
                                                                                 <Text fontSize="sm">No records match current filters</Text>
@@ -2381,6 +2382,7 @@ const EmployeeMasterForm = () => {
                                                                     // Pull from real attendance cache
                                                                     const attCache = attendanceCache[`${emp._id}_${reportMonthFilter}`];
                                                                     const present = attCache ? attCache.present : null;
+                                                                    const pending = attCache ? attCache.pending : null;
                                                                     const absent = attCache ? attCache.absent : null;
                                                                     const effectivePresent = present !== null ? present : totalDays;
                                                                     const payable = (perDay * effectivePresent) - upad + incentive;
@@ -2451,6 +2453,18 @@ const EmployeeMasterForm = () => {
                                                                                 ) : present !== null ? (
                                                                                     <Badge colorScheme="green" variant="solid" fontSize="xs" px={2.5} py={0.5} borderRadius="md">
                                                                                         {present}
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Badge colorScheme="gray" variant="outline" fontSize="9px">No Data</Badge>
+                                                                                )}
+                                                                            </Td>
+                                                                            {/* Pending — from real attendance */}
+                                                                            <Td py={3} textAlign="center">
+                                                                                {attendanceLoading ? (
+                                                                                    <Badge colorScheme="gray" variant="subtle" fontSize="9px">…</Badge>
+                                                                                ) : pending !== null ? (
+                                                                                    <Badge colorScheme="orange" variant="solid" fontSize="xs" px={2.5} py={0.5} borderRadius="md">
+                                                                                        {pending}
                                                                                     </Badge>
                                                                                 ) : (
                                                                                     <Badge colorScheme="gray" variant="outline" fontSize="9px">No Data</Badge>
@@ -2822,12 +2836,14 @@ const ClientMasterForm = () => {
         clientName: '',
         email: '',
         contactPersonName: '',
-        contactPersonPhone: '',
         panCard: '',
         clientAddress: '',
+        pincode: '',
+        state: '',
         gstNo: '',
         msmeNo: ''
     });
+    const [contactNumbers, setContactNumbers] = useState(['']);
     const [files, setFiles] = useState({
         gstCert: null,
         msmeCert: null
@@ -2856,7 +2872,8 @@ const ClientMasterForm = () => {
         const id = e.target.value;
         setEditId(id);
         if (!id) {
-            setFormData({ clientName: '', email: '', contactPersonName: '', contactPersonPhone: '', panCard: '', clientAddress: '', gstNo: '', msmeNo: '' });
+            setFormData({ clientName: '', email: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
+            setContactNumbers(['']);
             setFiles({ gstCert: null, msmeCert: null });
             fetchNextId();
             return;
@@ -2868,12 +2885,16 @@ const ClientMasterForm = () => {
                 clientName: c.clientName || '',
                 email: c.email || '',
                 contactPersonName: c.contactPerson?.name || '',
-                contactPersonPhone: c.contactPerson?.phone || '',
                 panCard: c.panCard || '',
                 clientAddress: c.clientAddress || '',
+                pincode: c.pincode || '',
+                state: c.state || '',
                 gstNo: c.gstNo || '',
                 msmeNo: c.msmeNo || ''
             });
+            setContactNumbers(c.contactNumbers?.length > 0 ? c.contactNumbers : (c.contactPerson?.phone ? [c.contactPerson.phone] : ['']));
+            setActiveTab(0);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
 
@@ -2885,13 +2906,22 @@ const ClientMasterForm = () => {
             fetchClients();
             if (editId === id) {
                 setEditId('');
-                setFormData({ clientName: '', email: '', contactPersonName: '', contactPersonPhone: '', panCard: '', clientAddress: '', gstNo: '', msmeNo: '' });
+                setFormData({ clientName: '', email: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
+                setContactNumbers(['']);
                 fetchNextId();
             }
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
         }
     };
+
+    const handleContactNumberChange = (index, value) => {
+        const newNumbers = [...contactNumbers];
+        newNumbers[index] = value;
+        setContactNumbers(newNumbers);
+    };
+    const addContactNumber = () => setContactNumbers([...contactNumbers, '']);
+    const removeContactNumber = (index) => setContactNumbers(contactNumbers.filter((_, i) => i !== index));
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -2914,8 +2944,9 @@ const ClientMasterForm = () => {
             const uploadData = new FormData();
             uploadData.append('clientId', nextId);
             Object.keys(formData).forEach(key => {
-                if (formData[key]) uploadData.append(key, formData[key]);
+                uploadData.append(key, formData[key] || '');
             });
+            uploadData.append('contactNumbers', JSON.stringify(contactNumbers.filter(n => n.trim() !== '')));
             if (files.gstCert) uploadData.append('gstCert', files.gstCert);
             if (files.msmeCert) uploadData.append('msmeCert', files.msmeCert);
 
@@ -2928,7 +2959,8 @@ const ClientMasterForm = () => {
 
             if (response.data.success) {
                 toast({ title: editId ? "Updated" : "Success", description: editId ? "Client updated successfully" : "Client record stored successfully", status: "success", duration: 3000 });
-                setFormData({ clientName: '', email: '', contactPersonName: '', contactPersonPhone: '', panCard: '', clientAddress: '', gstNo: '', msmeNo: '' });
+                setFormData({ clientName: '', email: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
+                setContactNumbers(['']);
                 setFiles({ gstCert: null, msmeCert: null });
                 setEditId('');
                 fetchNextId();
@@ -3000,25 +3032,26 @@ const ClientMasterForm = () => {
                             <TabPanels>
                                 <TabPanel p={0}>
                         <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
+                            <HStack justify="space-between" align="flex-start" mb={6}>
+                                <VStack align="start" spacing={1}>
+                                    <Heading size="md" color="gray.700">Client Details</Heading>
+                                    <Text fontSize="sm" color="gray.500">Fill in the basic client information</Text>
+                                </VStack>
+                                <HStack bg="orange.50" p={2} borderRadius="xl" border="1px dashed" borderColor="orange.300">
+                                    <Icon as={FaFingerprint} color="orange.500" />
+                                    <Text fontSize="sm" fontWeight="bold" color="orange.700">Ref: {nextId || 'Generating...'}</Text>
+                                </HStack>
+                            </HStack>
+
                             <VStack spacing={8} align="stretch">
-                                <FormControl isRequired>
-                                    <FormLabel fontWeight="bold">Client Name</FormLabel>
-                                    <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                        <Icon as={FaIdBadge} ml={3} color="orange.500" />
-                                        <Input name="clientName" variant="unstyled" p={2} placeholder="Company Name" value={formData.clientName} onChange={handleChange} />
-                                    </HStack>
-                                </FormControl>
-                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold" fontSize="sm">Reference No (Auto Generated)</FormLabel>
-                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px dashed" borderColor="gray.300">
-                                            <Icon as={FaFingerprint} ml={2} color="orange.500" />
-                                            <Input variant="unstyled" p={2} value={nextId || 'Generating...'} isReadOnly color="orange.700" fontWeight="bold" />
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                                    <FormControl isRequired>
+                                        <FormLabel fontWeight="bold">Client Name</FormLabel>
+                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                            <Icon as={FaIdBadge} ml={3} color="orange.500" />
+                                            <Input name="clientName" variant="unstyled" p={2} placeholder="Company Name" value={formData.clientName} onChange={handleChange} />
                                         </HStack>
                                     </FormControl>
-                                </SimpleGrid>
-
-                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={5}>
                                     <FormControl>
                                         <FormLabel fontWeight="bold">Billing Email Address</FormLabel>
                                         <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
@@ -3026,14 +3059,8 @@ const ClientMasterForm = () => {
                                             <Input name="email" type="email" variant="unstyled" p={2} placeholder="accounts@client.com" value={formData.email} onChange={handleChange} />
                                         </HStack>
                                     </FormControl>
-                                    <FormControl>
-                                        <FormLabel fontWeight="bold">PAN Card Number</FormLabel>
-                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                            <Icon as={FaIdCard} ml={3} color="orange.500" />
-                                            <Input name="panCard" variant="unstyled" p={2} placeholder="ABCDE1234F" textTransform="uppercase" maxLength={10} value={formData.panCard} onChange={handleChange} />
-                                        </HStack>
-                                    </FormControl>
                                 </SimpleGrid>
+
                                 <FormControl>
                                     <FormLabel fontWeight="bold">Client Address</FormLabel>
                                     <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
@@ -3041,6 +3068,23 @@ const ClientMasterForm = () => {
                                         <Input name="clientAddress" variant="unstyled" p={2} placeholder="Full address" value={formData.clientAddress} onChange={handleChange} />
                                     </HStack>
                                 </FormControl>
+
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                                    <FormControl>
+                                        <FormLabel fontWeight="bold">Pincode</FormLabel>
+                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                            <Icon as={FaMapMarkerAlt} ml={3} color="orange.500" />
+                                            <Input name="pincode" variant="unstyled" p={2} placeholder="380015" value={formData.pincode || ''} onChange={handleChange} />
+                                        </HStack>
+                                    </FormControl>
+                                    <FormControl>
+                                        <FormLabel fontWeight="bold">State</FormLabel>
+                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                            <Icon as={FaMapMarkerAlt} ml={3} color="orange.500" />
+                                            <Input name="state" variant="unstyled" p={2} placeholder="Gujarat" value={formData.state || ''} onChange={handleChange} />
+                                        </HStack>
+                                    </FormControl>
+                                </SimpleGrid>
 
                                 <Divider />
 
@@ -3054,8 +3098,37 @@ const ClientMasterForm = () => {
                                             <Input name="contactPersonName" borderRadius="xl" placeholder="Full Name" value={formData.contactPersonName} onChange={handleChange} />
                                         </FormControl>
                                         <FormControl>
-                                            <FormLabel fontWeight="bold">Contact Phone Number</FormLabel>
-                                            <Input name="contactPersonPhone" borderRadius="xl" placeholder="Mobile Number" value={formData.contactPersonPhone} onChange={handleChange} />
+                                            <FormLabel fontWeight="bold" display="flex" justifyContent="space-between" alignItems="center">
+                                                <Text>Contact Phone Numbers</Text>
+                                                <Button size="xs" colorScheme="orange" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addContactNumber}>
+                                                    Add Number
+                                                </Button>
+                                            </FormLabel>
+                                            <VStack align="stretch" spacing={2}>
+                                                {contactNumbers.map((num, idx) => (
+                                                    <HStack key={idx} spacing={2}>
+                                                        <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200" flex={1}>
+                                                            <Icon as={FaPhoneAlt} ml={3} color="orange.500" />
+                                                            <Input
+                                                                variant="unstyled"
+                                                                p={2}
+                                                                placeholder={`Contact Number #${idx + 1}`}
+                                                                value={num}
+                                                                onChange={(e) => handleContactNumberChange(idx, e.target.value)}
+                                                            />
+                                                        </HStack>
+                                                        {contactNumbers.length > 1 && (
+                                                            <IconButton
+                                                                aria-label="Remove Number"
+                                                                icon={<Icon as={FaTrash} />}
+                                                                colorScheme="red"
+                                                                variant="ghost"
+                                                                onClick={() => removeContactNumber(idx)}
+                                                            />
+                                                        )}
+                                                    </HStack>
+                                                ))}
+                                            </VStack>
                                         </FormControl>
                                     </SimpleGrid>
                                 </Box>
@@ -3064,9 +3137,9 @@ const ClientMasterForm = () => {
 
                                 <Box>
                                     <Heading size="sm" mb={6} color="orange.700" display="flex" alignItems="center">
-                                        <Icon as={FaIdCard} mr={2} /> Statutory Details (GST & MSME)
+                                        <Icon as={FaIdCard} mr={2} /> Statutory Details (GST, MSME & PAN)
                                     </Heading>
-                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8} mb={6}>
+                                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mb={6}>
                                         <FormControl>
                                             <FormLabel fontWeight="bold">GST Number</FormLabel>
                                             <Input name="gstNo" borderRadius="xl" placeholder="27XXXXX0000X1ZX" value={formData.gstNo} onChange={handleChange} />
@@ -3074,6 +3147,10 @@ const ClientMasterForm = () => {
                                         <FormControl>
                                             <FormLabel fontWeight="bold">MSME Number</FormLabel>
                                             <Input name="msmeNo" borderRadius="xl" placeholder="UDYAM-XX-00-0000000" value={formData.msmeNo} onChange={handleChange} />
+                                        </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontWeight="bold">PAN Card Number</FormLabel>
+                                            <Input name="panCard" borderRadius="xl" placeholder="ABCDE1234F" textTransform="uppercase" maxLength={10} value={formData.panCard} onChange={handleChange} />
                                         </FormControl>
                                     </SimpleGrid>
                                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
@@ -3200,16 +3277,39 @@ const ClientMasterForm = () => {
                                                     <VStack align="start" spacing={4} p={4} bg="orange.50" borderRadius="2xl" w="full">
                                                         <Box>
                                                             <Text fontSize="9px" color="orange.600" fontWeight="bold">CONTACT PERSON</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.contactPersonName || viewClient.contactPerson?.name}</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.contactPersonName || viewClient.contactPerson?.name || 'N/A'}</Text>
                                                         </Box>
                                                         <Box>
-                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">PHONE NUMBER</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.contactPersonPhone || viewClient.contactPerson?.phone}</Text>
+                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">PHONE NUMBERS</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">
+                                                                {viewClient.contactNumbers?.length > 0 
+                                                                    ? viewClient.contactNumbers.join(', ') 
+                                                                    : (viewClient.contactPersonPhone || viewClient.contactPerson?.phone || 'N/A')}
+                                                            </Text>
                                                         </Box>
                                                         <Box>
                                                             <Text fontSize="9px" color="orange.600" fontWeight="bold">EMAIL ADDRESS</Text>
                                                             <Text fontSize="sm" color="gray.800">{viewClient.email || 'N/A'}</Text>
                                                         </Box>
+                                                    </VStack>
+                                                </Box>
+                                                <Box w="full">
+                                                    <Text fontSize="10px" fontWeight="black" color="green.500" textTransform="uppercase" mb={3}>Location Details</Text>
+                                                    <VStack align="start" spacing={4} p={4} bg="green.50" borderRadius="2xl" w="full">
+                                                        <Box>
+                                                            <Text fontSize="9px" color="green.600" fontWeight="bold">ADDRESS</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.clientAddress || 'N/A'}</Text>
+                                                        </Box>
+                                                        <HStack spacing={8}>
+                                                            <Box>
+                                                                <Text fontSize="9px" color="green.600" fontWeight="bold">PINCODE</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.pincode || 'N/A'}</Text>
+                                                            </Box>
+                                                            <Box>
+                                                                <Text fontSize="9px" color="green.600" fontWeight="bold">STATE</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.state || 'N/A'}</Text>
+                                                            </Box>
+                                                        </HStack>
                                                     </VStack>
                                                 </Box>
                                             </VStack>
@@ -3226,6 +3326,10 @@ const ClientMasterForm = () => {
                                                             <Text fontSize="9px" color="blue.600" fontWeight="bold">PAN CARD</Text>
                                                             <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.panCard || 'N/A'}</Text>
                                                         </Box>
+                                                        <Box>
+                                                            <Text fontSize="9px" color="blue.600" fontWeight="bold">MSME NUMBER</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewClient.msmeNo || 'N/A'}</Text>
+                                                        </Box>
                                                     </VStack>
                                                 </Box>
                                                 <Box w="full">
@@ -3236,6 +3340,9 @@ const ClientMasterForm = () => {
                                                         )}
                                                         {viewClient.documents?.find(d => d.type === 'MSME') && (
                                                             <Button as="a" target="_blank" href={`${API_BASE_URL}${viewClient.documents.find(d => d.type === 'MSME').url}`} size="xs" colorScheme="teal" variant="subtle" leftIcon={<Icon as={FaFileAlt} />}>MSME CERT</Button>
+                                                        )}
+                                                        {!viewClient.documents?.length && (
+                                                            <Text fontSize="sm" color="gray.500">No documents uploaded.</Text>
                                                         )}
                                                     </Wrap>
                                                 </Box>
@@ -4634,7 +4741,7 @@ const ScheduleMasterForm = () => {
                                                     </Td>
                                                     <Td py={3} onClick={(e) => e.stopPropagation()}>
                                                         <HStack spacing={2}>
-                                                            {s.dayStatus === 'Scheduled' && (
+                                                            {s.dayStatus === 'Scheduled' && !s.hasExpenses && (
                                                                 <Button size="xs" colorScheme="red" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>Reject</Button>
                                                             )}
                                                         </HStack>
