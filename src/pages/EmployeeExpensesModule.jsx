@@ -692,6 +692,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     // New Fuel & Day Schedules State
     const [fuelType, setFuelType] = useState('Petrol');
     const [daySchedules, setDaySchedules] = useState([]);
+    const [isFetchingSchedules, setIsFetchingSchedules] = useState(false);
 
     // Fetch Day Schedules on Date change
     const [committedExpenses, setCommittedExpenses] = useState([]);
@@ -774,6 +775,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
     useEffect(() => {
         if (!date) return;
         const fetchDaySchedules = async () => {
+            setIsFetchingSchedules(true);
+            setDaySchedules([]);
             try {
                 const res = await api.get(`/schedule-master?date=${date}`);
                 if (res.data.success) {
@@ -788,6 +791,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             } catch (err) {
                 console.error("Failed to fetch day schedules", err);
                 setDaySchedules([]);
+            } finally {
+                setIsFetchingSchedules(false);
             }
         };
         fetchDaySchedules();
@@ -1283,11 +1288,11 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                             <FormLabel fontSize="sm" fontWeight="bold" color="gray.600">Select Employee</FormLabel>
                             <Select 
                                 size="lg" 
-                                placeholder={scheduledEmployees.length > 0 ? "Choose Employee" : "No Employees Scheduled"} 
+                                placeholder={isFetchingSchedules ? "Loading Employees..." : (scheduledEmployees.length > 0 ? "Choose Employee" : "No Employees Scheduled")} 
                                 value={selectedEmployeeId} 
                                 onChange={(e) => setSelectedEmployeeId(e.target.value)}
                                 borderRadius="xl"
-                                isDisabled={scheduledEmployees.length === 0}
+                                isDisabled={isFetchingSchedules || scheduledEmployees.length === 0}
                             >
                                 {scheduledEmployees.map(e => (
                                     <option key={e._id} value={e._id}>{e.name} ({e.empId})</option>

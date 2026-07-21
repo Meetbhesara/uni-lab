@@ -120,7 +120,8 @@ export const PERMISSION_MODULES = [
         subTabs: [
             { key: 'otherServices', label: 'Main Tab Access' },
             { key: 'draftingWork', label: 'Drafting Work', parentKey: 'otherServices' },
-            { key: 'invoiceReport', label: 'Invoice Report', parentKey: 'otherServices' }
+            { key: 'invoiceReport', label: 'Invoice Report', parentKey: 'otherServices' },
+            { key: 'companyMaster', label: 'Our Companies', parentKey: 'otherServices' }
         ]
     }
 ];

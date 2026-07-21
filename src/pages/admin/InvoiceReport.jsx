@@ -69,13 +69,15 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     const [selectedEntries, setSelectedEntries] = useState([]);
     // Tabs & Invoice Form state
     const [activeTab, setActiveTab] = useState(0);
+    const [companies, setCompanies] = useState([]);
     const [invoiceForm, setInvoiceForm] = useState({ 
         isOpen: false, type: '', entries: [], entryConfigs: {}, 
-        companyName: 'UNIQUE ENGINEERING', 
+        companyDetails: null, 
         invoiceId: '',
         buyerDetails: { name: '', address: '', gstin: '', stateName: '', stateCode: '24', contactPerson: '', contact: '' },
         shipToDetails: { name: '', address: '', gstin: '', stateName: '', stateCode: '24', contactPerson: '', contact: '' },
-        description: '', targetGroup: null 
+        description: '', targetGroup: null,
+        gstType: 'CGST_SGST', gstPercentage: 18
     });
 
     const [schedules, setSchedules] = useState([]);
@@ -113,8 +115,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 });
                 
                 setSchedules(formattedSchedules);
-                // By default, select all pending entries across all schedules
-                setSelectedEntries(formattedSchedules.filter(s => s.invoiceStatus !== 'Completed').map(s => s._id));
+                // Do not auto-select entries on load as per user request
+                // setSelectedEntries(formattedSchedules.filter(s => s.invoiceStatus !== 'Completed').map(s => s._id));
             }
         } catch (err) {
             toast({ title: 'Failed to load schedules', status: 'error', duration: 3000 });
@@ -124,6 +126,20 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     }, [filterDateFrom, filterDateTo]);
 
     useEffect(() => { fetchVisitSchedules(); }, [fetchVisitSchedules]);
+
+    useEffect(() => {
+        const fetchCompanies = async () => {
+            try {
+                const res = await api.get('/company-master');
+                if (res.data.success) {
+                    setCompanies(res.data.data);
+                }
+            } catch (err) {
+                console.error("Failed to fetch companies", err);
+            }
+        };
+        fetchCompanies();
+    }, []);
 
     useEffect(() => {
         const handleRealtimeUpdate = (e) => {
@@ -237,10 +253,22 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             const siteId = s.site?._id || s.site;
             if (!clientId || !siteId) return;
             const sType = s.scheduleType || 'VISIT';
-            const groupKey = `${clientId}-${siteId}-${sType}`;
+            
+            // If the entry is part of a generated invoice, group by that invoice ID. 
+            // This prevents multi-site invoices from splitting apart in the Proforma/Final tabs.
+            const invId = s.invoiceDetails?.invoiceId || s.finalInvoiceId || s.proformaInvoiceId;
+            let groupKey;
+            
+            if (activeTab > 0 && invId) {
+                groupKey = `inv-${invId}`;
+            } else {
+                groupKey = `${clientId}-${siteId}-${sType}`;
+            }
+            
             if (!groups[groupKey]) {
                 groups[groupKey] = {
                     groupId: groupKey,
+                    invoiceId: invId,
                     client: s.client,
                     site: s.site,
                     scheduleType: sType,
@@ -294,9 +322,12 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             g.finalInvoicePdf = g.entries.find(e => e.finalInvoicePdf)?.finalInvoicePdf || null;
             g.proformaInvoiceId = g.entries.find(e => e.proformaInvoiceId)?.proformaInvoiceId || null;
             g.finalInvoiceId = g.entries.find(e => e.finalInvoiceId)?.finalInvoiceId || null;
+            
+            // Find invoice generation timestamp for proper sorting
+            g.latestInvoiceDate = g.entries.find(e => e.invoiceDetails?.generatedAt)?.invoiceDetails?.generatedAt || g.latestEntryDate;
         });
 
-        // Sort: Pending groups first (ordered by earliestPendingDate asc), Completed groups next (ordered by latestEntryDate desc)
+        // Sort: Pending groups first (ordered by earliestPendingDate asc), Completed groups next (ordered by latestInvoiceDate desc)
         list.sort((a, b) => {
             if (a.status === 'Pending' && b.status !== 'Pending') return -1;
             if (a.status !== 'Pending' && b.status === 'Pending') return 1;
@@ -305,49 +336,83 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 return new Date(a.earliestPendingDate) - new Date(b.earliestPendingDate);
             }
             
-            return new Date(b.latestEntryDate) - new Date(a.latestEntryDate);
+            return new Date(b.latestInvoiceDate) - new Date(a.latestInvoiceDate);
         });
 
         return list;
-    }, [displayed]);
+    }, [displayed, activeTab]);
 
-    const validateAndPrepareInvoice = (type, targetGroup) => {
-        const group = targetGroup || selectedGroup;
-        if (!group || !group.site) return;
-        const entriesToInvoice = group.entries.filter(e => selectedEntries.includes(e._id));
-        
-        if (entriesToInvoice.length === 0) {
+    const validateAndPrepareGlobalInvoice = (type) => {
+        if (selectedEntries.length === 0) {
             toast({ title: 'No entries selected', status: 'warning', duration: 2000 });
             return;
         }
 
-        const siteLedgers = group.site.ledgerItems || [];
-        if (siteLedgers.length === 0) {
-             toast({ title: `Validation Failed: No ledgers configured for Site '${group.site.siteName}'. Please update the Site Master.`, status: 'error', duration: 5000 });
-             return;
+        const entriesToInvoice = schedules.filter(s => selectedEntries.includes(s._id));
+        
+        // Ensure all selected entries belong to the SAME client
+        const firstClient = entriesToInvoice[0].client?._id || entriesToInvoice[0].client;
+        const allSameClient = entriesToInvoice.every(e => (e.client?._id || e.client) === firstClient);
+        
+        if (!allSameClient) {
+            toast({ title: 'Cannot generate invoice for multiple clients', description: 'Please select entries belonging to the same client.', status: 'error', duration: 5000 });
+            return;
         }
 
         const initialConfigs = {};
+        let failedSites = [];
+
         entriesToInvoice.forEach(entry => {
+            const siteLedgers = entry.site?.ledgerItems || [];
+            if (siteLedgers.length === 0) {
+                if (!failedSites.includes(entry.site?.siteName)) failedSites.push(entry.site?.siteName || 'Unknown Site');
+            }
+
             let defaultLedger = '';
             let defaultRate = 0;
-            
-            const match = siteLedgers.find(l => l.ledger === entry.ledger);
-            if (match) {
-                defaultLedger = match.ledger;
-                defaultRate = match.amount;
+
+            // Step 1: Try to find the best site ledger match using AMOUNT (most reliable unique key)
+            // because the same ledger NAME may be reused across schedules while amounts differ
+            const matchByAmount = entry.amount > 0
+                ? siteLedgers.find(l => Number(l.amount) === Number(entry.amount))
+                : null;
+
+            // Step 2: Try to match by saved ledger NAME
+            const matchByName = entry.ledger && entry.ledger.trim()
+                ? siteLedgers.find(l => l.ledger === entry.ledger.trim())
+                : null;
+
+            if (matchByAmount) {
+                // Amount match wins — this uniquely identifies which ledger was applied
+                defaultLedger = matchByAmount.ledger;
+                defaultRate = matchByAmount.amount;
+            } else if (matchByName) {
+                // Name matches but amount doesn't have a matching ledger → use name + entry amount
+                defaultLedger = matchByName.ledger;
+                defaultRate = entry.amount > 0 ? entry.amount : matchByName.amount;
+            } else if (entry.ledger && entry.ledger.trim()) {
+                // Ledger name was saved but doesn't exist in site master anymore → keep it
+                defaultLedger = entry.ledger.trim();
+                defaultRate = entry.amount || 0;
             } else if (siteLedgers.length > 0) {
+                // Nothing matches → fallback to first site ledger
                 defaultLedger = siteLedgers[0].ledger;
                 defaultRate = siteLedgers[0].amount;
             }
-            
+
             initialConfigs[entry._id] = {
                 ledger: defaultLedger,
                 rate: defaultRate,
                 qty: 1,
-                instrument: 'Total Station'
+                instrument: 'Total Station',
+                extraDescription: ''
             };
         });
+
+        if (failedSites.length > 0) {
+            toast({ title: `Validation Failed: No ledgers configured for Sites: ${failedSites.join(', ')}. Please update the Site Master.`, status: 'error', duration: 7000 });
+            return;
+        }
 
         // Determine next Invoice ID
         let maxId = 0;
@@ -367,33 +432,38 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         });
         const nextInvoiceId = `${prefix}${String(maxId + 1).padStart(4, '0')}`;
 
+        const baseClient = entriesToInvoice[0].client;
+        const baseSite = entriesToInvoice[0].site;
+
         setInvoiceForm({
             isOpen: true,
             type,
             entries: entriesToInvoice,
             entryConfigs: initialConfigs,
-            companyName: 'UNIQUE ENGINEERING',
+            companyDetails: companies.length > 0 ? companies[0] : null,
             buyerDetails: {
-                name: group.client?.clientName || 'NA',
-                address: group.client?.clientAddress || 'NA',
-                gstin: group.client?.gstNo || 'NA',
-                stateName: group.client?.state || 'Gujarat',
+                name: baseClient?.clientName || 'NA',
+                address: baseClient?.clientAddress || 'NA',
+                gstin: baseClient?.gstNo || 'NA',
+                stateName: baseClient?.state || 'Gujarat',
                 stateCode: '24',
-                contactPerson: group.client?.contactPerson?.name || 'NA',
-                contact: group.client?.contactPerson?.phone || (group.client?.contactNumbers?.[0] || 'NA'),
+                contactPerson: baseClient?.contactPerson?.name || 'NA',
+                contact: baseClient?.contactPerson?.phone || (baseClient?.contactNumbers?.[0] || 'NA'),
             },
             shipToDetails: {
-                name: group.client?.clientName || group.site?.siteName || 'NA',
-                address: group.site?.siteAddress || 'NA',
-                gstin: group.client?.gstNo || 'NA',
-                stateName: group.site?.stateName || group.client?.state || 'Gujarat',
-                stateCode: group.site?.stateCode || '24',
-                contactPerson: group.site?.contactPersons?.[0]?.name || group.client?.contactPerson?.name || 'NA',
-                contact: group.site?.contactPersons?.[0]?.phone || group.site?.contactPhone || 'NA',
+                name: baseClient?.clientName || baseSite?.siteName || 'NA',
+                address: baseClient?.clientAddress || baseSite?.siteAddress || 'NA',
+                gstin: baseClient?.gstNo || 'NA',
+                stateName: baseSite?.stateName || baseClient?.state || 'Gujarat',
+                stateCode: baseSite?.stateCode || '24',
+                contactPerson: baseSite?.contactPersons?.[0]?.name || baseClient?.contactPerson?.name || 'NA',
+                contact: baseSite?.contactPersons?.[0]?.phone || baseSite?.contactPhone || 'NA',
             },
             invoiceId: nextInvoiceId,
             description: '',
-            targetGroup: group
+            targetGroup: null, // No longer bound to a single group
+            gstType: ((baseSite?.stateCode || baseClient?.stateCode || '24') === '24') ? 'CGST_SGST' : 'IGST',
+            gstPercentage: 18
         });
     };
 
@@ -411,11 +481,13 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 invoiceId: invoiceForm.invoiceId,
                 invoiceDetails: {
                     invoiceId: invoiceForm.invoiceId,
-                    companyName: invoiceForm.companyName,
+                    companyDetails: invoiceForm.companyDetails,
                     buyerDetails: invoiceForm.buyerDetails,
                     shipToDetails: invoiceForm.shipToDetails,
                     description: invoiceForm.description,
                     entryConfigs: invoiceForm.entryConfigs,
+                    gstType: invoiceForm.gstType,
+                    gstPercentage: invoiceForm.gstPercentage,
                     generatedAt: new Date().toISOString()
                 },
                 pdfHtml
@@ -428,6 +500,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             }
             setInvoiceForm(prev => ({ ...prev, isOpen: false }));
             setSelectedGroup(null);
+            setSelectedEntries([]); // Clear global selection state
             fetchVisitSchedules();
         } catch (error) {
             toast({ title: 'Failed to generate invoice', status: 'error' });
@@ -508,15 +581,35 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                         ))}
                     </SimpleGrid>
 
-                    {/* ── Tabs ── */}
-                    <Tabs variant="soft-rounded" colorScheme="blue" index={activeTab} onChange={(idx) => { setActiveTab(idx); setSelectedGroup(null); }}>
-                        <TabList bg="white" p={2} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                            <Tab fontWeight="bold">⏳ Pending</Tab>
-                            <Tab fontWeight="bold">📄 Proforma</Tab>
-                            <Tab fontWeight="bold">✅ Final Invoice</Tab>
-                            <Tab fontWeight="bold">🔒 Closed</Tab>
-                        </TabList>
-                    </Tabs>
+                    {/* ── Tabs & Global Actions ── */}
+                    <Flex justify="space-between" align="center">
+                        <Tabs variant="soft-rounded" colorScheme="blue" index={activeTab} onChange={(idx) => { setActiveTab(idx); setSelectedGroup(null); setSelectedEntries([]); }}>
+                            <TabList bg="white" p={2} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                                <Tab fontWeight="bold">⏳ Pending</Tab>
+                                <Tab fontWeight="bold">📄 Proforma</Tab>
+                                <Tab fontWeight="bold">✅ Final Invoice</Tab>
+                                <Tab fontWeight="bold">🔒 Closed</Tab>
+                            </TabList>
+                        </Tabs>
+                        
+                        {selectedEntries.length > 0 && (
+                            <HStack bg="white" p={2} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                                <HStack spacing={2} px={2} mr={2} borderRight="1px solid" borderColor="gray.200">
+                                    <Text fontSize="sm" fontWeight="bold" color="blue.600">{selectedEntries.length} selected</Text>
+                                    <Button size="xs" variant="ghost" colorScheme="red" onClick={() => setSelectedEntries([])}>Clear</Button>
+                                </HStack>
+                                {activeTab === 0 && (
+                                    <>
+                                        <Button size="sm" colorScheme="purple" leftIcon={<FaFileInvoiceDollar />} onClick={() => validateAndPrepareGlobalInvoice('PROFORMA')}>Gen Proforma</Button>
+                                        <Button size="sm" colorScheme="green" leftIcon={<FaCheckCircle />} onClick={() => validateAndPrepareGlobalInvoice('FINAL')}>Gen Final</Button>
+                                    </>
+                                )}
+                                {activeTab === 1 && (
+                                    <Button size="sm" colorScheme="green" leftIcon={<FaCheckCircle />} onClick={() => validateAndPrepareGlobalInvoice('FINAL')}>Gen Final Invoice</Button>
+                                )}
+                            </HStack>
+                        )}
+                    </Flex>
 
                     {/* ── Filters ── */}
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
@@ -605,6 +698,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                 const pendingCount = totalCount - completedCount;
                                                 const isPending = group.status === 'Pending';
                                                 
+                                                const uniqueSites = [...new Set(group.entries.map(e => e.site?.siteName).filter(Boolean))].join(', ');
+                                                
                                                 // Color variables for main row based on schedule type
                                                 const { bg, border, hoverBg } = rowStyle(group);
 
@@ -634,9 +729,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                         </Td>
                                                         <Td py={4}>
                                                             <HStack spacing={2}>
-                                                                <Icon as={FaMapMarkerAlt} color="teal.400" w={3} h={3} />
-                                                                <Text fontSize="sm" color="gray.700" fontWeight="semibold">
-                                                                    {group.site?.siteName || '—'}
+                                                                <Icon as={group.invoiceId ? FaFileInvoiceDollar : FaMapMarkerAlt} color={group.invoiceId ? "purple.500" : "teal.400"} w={3} h={3} />
+                                                                <Text fontSize="sm" color={group.invoiceId ? "purple.600" : "gray.700"} fontWeight="bold">
+                                                                    {group.invoiceId ? `Invoice: ${group.invoiceId} (${uniqueSites})` : (uniqueSites || '—')}
                                                                 </Text>
                                                             </HStack>
                                                         </Td>
@@ -681,15 +776,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                         </Td>
                                                         <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
                                                             <HStack justify="flex-end" spacing={2}>
-                                                                {activeTab === 0 && (
-                                                                    <>
-                                                                        <Button size="xs" colorScheme="purple" variant="outline" onClick={() => validateAndPrepareInvoice('PROFORMA', group)}>Proforma</Button>
-                                                                        <Button size="xs" colorScheme="green" variant="solid" onClick={() => validateAndPrepareInvoice('FINAL', group)}>Final</Button>
-                                                                    </>
-                                                                )}
-                                                                {activeTab === 1 && (
-                                                                    <Button size="xs" colorScheme="green" variant="solid" onClick={() => validateAndPrepareInvoice('FINAL', group)}>Final Invoice</Button>
-                                                                )}
                                                                 {activeTab === 2 && (
                                                                     <Button size="xs" colorScheme="gray" variant="solid" onClick={() => handleStatusMove(group, 'Closed')}>Mark Closed</Button>
                                                                 )}
@@ -967,22 +1053,21 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                                     <Box>
                                         <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">Billing Company Selection</Text>
-                                        <RadioGroup 
-                                            value={invoiceForm.companyName} 
-                                            onChange={(val) => setInvoiceForm(prev => ({ ...prev, companyName: val }))}
+                                        <Select 
+                                            value={invoiceForm.companyDetails?._id || ''} 
+                                            onChange={(e) => {
+                                                const selected = companies.find(c => c._id === e.target.value);
+                                                setInvoiceForm(prev => ({ ...prev, companyDetails: selected || null }));
+                                            }}
+                                            bg="white"
+                                            size="md"
+                                            borderRadius="xl"
                                         >
-                                            <HStack spacing={6}>
-                                                <Radio value="UNIQUE ENGINEERING" colorScheme="blue" size="lg">
-                                                    <Text fontWeight="semibold">Unique Engineering</Text>
-                                                </Radio>
-                                                <Radio value="UNIQUE INSPECTION" colorScheme="purple" size="lg" isDisabled>
-                                                    <Text fontWeight="semibold" textDecoration="line-through">Unique Inspection</Text>
-                                                </Radio>
-                                                <Radio value="UNIQUE LAB INSTRUMENT" colorScheme="purple" size="lg">
-                                                    <Text fontWeight="semibold">Unique Lab Instrument</Text>
-                                                </Radio>
-                                            </HStack>
-                                        </RadioGroup>
+                                            {companies.length === 0 && <option value="">No Companies Found</option>}
+                                            {companies.map(c => (
+                                                <option key={c._id} value={c._id}>{c.companyName}</option>
+                                            ))}
+                                        </Select>
                                     </Box>
                                     <Box>
                                         <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">Invoice No.</Text>
@@ -1078,6 +1163,46 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                 </Box>
                             </SimpleGrid>
 
+                            <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                <Text fontSize="md" fontWeight="black" mb={4} color="orange.700" textTransform="uppercase">GST Configuration</Text>
+                                <HStack spacing={6} align="center">
+                                    <Box>
+                                        <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">GST Type</Text>
+                                        <RadioGroup 
+                                            value={invoiceForm.gstType} 
+                                            onChange={(val) => setInvoiceForm(prev => ({ 
+                                                ...prev, 
+                                                gstType: val,
+                                                gstPercentage: 18  // always 18% total regardless of type
+                                            }))}
+                                        >
+                                            <HStack spacing={6}>
+                                                <Radio value="CGST_SGST" colorScheme="blue">
+                                                    <Text fontWeight="semibold">CGST & SGST (Same State)</Text>
+                                                </Radio>
+                                                <Radio value="IGST" colorScheme="purple">
+                                                    <Text fontWeight="semibold">IGST (Other State)</Text>
+                                                </Radio>
+                                            </HStack>
+                                        </RadioGroup>
+                                    </Box>
+                                    <Box bg="blue.50" px={4} py={2} borderRadius="lg" border="1px solid" borderColor="blue.100">
+                                        <Text fontSize="xs" color="blue.500" fontWeight="bold" textTransform="uppercase" mb={1}>Applicable Rate</Text>
+                                        {invoiceForm.gstType === 'CGST_SGST' ? (
+                                            <HStack spacing={3}>
+                                                <Text fontSize="sm" fontWeight="black" color="blue.700">CGST 9% + SGST 9%</Text>
+                                                <Badge colorScheme="blue" fontSize="sm" px={2}>= 18%</Badge>
+                                            </HStack>
+                                        ) : (
+                                            <HStack spacing={3}>
+                                                <Text fontSize="sm" fontWeight="black" color="purple.700">IGST 18%</Text>
+                                                <Badge colorScheme="purple" fontSize="sm" px={2}>= 18%</Badge>
+                                            </HStack>
+                                        )}
+                                    </Box>
+                                </HStack>
+                            </Box>
+
                             <Box mt={2}>
                                 <Text fontSize="md" fontWeight="bold" mb={3} color="gray.700">Invoice Items (Select Ledgers & Quantities)</Text>
                                 <TableContainer border="1px solid" borderColor="gray.200" borderRadius="lg">
@@ -1085,8 +1210,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         <Thead bg="gray.100">
                                             <Tr>
                                                 <Th>Date</Th>
-                                                <Th>Operative</Th>
                                                 <Th>Instrument</Th>
+                                                <Th>Extra Desc.</Th>
                                                 <Th>Service Ledger</Th>
                                                 <Th>Rate (₹)</Th>
                                                 <Th>Quantity</Th>
@@ -1099,7 +1224,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                 return (
                                                     <Tr key={entry._id}>
                                                         <Td>{formatDate(entry.scheduleDate)}</Td>
-                                                        <Td>{entry.operative?.name || 'Unassigned'}</Td>
                                                         <Td>
                                                             <Select 
                                                                 size="sm" 
@@ -1117,11 +1241,23 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             </Select>
                                                         </Td>
                                                         <Td>
+                                                            <Input 
+                                                                size="sm" 
+                                                                placeholder="e.g. LEVELING SURVEY" 
+                                                                w="140px"
+                                                                value={conf.extraDescription || ''} 
+                                                                onChange={(e) => setInvoiceForm(prev => ({
+                                                                    ...prev,
+                                                                    entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, extraDescription: e.target.value } }
+                                                                }))} 
+                                                            />
+                                                        </Td>
+                                                        <Td>
                                                             <Select 
                                                                 size="sm" 
                                                                 value={conf.ledger} 
                                                                 onChange={(e) => {
-                                                                    const selectedLedger = invoiceForm.targetGroup?.site?.ledgerItems?.find(l => l.ledger === e.target.value);
+                                                                    const selectedLedger = entry.site?.ledgerItems?.find(l => l.ledger === e.target.value);
                                                                     setInvoiceForm(prev => ({
                                                                         ...prev,
                                                                         entryConfigs: {
@@ -1131,7 +1267,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     }))
                                                                 }}
                                                             >
-                                                                {invoiceForm.targetGroup?.site?.ledgerItems?.map(l => (
+                                                                {entry.site?.ledgerItems?.map(l => (
                                                                     <option key={l.ledger} value={l.ledger}>{l.ledger}</option>
                                                                 ))}
                                                             </Select>

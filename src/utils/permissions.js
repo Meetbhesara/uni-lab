@@ -58,7 +58,8 @@ const PARENT_PERMISSIONS = {
 
     // Other Services Sub-modules
     'draftingWork': 'otherServices',
-    'invoiceReport': 'otherServices'
+    'invoiceReport': 'otherServices',
+    'companyMaster': 'otherServices'
 };
 
 export const hasPermission = (user, moduleName, action = 'read') => {

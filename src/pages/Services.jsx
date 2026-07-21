@@ -7,7 +7,7 @@ import {
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer,
-    NumberInput, NumberInputField, Spinner
+    NumberInput, NumberInputField, Spinner, Textarea
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
@@ -22,6 +22,7 @@ import EmployeeExpensesModule from '../pages/EmployeeExpensesModule';
 import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import AdminDraftingWork from './admin/AdminDraftingWork';
 import InvoiceReport from './admin/InvoiceReport';
+import CompanyMaster from './admin/CompanyMaster';
 import AdminLoginReportView from '../components/admin/AdminLoginReportView';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -789,6 +790,11 @@ const EmployeeMasterForm = () => {
     const [attendanceDetailLoading, setAttendanceDetailLoading] = useState(false);
 
     const handleRowClick = async (emp) => {
+        if (emp.status === 'Deactive') {
+            const proceed = window.confirm(`Notice: ${emp.name} is DEACTIVATED.\n\nDo you want to view their attendance details?`);
+            if (!proceed) return;
+        }
+
         setSelectedReportEmployee(emp);
         setAttendanceDetailLoading(true);
         try {
@@ -803,6 +809,19 @@ const EmployeeMasterForm = () => {
             setAttendanceDetailLoading(false);
         }
     };
+
+    const handleToggleShowInReport = async (empId, newValue) => {
+        try {
+            const res = await api.put(`/employee-master/${empId}`, { showInPaymentReport: newValue });
+            if (res.data.success) {
+                setEmployees(prev => prev.map(e => e._id === empId ? { ...e, showInPaymentReport: newValue } : e));
+                toast({ title: 'Success', description: `Employee visibility updated.`, status: 'success', duration: 2000 });
+            }
+        } catch (err) {
+            toast({ title: 'Error', description: 'Failed to update visibility', status: 'error', duration: 2000 });
+        }
+    };
+
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
     const [employeeViewSubTab, setEmployeeViewSubTab] = useState('active'); // 'active' or 'deactive'
@@ -825,7 +844,6 @@ const EmployeeMasterForm = () => {
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     });
     const [reportFoodFilter, setReportFoodFilter] = useState('All');
-    const [reportStatusFilter, setReportStatusFilter] = useState('All');
     // Cache of { [empId_month]: { present, absent, halfDay, totalRecorded } }
     const [attendanceCache, setAttendanceCache] = useState({});
     const [attendanceLoading, setAttendanceLoading] = useState(false);
@@ -1275,8 +1293,8 @@ const EmployeeMasterForm = () => {
             const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
             const matchesStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
             const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
-            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
-            return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
+            const isHidden = emp.showInPaymentReport === false;
+            return matchesSearch && matchesMode && matchesStatus && matchesFood && !isHidden;
         });
 
         const totalSalary = reportRows.reduce((acc, emp) => acc + parseFloat(emp.salary || 0), 0);
@@ -1406,8 +1424,8 @@ const EmployeeMasterForm = () => {
             const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
             const matchesStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
             const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
-            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
-            return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
+            const isHidden = emp.showInPaymentReport === false;
+            return matchesSearch && matchesMode && matchesStatus && matchesFood && !isHidden;
         });
 
         const headers = ['SR. NO.', 'Month', 'Employee ID', 'Name', 'Bank A/C No', 'IFSC Code', 'Monthly Salary (INR)', 'Total Days', 'Present', 'Absent', 'Per Day Salary', 'UPAD', 'Incentive', 'Payable Salary', 'Payment Mode', 'Payment Status', 'Employee Status'];
@@ -1465,8 +1483,8 @@ const EmployeeMasterForm = () => {
             const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
             const matchesStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
             const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
-            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
-            return matchesSearch && matchesMode && matchesStatus && matchesFood && matchesEmpStatus;
+            const isHidden = emp.showInPaymentReport === false;
+            return matchesSearch && matchesMode && matchesStatus && matchesFood && !isHidden;
         });
 
         const validRows = reportRows.filter(emp => emp.bankDetails?.accountNumber);
@@ -2237,8 +2255,8 @@ const EmployeeMasterForm = () => {
                                             const matchesMode = reportPaymentModeFilter === 'All' || monthData.paymentMode === reportPaymentModeFilter;
                                             const matchesPayStatus = reportPaymentStatusFilter === 'All' || monthData.paymentStatus === reportPaymentStatusFilter;
                                             const matchesFood = reportFoodFilter === 'All' || emp.foodAllowance === reportFoodFilter;
-                                            const matchesEmpStatus = reportStatusFilter === 'All' || emp.status === reportStatusFilter;
-                                            return matchesSearch && matchesMode && matchesPayStatus && matchesFood && matchesEmpStatus;
+                                            const isHidden = emp.showInPaymentReport === false;
+                                            return matchesSearch && matchesMode && matchesPayStatus && matchesFood && !isHidden;
                                         });
                                         return (
                                             <VStack spacing={5} align="stretch" mt={4}>
@@ -2307,14 +2325,6 @@ const EmployeeMasterForm = () => {
                                                                 <option value="All">All Status</option>
                                                                 <option value="Pending">⏳ Pending</option>
                                                                 <option value="Done">✅ Done</option>
-                                                            </Select>
-                                                        </Box>
-                                                        <Box>
-                                                            <Text fontSize="10px" fontWeight="bold" color="gray.500" mb={1}>EMP STATUS</Text>
-                                                            <Select bg="white" size="sm" borderRadius="lg" value={reportStatusFilter} onChange={(e) => setReportStatusFilter(e.target.value)}>
-                                                                <option value="All">All</option>
-                                                                <option value="Active">✅ Active</option>
-                                                                <option value="Deactive">❌ Deactive</option>
                                                             </Select>
                                                         </Box>
                                                     </SimpleGrid>
@@ -2398,7 +2408,12 @@ const EmployeeMasterForm = () => {
                                                                                             <Text fontSize="xs" fontWeight="bold" color="gray.800">{emp.name}</Text>
                                                                                             <Badge colorScheme="blue" variant="subtle" fontSize="9px">{emp.empId}</Badge>
                                                                                             {isDeactive ? (
-                                                                                                <Badge colorScheme="red" variant="solid" fontSize="8px" px={1.5} borderRadius="sm">Deactive</Badge>
+                                                                                                <HStack spacing={1}>
+                                                                                                    <Badge colorScheme="red" variant="solid" fontSize="8px" px={1.5} borderRadius="sm">Deactive</Badge>
+                                                                                                    <Button size="xs" colorScheme={emp.showInPaymentReport !== false ? 'green' : 'gray'} variant="outline" height="18px" fontSize="9px" px={2} onClick={(e) => { e.stopPropagation(); handleToggleShowInReport(emp._id, emp.showInPaymentReport === false ? true : false); }}>
+                                                                                                        {emp.showInPaymentReport !== false ? 'Hide from Report' : 'Show in Report'}
+                                                                                                    </Button>
+                                                                                                </HStack>
                                                                                             ) : null}
                                                                                         </HStack>
                                                                                         {emp.phone && <Text fontSize="10px" color="gray.500">📱 {emp.phone}</Text>}
@@ -2462,6 +2477,8 @@ const EmployeeMasterForm = () => {
                                                                             <Td py={3} textAlign="center">
                                                                                 {attendanceLoading ? (
                                                                                     <Badge colorScheme="gray" variant="subtle" fontSize="9px">…</Badge>
+                                                                                ) : isDeactive ? (
+                                                                                    <Badge colorScheme="red" variant="solid" fontSize="xs" px={2.5} py={0.5} borderRadius="md">Deactive</Badge>
                                                                                 ) : pending !== null ? (
                                                                                     <Badge colorScheme="orange" variant="solid" fontSize="xs" px={2.5} py={0.5} borderRadius="md">
                                                                                         {pending}
@@ -3555,6 +3572,7 @@ const SiteMasterForm = () => {
         });
         setLedgerItems(s.ledgerItems?.length > 0 ? s.ledgerItems.map(li => ({ ...li, isNew: false })) : [{ ledger: '', amount: '', isNew: false }]);
         setContactPersons(s.contactPersons?.length > 0 ? s.contactPersons : [{ name: '', phone: '' }]);
+        setActiveTab(0);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -3970,6 +3988,7 @@ const SiteMasterForm = () => {
                                                                 });
                                                                 setLedgerItems(s.ledgerItems?.length ? s.ledgerItems.map(li => ({ ...li, isNew: false })) : [{ ledger: '', amount: '', isNew: false }]);
                                                                 setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
+                                                                setActiveTab(0);
                                                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                                             }} />
                                                             <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDeleteSite(s._id)} />
@@ -4020,6 +4039,7 @@ const SiteMasterForm = () => {
                                                         });
                                                         setLedgerItems(s.ledgerItems?.length ? s.ledgerItems.map(li => ({ ...li, isNew: false })) : [{ ledger: '', amount: '', isNew: false }]);
                                                         setContactPersons(s.contactPersons?.length ? s.contactPersons : [{ name: '', phone: '' }]);
+                                                        setActiveTab(0);
                                                         window.scrollTo({ top: 0, behavior: 'smooth' });
                                                     }}>Edit</Button>
                                                     <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDeleteSite(s._id)} />
@@ -4182,6 +4202,7 @@ const ScheduleMasterForm = () => {
     const [vehicles, setVehicles] = useState([]);
     const [instrList, setInstrList] = useState([]);
     const [schedules, setSchedules] = useState([]);
+    const [isFetchingSchedules, setIsFetchingSchedules] = useState(false);
     const [ledgers, setLedgers] = useState([]);
     const [viewDate, setViewDate] = useState(new Date().toISOString().split('T')[0]);
     const [editId, setEditId] = useState(null);
@@ -4210,6 +4231,7 @@ const ScheduleMasterForm = () => {
     });
     const [selectedSiteLedgers, setSelectedSiteLedgers] = useState([]);
     const { isOpen: isCompOpen, onOpen: onCompOpen, onClose: onCompClose } = useDisclosure();
+    const { isOpen: isNoLedgerOpen, onOpen: onNoLedgerOpen, onClose: onNoLedgerClose } = useDisclosure();
     const { isOpen: isAssignOpen, onOpen: onAssignOpen, onClose: onAssignClose } = useDisclosure();
     const [assignTarget, setAssignTarget] = useState(null);
     const [compFiles, setCompFiles] = useState({ photos: [], dailyReports: [], data: [] });
@@ -4221,6 +4243,7 @@ const ScheduleMasterForm = () => {
     const { isOpen: isRejectOpen, onOpen: onRejectOpen, onClose: onRejectClose } = useDisclosure();
     const cancelRejectRef = React.useRef();
     const [rejectTargetId, setRejectTargetId] = useState(null);
+    const [rejectReason, setRejectReason] = useState('');
     const [isRejectLoading, setIsRejectLoading] = useState(false);
 
     useEffect(() => {
@@ -4280,7 +4303,8 @@ const ScheduleMasterForm = () => {
         if (formData.site && sites.length > 0) {
             const currentSite = sites.find(s => s._id === formData.site);
             if (currentSite) {
-                setSelectedSiteLedgers(currentSite.ledgerItems || []);
+                const siteLedgerItems = (currentSite.ledgerItems || []).filter(li => li.ledger && li.amount);
+                setSelectedSiteLedgers(siteLedgerItems);
             }
         }
     }, [formData.site, sites]);
@@ -4288,10 +4312,13 @@ const ScheduleMasterForm = () => {
     useEffect(() => {
         if (!viewDate) return;
         const fetchSchedules = async () => {
+            setIsFetchingSchedules(true);
             try {
                 const res = await api.get(`/schedule-master?date=${viewDate}`);
                 if (res.data.success) setSchedules(res.data.data);
-            } catch (err) { console.error(err); }
+            } catch (err) { console.error(err); } finally {
+                setIsFetchingSchedules(false);
+            }
         };
         fetchSchedules();
     }, [viewDate]);
@@ -4313,9 +4340,14 @@ const ScheduleMasterForm = () => {
     const selectSite = (s) => {
         setFormData(prev => ({ ...prev, site: s._id, ledger: '', amount: 0 }));
         setSelectedSiteName(s.siteName);
-        setSelectedSiteLedgers(s.ledgerItems || []);
+        const siteLedgerItems = (s.ledgerItems || []).filter(li => li.ledger && li.amount);
+        setSelectedSiteLedgers(siteLedgerItems);
         setSiteSearch('');
         setShowSiteList(false);
+        // Warn immediately if this site has no configured ledgers
+        if (siteLedgerItems.length === 0) {
+            onNoLedgerOpen();
+        }
     };
 
     const handleHelperToggle = (empId) => {
@@ -4404,17 +4436,20 @@ const ScheduleMasterForm = () => {
 
     const handleRejectClick = (id) => {
         setRejectTargetId(id);
+        setRejectReason(''); // Always reset reason on open
         onRejectOpen();
     };
 
     const handleRejectConfirm = async () => {
         if (!rejectTargetId) return;
+        if (!rejectReason.trim()) return;
         setIsRejectLoading(true);
         try {
-            const res = await api.put(`/schedule-master/reject/${rejectTargetId}`);
+            const res = await api.put(`/schedule-master/reject/${rejectTargetId}`, { rejectReason: rejectReason.trim() });
             if (res.data.success) {
-                toast({ title: 'Schedule Rejected', status: 'info' });
+                toast({ title: 'Schedule Rejected', description: `Reason: ${rejectReason.trim()}`, status: 'info' });
                 onRejectClose();
+                setRejectReason('');
                 const sRes = await api.get(`/schedule-master?date=${viewDate}`);
                 if (sRes.data.success) setSchedules(sRes.data.data);
             }
@@ -4596,21 +4631,35 @@ const ScheduleMasterForm = () => {
                                         )}
                                         <FormControl>
                                             <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Site Ledger</FormLabel>
-                                            <Select
-                                                name="ledger"
-                                                value={formData.ledger}
-                                                onChange={(e) => {
-                                                    const selected = selectedSiteLedgers.find(l => l.ledger === e.target.value);
-                                                    setFormData(prev => ({ ...prev, ledger: e.target.value, amount: selected ? selected.amount : 0 }));
-                                                }}
-                                                borderRadius="xl"
-                                                bg="gray.50"
-                                                placeholder="Select Ledger"
-                                            >
-                                                {ledgers.map((l, i) => (
-                                                    <option key={i} value={l}>{l}</option>
-                                                ))}
-                                            </Select>
+                                            {!formData.site ? (
+                                                <Box bg="gray.50" border="1px dashed" borderColor="gray.300" px={4} py={3} borderRadius="xl">
+                                                    <Text fontSize="sm" color="gray.400">Select a site first</Text>
+                                                </Box>
+                                            ) : selectedSiteLedgers.length === 0 ? (
+                                                <HStack bg="red.50" border="1px solid" borderColor="red.200" px={4} py={3} borderRadius="xl" justify="space-between">
+                                                    <VStack align="start" spacing={0}>
+                                                        <Text fontSize="xs" color="red.600" fontWeight="bold">⚠ No ledgers configured</Text>
+                                                        <Text fontSize="10px" color="red.400">Add rates in Site Master first</Text>
+                                                    </VStack>
+                                                    <Button size="xs" colorScheme="red" variant="ghost" onClick={onNoLedgerOpen}>Details</Button>
+                                                </HStack>
+                                            ) : (
+                                                <Select
+                                                    name="ledger"
+                                                    value={formData.ledger}
+                                                    onChange={(e) => {
+                                                        const selected = selectedSiteLedgers.find(l => l.ledger === e.target.value);
+                                                        setFormData(prev => ({ ...prev, ledger: e.target.value, amount: selected ? selected.amount : 0 }));
+                                                    }}
+                                                    borderRadius="xl"
+                                                    bg="gray.50"
+                                                    placeholder="Select Ledger"
+                                                >
+                                                    {selectedSiteLedgers.map((l, i) => (
+                                                        <option key={i} value={l.ledger}>{l.ledger}</option>
+                                                    ))}
+                                                </Select>
+                                            )}
                                         </FormControl>
                                     </SimpleGrid>
 
@@ -4648,7 +4697,12 @@ const ScheduleMasterForm = () => {
                         </Box>
 
                         <CardBody p={6}>
-                            {schedules.length === 0 ? (
+                            {isFetchingSchedules ? (
+                                <Box textAlign="center" py={10}>
+                                    <Spinner size="xl" color="teal.500" thickness="4px" />
+                                    <Text mt={4} color="gray.500">Loading schedules...</Text>
+                                </Box>
+                            ) : schedules.length === 0 ? (
                                 <Box textAlign="center" py={10}>
                                     <Text color="gray.400">No schedules found for {viewDate}</Text>
                                 </Box>
@@ -4665,6 +4719,7 @@ const ScheduleMasterForm = () => {
                                                 <Th py={4} color="gray.500" fontSize="10px">INSTRUMENT</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">TYPE</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">STATUS</Th>
+                                                <Th py={4} color="gray.500" fontSize="10px" maxW="200px">REJECT REASON</Th>
                                                 <Th py={4} color="gray.500" fontSize="10px">ACTIONS</Th>
                                             </Tr>
                                         </Thead>
@@ -4738,6 +4793,21 @@ const ScheduleMasterForm = () => {
                                                     </Td>
                                                     <Td py={3}>
                                                         <Badge colorScheme={statusColors[s.dayStatus]} variant="solid">{s.dayStatus}</Badge>
+                                                    </Td>
+                                                    <Td py={3} maxW="200px">
+                                                        {s.dayStatus === 'Rejected' && s.rejectReason ? (
+                                                            <VStack align="start" spacing={0}>
+                                                                <HStack spacing={1}>
+                                                                    <Icon as={FaTimes} color="red.400" w={2.5} h={2.5} />
+                                                                    <Text fontSize="10px" fontWeight="bold" color="red.500" textTransform="uppercase">Reason</Text>
+                                                                </HStack>
+                                                                <Text fontSize="xs" color="red.600" fontStyle="italic" noOfLines={2} title={s.rejectReason}>
+                                                                    {s.rejectReason}
+                                                                </Text>
+                                                            </VStack>
+                                                        ) : (
+                                                            <Text fontSize="xs" color="gray.300">—</Text>
+                                                        )}
                                                     </Td>
                                                     <Td py={3} onClick={(e) => e.stopPropagation()}>
                                                         <HStack spacing={2}>
@@ -4864,27 +4934,173 @@ const ScheduleMasterForm = () => {
                 isLoading={isCompLoading}
             />
 
-            {/* Reject Confirmation AlertDialog */}
-            <AlertDialog isOpen={isRejectOpen} leastDestructiveRef={cancelRejectRef} onClose={onRejectClose} isCentered>
-                <AlertDialogOverlay backdropFilter="blur(5px)" bg="blackAlpha.600">
-                    <AlertDialogContent borderRadius="2xl">
-                        <AlertDialogHeader fontSize="lg" fontWeight="black" color="red.600">
-                            Reject Schedule
-                        </AlertDialogHeader>
-                        <AlertDialogBody color="gray.600">
-                            Are you sure you want to reject this schedule? This will mark the visit as rejected and cancel it from the active pipeline.
-                        </AlertDialogBody>
-                        <AlertDialogFooter>
-                            <Button ref={cancelRejectRef} onClick={onRejectClose} borderRadius="full" variant="ghost">
+            {/* ── No Site Ledger Warning Modal ── */}
+            <Modal isOpen={isNoLedgerOpen} onClose={onNoLedgerClose} isCentered motionPreset="slideInBottom" size="md">
+                <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader p={0}>
+                        <Box bgGradient="linear(to-r, red.500, orange.500)" px={7} py={6} color="white">
+                            <HStack spacing={4}>
+                                <Box bg="whiteAlpha.200" p={3} borderRadius="2xl">
+                                    <Icon as={FaTag} w={7} h={7} />
+                                </Box>
+                                <VStack align="start" spacing={0}>
+                                    <Heading size="md">No Ledger Configured</Heading>
+                                    <Text fontSize="sm" opacity={0.85}>This site has no rate / ledger set up yet</Text>
+                                </VStack>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={5} right={5} borderRadius="full" />
+                    <ModalBody px={7} py={6}>
+                        <VStack spacing={5} align="stretch">
+                            <Box p={4} bg="red.50" borderRadius="2xl" border="1px solid" borderColor="red.100">
+                                <Text fontSize="xs" fontWeight="black" color="red.500" textTransform="uppercase" mb={3}>Selected Site Details</Text>
+                                <VStack align="start" spacing={3}>
+                                    <HStack>
+                                        <Icon as={FaBuilding} color="gray.500" />
+                                        <Box>
+                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" textTransform="uppercase">Client</Text>
+                                            <Text fontWeight="bold" color="gray.800">{selectedClientName || '—'}</Text>
+                                        </Box>
+                                    </HStack>
+                                    <HStack>
+                                        <Icon as={FaMapMarkerAlt} color="gray.500" />
+                                        <Box>
+                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" textTransform="uppercase">Site</Text>
+                                            <Text fontWeight="bold" color="gray.800">{selectedSiteName || '—'}</Text>
+                                        </Box>
+                                    </HStack>
+                                </VStack>
+                            </Box>
+                            <Box p={4} bg="orange.50" borderRadius="2xl" border="1px solid" borderColor="orange.100">
+                                <HStack spacing={3} mb={2}>
+                                    <Icon as={FaMoneyBillWave} color="orange.500" w={5} h={5} />
+                                    <Text fontWeight="black" color="orange.700">Action Required</Text>
+                                </HStack>
+                                <Text fontSize="sm" color="gray.600" lineHeight="tall">
+                                    This site has <strong>no ledger items or rates</strong> configured.
+                                    You must add the service ledger type and the corresponding rate in
+                                    <strong> Site Master</strong> before scheduling this site.
+                                </Text>
+                            </Box>
+                            <Box p={4} bg="blue.50" borderRadius="2xl" border="1px solid" borderColor="blue.100">
+                                <Text fontSize="xs" fontWeight="black" color="blue.600" textTransform="uppercase" mb={2}>How to Fix</Text>
+                                <VStack align="start" spacing={2}>
+                                    <HStack align="start">
+                                        <Text fontSize="sm" color="blue.700" fontWeight="bold">1.</Text>
+                                        <Text fontSize="sm" color="gray.700">Go to <strong>Site Master</strong> module</Text>
+                                    </HStack>
+                                    <HStack align="start">
+                                        <Text fontSize="sm" color="blue.700" fontWeight="bold">2.</Text>
+                                        <Text fontSize="sm" color="gray.700">Find client <strong>{selectedClientName}</strong> → site <strong>{selectedSiteName}</strong></Text>
+                                    </HStack>
+                                    <HStack align="start">
+                                        <Text fontSize="sm" color="blue.700" fontWeight="bold">3.</Text>
+                                        <Text fontSize="sm" color="gray.700">Click <strong>Edit</strong> and add a <strong>Ledger</strong> name and <strong>Rate (₹)</strong></Text>
+                                    </HStack>
+                                    <HStack align="start">
+                                        <Text fontSize="sm" color="blue.700" fontWeight="bold">4.</Text>
+                                        <Text fontSize="sm" color="gray.700">Save and come back here to schedule the site</Text>
+                                    </HStack>
+                                </VStack>
+                            </Box>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" px={7} py={4}>
+                        <Button colorScheme="red" borderRadius="full" shadow="md" onClick={onNoLedgerClose} w="full">
+                            Understood — I'll Update Site Master
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── Reject Schedule Modal (with mandatory reason) ── */}
+            <Modal
+                isOpen={isRejectOpen}
+                onClose={() => { onRejectClose(); setRejectReason(''); }}
+                isCentered
+                motionPreset="slideInBottom"
+                size="md"
+            >
+                <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader p={0}>
+                        <Box bgGradient="linear(to-r, red.500, red.700)" px={7} py={6} color="white">
+                            <HStack spacing={4}>
+                                <Box bg="whiteAlpha.200" p={3} borderRadius="2xl">
+                                    <Icon as={FaTimes} w={6} h={6} />
+                                </Box>
+                                <VStack align="start" spacing={0}>
+                                    <Heading size="md">Reject Schedule</Heading>
+                                    <Text fontSize="sm" opacity={0.85}>This action cannot be undone</Text>
+                                </VStack>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={5} right={5} borderRadius="full" onClick={() => setRejectReason('')} />
+                    <ModalBody px={7} py={6}>
+                        <VStack spacing={4} align="stretch">
+                            <Box p={4} bg="red.50" borderRadius="2xl" border="1px solid" borderColor="red.100">
+                                <HStack spacing={2} mb={1}>
+                                    <Icon as={FaTimes} color="red.400" w={3} h={3} />
+                                    <Text fontSize="xs" fontWeight="black" color="red.600" textTransform="uppercase">Warning</Text>
+                                </HStack>
+                                <Text fontSize="sm" color="gray.700">
+                                    This will mark the schedule as <strong>Rejected</strong> and remove it from the active pipeline. All associated data checks will be run before rejection.
+                                </Text>
+                            </Box>
+                            <Box>
+                                <Text fontWeight="bold" fontSize="sm" color="gray.700" mb={2}>
+                                    Rejection Reason <Text as="span" color="red.500">*</Text>
+                                </Text>
+                                <Textarea
+                                    placeholder="Enter the reason for rejecting this schedule (required)..."
+                                    value={rejectReason}
+                                    onChange={(e) => setRejectReason(e.target.value)}
+                                    borderRadius="xl"
+                                    bg="gray.50"
+                                    rows={4}
+                                    resize="none"
+                                    focusBorderColor="red.400"
+                                    _placeholder={{ color: 'gray.400', fontSize: 'sm' }}
+                                />
+                                {rejectReason.trim().length === 0 && (
+                                    <Text fontSize="xs" color="red.400" mt={1}>⚠ Reason is required to proceed</Text>
+                                )}
+                                {rejectReason.trim().length > 0 && (
+                                    <Text fontSize="xs" color="green.500" mt={1}>✓ {rejectReason.trim().length} characters entered</Text>
+                                )}
+                            </Box>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" px={7} py={4}>
+                        <HStack w="full" spacing={3}>
+                            <Button
+                                ref={cancelRejectRef}
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => { onRejectClose(); setRejectReason(''); }}
+                                flex={1}
+                            >
                                 Cancel
                             </Button>
-                            <Button colorScheme="red" onClick={handleRejectConfirm} ml={3} isLoading={isRejectLoading} borderRadius="full" shadow="md">
-                                Reject Schedule
+                            <Button
+                                colorScheme="red"
+                                borderRadius="full"
+                                shadow="md"
+                                onClick={handleRejectConfirm}
+                                isLoading={isRejectLoading}
+                                isDisabled={!rejectReason.trim()}
+                                leftIcon={<Icon as={FaTimes} />}
+                                flex={1}
+                            >
+                                Confirm Reject
                             </Button>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialogOverlay>
-            </AlertDialog>
+                        </HStack>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </Box>
     );
 };
@@ -4964,6 +5180,17 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                             <Text fontSize="xs" fontWeight="medium" opacity={0.9}>
                                 {schedule?.client?.clientName} • {schedule?.site?.siteName}
                             </Text>
+                            {schedule?.site?.contactPersons && schedule.site.contactPersons.length > 0 ? (
+                                <Text fontSize="xs" fontWeight="bold" opacity={0.9} mt={1} color="yellow.300">
+                                    <Icon as={FaPhoneAlt} mr={1} /> 
+                                    {schedule.site.contactPersons[0].name} ({schedule.site.contactPersons[0].phone})
+                                </Text>
+                            ) : schedule?.site?.contactPhone ? (
+                                <Text fontSize="xs" fontWeight="bold" opacity={0.9} mt={1} color="yellow.300">
+                                    <Icon as={FaPhoneAlt} mr={1} /> 
+                                    {schedule.site.contactPhone}
+                                </Text>
+                            ) : null}
                         </VStack>
                     </HStack>
                 </ModalHeader>
@@ -6221,6 +6448,7 @@ const Services = () => {
         { key: 'employeeExpense', groupKey: 'employeeExpenseGroup', label: 'Employee Ledger', icon: FaMoneyBillWave, colorScheme: 'blue', component: <EmployeeExpensesModule isInsideServices={true} /> },
         { key: 'draftingWork', groupKey: 'otherServicesGroup', subFilter: 'draftingWork', label: 'Drafting Work', icon: FaFolderOpen, colorScheme: 'purple', component: <AdminDraftingWork isInsideServices={true} /> },
         { key: 'invoiceReport', groupKey: 'otherServicesGroup', subFilter: 'invoiceReport', label: 'Invoice Report', icon: FaFileInvoiceDollar, colorScheme: 'blue', component: <InvoiceReport isInsideServices={true} /> },
+        { key: 'companyMaster', groupKey: 'otherServicesGroup', subFilter: 'companyMaster', label: 'Our Companies', icon: FaBuilding, colorScheme: 'teal', component: <CompanyMaster /> },
     ].filter(t => hasPermission(user, t.key, 'read'));
 
     return (
