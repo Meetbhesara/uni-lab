@@ -2446,7 +2446,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 };
 
 // ── Attendance Sub-Module for Unscheduled Employees ────────────────────────
-const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, canWrite = true }) => {
+const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, canWrite = true, isLoading = false }) => {
     const toast = useToast();
     const [attendanceMap, setAttendanceMap] = useState({});
     const [remarks, setRemarks] = useState({});
@@ -2454,6 +2454,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     const [savedAttendance, setSavedAttendance] = useState([]);
     const [adminLoggedInEmpIds, setAdminLoggedInEmpIds] = useState(new Set());
     const [isLinkedAdminMap, setIsLinkedAdminMap] = useState({});
+    const [isFetchingAttendance, setIsFetchingAttendance] = useState(true);
 
     // Compute IDs of all scheduled operatives + helpers
     const scheduledIds = useMemo(() => {
@@ -2488,6 +2489,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     // Fetch existing attendance for this date
     useEffect(() => {
         if (!attendanceDate) return;
+        setIsFetchingAttendance(true);
         const fetchExisting = async () => {
             try {
                 const res = await api.get(`/employee-expense/attendance?date=${attendanceDate}`);
@@ -2507,6 +2509,8 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                 }
             } catch (err) {
                 // Silently handle — attendance endpoint may not exist yet
+            } finally {
+                setIsFetchingAttendance(false);
             }
         };
         fetchExisting();
@@ -2548,6 +2552,17 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
             setIsSaving(false);
         }
     };
+
+    if (isFetchingAttendance || isLoading) {
+        return (
+            <Center py={10} bg="orange.50/40" borderRadius="2xl" border="1px dashed" borderColor="orange.200">
+                <VStack spacing={3}>
+                    <Spinner size="lg" color="orange.500" thickness="3.5px" speed="0.65s" />
+                    <Text color="orange.700" fontWeight="bold" fontSize="xs">Loading Unscheduled Attendance Details...</Text>
+                </VStack>
+            </Center>
+        );
+    }
 
     if (unscheduledEmployees.length === 0) {
         return (

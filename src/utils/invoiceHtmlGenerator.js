@@ -25,9 +25,14 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     const ifsc = bank.ifscCode || 'INDB0000330';
 
     let logoHtml = '';
-    if (cd.logo) {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
-        logoHtml = `<img src="${baseUrl}${cd.logo}" style="max-height: 55px; max-width: 100px; object-fit: contain;" />`;
+    const logoPath = cd.logo;
+    if (logoPath) {
+        let logoUrl = logoPath;
+        if (!logoUrl.startsWith('http://') && !logoUrl.startsWith('https://')) {
+            const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) ? import.meta.env.VITE_API_BASE_URL : 'http://localhost:5001';
+            logoUrl = `${baseUrl}${logoUrl.startsWith('/') ? '' : '/'}${logoUrl}`;
+        }
+        logoHtml = `<img src="${logoUrl}" style="max-height: 55px; max-width: 100px; object-fit: contain;" />`;
     } else {
         const logoText = isUniqueLab ? "ULI" : "UE";
         logoHtml = `<div style="font-family:Arial, sans-serif; font-size:45px; font-weight:900; color:#007bff; line-height:1; letter-spacing:-2px; border:3px solid #007bff; display:inline-block; padding:0px 6px; border-radius:5px;">${logoText}</div>`;
@@ -63,33 +68,44 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     let totalAmount = 0;
     let totalQty = 0;
     
+    const shouldIncludeDates = invoiceForm.includeDates !== false;
+
     entries.forEach((entry, i) => {
-        const conf = invoiceForm.entryConfigs[entry._id] || {};
-        const qty = conf.qty || 1;
+        const conf = invoiceForm.entryConfigs?.[entry._id] || {};
+        const qty = conf.qty !== undefined ? conf.qty : 1;
         const rate = conf.rate || 0;
         const amt = qty * rate;
         totalAmount += amt;
         totalQty += qty;
         
-        const entryDate = new Date(entry.scheduleDate).toLocaleDateString('en-GB');
+        const entryDate = entry.scheduleDate ? new Date(entry.scheduleDate).toLocaleDateString('en-GB') : '';
         const siteName = entry.site?.siteName || '';
-        const clientName = entry.client?.clientName || '';
         
-        let desc = "<b>Hire Charges for " + conf.instrument + " Days</b><br/>";
+        const instrumentTitle = conf.instrument || 'Total Station';
+        let desc = "<b>Hire Charges for " + instrumentTitle + "</b><br/>";
         desc += "<div style=\"font-size:10px; font-style:italic; margin-top: 4px; line-height: 1.4; font-weight: normal;\">";
         if (siteName) desc += "SURVEY WORK AT " + siteName.toUpperCase() + "<br/>";
-        if (entry.scheduleType) desc += entry.scheduleType.toUpperCase() + "<br/>";
+        
+        // Main Site Ledger Name
+        const mainLedgerName = conf.ledgerName || conf.ledger || entry.ledger || entry.scheduleType || '';
+        if (mainLedgerName) desc += mainLedgerName.toUpperCase() + "<br/>";
         if (conf.extraDescription) desc += conf.extraDescription.toUpperCase() + "<br/>";
-        desc += "DATE : " + entryDate;
+        
+        if (shouldIncludeDates && entryDate) {
+            desc += "DATE : " + entryDate;
+        }
         desc += "</div>";
+
+        const hsnSacCode = conf.hsnSac || entry.hsnSac || '';
+        const perShortName = conf.shortName || '';
         
         itemsHtml += "<tr style=\"vertical-align:top;\">";
         itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:center;\">" + (i + 1) + "</td>";
         itemsHtml += "<td style=\"padding:4px; text-align:left; border-right:1px solid #000;\">" + desc + "</td>";
-        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">9983</td>";
+        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">" + hsnSacCode + "</td>";
         itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:center;\"><b>" + qty.toFixed(1) + "</b></td>";
         itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:right;\">" + formatNum(rate) + "</td>";
-        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">" + (conf.ledger || 'Day') + "</td>";
+        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">" + perShortName + "</td>";
         itemsHtml += "<td style=\"padding:4px; text-align:right;\"><b>" + formatNum(amt) + "</b></td>";
         itemsHtml += "</tr>";
     });
@@ -110,8 +126,8 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     const totalTax = cgst + sgst + igst;
     const grandTotal = totalAmount + totalTax;
     
-    // Add empty padding row to push taxes to the bottom, shrinking if there are many entries
-    let spacerHeight = Math.max(10, 280 - (entries.length * 50));
+    // Add empty padding row to push taxes to the bottom, shrinking dynamically to fit 1 page cleanly
+    let spacerHeight = Math.max(10, 150 - (entries.length * 30));
     itemsHtml += "<tr style=\"height: " + spacerHeight + "px; vertical-align: bottom;\">";
     itemsHtml += "<td style=\"border-right:1px solid #000;\"></td>";
     if (gstType === 'IGST') {
@@ -133,11 +149,13 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     itemsHtml += "</tr>";
 
     let html = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<style>\n";
-    html += "body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 20px; color: #000; }\n";
+    html += "@page { size: A4 portrait; margin: 5mm 8mm; }\n";
+    html += "@media print { html, body { width: 100%; margin: 0; padding: 0; -webkit-print-color-adjust: exact; } .container { page-break-inside: avoid; break-inside: avoid; } }\n";
+    html += "body { font-family: Arial, sans-serif; font-size: 10px; margin: 0; padding: 8px 12px; color: #000; box-sizing: border-box; }\n";
     html += "table { border-collapse: collapse; }\n";
     html += "td, th { vertical-align: top; }\n";
     html += ".container { width: 100%; border: 1px solid #000; }\n";
-    html += ".header-title { text-align: center; font-size: 14px; font-weight: bold; padding: 2px; }\n";
+    html += ".header-title { text-align: center; font-size: 13px; font-weight: bold; padding: 2px; }\n";
     html += "</style>\n</head>\n<body>\n";
     
     html += "<div class=\"header-title\">" + invoiceTitle + "</div>\n";
@@ -198,7 +216,7 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     html += "<tr>\n<td style=\"border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px;\">Delivery Note</td>\n";
     html += "<td style=\"border-bottom: 1px solid #000; padding: 4px;\">Mode/Terms of Payment</td>\n</tr>\n";
     
-    html += "<tr>\n<td style=\"border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px;\">Reference No. & Date.<br/><b>dt. " + dateStr + "</b></td>\n";
+    html += "<tr>\n<td style=\"border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px;\">Reference No. and Date<br/><b>" + (invoiceNo ? invoiceNo + " dt. " + dateStr : "dt. " + dateStr) + "</b></td>\n";
     html += "<td style=\"border-bottom: 1px solid #000; padding: 4px;\">Other References</td>\n</tr>\n";
     
     html += "<tr>\n<td style=\"border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px;\">Buyer's Order No.</td>\n";
@@ -324,8 +342,19 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     html += "<tr><td>Branch & IFS Code</td><td>: <b>" + ifsc + "</b></td></tr>\n";
     html += "</table>\n</div>\n";
     
-    html += "<div style=\"text-align: right; padding: 4px; margin-top: 15px; border-top: 1px solid #ccc;\">\n";
-    html += "<b>for " + companyName + "</b><br/><br/><br/>\nAuthorised Signatory\n";
+    let stampHtml = '<br/><br/><br/>';
+    const stampPath = cd.companyStamp || cd.stampLogo || cd.stamp;
+    if (stampPath) {
+        let stampUrl = stampPath;
+        if (!stampUrl.startsWith('http://') && !stampUrl.startsWith('https://')) {
+            const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) ? import.meta.env.VITE_API_BASE_URL : 'http://localhost:5001';
+            stampUrl = `${baseUrl}${stampUrl.startsWith('/') ? '' : '/'}${stampUrl}`;
+        }
+        stampHtml = `<div style="text-align:right; margin: 2px 0;"><img src="${stampUrl}" style="max-height: 55px; max-width: 130px; object-fit: contain; display: inline-block;" /></div>`;
+    }
+
+    html += "<div style=\"text-align: right; padding: 4px; margin-top: 4px; border-top: 1px solid #ccc;\">\n";
+    html += "<b>for " + companyName + "</b><br/>" + stampHtml + "\nAuthorised Signatory\n";
     html += "</div>\n</td>\n</tr>\n</table>\n";
     
     html += "</div>\n"; // End container

@@ -3420,7 +3420,15 @@ const SiteMasterForm = () => {
         siteLocation: '',
         status: 'Active'
     });
-    const [ledgerItems, setLedgerItems] = useState([{ ledger: '', amount: '', isNew: false }]);
+    const [ledgerItems, setLedgerItems] = useState([]);
+    const [ledgerModal, setLedgerModal] = useState({
+        isOpen: false,
+        editingIndex: null,
+        ledger: '',
+        shortName: '',
+        amount: '',
+        hsnSac: '998349'
+    });
     const [contactPersons, setContactPersons] = useState([{ name: '', phone: '' }]);
     const [docs, setDocs] = useState(null);
     const [locationLoading, setLocationLoading] = useState(false);
@@ -3444,8 +3452,6 @@ const SiteMasterForm = () => {
             if (cRes.data.success) {
                 const clientList = cRes.data.data;
                 setClients(clientList);
-                const defaultClient = clientList.find(c => c.clientId === '00001') || clientList[0];
-                if (defaultClient && !filterClientId) setFilterClientId(defaultClient._id);
             }
             if (eRes.data.success) setEmployees(eRes.data.data);
             if (lRes.data.success) setLedgers(lRes.data.data);
@@ -3529,8 +3535,13 @@ const SiteMasterForm = () => {
                 if (formData[key]) uploadData.append(key, formData[key]);
             });
             if (nextSiteId) uploadData.append('siteId', nextSiteId);
-            const cleanedLedgers = ledgerItems.filter(li => li.ledger && li.ledger.trim() !== '' && li.amount);
-            uploadData.append('ledgerItems', JSON.stringify(cleanedLedgers.map(item => ({ ledger: item.ledger, amount: item.amount }))));
+            const cleanedLedgers = ledgerItems.filter(li => li.ledger && li.ledger.trim() !== '' && li.amount !== '' && li.amount !== null);
+            uploadData.append('ledgerItems', JSON.stringify(cleanedLedgers.map(item => ({
+                ledger: item.ledger.trim(),
+                shortName: item.shortName ? item.shortName.trim() : '',
+                amount: Number(item.amount) || 0,
+                hsnSac: item.hsnSac ? item.hsnSac.trim() : '998349'
+            }))));
             const cleanedContacts = contactPersons.filter(cp => cp.name.trim() || cp.phone.trim());
             uploadData.append('contactPersons', JSON.stringify(cleanedContacts));
             if (docs) {
@@ -3547,7 +3558,7 @@ const SiteMasterForm = () => {
             if (response.data.success) {
                 toast({ title: editId ? "Updated" : "Success", description: editId ? "Site record updated" : "Site record stored successfully", status: "success", duration: 3000 });
                 setFormData({ client: '', siteName: '', siteAddress: '', siteLocation: '', status: 'Active' });
-                setLedgerItems([{ ledger: '', amount: '', isNew: false }]);
+                setLedgerItems([]);
                 setContactPersons([{ name: '', phone: '' }]);
                 setDocs(null);
                 setEditId('');
@@ -3570,7 +3581,12 @@ const SiteMasterForm = () => {
             siteLocation: s.siteLocation || '',
             status: s.status || 'Active'
         });
-        setLedgerItems(s.ledgerItems?.length > 0 ? s.ledgerItems.map(li => ({ ...li, isNew: false })) : [{ ledger: '', amount: '', isNew: false }]);
+        setLedgerItems(s.ledgerItems?.length > 0 ? s.ledgerItems.map(li => ({
+            ledger: li.ledger || '',
+            shortName: li.shortName || '',
+            amount: li.amount || 0,
+            hsnSac: li.hsnSac || '998349'
+        })) : []);
         setContactPersons(s.contactPersons?.length > 0 ? s.contactPersons : [{ name: '', phone: '' }]);
         setActiveTab(0);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3735,77 +3751,122 @@ const SiteMasterForm = () => {
                                 </SimpleGrid>
 
                                 <Box p={6} bg="teal.50" borderRadius="2xl" border="1px solid" borderColor="teal.100">
-                                    <HStack justify="space-between" mb={4}>
-                                        <Heading size="sm" color="teal.700" display="flex" alignItems="center">
-                                            <Icon as={FaFileInvoiceDollar} mr={2} /> Ledger Assignments
-                                        </Heading>
-                                        <Button size="xs" colorScheme="teal" onClick={() => addArrayItem(setLedgerItems, { ledger: '', amount: '', isNew: false })}>
-                                            + Add Item
-                                        </Button>
-                                    </HStack>
-                                    <VStack spacing={4} align="stretch">
-                                        {ledgerItems.map((item, idx) => (
-                                            <SimpleGrid key={idx} columns={{ base: 1, md: 3 }} spacing={4} bg="white" p={3} borderRadius="xl" shadow="sm">
-                                                <FormControl>
-                                                    {!item.isNew ? (
-                                                        <Select
-                                                            placeholder="Select Ledger"
-                                                            value={item.ledger}
-                                                            onChange={(e) => {
-                                                                if (e.target.value === 'NEW_LEDGER_TRIGGER') {
-                                                                    handleArrayChange(setLedgerItems, idx, 'isNew', true);
-                                                                    handleArrayChange(setLedgerItems, idx, 'ledger', '');
-                                                                } else {
-                                                                    handleArrayChange(setLedgerItems, idx, 'ledger', e.target.value);
-                                                                }
-                                                            }}
-                                                            borderRadius="lg"
-                                                        >
-                                                            {ledgers.map((l, i) => <option key={i} value={l}>{l}</option>)}
-                                                            <option value="NEW_LEDGER_TRIGGER">+ Create New Ledger</option>
-                                                        </Select>
-                                                    ) : (
-                                                        <HStack>
-                                                            <Input
-                                                                placeholder="Enter Ledger Name"
-                                                                value={item.ledger}
-                                                                onChange={(e) => handleArrayChange(setLedgerItems, idx, 'ledger', e.target.value)}
-                                                                borderRadius="lg"
-                                                                autoFocus
-                                                            />
-                                                            <IconButton
-                                                                icon={<FaUndo />}
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() => handleArrayChange(setLedgerItems, idx, 'isNew', false)}
-                                                                title="Switch back to list"
-                                                            />
-                                                        </HStack>
-                                                    )}
-                                                </FormControl>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="Amount"
-                                                        value={item.amount}
-                                                        onChange={(e) => handleArrayChange(setLedgerItems, idx, 'amount', e.target.value)}
-                                                        borderRadius="lg"
-                                                    />
-                                                </FormControl>
-                                                <HStack justify="flex-end">
-                                                    <IconButton
-                                                        icon={<FaTrash />}
-                                                        colorScheme="red"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => removeArrayItem(setLedgerItems, idx)}
-                                                        isDisabled={ledgerItems.length === 1}
-                                                    />
-                                                </HStack>
-                                            </SimpleGrid>
-                                        ))}
-                                    </VStack>
-                                </Box>
+                                     <HStack justify="space-between" mb={4}>
+                                         <VStack align="start" spacing={0}>
+                                             <Heading size="sm" color="teal.700" display="flex" alignItems="center">
+                                                 <Icon as={FaFileInvoiceDollar} mr={2} /> Ledger Assignments
+                                             </Heading>
+                                             <Text fontSize="xs" color="gray.500">
+                                                 Configure rates, short names, and HSN/SAC codes for site billing
+                                             </Text>
+                                         </VStack>
+                                         <Button
+                                             size="sm"
+                                             colorScheme="teal"
+                                             borderRadius="full"
+                                             leftIcon={<FaPlus />}
+                                             onClick={() => setLedgerModal({
+                                                 isOpen: true,
+                                                 editingIndex: null,
+                                                 ledger: '',
+                                                 shortName: '',
+                                                 amount: '',
+                                                 hsnSac: '998349'
+                                             })}
+                                         >
+                                             + Create New Ledger
+                                         </Button>
+                                     </HStack>
+
+                                     {ledgerItems.length === 0 ? (
+                                         <Center py={6} bg="white" borderRadius="xl" border="1px dashed" borderColor="teal.200">
+                                             <VStack spacing={2}>
+                                                 <Text color="gray.400" fontSize="sm">No ledgers assigned to this site yet.</Text>
+                                                 <Button
+                                                     size="xs"
+                                                     colorScheme="teal"
+                                                     variant="outline"
+                                                     borderRadius="full"
+                                                     onClick={() => setLedgerModal({
+                                                         isOpen: true,
+                                                         editingIndex: null,
+                                                         ledger: '',
+                                                         shortName: '',
+                                                         amount: '',
+                                                         hsnSac: '998349'
+                                                     })}
+                                                 >
+                                                     + Add First Ledger
+                                                 </Button>
+                                             </VStack>
+                                         </Center>
+                                     ) : (
+                                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                                             {ledgerItems.map((item, idx) => (
+                                                 <Box key={idx} bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="xs">
+                                                     <Flex justify="space-between" align="start">
+                                                         <VStack align="start" spacing={1}>
+                                                             <HStack spacing={2}>
+                                                                 <Text fontWeight="extrabold" fontSize="sm" color="gray.800">
+                                                                     {item.ledger}
+                                                                 </Text>
+                                                                 {item.shortName && (
+                                                                     <Badge colorScheme="purple" borderRadius="full" px={2} fontSize="9px">
+                                                                         {item.shortName}
+                                                                     </Badge>
+                                                                 )}
+                                                             </HStack>
+                                                             <HStack spacing={2}>
+                                                                 <Text fontSize="xs" fontWeight="bold" color="teal.600">
+                                                                     ₹{Number(item.amount).toLocaleString()}
+                                                                 </Text>
+                                                                 <Badge colorScheme="gray" variant="subtle" fontSize="9px">
+                                                                     HSN/SAC: {item.hsnSac || '998349'}
+                                                                 </Badge>
+                                                             </HStack>
+                                                         </VStack>
+                                                         <HStack spacing={1}>
+                                                             <IconButton
+                                                                 icon={<FaEdit />}
+                                                                 aria-label="Edit Ledger"
+                                                                 size="xs"
+                                                                 colorScheme="blue"
+                                                                 variant="ghost"
+                                                                 borderRadius="full"
+                                                                 onClick={() => setLedgerModal({
+                                                                     isOpen: true,
+                                                                     editingIndex: idx,
+                                                                     ledger: item.ledger || '',
+                                                                     shortName: item.shortName || '',
+                                                                     amount: item.amount || '',
+                                                                     hsnSac: item.hsnSac || '998349'
+                                                                 })}
+                                                             />
+                                                             <IconButton
+                                                                 icon={<FaTrash />}
+                                                                 aria-label="Delete Ledger"
+                                                                 size="xs"
+                                                                 colorScheme="red"
+                                                                 variant="ghost"
+                                                                 borderRadius="full"
+                                                                 onClick={() => {
+                                                                     const removedLedgerName = item.ledger;
+                                                                     setLedgerItems(prev => prev.filter((_, i) => i !== idx));
+                                                                     toast({
+                                                                         title: `Ledger "${removedLedgerName}" removed from draft`,
+                                                                         description: 'Click "Update Site" below to apply changes permanently.',
+                                                                         status: 'info',
+                                                                         duration: 3000
+                                                                     });
+                                                                 }}
+                                                             />
+                                                         </HStack>
+                                                     </Flex>
+                                                 </Box>
+                                             ))}
+                                         </SimpleGrid>
+                                     )}
+                                 </Box>
 
                                 {/* ── GPS Location Field ── */}
                                 <FormControl>
@@ -4188,6 +4249,125 @@ const SiteMasterForm = () => {
                     </CardBody>
                 </Card>
             </Container>
+            {/* ── Ledger Creation & Editing Modal ── */}
+            <Modal isOpen={ledgerModal.isOpen} onClose={() => setLedgerModal(prev => ({ ...prev, isOpen: false }))} size="md" isCentered motionPreset="slideInBottom">
+                <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader bg="teal.600" color="white" p={5}>
+                        <HStack spacing={3}>
+                            <Icon as={FaFileInvoiceDollar} w={6} h={6} />
+                            <Text fontSize="lg" fontWeight="black">
+                                {ledgerModal.editingIndex !== null ? 'Edit Site Ledger' : 'Create New Site Ledger'}
+                            </Text>
+                        </HStack>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} />
+                    <ModalBody p={6}>
+                        <VStack spacing={4} align="stretch">
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Ledger Name</FormLabel>
+                                <Select
+                                    placeholder="Select from Master Ledgers"
+                                    value={ledgerModal.ledger}
+                                    onChange={(e) => setLedgerModal(prev => ({ ...prev, ledger: e.target.value }))}
+                                    borderRadius="xl"
+                                    mb={2}
+                                    bg="gray.50"
+                                >
+                                    {ledgers.map((l, i) => <option key={i} value={l}>{l}</option>)}
+                                </Select>
+                                <Input
+                                    placeholder="Or type Custom Ledger Name (e.g. VISIT FULL DAY)"
+                                    value={ledgerModal.ledger}
+                                    onChange={(e) => setLedgerModal(prev => ({ ...prev, ledger: e.target.value }))}
+                                    borderRadius="xl"
+                                />
+                            </FormControl>
+
+                            <SimpleGrid columns={2} spacing={3} w="full">
+                                <FormControl>
+                                    <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Short Name</FormLabel>
+                                    <Input
+                                        placeholder="e.g. FD / HD / TOPO"
+                                        value={ledgerModal.shortName}
+                                        onChange={(e) => setLedgerModal(prev => ({ ...prev, shortName: e.target.value }))}
+                                        borderRadius="xl"
+                                    />
+                                </FormControl>
+
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Amount (₹)</FormLabel>
+                                    <Input
+                                        type="number"
+                                        placeholder="e.g. 2500"
+                                        value={ledgerModal.amount}
+                                        onChange={(e) => setLedgerModal(prev => ({ ...prev, amount: e.target.value }))}
+                                        borderRadius="xl"
+                                    />
+                                </FormControl>
+                            </SimpleGrid>
+
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">HSN / SAC Code</FormLabel>
+                                <Input
+                                    placeholder="e.g. 998349"
+                                    value={ledgerModal.hsnSac}
+                                    onChange={(e) => setLedgerModal(prev => ({ ...prev, hsnSac: e.target.value }))}
+                                    borderRadius="xl"
+                                />
+                            </FormControl>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" p={4}>
+                        <Button variant="ghost" mr={3} borderRadius="full" onClick={() => setLedgerModal(prev => ({ ...prev, isOpen: false }))}>
+                            Cancel
+                        </Button>
+                        <Button
+                            colorScheme="teal"
+                            borderRadius="full"
+                            px={8}
+                            onClick={() => {
+                                if (!ledgerModal.ledger || !ledgerModal.ledger.trim()) {
+                                    toast({ title: 'Ledger Name required', status: 'warning', duration: 2000 });
+                                    return;
+                                }
+                                if (ledgerModal.amount === '' || ledgerModal.amount === null) {
+                                    toast({ title: 'Amount required', status: 'warning', duration: 2000 });
+                                    return;
+                                }
+
+                                const newItem = {
+                                    ledger: ledgerModal.ledger.trim(),
+                                    shortName: ledgerModal.shortName.trim(),
+                                    amount: Number(ledgerModal.amount),
+                                    hsnSac: ledgerModal.hsnSac.trim() || '998349'
+                                };
+
+                                if (ledgerModal.editingIndex !== null) {
+                                    setLedgerItems(prev => {
+                                        const copy = [...prev];
+                                        copy[ledgerModal.editingIndex] = newItem;
+                                        return copy;
+                                    });
+                                } else {
+                                    setLedgerItems(prev => [...prev, newItem]);
+                                }
+
+                                toast({
+                                    title: ledgerModal.editingIndex !== null ? `Ledger "${newItem.ledger}" updated in draft` : `Ledger "${newItem.ledger}" added to draft`,
+                                    description: 'Remember to click "Update Site" below to save changes permanently.',
+                                    status: 'success',
+                                    duration: 3000
+                                });
+
+                                setLedgerModal(prev => ({ ...prev, isOpen: false }));
+                            }}
+                        >
+                            {ledgerModal.editingIndex !== null ? 'Update Ledger' : 'Save Ledger'}
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </Box>
     );
 };
@@ -5163,6 +5343,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
 
     const isCompleted = schedule?.dayStatus === 'Completed';
     const isPaused = schedule?.dayStatus === 'Paused';
+    const isRejected = schedule?.dayStatus === 'Rejected';
     const isMonthType = schedule?.scheduleType === 'MONTH';
 
     return (
@@ -5170,13 +5351,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
         <Modal isOpen={isOpen} onClose={onClose} size="xl">
             <ModalOverlay backdropFilter="blur(12px)" bg="blackAlpha.700" />
             <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300">
-                <ModalHeader bgGradient={isCompleted ? "linear(to-r, gray.700, gray.500)" : "linear(to-r, blue.700, blue.500)"} color="white" py={5}>
+                <ModalHeader bgGradient={isRejected ? "linear(to-r, red.700, red.500)" : isCompleted ? "linear(to-r, gray.700, gray.500)" : "linear(to-r, blue.700, blue.500)"} color="white" py={5}>
                     <HStack spacing={4}>
                         <Box p={2} bg="whiteAlpha.300" borderRadius="xl">
                             <Icon as={FaUsers} w={6} h={6} />
                         </Box>
                         <VStack align="start" spacing={0}>
-                            <Text fontSize="lg" fontWeight="black">{isCompleted ? 'View Assigned Resources' : 'Assign Resources'}</Text>
+                            <Text fontSize="lg" fontWeight="black">{isRejected ? 'Schedule Rejected (Locked)' : isCompleted ? 'View Assigned Resources' : 'Assign Resources'}</Text>
                             <Text fontSize="xs" fontWeight="medium" opacity={0.9}>
                                 {schedule?.client?.clientName} • {schedule?.site?.siteName}
                             </Text>
@@ -5197,8 +5378,21 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                 <ModalCloseButton color="white" borderRadius="full" mt={2} />
                 <ModalBody p={8} bg="gray.50">
                     <VStack spacing={8} align="stretch">
+                        {isRejected && (
+                            <Box p={4} bg="red.50" borderRadius="2xl" border="1px solid" borderColor="red.200">
+                                <HStack spacing={3}>
+                                    <Icon as={FaTimes} color="red.500" w={5} h={5} />
+                                    <VStack align="start" spacing={0}>
+                                        <Text fontWeight="black" color="red.800" fontSize="sm">Schedule Marked as REJECTED</Text>
+                                        <Text fontSize="xs" color="red.600">
+                                            Reason: <strong>{schedule.rejectReason || 'No reason specified'}</strong>. Operative assignment is disabled for rejected schedules.
+                                        </Text>
+                                    </VStack>
+                                </HStack>
+                            </Box>
+                        )}
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                            <FormControl isDisabled={isCompleted}>
+                            <FormControl isDisabled={isCompleted || isRejected}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
                                     <Icon as={FaListUl} mr={2} color="purple.500" /> Schedule Type
                                 </FormLabel>
@@ -5222,7 +5416,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                             </FormControl>
 
 
-                            <FormControl isDisabled={isCompleted}>
+                            <FormControl isDisabled={isCompleted || isRejected}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
                                     <Icon as={FaStar} mr={2} color="yellow.500" /> Main Operative
                                 </FormLabel>
@@ -5449,9 +5643,10 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                             )}
                             {!isCompleted && !isPaused && (
                                 <Button 
-                                    bgGradient="linear(to-r, blue.600, blue.400)" 
+                                    bgGradient={isRejected ? "linear(to-r, gray.400, gray.400)" : "linear(to-r, blue.600, blue.400)"} 
                                     color="white" 
-                                    _hover={{ bgGradient: 'linear(to-r, blue.700, blue.500)', transform: 'translateY(-1px)', shadow: 'xl' }}
+                                    isDisabled={isRejected}
+                                    _hover={{ bgGradient: isRejected ? 'none' : 'linear(to-r, blue.700, blue.500)', transform: isRejected ? 'none' : 'translateY(-1px)', shadow: 'xl' }}
                                     _active={{ transform: 'translateY(0)' }}
                                     isLoading={isLoading} 
                                     onClick={() => {
