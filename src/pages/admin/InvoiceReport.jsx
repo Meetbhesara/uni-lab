@@ -13,7 +13,7 @@ import {
     FaFileInvoiceDollar, FaEye, FaCheckCircle, FaClock, FaSearch,
     FaCalendarAlt, FaUser, FaBuilding, FaMapMarkerAlt, FaFilter,
     FaFileAlt, FaCamera, FaFilePdf, FaSyncAlt, FaDownload, FaEnvelope,
-    FaListUl, FaExclamationTriangle, FaMoneyBillWave
+    FaListUl, FaExclamationTriangle, FaMoneyBillWave, FaTimes, FaPrint
 } from 'react-icons/fa';
 import api from '../../api/axios';
 import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
@@ -165,9 +165,51 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     const [updatingId, setUpdatingId] = useState(null);
     const [cashUpiModal, setCashUpiModal] = useState({
         isOpen: false,
+        mode: 'UPI', // 'UPI' or 'CASH'
+        receiverName: '',
+        transactionNo: '',
+        paymentAmount: '',
+        closedDate: new Date().toISOString().split('T')[0],
         remark: '',
         isSubmitting: false
     });
+
+    // Preview Modal State
+    const [previewModal, setPreviewModal] = useState({
+        isOpen: false,
+        htmlContent: '',
+        pdfUrl: '',
+        title: '',
+        type: ''
+    });
+
+    const handlePreviewInvoiceForm = () => {
+        if (!invoiceForm.entries || invoiceForm.entries.length === 0) {
+            toast({ title: 'No entries selected for preview', status: 'warning', duration: 2000 });
+            return;
+        }
+        const html = generateInvoiceHtml(invoiceForm, invoiceForm.entries, invoiceForm.type);
+        const isProforma = invoiceForm.type === 'PROFORMA';
+        setPreviewModal({
+            isOpen: true,
+            htmlContent: html,
+            pdfUrl: '',
+            title: `${isProforma ? 'Proforma Invoice' : 'Tax Invoice'} Preview — ${invoiceForm.invoiceId || 'Draft'}`,
+            type: invoiceForm.type
+        });
+    };
+
+    const handlePreviewExistingPdf = (pdfUrl, invoiceId, type = 'Invoice') => {
+        if (!pdfUrl) return;
+        const fullUrl = pdfUrl.startsWith('http') ? pdfUrl : `${API_BASE_URL}${pdfUrl.startsWith('/') ? '' : '/'}${pdfUrl}`;
+        setPreviewModal({
+            isOpen: true,
+            htmlContent: '',
+            pdfUrl: fullUrl,
+            title: `${type} Preview — ${invoiceId || ''}`,
+            type: type
+        });
+    };
 
     // Filters
     const [search, setSearch] = useState('');
@@ -468,15 +510,14 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             let defaultLedger = '';
             let defaultRate = 0;
 
-            // Step 1: Try to find the best site ledger match using AMOUNT (most reliable unique key)
-            // because the same ledger NAME may be reused across schedules while amounts differ
+            // Step 1: Try to find the best site ledger match using AMOUNT
             const matchByAmount = entry.amount > 0
                 ? siteLedgers.find(l => Number(l.amount) === Number(entry.amount))
                 : null;
 
-            // Step 2: Try to match by saved ledger NAME
+            // Step 2: Try to match by saved ledger NAME (case-insensitive)
             const matchByName = entry.ledger && entry.ledger.trim()
-                ? siteLedgers.find(l => l.ledger === entry.ledger.trim())
+                ? siteLedgers.find(l => (l.ledger || '').trim().toLowerCase() === entry.ledger.trim().toLowerCase())
                 : null;
 
             if (matchByAmount) {
@@ -497,9 +538,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 defaultRate = siteLedgers[0].amount;
             }
 
-            const matchedLedgerItem = matchByAmount || matchByName;
+            const matchedLedgerItem = matchByAmount || matchByName || (defaultLedger ? siteLedgers.find(l => (l.ledger || '').trim().toLowerCase() === defaultLedger.trim().toLowerCase()) : null) || siteLedgers[0];
             const defaultHsnSac = matchedLedgerItem?.hsnSac || '';
-            const defaultShortName = matchedLedgerItem?.shortName || '';
+            const defaultShortName = matchedLedgerItem?.shortName || entry.shortName || '';
             const defaultLedgerName = defaultLedger || entry.ledger || entry.scheduleType || 'VISIT';
 
             initialConfigs[entry._id] = {
@@ -542,6 +583,19 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         const baseClient = entriesToInvoice[0].client;
         const baseSite = entriesToInvoice[0].site;
 
+        const buyerDetailsObj = {
+            name: baseClient?.clientName || 'NA',
+            address: baseClient?.clientAddress || 'NA',
+            gstin: baseClient?.gstNo || 'NA',
+            stateName: baseClient?.state || 'Gujarat',
+            stateCode: baseClient?.stateCode || '24',
+            contactPerson: baseClient?.contactPerson?.name || 'NA',
+            contact: baseClient?.contactPerson?.phone || (baseClient?.contactNumbers?.[0] || 'NA'),
+        };
+
+        // Ship To is an EXACT copy of Buyer To details by default
+        const shipToDetailsObj = { ...buyerDetailsObj };
+
         setInvoiceForm({
             isOpen: true,
             type: actualType,
@@ -551,24 +605,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             entries: entriesToInvoice,
             entryConfigs: initialConfigs,
             companyDetails: initialCompany,
-            buyerDetails: {
-                name: baseClient?.clientName || 'NA',
-                address: baseClient?.clientAddress || 'NA',
-                gstin: baseClient?.gstNo || 'NA',
-                stateName: baseClient?.state || 'Gujarat',
-                stateCode: '24',
-                contactPerson: baseClient?.contactPerson?.name || 'NA',
-                contact: baseClient?.contactPerson?.phone || (baseClient?.contactNumbers?.[0] || 'NA'),
-            },
-            shipToDetails: {
-                name: baseClient?.clientName || baseSite?.siteName || 'NA',
-                address: baseClient?.clientAddress || baseSite?.siteAddress || 'NA',
-                gstin: baseClient?.gstNo || 'NA',
-                stateName: baseSite?.stateName || baseClient?.state || 'Gujarat',
-                stateCode: baseSite?.stateCode || '24',
-                contactPerson: baseSite?.contactPersons?.[0]?.name || baseClient?.contactPerson?.name || 'NA',
-                contact: baseSite?.contactPersons?.[0]?.phone || baseSite?.contactPhone || 'NA',
-            },
+            buyerDetails: buyerDetailsObj,
+            shipToDetails: shipToDetailsObj,
             invoiceId: nextInvoiceId,
             description: '',
             targetGroup: null, // No longer bound to a single group
@@ -624,33 +662,65 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             toast({ title: 'No entries selected', status: 'warning' });
             return;
         }
+
         try {
             setCashUpiModal(prev => ({ ...prev, isSubmitting: true }));
-            const closedDateStr = new Date().toISOString();
-            const remarkText = cashUpiModal.remark.trim() || 'Paid via Cash / UPI';
+            const closedDateIso = cashUpiModal.closedDate ? new Date(cashUpiModal.closedDate).toISOString() : new Date().toISOString();
+            const amtNum = Number(cashUpiModal.paymentAmount) || 0;
+            const modeStr = cashUpiModal.mode;
+            const recStr = (cashUpiModal.receiverName || '').trim();
+            const txStr = cashUpiModal.mode === 'UPI' ? (cashUpiModal.transactionNo || '').trim() : '';
+            const endRemarkStr = (cashUpiModal.remark || '').trim();
+
+            // Construct clean formatted summary remark
+            let formattedRemark = `[${modeStr}]`;
+            if (recStr) {
+                formattedRemark += ` Receiver: ${recStr}`;
+            }
+            if (modeStr === 'UPI' && txStr) {
+                formattedRemark += `${recStr ? ' |' : ''} Txn: ${txStr}`;
+            }
+            if (amtNum > 0) {
+                formattedRemark += ` | Amount: ₹${amtNum.toLocaleString('en-IN')}`;
+            }
+            if (endRemarkStr) {
+                formattedRemark += ` | Remark: ${endRemarkStr}`;
+            }
 
             for (const entryId of selectedEntries) {
                 await api.patch(`/schedule-master/invoice-status/${entryId}`, {
                     invoiceStatus: 'Closed',
-                    paymentMode: 'Cash/UPI',
-                    paymentRemark: remarkText,
-                    closedDate: closedDateStr
+                    paymentMode: modeStr,
+                    receiverName: recStr,
+                    transactionNo: txStr,
+                    paymentAmount: amtNum,
+                    paymentRemark: formattedRemark,
+                    closedDate: closedDateIso
                 });
             }
 
             toast({
-                title: 'Paid via Cash / UPI',
-                description: `${selectedEntries.length} entries marked as paid & moved to Closed status on ${new Date(closedDateStr).toLocaleDateString('en-GB')}`,
+                title: `Paid via ${modeStr}`,
+                description: `${selectedEntries.length} entries marked as paid & moved to Closed status.`,
                 status: 'success',
                 duration: 4000
             });
 
-            setCashUpiModal({ isOpen: false, remark: '', isSubmitting: false });
+            setCashUpiModal({
+                isOpen: false,
+                mode: 'UPI',
+                receiverName: '',
+                transactionNo: '',
+                paymentAmount: '',
+                closedDate: new Date().toISOString().split('T')[0],
+                remark: '',
+                isSubmitting: false
+            });
             setSelectedGroup(null);
             setSelectedEntries([]);
             fetchVisitSchedules();
         } catch (err) {
-            toast({ title: 'Failed to process Cash / UPI payment', status: 'error' });
+            toast({ title: 'Failed to process payment', status: 'error' });
             setCashUpiModal(prev => ({ ...prev, isSubmitting: false }));
         }
     };
@@ -922,18 +992,36 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     <Badge colorScheme="gray">Archived</Badge>
                                                                 )}
                                                                 {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
-                                                                    <Tooltip label="View Generated Invoice PDF" placement="top">
-                                                                        <IconButton
-                                                                            as="a"
-                                                                            href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
-                                                                            target="_blank"
-                                                                            icon={<FaFilePdf />}
-                                                                            size="sm"
-                                                                            colorScheme="red"
-                                                                            variant="solid"
-                                                                            borderRadius="full"
-                                                                        />
-                                                                    </Tooltip>
+                                                                    <HStack spacing={1}>
+                                                                        <Tooltip label="Preview Invoice" placement="top">
+                                                                            <IconButton
+                                                                                icon={<FaEye />}
+                                                                                size="sm"
+                                                                                colorScheme="purple"
+                                                                                variant="solid"
+                                                                                borderRadius="full"
+                                                                                aria-label="Preview Invoice"
+                                                                                onClick={() => handlePreviewExistingPdf(
+                                                                                    group.finalInvoicePdf || group.proformaInvoicePdf,
+                                                                                    group.finalInvoiceId || group.proformaInvoiceId,
+                                                                                    group.finalInvoicePdf ? 'Final Invoice' : 'Proforma Invoice'
+                                                                                )}
+                                                                            />
+                                                                        </Tooltip>
+                                                                        <Tooltip label="Open PDF in New Tab" placement="top">
+                                                                            <IconButton
+                                                                                as="a"
+                                                                                href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
+                                                                                target="_blank"
+                                                                                icon={<FaFilePdf />}
+                                                                                size="sm"
+                                                                                colorScheme="red"
+                                                                                variant="ghost"
+                                                                                borderRadius="full"
+                                                                                aria-label="Open PDF"
+                                                                            />
+                                                                        </Tooltip>
+                                                                    </HStack>
                                                                 )}
                                                                 <IconButton
                                                                     aria-label="View Details"
@@ -1467,7 +1555,20 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     colorScheme="teal"
                                                     borderRadius="full"
                                                     leftIcon={<FaMoneyBillWave />}
-                                                    onClick={() => setCashUpiModal({ isOpen: true, remark: '', isSubmitting: false })}
+                                                    onClick={() => {
+                                                        const selectedObjs = schedules.filter(s => selectedEntries.includes(s._id));
+                                                        const totalSum = selectedObjs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+                                                        setCashUpiModal({
+                                                            isOpen: true,
+                                                            mode: 'UPI',
+                                                            receiverName: '',
+                                                            transactionNo: '',
+                                                            paymentAmount: totalSum > 0 ? String(totalSum) : '',
+                                                            closedDate: new Date().toISOString().split('T')[0],
+                                                            remark: '',
+                                                            isSubmitting: false
+                                                        });
+                                                    }}
                                                 >
                                                     Cash / UPI
                                                 </Button>
@@ -1749,18 +1850,19 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                 size="sm" 
                                                                 value={conf.ledger || ''} 
                                                                 onChange={(e) => {
-                                                                    const selectedLedger = entry.site?.ledgerItems?.find(l => l.ledger === e.target.value);
+                                                                    const val = e.target.value;
+                                                                    const selectedLedger = entry.site?.ledgerItems?.find(l => (l.ledger || '').trim().toLowerCase() === val.trim().toLowerCase());
                                                                     setInvoiceForm(prev => ({
                                                                         ...prev,
                                                                         entryConfigs: {
                                                                             ...prev.entryConfigs,
                                                                             [entry._id]: { 
                                                                                 ...conf, 
-                                                                                ledger: e.target.value,
-                                                                                ledgerName: e.target.value,
+                                                                                ledger: val,
+                                                                                ledgerName: val,
                                                                                 rate: selectedLedger ? selectedLedger.amount : conf.rate,
-                                                                                hsnSac: selectedLedger?.hsnSac || '',
-                                                                                shortName: selectedLedger?.shortName || conf.shortName || ''
+                                                                                hsnSac: selectedLedger?.hsnSac || conf.hsnSac || '',
+                                                                                shortName: selectedLedger?.shortName || ''
                                                                             }
                                                                         }
                                                                     }));
@@ -1831,15 +1933,152 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                             </Box>
                         </VStack>
                     </ModalBody>
-                    <ModalFooter bg="gray.50">
-                        <Button variant="ghost" mr={3} onClick={() => setInvoiceForm(prev => ({ ...prev, isOpen: false }))}>Cancel</Button>
-                        <Button 
-                            colorScheme={invoiceForm.type === 'PROFORMA' ? 'purple' : 'green'} 
-                            onClick={handleSubmitInvoiceForm}
-                            isLoading={loading}
-                        >
-                            Submit & Generate {invoiceForm.type === 'PROFORMA' ? 'Proforma' : 'Final'}
-                        </Button>
+                    <ModalFooter bg="gray.50" py={4} px={6}>
+                        <Flex w="full" justify="space-between" align="center">
+                            <Button 
+                                leftIcon={<FaEye />}
+                                colorScheme="blue" 
+                                variant="outline" 
+                                borderRadius="full" 
+                                px={6}
+                                onClick={handlePreviewInvoiceForm}
+                            >
+                                Preview Invoice
+                            </Button>
+                            <HStack spacing={3}>
+                                <Button variant="ghost" borderRadius="full" onClick={() => setInvoiceForm(prev => ({ ...prev, isOpen: false }))}>Cancel</Button>
+                                <Button 
+                                    colorScheme={invoiceForm.type === 'PROFORMA' ? 'purple' : 'green'} 
+                                    borderRadius="full"
+                                    px={6}
+                                    leftIcon={<FaCheckCircle />}
+                                    onClick={handleSubmitInvoiceForm}
+                                    isLoading={loading}
+                                >
+                                    Submit & Generate {invoiceForm.type === 'PROFORMA' ? 'Proforma' : 'Final'}
+                                </Button>
+                            </HStack>
+                        </Flex>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── Invoice Preview Modal (HTML Live Preview & PDF Viewer) ── */}
+            <Modal 
+                isOpen={previewModal.isOpen} 
+                onClose={() => setPreviewModal(prev => ({ ...prev, isOpen: false }))} 
+                size="6xl" 
+                isCentered 
+                scrollBehavior="inside" 
+                motionPreset="slideInBottom"
+            >
+                <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxH="92vh">
+                    <ModalHeader p={0}>
+                        <Box bgGradient={previewModal.type === 'PROFORMA' ? 'linear(to-r, purple.700, blue.600)' : 'linear(to-r, green.700, teal.600)'} p={5} color="white">
+                            <HStack justify="space-between" align="center" pr={8}>
+                                <HStack spacing={3}>
+                                    <Icon as={FaFileInvoiceDollar} w={6} h={6} />
+                                    <VStack align="start" spacing={0}>
+                                        <Text fontWeight="black" fontSize="lg">
+                                            {previewModal.title || 'Invoice Preview'}
+                                        </Text>
+                                        <Text fontSize="xs" opacity={0.85}>
+                                            Live Preview of Proforma / Tax Invoice Layout
+                                        </Text>
+                                    </VStack>
+                                </HStack>
+                                <Badge colorScheme="whiteAlpha" variant="solid" px={3} py={1} borderRadius="full" fontSize="xs">
+                                    👁️ PREVIEW MODE
+                                </Badge>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} size="lg" />
+                    <ModalBody p={4} bg="gray.100" maxH="75vh">
+                        {previewModal.htmlContent ? (
+                            <Box bg="white" borderRadius="2xl" shadow="md" p={2} overflow="hidden" h="70vh">
+                                <iframe
+                                    title="Invoice Live Preview"
+                                    srcDoc={previewModal.htmlContent}
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        border: 'none',
+                                        borderRadius: '12px'
+                                    }}
+                                />
+                            </Box>
+                        ) : previewModal.pdfUrl ? (
+                            <Box bg="white" borderRadius="2xl" shadow="md" p={2} overflow="hidden" h="70vh">
+                                <iframe
+                                    title="Invoice PDF Preview"
+                                    src={previewModal.pdfUrl}
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        border: 'none',
+                                        borderRadius: '12px'
+                                    }}
+                                />
+                            </Box>
+                        ) : (
+                            <Center py={16}>
+                                <Text color="gray.400">No preview content available</Text>
+                            </Center>
+                        )}
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" py={4} px={6} borderTop="1px solid" borderColor="gray.200">
+                        <Flex w="full" justify="space-between" align="center" gap={3}>
+                            <HStack spacing={3}>
+                                {previewModal.htmlContent && (
+                                    <Button
+                                        size="sm"
+                                        leftIcon={<FaPrint />}
+                                        colorScheme="blue"
+                                        variant="subtle"
+                                        borderRadius="full"
+                                        onClick={() => {
+                                            const iframe = document.querySelector('iframe[title="Invoice Live Preview"]');
+                                            if (iframe && iframe.contentWindow) {
+                                                iframe.contentWindow.print();
+                                            }
+                                        }}
+                                    >
+                                        Print Preview
+                                    </Button>
+                                )}
+                            </HStack>
+                            <HStack spacing={3}>
+                                {invoiceForm.isOpen && previewModal.htmlContent && (
+                                    <Button
+                                        size="sm"
+                                        colorScheme={invoiceForm.type === 'PROFORMA' ? 'purple' : 'green'}
+                                        borderRadius="full"
+                                        px={6}
+                                        leftIcon={<FaCheckCircle />}
+                                        isLoading={loading}
+                                        onClick={async () => {
+                                            setPreviewModal(prev => ({ ...prev, isOpen: false }));
+                                            await handleSubmitInvoiceForm();
+                                        }}
+                                    >
+                                        Submit & Generate {invoiceForm.type === 'PROFORMA' ? 'Proforma' : 'Final'}
+                                    </Button>
+                                )}
+                                <Button
+                                    size="sm"
+                                    colorScheme="red"
+                                    variant="solid"
+                                    borderRadius="full"
+                                    px={6}
+                                    leftIcon={<FaTimes />}
+                                    onClick={() => setPreviewModal(prev => ({ ...prev, isOpen: false }))}
+                                >
+                                    Close Preview
+                                </Button>
+                            </HStack>
+                        </Flex>
                     </ModalFooter>
                 </ModalContent>
             </Modal>
@@ -1924,16 +2163,27 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                     </ModalFooter>
                 </ModalContent>
             </Modal>
-            {/* ── Cash / UPI Remark & Close Modal ── */}
-            <Modal isOpen={cashUpiModal.isOpen} onClose={() => setCashUpiModal(prev => ({ ...prev, isOpen: false }))} size="md" isCentered scrollBehavior="inside" motionPreset="slideInBottom">
+            {/* ── Cash / UPI Payment Entry Modal ── */}
+            <Modal 
+                isOpen={cashUpiModal.isOpen} 
+                onClose={() => setCashUpiModal(prev => ({ ...prev, isOpen: false }))} 
+                size="lg" 
+                isCentered 
+                motionPreset="slideInBottom"
+            >
                 <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
-                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxH="85vh">
-                    <ModalHeader bg="teal.600" color="white" p={5}>
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader bgGradient="linear(to-r, teal.600, blue.600)" color="white" p={5}>
                         <HStack spacing={3}>
                             <Icon as={FaMoneyBillWave} w={6} h={6} />
-                            <Text fontSize="lg" fontWeight="black">
-                                Cash / UPI Payment Entry
-                            </Text>
+                            <VStack align="start" spacing={0}>
+                                <Text fontSize="lg" fontWeight="black">
+                                    Cash / UPI Payment Entry
+                                </Text>
+                                <Text fontSize="xs" opacity={0.85}>
+                                    Record payment details and mark entries as Closed
+                                </Text>
+                            </VStack>
                         </HStack>
                     </ModalHeader>
                     <ModalCloseButton color="white" top={4} right={4} />
@@ -1944,35 +2194,137 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                     {selectedEntries.length} Entry(ies) Selected for Client: <b>{activeSelectedClientName}</b>
                                 </Text>
                                 <Text fontSize="11px" color="teal.600" mt={1}>
-                                    This action will mark the selected entries as paid via Cash/UPI and directly move them to <b>Closed</b> status.
+                                    This action will record payment details and directly move selected entries to <b>Closed</b> status.
                                 </Text>
                             </Box>
 
+                            {/* 1. Payment Mode Radio Selector */}
                             <FormControl>
-                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Closed Date</FormLabel>
-                                <Input
-                                    value={new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                    isReadOnly
-                                    bg="gray.100"
-                                    borderRadius="xl"
-                                    fontWeight="bold"
-                                    color="teal.700"
-                                />
+                                <FormLabel fontSize="xs" fontWeight="extrabold" color="gray.700">Select Payment Mode</FormLabel>
+                                <RadioGroup
+                                    value={cashUpiModal.mode}
+                                    onChange={(val) => setCashUpiModal(prev => ({ ...prev, mode: val }))}
+                                >
+                                    <HStack spacing={6} bg="gray.50" p={3} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                        <Radio value="UPI" colorScheme="purple" fontWeight="bold">
+                                            📱 UPI (GPay / PhonePe / Paytm)
+                                        </Radio>
+                                        <Radio value="CASH" colorScheme="green" fontWeight="bold">
+                                            💵 CASH Payment
+                                        </Radio>
+                                    </HStack>
+                                </RadioGroup>
                             </FormControl>
 
-                            <FormControl isRequired>
-                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Payment Remark / Reference</FormLabel>
+                            {/* Conditional Rendering based on Payment Mode */}
+                            {cashUpiModal.mode === 'UPI' ? (
+                                <>
+                                    {/* UPI Mode Fields */}
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Receiver Name</FormLabel>
+                                            <Input
+                                                size="sm"
+                                                placeholder="e.g. Meet Bhesara / Account Name"
+                                                value={cashUpiModal.receiverName}
+                                                onChange={(e) => setCashUpiModal(prev => ({ ...prev, receiverName: e.target.value }))}
+                                                borderRadius="xl"
+                                            />
+                                        </FormControl>
+
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Transaction No / Ref No</FormLabel>
+                                            <Input
+                                                size="sm"
+                                                placeholder="e.g. UPI/1234567890/GPay"
+                                                value={cashUpiModal.transactionNo}
+                                                onChange={(e) => setCashUpiModal(prev => ({ ...prev, transactionNo: e.target.value }))}
+                                                borderRadius="xl"
+                                            />
+                                        </FormControl>
+                                    </SimpleGrid>
+
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Amount (₹)</FormLabel>
+                                            <Input
+                                                size="sm"
+                                                type="number"
+                                                placeholder="e.g. 5000"
+                                                value={cashUpiModal.paymentAmount}
+                                                onChange={(e) => setCashUpiModal(prev => ({ ...prev, paymentAmount: e.target.value }))}
+                                                borderRadius="xl"
+                                            />
+                                        </FormControl>
+
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Payment Date</FormLabel>
+                                            <Input
+                                                size="sm"
+                                                type="date"
+                                                value={cashUpiModal.closedDate}
+                                                onChange={(e) => setCashUpiModal(prev => ({ ...prev, closedDate: e.target.value }))}
+                                                borderRadius="xl"
+                                            />
+                                        </FormControl>
+                                    </SimpleGrid>
+                                </>
+                            ) : (
+                                <>
+                                    {/* CASH Mode Fields */}
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Apply Date / Closed Date</FormLabel>
+                                            <Input
+                                                size="sm"
+                                                type="date"
+                                                value={cashUpiModal.closedDate}
+                                                onChange={(e) => setCashUpiModal(prev => ({ ...prev, closedDate: e.target.value }))}
+                                                borderRadius="xl"
+                                            />
+                                        </FormControl>
+
+                                        <FormControl>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Receiver Name</FormLabel>
+                                            <Input
+                                                size="sm"
+                                                placeholder="e.g. Collected by Site Engineer"
+                                                value={cashUpiModal.receiverName}
+                                                onChange={(e) => setCashUpiModal(prev => ({ ...prev, receiverName: e.target.value }))}
+                                                borderRadius="xl"
+                                            />
+                                        </FormControl>
+                                    </SimpleGrid>
+
+                                    <FormControl>
+                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Amount (₹)</FormLabel>
+                                        <Input
+                                            size="sm"
+                                            type="number"
+                                            placeholder="e.g. 5000"
+                                            value={cashUpiModal.paymentAmount}
+                                            onChange={(e) => setCashUpiModal(prev => ({ ...prev, paymentAmount: e.target.value }))}
+                                            borderRadius="xl"
+                                        />
+                                    </FormControl>
+                                </>
+                            )}
+
+                            {/* End Remark (Common to both UPI and CASH) */}
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Payment Remark / End Remark</FormLabel>
                                 <Textarea
-                                    placeholder="e.g. Received ₹5,000 via GPay ref #12345 / Cash received by site team"
+                                    size="sm"
+                                    placeholder="e.g. Additional remarks or notes regarding this payment"
                                     value={cashUpiModal.remark}
                                     onChange={(e) => setCashUpiModal(prev => ({ ...prev, remark: e.target.value }))}
                                     borderRadius="xl"
-                                    rows={3}
+                                    rows={2}
                                 />
                             </FormControl>
                         </VStack>
                     </ModalBody>
-                    <ModalFooter bg="gray.50" p={4}>
+                    <ModalFooter bg="gray.50" p={4} borderTop="1px solid" borderColor="gray.200">
                         <Button variant="ghost" mr={3} borderRadius="full" onClick={() => setCashUpiModal(prev => ({ ...prev, isOpen: false }))}>
                             Cancel
                         </Button>
