@@ -3429,6 +3429,9 @@ const SiteMasterForm = () => {
         amount: '',
         hsnSac: ''
     });
+    const [ledgerPopup, setLedgerPopup] = useState({ isOpen: false });
+    // Quick-add inline row (ledger name + amount only)
+    const [quickLedger, setQuickLedger] = useState({ ledger: '', amount: '' });
     const [contactPersons, setContactPersons] = useState([{ name: '', phone: '' }]);
     const [docs, setDocs] = useState(null);
     const [locationLoading, setLocationLoading] = useState(false);
@@ -3836,224 +3839,316 @@ const SiteMasterForm = () => {
                                 </SimpleGrid>
 
                                 <Box p={6} bg="teal.50" borderRadius="2xl" border="1px solid" borderColor="teal.100">
-                                     <VStack align="stretch" spacing={5}>
-                                         <Box>
-                                             <Heading size="sm" color="teal.700" display="flex" alignItems="center">
-                                                 <Icon as={FaFileInvoiceDollar} mr={2} /> Site Ledger Assignments
-                                             </Heading>
-                                             <Text fontSize="xs" color="gray.500" mt={1}>
-                                                 Assign 4-field ledger details (Ledger Name, Small/Short Name, Amount, HSN/SAC Code) directly without pop-up modal.
-                                             </Text>
-                                         </Box>
+                                    <VStack align="stretch" spacing={4}>
+                                        {/* Header */}
+                                        <Flex justify="space-between" align="center">
+                                            <Box>
+                                                <Heading size="sm" color="teal.700" display="flex" alignItems="center">
+                                                    <Icon as={FaFileInvoiceDollar} mr={2} /> Site Ledger Assignments
+                                                </Heading>
+                                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                                    Select an existing ledger or create a new one below.
+                                                </Text>
+                                            </Box>
+                                        </Flex>
 
-                                         <Box bg="white" p={5} borderRadius="2xl" border="1px solid" borderColor="teal.200" boxShadow="sm">
-                                             <Text fontSize="xs" fontWeight="black" color="teal.700" textTransform="uppercase" mb={3}>
-                                                 {currentLedgerForm.editingIndex !== null ? '✏ Edit Ledger Item' : '➕ Add Four-Field Site Ledger Item'}
-                                             </Text>
+                                        {/* Dropdown only — select existing or create new */}
+                                        <Box bg="white" p={4} borderRadius="2xl" border="1px solid" borderColor="teal.200" boxShadow="sm">
+                                            <Text fontSize="xs" fontWeight="black" color="teal.700" textTransform="uppercase" mb={3}>📋 Select / Add Ledger</Text>
+                                            <Select
+                                                placeholder="— Select ledger or create new —"
+                                                size="sm"
+                                                borderRadius="xl"
+                                                bg="gray.50"
+                                                value=""
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (!val) return;
+                                                    if (val === '__CREATE_NEW__') {
+                                                        setCurrentLedgerForm({ editingIndex: null, ledger: '', shortName: '', amount: '', hsnSac: '' });
+                                                        setLedgerPopup({ isOpen: true });
+                                                        e.target.value = '';
+                                                        return;
+                                                    }
+                                                    const caseKey = Object.keys(ledgerDetailsMap).find(k => k.toLowerCase() === val.toLowerCase());
+                                                    const matched = ledgerDetailsMap[val] || (caseKey && ledgerDetailsMap[caseKey]) || null;
+                                                    const newItem = {
+                                                        ledger: val,
+                                                        shortName: matched?.shortName || '',
+                                                        amount: matched?.amount !== undefined && matched?.amount !== null && matched?.amount !== 0 ? Number(matched.amount) : 0,
+                                                        hsnSac: matched?.hsnSac || ''
+                                                    };
+                                                    setLedgerItems(prev => [...prev, newItem]);
+                                                    toast({ title: `Ledger "${val}" added`, status: 'success', duration: 2000 });
+                                                    e.target.value = '';
+                                                }}
+                                            >
+                                                <option value="__CREATE_NEW__">➕ Create New Ledger</option>
+                                                <option disabled>──────────────────</option>
+                                                {Array.from(new Set([
+                                                    ...ledgers,
+                                                    ...ledgerItems.map(item => item.ledger).filter(Boolean)
+                                                ])).map((l, i) => <option key={i} value={l}>{l}</option>)}
+                                            </Select>
+                                        </Box>
 
-                                             <VStack spacing={4} align="stretch">
-                                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                                                     <FormControl>
-                                                         <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">1. Main Ledger Name (Broad Level) <Text as="span" color="red.500">*</Text></FormLabel>
-                                                         <VStack spacing={2} align="stretch">
-                                                             {(() => {
-                                                                 const allAvailableLedgers = Array.from(new Set([
-                                                                     ...ledgers,
-                                                                     ...ledgerItems.map(item => item.ledger).filter(Boolean)
-                                                                 ]));
-                                                                 const selectedVal = allAvailableLedgers.find(l => l.toLowerCase() === (currentLedgerForm.ledger || '').trim().toLowerCase()) || '';
-                                                                 return (
-                                                                     <Select
-                                                                         placeholder="Choose Existing Ledger (Master / Site Ledgers)"
-                                                                         value={selectedVal}
-                                                                         onChange={(e) => {
-                                                                             if (e.target.value) handleLedgerNameChange(e.target.value);
-                                                                         }}
-                                                                         borderRadius="xl"
-                                                                         size="sm"
-                                                                         bg="gray.50"
-                                                                     >
-                                                                         {allAvailableLedgers.map((l, i) => <option key={i} value={l}>{l}</option>)}
-                                                                     </Select>
-                                                                 );
-                                                             })()}
-                                                             <Input
-                                                                 size="sm"
-                                                                 placeholder="Or type Custom Ledger Name..."
-                                                                 value={currentLedgerForm.ledger}
-                                                                 onChange={(e) => handleLedgerNameChange(e.target.value)}
-                                                                 borderRadius="xl"
-                                                             />
-                                                         </VStack>
-                                                     </FormControl>
 
-                                                     <FormControl>
-                                                         <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">2. Small Name / Short Name (Auto-selected if available)</FormLabel>
-                                                         <Input
-                                                             size="sm"
-                                                             placeholder="e.g. K.M. / FD / HD / TOPO"
-                                                             value={currentLedgerForm.shortName}
-                                                             onChange={(e) => setCurrentLedgerForm(prev => ({ ...prev, shortName: e.target.value }))}
-                                                             borderRadius="xl"
-                                                             bg={currentLedgerForm.shortName ? "purple.50" : "white"}
-                                                             borderColor={currentLedgerForm.shortName ? "purple.300" : "gray.200"}
-                                                             fontWeight={currentLedgerForm.shortName ? "bold" : "normal"}
-                                                         />
-                                                     </FormControl>
-                                                 </SimpleGrid>
+                                        {ledgerItems.length > 0 && (
+                                            <VStack spacing={0} align="stretch" bg="white" borderRadius="xl" border="1px solid" borderColor="teal.100" overflow="hidden">
+                                                {/* Column header */}
+                                                <Flex px={3} py={2} bg="teal.50" borderBottom="1px solid" borderColor="teal.100" align="center" gap={2}>
+                                                    <Text flex={1} fontSize="10px" fontWeight="extrabold" color="teal.600" textTransform="uppercase" letterSpacing="wider">Ledger Name</Text>
+                                                    <Text fontSize="10px" color="teal.300" fontWeight="bold">|</Text>
+                                                    <Text w="110px" fontSize="10px" fontWeight="extrabold" color="teal.600" textTransform="uppercase" letterSpacing="wider" textAlign="right">Amount (₹)</Text>
+                                                    <Box w="52px" />
+                                                </Flex>
 
-                                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                                                     <FormControl>
-                                                         <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">3. Amount (₹) <Text as="span" color="red.500">*</Text></FormLabel>
-                                                         <Input
-                                                             size="sm"
-                                                             type="number"
-                                                             placeholder="e.g. 2500"
-                                                             value={currentLedgerForm.amount}
-                                                             onChange={(e) => setCurrentLedgerForm(prev => ({ ...prev, amount: e.target.value }))}
-                                                             borderRadius="xl"
-                                                         />
-                                                     </FormControl>
+                                                {ledgerItems.map((item, idx) => {
+                                                    const allAvailableLedgers = Array.from(new Set([
+                                                        ...ledgers,
+                                                        ...ledgerItems.map(i => i.ledger).filter(Boolean)
+                                                    ]));
+                                                    return (
+                                                        <Flex
+                                                            key={idx}
+                                                            align="center"
+                                                            px={3}
+                                                            py={1}
+                                                            borderBottom={idx < ledgerItems.length - 1 ? "1px solid" : "none"}
+                                                            borderColor="gray.100"
+                                                            _hover={{ bg: 'gray.50' }}
+                                                            transition="background 0.1s"
+                                                            gap={2}
+                                                        >
+                                                            {/* LEFT: Ledger Select dropdown */}
+                                                            <Select
+                                                                flex={1}
+                                                                size="xs"
+                                                                variant="unstyled"
+                                                                fontWeight="semibold"
+                                                                fontSize="sm"
+                                                                color="gray.800"
+                                                                value={item.ledger}
+                                                                onChange={(e) => {
+                                                                    const name = e.target.value;
+                                                                    const caseKey = Object.keys(ledgerDetailsMap).find(k => k.toLowerCase() === name.toLowerCase());
+                                                                    const matched = ledgerDetailsMap[name] || (caseKey && ledgerDetailsMap[caseKey]) || null;
+                                                                    setLedgerItems(prev => {
+                                                                        const copy = [...prev];
+                                                                        copy[idx] = {
+                                                                            ...copy[idx],
+                                                                            ledger: name,
+                                                                            shortName: matched?.shortName || copy[idx].shortName || '',
+                                                                            amount: matched?.amount !== undefined && matched?.amount !== null && matched?.amount !== 0 ? matched.amount : copy[idx].amount,
+                                                                            hsnSac: matched?.hsnSac || copy[idx].hsnSac || ''
+                                                                        };
+                                                                        return copy;
+                                                                    });
+                                                                }}
+                                                            >
+                                                                {allAvailableLedgers.map((l, i) => (
+                                                                    <option key={i} value={l}>{l}</option>
+                                                                ))}
+                                                            </Select>
 
-                                                     <FormControl>
-                                                         <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">4. HSN / SAC Code</FormLabel>
-                                                         <Input
-                                                             size="sm"
-                                                             placeholder="e.g. 998349"
-                                                             value={currentLedgerForm.hsnSac}
-                                                             onChange={(e) => setCurrentLedgerForm(prev => ({ ...prev, hsnSac: e.target.value }))}
-                                                             borderRadius="xl"
-                                                         />
-                                                     </FormControl>
-                                                 </SimpleGrid>
+                                                            {/* Pipe separator */}
+                                                            <Text fontSize="sm" color="gray.300" fontWeight="thin" flexShrink={0} userSelect="none">|</Text>
 
-                                                 <HStack justify="flex-end" spacing={2} pt={1}>
-                                                     {currentLedgerForm.editingIndex !== null && (
-                                                         <Button
-                                                             type="button"
-                                                             size="sm"
-                                                             variant="ghost"
-                                                             borderRadius="full"
-                                                             onClick={() => setCurrentLedgerForm({ editingIndex: null, ledger: '', shortName: '', amount: '', hsnSac: '' })}
-                                                         >
-                                                             Cancel Edit
-                                                         </Button>
-                                                     )}
-                                                     <Button
-                                                         type="button"
-                                                         size="sm"
-                                                         colorScheme="teal"
-                                                         borderRadius="full"
-                                                         px={6}
-                                                         leftIcon={currentLedgerForm.editingIndex !== null ? <FaEdit /> : <FaPlus />}
-                                                         onClick={handleAddOrUpdateLedgerItem}
-                                                     >
-                                                         {currentLedgerForm.editingIndex !== null ? 'Update Item' : 'Add Ledger Item'}
-                                                     </Button>
-                                                 </HStack>
-                                             </VStack>
-                                         </Box>
+                                                            {/* RIGHT: Amount — editable input */}
+                                                            <Input
+                                                                w="110px"
+                                                                size="xs"
+                                                                type="number"
+                                                                fontWeight="bold"
+                                                                fontSize="sm"
+                                                                color="teal.700"
+                                                                textAlign="right"
+                                                                bg="teal.50"
+                                                                borderRadius="md"
+                                                                border="1px solid"
+                                                                borderColor="teal.200"
+                                                                px={2}
+                                                                value={item.amount}
+                                                                onChange={(e) => setLedgerItems(prev => {
+                                                                    const copy = [...prev];
+                                                                    copy[idx] = { ...copy[idx], amount: e.target.value };
+                                                                    return copy;
+                                                                })}
+                                                                placeholder="0"
+                                                                _placeholder={{ color: 'gray.300' }}
+                                                                _focus={{ borderColor: 'teal.400', boxShadow: 'none' }}
+                                                            />
 
-                                         {/* ── Assigned Ledgers List ── */}
-                                         <Box pt={2}>
-                                             <Text fontSize="xs" fontWeight="extrabold" color="gray.600" mb={2}>
-                                                 Assigned Ledgers for this Site ({ledgerItems.length})
-                                             </Text>
-                                             {ledgerItems.length === 0 ? (
-                                                 <Center py={4} bg="white" borderRadius="xl" border="1px dashed" borderColor="teal.200">
-                                                     <Text color="gray.400" fontSize="xs">No ledgers added yet. Fill the 4 fields above to add.</Text>
-                                                 </Center>
-                                             ) : (
-                                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-                                                     {ledgerItems.map((item, idx) => (
-                                                         <Box
-                                                             key={idx}
-                                                             bg="white"
-                                                             p={4}
-                                                             borderRadius="xl"
-                                                             border="1px solid"
-                                                             borderColor={currentLedgerForm.editingIndex === idx ? "teal.400" : "gray.200"}
-                                                             shadow="xs"
-                                                             cursor="pointer"
-                                                             _hover={{ borderColor: 'teal.300', bg: 'teal.50' }}
-                                                             onClick={() => setCurrentLedgerForm({
-                                                                 editingIndex: idx,
-                                                                 ledger: item.ledger || '',
-                                                                 shortName: item.shortName || '',
-                                                                 amount: item.amount || '',
-                                                                 hsnSac: item.hsnSac || ''
-                                                             })}
-                                                         >
-                                                             <Flex justify="space-between" align="start">
-                                                                 <VStack align="start" spacing={1}>
-                                                                     <HStack spacing={2}>
-                                                                         <Text fontWeight="extrabold" fontSize="sm" color="gray.800">
-                                                                             {item.ledger}
-                                                                         </Text>
-                                                                         {item.shortName && (
-                                                                             <Badge colorScheme="purple" borderRadius="full" px={2} fontSize="9px">
-                                                                                 {item.shortName}
-                                                                             </Badge>
-                                                                         )}
-                                                                     </HStack>
-                                                                     <HStack spacing={2}>
-                                                                         <Text fontSize="xs" fontWeight="bold" color="teal.600">
-                                                                             ₹{Number(item.amount).toLocaleString()}
-                                                                         </Text>
-                                                                         <Badge colorScheme="gray" variant="subtle" fontSize="9px">
-                                                                             HSN/SAC: {item.hsnSac || ''}
-                                                                         </Badge>
-                                                                     </HStack>
-                                                                 </VStack>
-                                                                 <HStack spacing={1}>
-                                                                     <IconButton
-                                                                         icon={<FaEdit />}
-                                                                         aria-label="Edit Ledger"
-                                                                         size="xs"
-                                                                         colorScheme="blue"
-                                                                         variant="ghost"
-                                                                         borderRadius="full"
-                                                                         onClick={(e) => {
-                                                                             e.stopPropagation();
-                                                                             setCurrentLedgerForm({
-                                                                                 editingIndex: idx,
-                                                                                 ledger: item.ledger || '',
-                                                                                 shortName: item.shortName || '',
-                                                                                 amount: item.amount || '',
-                                                                                 hsnSac: item.hsnSac || ''
-                                                                             });
-                                                                         }}
-                                                                     />
-                                                                     <IconButton
-                                                                         icon={<FaTrash />}
-                                                                         aria-label="Delete Ledger"
-                                                                         size="xs"
-                                                                         colorScheme="red"
-                                                                         variant="ghost"
-                                                                         borderRadius="full"
-                                                                         onClick={(e) => {
-                                                                             e.stopPropagation();
-                                                                             const removedLedgerName = item.ledger;
-                                                                             setLedgerItems(prev => prev.filter((_, i) => i !== idx));
-                                                                             if (currentLedgerForm.editingIndex === idx) {
-                                                                                 setCurrentLedgerForm({ editingIndex: null, ledger: '', shortName: '', amount: '', hsnSac: '' });
-                                                                             }
-                                                                             toast({
-                                                                                 title: `Ledger "${removedLedgerName}" removed`,
-                                                                                 status: 'info',
-                                                                                 duration: 2000
-                                                                             });
-                                                                         }}
-                                                                     />
-                                                                 </HStack>
-                                                             </Flex>
-                                                         </Box>
-                                                     ))}
-                                                 </SimpleGrid>
-                                             )}
-                                         </Box>
-                                     </VStack>
-                                 </Box>
+                                                            {/* Edit (for short name + HSN) + Delete */}
+                                                            <HStack spacing={0} flexShrink={0}>
+                                                                <IconButton
+                                                                    icon={<FaEdit />}
+                                                                    aria-label="Edit short name & HSN"
+                                                                    size="xs"
+                                                                    colorScheme="blue"
+                                                                    variant="ghost"
+                                                                    borderRadius="md"
+                                                                    title="Set short name & HSN code"
+                                                                    onClick={() => {
+                                                                        setCurrentLedgerForm({
+                                                                            editingIndex: idx,
+                                                                            ledger: item.ledger || '',
+                                                                            shortName: item.shortName || '',
+                                                                            amount: item.amount || '',
+                                                                            hsnSac: item.hsnSac || ''
+                                                                        });
+                                                                        setLedgerPopup({ isOpen: true });
+                                                                    }}
+                                                                />
+                                                                <IconButton
+                                                                    icon={<FaTrash />}
+                                                                    aria-label="Remove ledger"
+                                                                    size="xs"
+                                                                    colorScheme="red"
+                                                                    variant="ghost"
+                                                                    borderRadius="md"
+                                                                    onClick={() => {
+                                                                        setLedgerItems(prev => prev.filter((_, i) => i !== idx));
+                                                                        toast({ title: `Ledger "${item.ledger}" removed`, status: 'info', duration: 2000 });
+                                                                    }}
+                                                                />
+                                                            </HStack>
+                                                        </Flex>
+                                                    );
+                                                })}
+                                            </VStack>
+                                        )}
+
+                                    </VStack>
+                                </Box>
+
+                                {/* ── Ledger Detail Popup Modal ── */}
+                                <Modal
+                                    isOpen={ledgerPopup.isOpen}
+                                    onClose={() => setLedgerPopup({ isOpen: false })}
+                                    size="md"
+                                    isCentered
+                                    motionPreset="slideInBottom"
+                                >
+                                    <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.500" />
+                                    <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
+                                        <ModalHeader bgGradient="linear(to-r, teal.600, blue.500)" color="white" py={4} px={6}>
+                                            <HStack spacing={3}>
+                                                <Icon as={FaFileInvoiceDollar} />
+                                                <Text fontWeight="black" fontSize="md">
+                                                    {currentLedgerForm.editingIndex !== null ? 'Edit Ledger Item' : 'Add Ledger Item'}
+                                                </Text>
+                                            </HStack>
+                                        </ModalHeader>
+                                        <ModalCloseButton color="white" top={3} right={4} />
+                                        <ModalBody p={6}>
+                                            <VStack spacing={4} align="stretch">
+                                                {/* Ledger Name */}
+                                                <FormControl>
+                                                    <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Ledger Name <Text as="span" color="red.500">*</Text></FormLabel>
+                                                    <VStack spacing={2} align="stretch">
+                                                        {(() => {
+                                                            const allAvailableLedgers = Array.from(new Set([
+                                                                ...ledgers,
+                                                                ...ledgerItems.map(item => item.ledger).filter(Boolean)
+                                                            ]));
+                                                            const selectedVal = allAvailableLedgers.find(l => l.toLowerCase() === (currentLedgerForm.ledger || '').trim().toLowerCase()) || '';
+                                                            return (
+                                                                <Select
+                                                                    placeholder="Choose existing ledger..."
+                                                                    value={selectedVal}
+                                                                    onChange={(e) => { if (e.target.value) handleLedgerNameChange(e.target.value); }}
+                                                                    borderRadius="xl"
+                                                                    size="sm"
+                                                                    bg="gray.50"
+                                                                >
+                                                                    {allAvailableLedgers.map((l, i) => <option key={i} value={l}>{l}</option>)}
+                                                                </Select>
+                                                            );
+                                                        })()}
+                                                        <Input
+                                                            size="sm"
+                                                            placeholder="Or type custom ledger name..."
+                                                            value={currentLedgerForm.ledger}
+                                                            onChange={(e) => handleLedgerNameChange(e.target.value)}
+                                                            borderRadius="xl"
+                                                        />
+                                                    </VStack>
+                                                </FormControl>
+
+                                                <SimpleGrid columns={2} spacing={4}>
+                                                    {/* Short Name */}
+                                                    <FormControl>
+                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Short Name</FormLabel>
+                                                        <Input
+                                                            size="sm"
+                                                            placeholder="e.g. FD / HD / TOPO"
+                                                            value={currentLedgerForm.shortName}
+                                                            onChange={(e) => setCurrentLedgerForm(prev => ({ ...prev, shortName: e.target.value }))}
+                                                            borderRadius="xl"
+                                                            bg={currentLedgerForm.shortName ? 'purple.50' : 'white'}
+                                                            borderColor={currentLedgerForm.shortName ? 'purple.300' : 'gray.200'}
+                                                        />
+                                                    </FormControl>
+
+                                                    {/* HSN Code */}
+                                                    <FormControl>
+                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">HSN / SAC Code</FormLabel>
+                                                        <Input
+                                                            size="sm"
+                                                            placeholder="e.g. 998349"
+                                                            value={currentLedgerForm.hsnSac}
+                                                            onChange={(e) => setCurrentLedgerForm(prev => ({ ...prev, hsnSac: e.target.value }))}
+                                                            borderRadius="xl"
+                                                        />
+                                                    </FormControl>
+                                                </SimpleGrid>
+
+                                                {/* Amount */}
+                                                <FormControl>
+                                                    <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Amount (₹) <Text as="span" color="red.500">*</Text></FormLabel>
+                                                    <Input
+                                                        size="sm"
+                                                        type="number"
+                                                        placeholder="e.g. 2500"
+                                                        value={currentLedgerForm.amount}
+                                                        onChange={(e) => setCurrentLedgerForm(prev => ({ ...prev, amount: e.target.value }))}
+                                                        borderRadius="xl"
+                                                    />
+                                                </FormControl>
+                                            </VStack>
+                                        </ModalBody>
+                                        <ModalFooter bg="gray.50" borderTop="1px solid" borderColor="gray.200" py={3} px={6}>
+                                            <HStack spacing={3}>
+                                                <Button
+                                                    variant="ghost"
+                                                    borderRadius="full"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setLedgerPopup({ isOpen: false });
+                                                        setCurrentLedgerForm({ editingIndex: null, ledger: '', shortName: '', amount: '', hsnSac: '' });
+                                                    }}
+                                                >
+                                                    Cancel
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    colorScheme="teal"
+                                                    borderRadius="full"
+                                                    size="sm"
+                                                    px={6}
+                                                    leftIcon={currentLedgerForm.editingIndex !== null ? <FaEdit /> : <FaPlus />}
+                                                    onClick={() => {
+                                                        handleAddOrUpdateLedgerItem();
+                                                        setLedgerPopup({ isOpen: false });
+                                                    }}
+                                                >
+                                                    {currentLedgerForm.editingIndex !== null ? 'Update Ledger' : 'Add Ledger'}
+                                                </Button>
+                                            </HStack>
+                                        </ModalFooter>
+                                    </ModalContent>
+                                </Modal>
 
                                 {/* ── GPS Location Field ── */}
                                 <FormControl>
@@ -5360,7 +5455,8 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
         vehicle: '',
         instruments: [],
         scheduleType: '',
-        endDate: ''
+        endDate: '',
+        scheduleDate: ''
     });
     const [requiredToday, setRequiredToday] = useState(true);
     const [showResumeInput, setShowResumeInput] = useState(false);
@@ -5383,13 +5479,18 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
 
     useEffect(() => {
         if (schedule) {
+            const today = new Date().toISOString().split('T')[0];
+            const existingDate = schedule.scheduleDate
+                ? new Date(schedule.scheduleDate).toISOString().split('T')[0]
+                : today;
             setFormData({
                 operative: schedule.operative?._id || schedule.operative || '',
                 helpers: schedule.helpers?.map(h => h._id || h) || [],
                 vehicle: schedule.vehicle?._id || schedule.vehicle || '',
                 instruments: schedule.instruments?.map(i => i._id || i) || [],
                 scheduleType: schedule.scheduleType || '',
-                endDate: schedule.endDate ? new Date(schedule.endDate).toISOString().split('T')[0] : ''
+                endDate: schedule.endDate ? new Date(schedule.endDate).toISOString().split('T')[0] : '',
+                scheduleDate: existingDate
             });
             setRequiredToday(schedule.dayStatus !== 'Rejected');
         }
@@ -5459,6 +5560,28 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                 </HStack>
                             </Box>
                         )}
+                        {/* ── Schedule Date Picker ── */}
+                        <FormControl isDisabled={isCompleted || isRejected}>
+                            <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                <Icon as={FaCalendarAlt} mr={2} color="blue.500" /> Schedule Date
+                                <Text as="span" fontSize="10px" color="gray.400" fontWeight="normal" ml={2}>(Today or future only)</Text>
+                            </FormLabel>
+                            <Input
+                                type="date"
+                                value={formData.scheduleDate}
+                                min={new Date().toISOString().split('T')[0]}
+                                onChange={(e) => setFormData(prev => ({ ...prev, scheduleDate: e.target.value }))}
+                                borderRadius="2xl"
+                                bg="white"
+                                border="2px solid"
+                                borderColor="blue.200"
+                                _focus={{ borderColor: 'blue.500', boxShadow: '0 0 0 1px var(--chakra-colors-blue-400)' }}
+                                fontWeight="bold"
+                                h="50px"
+                                color="blue.700"
+                            />
+                        </FormControl>
+
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                             <FormControl isDisabled={isCompleted || isRejected}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
@@ -5721,7 +5844,8 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                         const payload = {
                                             ...formData,
                                             dayStatus: (schedule.dayStatus === 'Rejected' && formData.operative) ? 'Scheduled' : schedule.dayStatus,
-                                            skipToday: !requiredToday
+                                            skipToday: !requiredToday,
+                                            scheduleDate: formData.scheduleDate
                                         };
                                         onUpdate(payload);
                                     }} 
