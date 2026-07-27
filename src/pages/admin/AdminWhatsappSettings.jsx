@@ -201,8 +201,9 @@ const AdminWhatsappSettings = () => {
                 setSystemStatus(sysRes.data);
 
                 // Fetch Personal Admin Status
-                if (user?.id) {
-                    const admRes = await api.get(`/whatsapp/status?sessionId=admin_${user.id}`);
+                const currentUserId = user?.id || user?._id;
+                if (currentUserId) {
+                    const admRes = await api.get(`/whatsapp/status?sessionId=admin_${currentUserId}`);
                     setAdminStatus(admRes.data);
                 }
 
@@ -211,7 +212,7 @@ const AdminWhatsappSettings = () => {
                     const statuses = {};
                     await Promise.all(
                         adminsList.map(async (adm) => {
-                            const id = adm._id || adm.id;
+                            const id = String(adm._id || adm.id);
                             try {
                                 const res = await api.get(`/whatsapp/status?sessionId=admin_${id}`);
                                 statuses[id] = res.data;
@@ -720,9 +721,9 @@ const AdminWhatsappSettings = () => {
 
                     <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4}>
                         {adminsList
-                            .filter((adm) => (adm._id || adm.id) !== user?.id)
+                            .filter((adm) => String(adm._id || adm.id) !== String(user?.id || user?._id))
                             .map((adm) => {
-                                const id = adm._id || adm.id;
+                                const id = String(adm._id || adm.id);
                             const statusObj = adminsStatus[id] || { status: 'disconnected', qr: null };
                             const isLoading = loadingAdminAction[id] || false;
 
@@ -781,7 +782,7 @@ const AdminWhatsappSettings = () => {
                                                 isLoading={isLoading}
                                                 leftIcon={<Icon as={FiXCircle} />}
                                             >
-                                                Disconnect
+                                                {statusObj.status === 'ready' ? 'Disconnect' : 'Cancel / Reset'}
                                             </Button>
                                         )}
                                     </Flex>
