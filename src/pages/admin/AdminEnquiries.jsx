@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner, Heading } from '@chakra-ui/react';
-import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, FiEdit } from 'react-icons/fi';
+import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, FiEdit, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { FaWhatsapp, FaChevronLeft } from 'react-icons/fa';
 import api from '../../api/axios';
 import { DEMO_ENQUIRIES, DEMO_QUOTATIONS } from '../../data/mockData';
@@ -19,10 +19,15 @@ const AdminEnquiries = () => {
     const [allProducts, setAllProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // Search States
+    // Search & Pagination States
     const [enquirySearch, setEnquirySearch] = useState('');
     const [activeSearch, setActiveSearch] = useState('');
     const [historySearch, setHistorySearch] = useState('');
+
+    const [enquiryPage, setEnquiryPage] = useState(1);
+    const [activePage, setActivePage] = useState(1);
+    const [historyPage, setHistoryPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
 
     // Status Confirmation State
     const { isOpen: isStatusConfirmOpen, onOpen: onStatusConfirmOpen, onClose: onStatusConfirmClose } = useDisclosure();
@@ -794,6 +799,78 @@ const AdminEnquiries = () => {
         return clientName.toLowerCase().includes(term) || refNo.toLowerCase().includes(term);
     });
 
+    const paginatedEnquiries = filteredEnquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
+    const paginatedQuotations = filteredQuotations.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
+    const paginatedHistory = filteredHistory.slice((historyPage - 1) * ITEMS_PER_PAGE, historyPage * ITEMS_PER_PAGE);
+
+    const PaginationControls = ({ currentPage, totalItems, onPageChange }) => {
+        const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+        if (totalPages <= 1) return null;
+
+        const startItem = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+        const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+
+        const getPageNumbers = () => {
+            const pages = [];
+            const maxPagesToShow = 5;
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+
+            if (endPage - startPage < maxPagesToShow - 1) {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                pages.push(i);
+            }
+            return pages;
+        };
+
+        return (
+            <Flex justify="space-between" align="center" mt={4} pt={4} borderTop="1px" borderColor="gray.100" wrap="wrap" gap={3}>
+                <Text fontSize="xs" color="gray.500" fontWeight="600">
+                    Showing <Text as="span" color="gray.800" fontWeight="bold">{startItem}</Text> to <Text as="span" color="gray.800" fontWeight="bold">{endItem}</Text> of <Text as="span" color="brand.600" fontWeight="bold">{totalItems}</Text> entries
+                </Text>
+                <HStack spacing={1}>
+                    <Button
+                        size="xs"
+                        variant="outline"
+                        isDisabled={currentPage === 1}
+                        onClick={() => onPageChange(currentPage - 1)}
+                        borderRadius="md"
+                        px={2}
+                    >
+                        <FiChevronLeft style={{ marginRight: 2 }} /> Prev
+                    </Button>
+                    {getPageNumbers().map(p => (
+                        <Button
+                            key={p}
+                            size="xs"
+                            colorScheme={p === currentPage ? 'brand' : 'gray'}
+                            variant={p === currentPage ? 'solid' : 'ghost'}
+                            onClick={() => onPageChange(p)}
+                            borderRadius="md"
+                            minW="28px"
+                            fontWeight={p === currentPage ? 'bold' : 'normal'}
+                        >
+                            {p}
+                        </Button>
+                    ))}
+                    <Button
+                        size="xs"
+                        variant="outline"
+                        isDisabled={currentPage === totalPages}
+                        onClick={() => onPageChange(currentPage + 1)}
+                        borderRadius="md"
+                        px={2}
+                    >
+                        Next <FiChevronRight style={{ marginLeft: 2 }} />
+                    </Button>
+                </HStack>
+            </Flex>
+        );
+    };
+
     return (
         <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100">
             <ModulePermissionBar moduleGroupKey="enquiriesGroup" />
@@ -859,7 +936,10 @@ const AdminEnquiries = () => {
                                     placeholder="Search by sender name or contact..." 
                                     borderRadius="xl"
                                     value={enquirySearch}
-                                    onChange={(e) => setEnquirySearch(e.target.value)}
+                                    onChange={(e) => {
+                                        setEnquirySearch(e.target.value);
+                                        setEnquiryPage(1);
+                                    }}
                                 />
                             </InputGroup>
                         </Flex>
@@ -874,7 +954,7 @@ const AdminEnquiries = () => {
                                     </Tr>
                                 </Thead>
                                 <Tbody>
-                                    {filteredEnquiries.map(e => (
+                                    {paginatedEnquiries.map(e => (
                                         <Tr key={e._id} _hover={{ bg: "gray.50" }}>
                                             <Td fontSize="sm">
                                                 <HStack>
@@ -911,6 +991,7 @@ const AdminEnquiries = () => {
                                 </Tbody>
                             </Table>
                         </Box>
+                        <PaginationControls currentPage={enquiryPage} totalItems={filteredEnquiries.length} onPageChange={setEnquiryPage} />
                     </TabPanel>
 
                     <TabPanel p={0} pt={4}>
@@ -923,7 +1004,10 @@ const AdminEnquiries = () => {
                                     placeholder="Search by client or Ref No..." 
                                     borderRadius="xl"
                                     value={activeSearch}
-                                    onChange={(e) => setActiveSearch(e.target.value)}
+                                    onChange={(e) => {
+                                        setActiveSearch(e.target.value);
+                                        setActivePage(1);
+                                    }}
                                 />
                             </InputGroup>
                         </Flex>
@@ -940,7 +1024,7 @@ const AdminEnquiries = () => {
                                     </Tr>
                                 </Thead>
                                 <Tbody>
-                                    {filteredQuotations.map(q => {
+                                    {paginatedQuotations.map(q => {
                                         let refSuffix = '';
                                         if (q.refNo) {
                                             const lowerRef = q.refNo.toLowerCase();
@@ -1029,6 +1113,7 @@ const AdminEnquiries = () => {
                                 </Tbody>
                             </Table>
                         </Box>
+                        <PaginationControls currentPage={activePage} totalItems={filteredQuotations.length} onPageChange={setActivePage} />
                     </TabPanel>
 
                     <TabPanel p={0} pt={4}>
@@ -1041,7 +1126,10 @@ const AdminEnquiries = () => {
                                     placeholder="Search by client or Ref No..." 
                                     borderRadius="xl"
                                     value={historySearch}
-                                    onChange={(e) => setHistorySearch(e.target.value)}
+                                    onChange={(e) => {
+                                        setHistorySearch(e.target.value);
+                                        setHistoryPage(1);
+                                    }}
                                 />
                             </InputGroup>
                         </Flex>
@@ -1058,7 +1146,7 @@ const AdminEnquiries = () => {
                                     </Tr>
                                 </Thead>
                                 <Tbody>
-                                    {filteredHistory.map(q => {
+                                    {paginatedHistory.map(q => {
                                         let refSuffix = '';
                                         if (q.refNo) {
                                             const lowerRef = q.refNo.toLowerCase();
@@ -1104,6 +1192,7 @@ const AdminEnquiries = () => {
                                 </Tbody>
                             </Table>
                         </Box>
+                        <PaginationControls currentPage={historyPage} totalItems={filteredHistory.length} onPageChange={setHistoryPage} />
                     </TabPanel>
                 </TabPanels>
                 )}

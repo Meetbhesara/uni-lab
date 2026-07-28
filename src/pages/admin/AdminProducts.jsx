@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
     Box, Button, Table, Thead, Tbody, Tr, Th, Td, IconButton, useDisclosure,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, ModalFooter,
     FormControl, FormLabel, FormErrorMessage, Input, Textarea, Checkbox, Stack, useToast, Flex,
-    Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, Select, Spinner
+    Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, Select, Spinner,
+    HStack, VStack, Tag, TagLabel, TagCloseButton, Divider, CheckboxGroup
 } from '@chakra-ui/react';
-import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch, FiPlay } from 'react-icons/fi';
-import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp } from 'react-icons/fa';
+import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch, FiPlay, FiLayers, FiX } from 'react-icons/fi';
+import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp, FaLayerGroup } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
 import { hasPermission } from '../../utils/permissions';
@@ -23,11 +24,70 @@ const PRODUCT_CATEGORIES = [
     "SAFETY PRODUCTS"
 ];
 
+const SUBCATEGORIES_STORAGE_KEY = 'admin_product_subcategories';
+
 const AdminProducts = () => {
     const location = useLocation();
     const [products, setProducts] = useState([]);
     const [searchVal, setSearchVal] = useState('');
     const [loading, setLoading] = useState(true);
+
+    // ── Subcategories (persisted in localStorage) ──────────────────────
+    // Structure: { [categoryName]: [ { id, name, productIds: [] } ] }
+    const [subcategories, setSubcategories] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(SUBCATEGORIES_STORAGE_KEY) || '{}'); }
+        catch { return {}; }
+    });
+    const saveSubcategories = (next) => {
+        setSubcategories(next);
+        localStorage.setItem(SUBCATEGORIES_STORAGE_KEY, JSON.stringify(next));
+    };
+
+    // Subcategory Manager modal (create / edit)
+    const { isOpen: isSubMgrOpen, onOpen: onSubMgrOpen, onClose: onSubMgrClose } = useDisclosure();
+    const [subMgrCategory, setSubMgrCategory] = useState('');   // which parent category
+    const [subMgrEditing, setSubMgrEditing] = useState(null);   // existing sub obj or null
+    const [subMgrName, setSubMgrName] = useState('');
+    const [subMgrSelectedIds, setSubMgrSelectedIds] = useState([]);
+
+    const openSubManager = (categoryName, existingSub = null) => {
+        setSubMgrCategory(categoryName);
+        setSubMgrEditing(existingSub);
+        setSubMgrName(existingSub ? existingSub.name : '');
+        setSubMgrSelectedIds(existingSub ? existingSub.productIds : []);
+        onSubMgrOpen();
+    };
+
+    const saveSubcategory = () => {
+        if (!subMgrName.trim()) return;
+        const cat = subMgrCategory;
+        const existing = subcategories[cat] || [];
+        let updated;
+        if (subMgrEditing) {
+            updated = existing.map(s => s.id === subMgrEditing.id
+                ? { ...s, name: subMgrName.trim(), productIds: subMgrSelectedIds }
+                : s);
+        } else {
+            const newSub = { id: Date.now().toString(), name: subMgrName.trim(), productIds: subMgrSelectedIds };
+            updated = [...existing, newSub];
+        }
+        saveSubcategories({ ...subcategories, [cat]: updated });
+        onSubMgrClose();
+    };
+
+    const deleteSubcategory = (categoryName, subId) => {
+        const updated = (subcategories[categoryName] || []).filter(s => s.id !== subId);
+        saveSubcategories({ ...subcategories, [categoryName]: updated });
+    };
+
+    // Subcategory Viewer modal (browse products in a subcategory)
+    const { isOpen: isSubViewOpen, onOpen: onSubViewOpen, onClose: onSubViewClose } = useDisclosure();
+    const [viewingSub, setViewingSub] = useState(null); // { name, productIds, categoryName }
+
+    const openSubViewer = (categoryName, sub) => {
+        setViewingSub({ ...sub, categoryName });
+        onSubViewOpen();
+    };
 
     // Disable Input Spinners via CSS Check
     useEffect(() => {
@@ -551,9 +611,21 @@ const AdminProducts = () => {
 
                 return categoriesWithProducts.map(categoryName => {
                     const list = grouped[categoryName];
+                    const catSubs = (subcategories[categoryName] || []);
+
+                    // All productIds assigned to any subcategory in this category
+                    const subAssignedIds = new Set(catSubs.flatMap(s => s.productIds));
+
+                    // Products NOT in any subcategory — shown as individual rows
+                    const standaloneProducts = list.filter(p => !subAssignedIds.has(p._id || p.id));
+
+                    // Total visible rows = standalone products + subcategory rows
+                    const totalRows = standaloneProducts.length + catSubs.length;
+
                     return (
                         <Box key={categoryName} mb={8} bg="white" borderRadius="2xl" border="1px" borderColor="gray.150" boxShadow="sm" overflow="hidden">
-                            <Flex bg="gray.50" px={6} py={4} align="center" justify="space-between" borderBottom="1px" borderColor="gray.100">
+                            {/* Category Header */}
+                            <Flex bg="gray.50" px={6} py={4} align="center" justify="space-between" borderBottom="1px" borderColor="gray.100" wrap="wrap" gap={3}>
                                 <Flex align="center" gap={3}>
                                     <Box p={2} bg="brand.50" color="brand.600" borderRadius="lg">
                                         <FiPackage size={18} />
@@ -562,10 +634,25 @@ const AdminProducts = () => {
                                         {categoryName === "Unassigned Categories" ? "UNASSIGNED CATEGORIES" : categoryName.toUpperCase()}
                                     </Text>
                                 </Flex>
-                                <Badge colorScheme="brand" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="xs" fontWeight="bold">
-                                    {list.length} {list.length === 1 ? 'Product' : 'Products'}
-                                </Badge>
+                                <HStack spacing={2} wrap="wrap" justify="flex-end">
+                                    <Badge colorScheme="brand" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="xs" fontWeight="bold">
+                                        {list.length} {list.length === 1 ? 'Product' : 'Products'}
+                                    </Badge>
+                                    {categoryName !== 'Unassigned Categories' && canWrite && (
+                                        <Button
+                                            size="xs"
+                                            leftIcon={<FaLayerGroup />}
+                                            colorScheme="purple"
+                                            variant="outline"
+                                            borderRadius="full"
+                                            onClick={() => openSubManager(categoryName)}
+                                        >
+                                            + Subcategory
+                                        </Button>
+                                    )}
+                                </HStack>
                             </Flex>
+
                             <Box overflowX="auto">
                                 <Table variant="simple" minW="600px">
                                     <Thead bg="white">
@@ -574,13 +661,109 @@ const AdminProducts = () => {
                                             {canShowVendors && <Th py={4}>Vendor</Th>}
                                             {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && <Th py={4}>Pricing</Th>}
                                             <Th py={4}>Videos</Th>
-
                                             {canShowStock && <Th py={4}>Stock</Th>}
                                             <Th py={4} textAlign="right">Actions</Th>
                                         </Tr>
                                     </Thead>
                                     <Tbody>
-                                        {list.map((product) => (
+                                        {/* ── Subcategory rows (appear first, styled with premium highlight) ── */}
+                                        {catSubs.map(sub => (
+                                            <Tr
+                                                key={`sub-${sub.id}`}
+                                                bgGradient="linear(to-r, purple.50, indigo.50/40)"
+                                                borderLeft="4px solid"
+                                                borderLeftColor="purple.500"
+                                                _hover={{
+                                                    bgGradient: "linear(to-r, purple.100, indigo.100/60)",
+                                                    shadow: "inner"
+                                                }}
+                                                transition="all 0.2s ease"
+                                                cursor="pointer"
+                                                onClick={() => openSubViewer(categoryName, sub)}
+                                            >
+                                                {/* Product Info — shows highlighted subcategory name & count */}
+                                                <Td py={3}>
+                                                    <Flex align="center" gap={3}>
+                                                        <Box
+                                                            p={2.5}
+                                                            bgGradient="linear(to-br, purple.500, indigo.600)"
+                                                            color="white"
+                                                            borderRadius="xl"
+                                                            boxShadow="0 2px 6px rgba(128, 90, 213, 0.3)"
+                                                            flexShrink={0}
+                                                        >
+                                                            <FiLayers size={18} />
+                                                        </Box>
+                                                        <Stack spacing={0.5}>
+                                                            <HStack spacing={2} align="center">
+                                                                <Text fontWeight="800" color="purple.900" fontSize="sm" letterSpacing="tight">
+                                                                    {sub.name}
+                                                                </Text>
+                                                                <Badge
+                                                                    colorScheme="purple"
+                                                                    variant="solid"
+                                                                    borderRadius="full"
+                                                                    fontSize="10px"
+                                                                    px={2.5}
+                                                                    py={0.5}
+                                                                    fontWeight="extrabold"
+                                                                    boxShadow="sm"
+                                                                >
+                                                                    {sub.productIds.length} {sub.productIds.length === 1 ? 'PRODUCT' : 'PRODUCTS'}
+                                                                </Badge>
+                                                            </HStack>
+                                                            <HStack spacing={1} align="center">
+                                                                <Badge variant="outline" colorScheme="purple" fontSize="9px" px={1.5} py={0} borderRadius="md" fontWeight="bold">
+                                                                    SUBCATEGORY
+                                                                </Badge>
+                                                                <Text fontSize="10px" color="purple.600" fontWeight="600">
+                                                                    • Click to view assigned products
+                                                                </Text>
+                                                            </HStack>
+                                                        </Stack>
+                                                    </Flex>
+                                                </Td>
+                                                {/* All data columns empty for subcategory rows */}
+                                                {canShowVendors && <Td />}
+                                                {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && <Td />}
+                                                <Td />
+                                                {canShowStock && <Td />}
+                                                {/* Actions: Edit subcategory + Delete subcategory */}
+                                                <Td textAlign="right" onClick={e => e.stopPropagation()}>
+                                                    <Stack direction="row" spacing={1} justify="flex-end">
+                                                        <IconButton
+                                                            size="sm"
+                                                            variant="solid"
+                                                            bg="purple.100"
+                                                            color="purple.700"
+                                                            icon={<FiEdit2 />}
+                                                            aria-label="Edit Subcategory"
+                                                            title="Edit subcategory"
+                                                            _hover={{ color: 'white', bg: 'purple.600' }}
+                                                            isDisabled={!canWrite}
+                                                            borderRadius="lg"
+                                                            onClick={() => openSubManager(categoryName, sub)}
+                                                        />
+                                                        <IconButton
+                                                            size="sm"
+                                                            variant="solid"
+                                                            bg="red.100"
+                                                            color="red.700"
+                                                            icon={<FiTrash2 />}
+                                                            aria-label="Delete Subcategory"
+                                                            title="Delete subcategory"
+                                                            _hover={{ color: 'white', bg: 'red.600' }}
+                                                            isDisabled={!canWrite}
+                                                            borderRadius="lg"
+                                                            onClick={() => deleteSubcategory(categoryName, sub.id)}
+                                                        />
+                                                    </Stack>
+                                                </Td>
+                                            </Tr>
+                                        ))}
+
+                                        {/* ── Standalone product rows (not in any subcategory) ── */}
+                                        {standaloneProducts.map((product) => (
                                             <Tr key={product._id || product.id} _hover={{ bg: 'gray.50/50' }} transition="0.2s">
                                                 <Td>
                                                     <Flex align="center" gap={4}>
@@ -699,6 +882,7 @@ const AdminProducts = () => {
                         </Box>
                     );
                 });
+
             })()}
 
             {/* Premium Add/Edit Modal */}
@@ -1325,6 +1509,300 @@ const AdminProducts = () => {
                             Delete Product
                         </Button>
                     </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── Subcategory Manager Modal (Create / Edit) ── */}
+            <Modal isOpen={isSubMgrOpen} onClose={onSubMgrClose} size="2xl" isCentered scrollBehavior="inside">
+                <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" boxShadow="2xl" overflow="hidden">
+                    <ModalHeader p={0}>
+                        <Box bgGradient="linear(to-r, purple.600, purple.800)" p={5} color="white">
+                            <HStack spacing={3}>
+                                <Box bg="whiteAlpha.200" p={2} borderRadius="lg"><FaLayerGroup /></Box>
+                                <VStack align="start" spacing={0}>
+                                    <Text fontSize="lg" fontWeight="800">
+                                        {subMgrEditing ? 'Edit Subcategory' : 'New Subcategory'}
+                                    </Text>
+                                    <Text fontSize="xs" color="purple.100">{subMgrCategory}</Text>
+                                </VStack>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} />
+                    <ModalBody p={6} bg="gray.50">
+                        <VStack spacing={5} align="stretch">
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="wider">Subcategory Name</FormLabel>
+                                <Input
+                                    variant="filled"
+                                    placeholder="e.g. Concrete Testers, Soil Samplers..."
+                                    value={subMgrName}
+                                    onChange={(e) => setSubMgrName(e.target.value)}
+                                    bg="white"
+                                    fontWeight="600"
+                                />
+                            </FormControl>
+
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="wider">
+                                    Select Products ({subMgrSelectedIds.length} selected) — only from "{subMgrCategory}"
+                                </FormLabel>
+                                <Box maxH="340px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="xl" bg="white" p={3}>
+                                    {products
+                                        .filter(p => {
+                                            if (!subMgrCategory) return false;
+                                            const found = PRODUCT_CATEGORIES.find(c => c.toLowerCase() === (p.category || '').toLowerCase());
+                                            return found === subMgrCategory;
+                                        })
+                                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                                        .map(p => {
+                                            const isChecked = subMgrSelectedIds.includes(p._id || p.id);
+                                            return (
+                                                <Flex
+                                                    key={p._id || p.id}
+                                                    align="center"
+                                                    py={2}
+                                                    px={3}
+                                                    mb={1}
+                                                    borderRadius="lg"
+                                                    bg={isChecked ? 'purple.50' : 'transparent'}
+                                                    border="1px solid"
+                                                    borderColor={isChecked ? 'purple.200' : 'transparent'}
+                                                    cursor="pointer"
+                                                    _hover={{ bg: 'purple.50', borderColor: 'purple.200' }}
+                                                    transition="all 0.15s"
+                                                    onClick={() => {
+                                                        const pid = p._id || p.id;
+                                                        setSubMgrSelectedIds(prev =>
+                                                            prev.includes(pid) ? prev.filter(x => x !== pid) : [...prev, pid]
+                                                        );
+                                                    }}
+                                                    gap={3}
+                                                >
+                                                    <Checkbox
+                                                        isChecked={isChecked}
+                                                        colorScheme="purple"
+                                                        pointerEvents="none"
+                                                        borderColor="gray.300"
+                                                    />
+                                                    <Image
+                                                        src={getImageUrl(p.localImages?.[0] || p.images?.[0])}
+                                                        boxSize="32px"
+                                                        objectFit="contain"
+                                                        borderRadius="md"
+                                                        bg="gray.100"
+                                                        fallbackSrc="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><rect width='32' height='32' fill='%23f1f5f9'/></svg>"
+                                                    />
+                                                    <VStack align="start" spacing={0}>
+                                                        <Text fontSize="sm" fontWeight="700" color={isChecked ? 'purple.800' : 'gray.800'}>{p.name}</Text>
+                                                        <Text fontSize="10px" color="gray.400">{p.category}</Text>
+                                                    </VStack>
+                                                </Flex>
+                                            );
+                                        })
+                                    }
+                                </Box>
+                            </FormControl>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="white" borderTop="1px solid" borderColor="gray.100">
+                        <Button variant="ghost" mr={3} onClick={onSubMgrClose}>Cancel</Button>
+                        <Button
+                            bgGradient="linear(to-r, purple.600, purple.700)"
+                            color="white"
+                            _hover={{ bgGradient: 'linear(to-r, purple.700, purple.800)' }}
+                            borderRadius="xl"
+                            onClick={saveSubcategory}
+                            isDisabled={!subMgrName.trim()}
+                        >
+                            {subMgrEditing ? 'Save Changes' : 'Create Subcategory'}
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── Subcategory Viewer Modal (Browse products — full table) ── */}
+            <Modal isOpen={isSubViewOpen} onClose={onSubViewClose} size="6xl" isCentered scrollBehavior="inside">
+                <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" boxShadow="2xl" overflow="hidden">
+                    <ModalHeader p={0}>
+                        <Box bgGradient="linear(to-r, purple.600, purple.800)" p={5} color="white">
+                            <HStack spacing={3}>
+                                <Box bg="whiteAlpha.200" p={2} borderRadius="lg"><FiLayers size={20} /></Box>
+                                <VStack align="start" spacing={0}>
+                                    <Text fontSize="lg" fontWeight="800">{viewingSub?.name}</Text>
+                                    <Text fontSize="xs" color="purple.200">{viewingSub?.categoryName} • {viewingSub?.productIds?.length || 0} Products</Text>
+                                </VStack>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} />
+                    <ModalBody p={0} bg="white">
+                        {(() => {
+                            const subProducts = products.filter(p => viewingSub?.productIds?.includes(p._id || p.id));
+                            if (subProducts.length === 0) {
+                                return (
+                                    <Flex py={16} flexDir="column" align="center" justify="center" color="gray.400">
+                                        <FiPackage size={40} />
+                                        <Text mt={3} fontWeight="600">No products in this subcategory yet.</Text>
+                                        <Button mt={4} size="sm" colorScheme="purple" variant="outline"
+                                            onClick={() => { onSubViewClose(); openSubManager(viewingSub?.categoryName, viewingSub); }}>
+                                            Edit Subcategory
+                                        </Button>
+                                    </Flex>
+                                );
+                            }
+                            return (
+                                <Box overflowX="auto">
+                                    <Table variant="simple" minW="700px">
+                                        <Thead bg="gray.50">
+                                            <Tr borderBottom="2px solid" borderBottomColor="gray.100">
+                                                <Th py={4} fontSize="xs" color="gray.500">Product Info</Th>
+                                                {canShowVendors && <Th py={4} fontSize="xs" color="gray.500">Vendor</Th>}
+                                                {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && <Th py={4} fontSize="xs" color="gray.500">Pricing</Th>}
+                                                <Th py={4} fontSize="xs" color="gray.500">Videos</Th>
+                                                {canShowStock && <Th py={4} fontSize="xs" color="gray.500">Stock</Th>}
+                                                <Th py={4} fontSize="xs" color="gray.500" textAlign="right">Actions</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {subProducts.map(product => (
+                                                <Tr key={product._id || product.id} _hover={{ bg: 'purple.50' }} transition="0.15s">
+                                                    {/* Product Info */}
+                                                    <Td>
+                                                        <Flex align="center" gap={4}>
+                                                            <Image
+                                                                src={getImageUrl(product.localImages?.[0] || product.images?.[0] || product.photos?.[0])}
+                                                                boxSize="40px"
+                                                                objectFit="contain"
+                                                                borderRadius="md"
+                                                                bg="white"
+                                                                boxShadow="sm"
+                                                                fallbackSrc='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><rect width="60" height="60" fill="%23f7fafc"/></svg>'
+                                                            />
+                                                            <Stack spacing={0}>
+                                                                <Text fontWeight="700" color="gray.800" fontSize="sm">{product.name}</Text>
+                                                                <Text fontSize="xs" color="purple.500" fontWeight="600" mt={0.5}>{product.category}</Text>
+                                                                <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="220px">
+                                                                    {product.description || 'No description'}
+                                                                </Text>
+                                                            </Stack>
+                                                        </Flex>
+                                                    </Td>
+
+                                                    {/* Vendor */}
+                                                    {canShowVendors && (
+                                                        <Td>
+                                                            <Flex wrap="wrap" gap={1} maxW="130px">
+                                                                {Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                                                    product.vendors.map((v, i) => (
+                                                                        <Badge key={i} variant="subtle" colorScheme="blue" borderRadius="full" px={2} fontSize="10px">{v.name || 'N/A'}</Badge>
+                                                                    ))
+                                                                ) : (
+                                                                    <Badge variant="subtle" colorScheme="blue" borderRadius="full" px={3}>{product.vendor || 'N/A'}</Badge>
+                                                                )}
+                                                            </Flex>
+                                                        </Td>
+                                                    )}
+
+                                                    {/* Pricing */}
+                                                    {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && (
+                                                        <Td>
+                                                            <Stack spacing={0}>
+                                                                {canShowSellingPrice && <Text fontWeight="bold" color="brand.600" fontSize="sm">Sell: ₹{product.sellingPriceStart} - {product.sellingPriceEnd || 'N/A'}</Text>}
+                                                                {canShowDealerPrice && <Text fontSize="xs" color="blue.500">Dealer: ₹{product.dealerPrice || 'N/A'}</Text>}
+                                                                {canShowVendors && (
+                                                                    Array.isArray(product.vendors) && product.vendors.length > 0 ? (
+                                                                        product.vendors.map((v, i) => (
+                                                                            <Text key={i} fontSize="xs" color="gray.500">{v.name || 'Unknown'}: ₹{v.price ?? '0'}</Text>
+                                                                        ))
+                                                                    ) : (
+                                                                        <Text fontSize="xs" color="gray.400">Buy: ₹{product.purchasePrice ?? '0'}</Text>
+                                                                    )
+                                                                )}
+                                                            </Stack>
+                                                        </Td>
+                                                    )}
+
+                                                    {/* Videos */}
+                                                    <Td>
+                                                        {((product.localVideos && product.localVideos.length > 0) || (product.videoLinks && product.videoLinks.length > 0)) ? (
+                                                            <Badge colorScheme="purple" borderRadius="md" px={2} py={1} display="inline-flex" alignItems="center" gap={1}>
+                                                                <FiPlay size={10} />
+                                                                {((product.localVideos?.length || 0) + (product.videoLinks?.length || 0))} Videos
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge colorScheme="gray" variant="subtle" borderRadius="md" px={2} py={1}>None</Badge>
+                                                        )}
+                                                    </Td>
+
+                                                    {/* Stock */}
+                                                    {canShowStock && (
+                                                        <Td>
+                                                            <Badge colorScheme={product.stock > 0 ? "green" : "red"} borderRadius="md" px={2} py={1}>
+                                                                {product.stock ?? 0}
+                                                            </Badge>
+                                                        </Td>
+                                                    )}
+
+                                                    {/* Actions */}
+                                                    <Td textAlign="right">
+                                                        <Stack direction="row" spacing={2} justify="flex-end">
+                                                            <IconButton
+                                                                size="sm"
+                                                                bg="#25D366"
+                                                                color="white"
+                                                                _hover={{ bg: "#128C7E" }}
+                                                                icon={<FaWhatsapp />}
+                                                                aria-label="WhatsApp"
+                                                                title="Send on WhatsApp"
+                                                                onClick={() => { onSubViewClose(); handleWhatsappOpen(product); }}
+                                                            />
+                                                            <IconButton
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                icon={<FiEdit2 />}
+                                                                aria-label="Edit Product"
+                                                                title="Edit product"
+                                                                _hover={{ color: 'brand.500', bg: 'brand.50' }}
+                                                                isDisabled={!canWrite}
+                                                                onClick={() => { onSubViewClose(); handleEdit(product); }}
+                                                            />
+                                                            <IconButton
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                icon={<FiTrash2 />}
+                                                                colorScheme="red"
+                                                                aria-label="Delete Product"
+                                                                title="Delete product"
+                                                                _hover={{ color: 'red.500', bg: 'red.50' }}
+                                                                isDisabled={!canWrite}
+                                                                onClick={() => { onSubViewClose(); handleDeleteClick(product); }}
+                                                            />
+                                                        </Stack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                            );
+                        })()}
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" borderTop="1px solid" borderColor="gray.100" justify="space-between">
+                        <Text fontSize="xs" color="gray.500" fontWeight="600">{(viewingSub?.productIds?.length || 0)} products in <b>{viewingSub?.name}</b></Text>
+                        <HStack>
+                            {canWrite && (
+                                <Button size="sm" colorScheme="purple" variant="outline" leftIcon={<FiEdit2 />}
+                                    onClick={() => { onSubViewClose(); openSubManager(viewingSub?.categoryName, viewingSub); }}>
+                                    Edit Subcategory
+                                </Button>
+                            )}
+                            <Button size="sm" variant="ghost" onClick={onSubViewClose}>Close</Button>
+                        </HStack>
+                    </ModalFooter>
+
                 </ModalContent>
             </Modal>
         </Box >

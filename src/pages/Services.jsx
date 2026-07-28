@@ -6820,6 +6820,8 @@ const ExpenseReportsTab = () => {
 
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
+const SERVICES_TAB_KEY = 'services_active_tab_key';
+
 const Services = () => {
     const { user } = useAuth();
     const isAdmin = user && user.isAdmin;
@@ -6837,6 +6839,31 @@ const Services = () => {
         { key: 'invoiceReport', groupKey: 'otherServicesGroup', subFilter: 'invoiceReport', label: 'Invoice Report', icon: FaFileInvoiceDollar, colorScheme: 'blue', component: <InvoiceReport isInsideServices={true} /> },
         { key: 'companyMaster', groupKey: 'otherServicesGroup', subFilter: 'companyMaster', label: 'Our Companies', icon: FaBuilding, colorScheme: 'teal', component: <CompanyMaster /> },
     ].filter(t => hasPermission(user, t.key, 'read'));
+
+    // Store tab KEY ('siteMaster', 'clientMaster', etc.) to avoid race conditions with permission loading
+    const [activeTabKey, setActiveTabKey] = useState(() => {
+        try {
+            return localStorage.getItem(SERVICES_TAB_KEY) || 'vehicleMaster';
+        } catch {
+            return 'vehicleMaster';
+        }
+    });
+
+    // Derive active index dynamically on render
+    const matchingIndex = adminServiceTabs.findIndex(t => t.key === activeTabKey);
+    const activeTabIndex = matchingIndex !== -1 ? matchingIndex : 0;
+
+    const handleTabChange = (index) => {
+        const selectedTab = adminServiceTabs[index];
+        if (selectedTab) {
+            setActiveTabKey(selectedTab.key);
+            try {
+                localStorage.setItem(SERVICES_TAB_KEY, selectedTab.key);
+            } catch (e) {
+                console.error('Error saving active tab', e);
+            }
+        }
+    };
 
     return (
         <Box>
@@ -6861,7 +6888,15 @@ const Services = () => {
                                 <Text fontSize="sm" color="gray.400" mt={1}>Please contact your Super Admin if you require access to these administrative modules.</Text>
                             </Box>
                         ) : (
-                            <Tabs isLazy variant="soft-rounded" colorScheme="purple" orientation="vertical" w="full">
+                            <Tabs 
+                                index={activeTabIndex} 
+                                onChange={handleTabChange} 
+                                isLazy 
+                                variant="soft-rounded" 
+                                colorScheme="purple" 
+                                orientation="vertical" 
+                                w="full"
+                            >
                                 {isSidebarOpen && (
                                     <TabList bg="white" p={4} borderRadius="2xl" boxShadow="md" mr={4} minW="180px" gap={2}>
                                         {adminServiceTabs.map((t) => (
