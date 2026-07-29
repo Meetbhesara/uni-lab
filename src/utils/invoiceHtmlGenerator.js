@@ -70,42 +70,72 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     
     const shouldIncludeDates = invoiceForm.includeDates !== false;
 
-    entries.forEach((entry, i) => {
+    // Group matching entries (Client, Site, Instrument, Ledger, HSN/SAC, Rate, Per, Extra Desc)
+    const itemGroupsMap = {};
+
+    entries.forEach((entry) => {
         const conf = invoiceForm.entryConfigs?.[entry._id] || {};
         const qty = conf.qty !== undefined ? conf.qty : 1;
-        const rate = conf.rate || 0;
+        const rate = Number(conf.rate || 0);
+        const instrument = (conf.instrument || 'Total Station').trim();
+        const siteId = String(entry.site?._id || entry.site?.siteName || 'site').trim();
+        const clientId = String(entry.client?._id || entry.client?.clientName || 'client').trim();
+        const mainLedgerName = (conf.ledgerName || conf.ledger || entry.ledger || entry.scheduleType || '').trim();
+        const hsnSacCode = (conf.hsnSac || entry.hsnSac || '').trim();
+        const perShortName = (conf.shortName || '').trim();
+        const extraDesc = (conf.extraDescription || '').trim();
+
+        const groupKey = `${clientId}|${siteId}|${instrument}|${mainLedgerName}|${hsnSacCode}|${rate}|${perShortName}|${extraDesc}`.toLowerCase();
+
+        const entryDate = entry.scheduleDate ? new Date(entry.scheduleDate).toLocaleDateString('en-GB') : '';
+
+        if (!itemGroupsMap[groupKey]) {
+            itemGroupsMap[groupKey] = {
+                instrument,
+                siteName: entry.site?.siteName || '',
+                mainLedgerName,
+                extraDesc,
+                hsnSacCode,
+                perShortName,
+                rate,
+                qty: 0,
+                dates: []
+            };
+        }
+
+        itemGroupsMap[groupKey].qty += qty;
+        if (entryDate && !itemGroupsMap[groupKey].dates.includes(entryDate)) {
+            itemGroupsMap[groupKey].dates.push(entryDate);
+        }
+    });
+
+    const mergedItems = Object.values(itemGroupsMap);
+
+    mergedItems.forEach((group, i) => {
+        const qty = group.qty;
+        const rate = group.rate;
         const amt = qty * rate;
         totalAmount += amt;
         totalQty += qty;
-        
-        const entryDate = entry.scheduleDate ? new Date(entry.scheduleDate).toLocaleDateString('en-GB') : '';
-        const siteName = entry.site?.siteName || '';
-        
-        const instrumentTitle = conf.instrument || 'Total Station';
-        let desc = "<b>Hire Charges for " + instrumentTitle + "</b><br/>";
+
+        let desc = "<b>Hire Charges for " + group.instrument + "</b><br/>";
         desc += "<div style=\"font-size:10px; font-style:italic; margin-top: 4px; line-height: 1.4; font-weight: normal;\">";
-        if (siteName) desc += "SURVEY WORK AT " + siteName.toUpperCase() + "<br/>";
-        
-        // Main Site Ledger Name
-        const mainLedgerName = conf.ledgerName || conf.ledger || entry.ledger || entry.scheduleType || '';
-        if (mainLedgerName) desc += mainLedgerName.toUpperCase() + "<br/>";
-        if (conf.extraDescription) desc += conf.extraDescription.toUpperCase() + "<br/>";
-        
-        if (shouldIncludeDates && entryDate) {
-            desc += "DATE : " + entryDate;
+        if (group.siteName) desc += "SURVEY WORK AT " + group.siteName.toUpperCase() + "<br/>";
+        if (group.mainLedgerName) desc += group.mainLedgerName.toUpperCase() + "<br/>";
+        if (group.extraDesc) desc += group.extraDesc.toUpperCase() + "<br/>";
+
+        if (shouldIncludeDates && group.dates.length > 0) {
+            desc += "DATE(S) : " + group.dates.join(', ');
         }
         desc += "</div>";
 
-        const hsnSacCode = conf.hsnSac || entry.hsnSac || '';
-        const perShortName = conf.shortName || '';
-        
         itemsHtml += "<tr style=\"vertical-align:top;\">";
         itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:center;\">" + (i + 1) + "</td>";
         itemsHtml += "<td style=\"padding:4px; text-align:left; border-right:1px solid #000;\">" + desc + "</td>";
-        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">" + hsnSacCode + "</td>";
+        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">" + group.hsnSacCode + "</td>";
         itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:center;\"><b>" + qty.toFixed(1) + "</b></td>";
         itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:right;\">" + formatNum(rate) + "</td>";
-        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">" + perShortName + "</td>";
+        itemsHtml += "<td style=\"padding:4px; border-right:1px solid #000; text-align:left;\">" + group.perShortName + "</td>";
         itemsHtml += "<td style=\"padding:4px; text-align:right;\"><b>" + formatNum(amt) + "</b></td>";
         itemsHtml += "</tr>";
     });
@@ -127,7 +157,7 @@ export const generateInvoiceHtml = (invoiceForm, entries, type) => {
     const grandTotal = totalAmount + totalTax;
     
     // Add empty padding row to push taxes to the bottom, shrinking dynamically to fit 1 page cleanly
-    let spacerHeight = Math.max(10, 150 - (entries.length * 30));
+    let spacerHeight = Math.max(10, 150 - (mergedItems.length * 30));
     itemsHtml += "<tr style=\"height: " + spacerHeight + "px; vertical-align: bottom;\">";
     itemsHtml += "<td style=\"border-right:1px solid #000;\"></td>";
     if (gstType === 'IGST') {

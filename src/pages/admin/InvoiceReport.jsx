@@ -347,14 +347,20 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         }
     };
 
-    // Filter logic based on documents
+    // Filter logic based on documents: Topography Survey requires at least 1 Mail file uploaded
     const validSchedules = schedules.filter(s => {
         if (s.dayStatus === 'Rejected') return false;
-        
-        if (s.scheduleType === 'TOPOGRAPHY SURVEY') {
-            return s.dayStatus === 'Completed';
+
+        const isTopo = (s.scheduleType || '').toUpperCase().includes('TOPOGRAPHY');
+
+        const hasMailFile = (s.draftingWorkFiles?.mailFiles && s.draftingWorkFiles.mailFiles.length > 0) ||
+                            (s.allDocuments && s.allDocuments.some(d => d.isMail || d.url?.includes('/drawing/') || d.url?.includes('/drafting/')));
+
+        // Topography Surveys require at least 1 Mail file uploaded
+        if (isTopo) {
+            return hasMailFile;
         }
-        
+
         if (s.scheduleType === 'MONTH' && s.endDate) {
             const end = new Date(s.endDate);
             const today = new Date();
@@ -363,21 +369,20 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 return true;
             }
         }
-        
-        const hasCoreDocs = s.allDocuments && s.allDocuments.some(d => {
-            // EXPLICITLY ignore Expense Receipts when determining if a schedule is ready for invoice
+
+        // For non-topography visits, check for core documents (photos, reports, data, drawings) or mail files
+        const hasCoreDocs = hasMailFile || (s.allDocuments && s.allDocuments.some(d => {
             if (d.category || d.url?.includes('employee_master') || d.url?.includes('expense_') || d.url?.includes('otherExpense_')) {
                 return false;
             }
-
             const isPhoto = d.url?.includes('/photos/') || d.name?.toLowerCase().includes('photo') || (d.url?.includes('site_') && d.url?.includes('photos')) || d.url?.includes('/uploads/photos-');
             const isReport = d.url?.includes('/Daily_report/') || d.url?.includes('dailyReports') || d.name?.toLowerCase().includes('report');
             const isData = d.url?.includes('/data/') || d.url?.includes('dataFiles') || (d.url?.includes('site_') && d.url?.includes('data'));
             const isDrawing = d.url?.includes('/drawing/') || (d.url?.includes('site_') && d.url?.includes('drawing'));
             
             return isPhoto || isReport || isData || isDrawing;
-        });
-            
+        }));
+
         return hasCoreDocs;
     });
 
@@ -1589,9 +1594,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                     const photos = docs.filter(d => d.url?.includes('/photos/') || d.name?.toLowerCase().includes('photo') || d.url?.includes('site_') && d.url?.includes('photos') || d.url?.includes('/uploads/photos-'));
                                                                                                     const reports = docs.filter(d => d.url?.includes('/Daily_report/') || d.url?.includes('dailyReports') || d.name?.toLowerCase().includes('report'));
                                                                                                     const data = docs.filter(d => d.url?.includes('/data/') || d.url?.includes('dataFiles') || d.url?.includes('site_') && d.url?.includes('data'));
-                                                                                                    const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('site_') && d.url?.includes('drawing'));
+                                                                                                    const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('/drafting/') || d.url?.includes('site_') && (d.url?.includes('drawing') || d.url?.includes('drafting')));
                                                                                                     const expenseReceipts = docs.filter(d => d.url?.includes('expense_') || d.url?.includes('otherExpense_') || d.category);
-                                                                                                    const topographyMails = docs.filter(d => d.isMail);
+                                                                                                    const topographyMails = docs.filter(d => d.isMail || d.url?.includes('/drawing/') || d.url?.includes('/drafting/'));
                                                                                                     
                                                                                                     const formatDateTime = (dateStr) => {
                                                                                                         if (!dateStr) return '—';

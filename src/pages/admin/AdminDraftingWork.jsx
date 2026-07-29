@@ -184,6 +184,12 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
+        if (files.length > 15) {
+            toast({ title: 'Maximum 15 files allowed', status: 'warning', description: 'You can upload a maximum of 15 files at a time.' });
+            e.target.value = null;
+            return;
+        }
+
         if (category === 'convertedFiles' && !selectedCollectedFileForConversion) {
             toast({ title: 'Please select an original Collected File first', status: 'warning' });
             e.target.value = null;
@@ -810,20 +816,12 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                                             <Tabs variant="enclosed" colorScheme="blue">
                                                 <TabList mb={4} overflowX="auto" whiteSpace="nowrap">
                                                     <Tab fontWeight="bold" color="blue.600">1. Collected Files</Tab>
-                                                    <Tab fontWeight="bold" color="orange.600">2. Converted</Tab>
-                                                    <Tab fontWeight="bold" color="teal.600">3. Lining Draw</Tab>
-                                                    <Tab fontWeight="bold" color="purple.600">4. eSurvey Work</Tab>
-                                                    <Tab fontWeight="bold" color="green.600">5. Final Checking</Tab>
-                                                    <Tab fontWeight="bold" color="red.600">6. Mail</Tab>
+                                                    <Tab fontWeight="bold" color="red.600">2. Mail Files</Tab>
                                                 </TabList>
                                                 
                                                 <TabPanels>
                                                     {[
                                                         { key: 'collectedFiles', color: 'blue' },
-                                                        { key: 'convertedFiles', color: 'orange' },
-                                                        { key: 'liningDrawFiles', color: 'teal' },
-                                                        { key: 'esurveyWorkFiles', color: 'purple' },
-                                                        { key: 'finalCheckingFiles', color: 'green' },
                                                         { key: 'mailFiles', color: 'red' }
                                                     ].map((step, idx) => (
                                                         <TabPanel key={step.key} p={0}>
@@ -831,70 +829,18 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                                                                 <CardBody p={6}>
                                                                     <VStack align="stretch" spacing={6}>
                                                                         
-                                                                        {(step.key !== 'collectedFiles' && step.key !== 'finalCheckingFiles' && step.key !== 'mailFiles') && (
+                                                                        {step.key === 'mailFiles' && (
                                                                             <VStack align="stretch" spacing={4}>
-                                                                                {step.key === 'convertedFiles' && (
-                                                                                    <FormControl>
-                                                                                        <FormLabel fontSize="sm" fontWeight="bold" color="orange.700">1. Select Original Collected File</FormLabel>
-                                                                                        <Select 
-                                                                                            placeholder="-- Select a received file to convert --" 
-                                                                                            value={selectedCollectedFileForConversion} 
-                                                                                            onChange={e => setSelectedCollectedFileForConversion(e.target.value)}
-                                                                                            bg="white"
-                                                                                            borderColor="orange.300"
-                                                                                        >
-                                                                                            {(surveyReceivedDocs || []).filter(doc => getCollectedDocCategory(doc) !== 'Photos').map(doc => (
-                                                                                                <option key={doc._id} value={doc._id}>{doc.name}</option>
-                                                                                            ))}
-                                                                                        </Select>
-                                                                                    </FormControl>
-                                                                                )}
-                                                                                
-                                                                                {step.key === 'liningDrawFiles' && (
-                                                                                    <FormControl>
-                                                                                        <FormLabel fontSize="sm" fontWeight="bold" color="teal.700">2. Select Converted File</FormLabel>
-                                                                                        <Select 
-                                                                                            placeholder="-- Select a converted file to draw lining --" 
-                                                                                            value={selectedConvertedFileForLining} 
-                                                                                            onChange={e => setSelectedConvertedFileForLining(e.target.value)}
-                                                                                            bg="white"
-                                                                                            borderColor="teal.300"
-                                                                                        >
-                                                                                            {(draftingFiles['convertedFiles'] || []).map(doc => (
-                                                                                                <option key={doc._id} value={doc._id}>{doc.name}</option>
-                                                                                            ))}
-                                                                                        </Select>
-                                                                                    </FormControl>
-                                                                                )}
-                                                                                
-                                                                                {step.key === 'esurveyWorkFiles' && (
-                                                                                    <FormControl>
-                                                                                        <FormLabel fontSize="sm" fontWeight="bold" color="purple.700">3. Select Lining Draw File</FormLabel>
-                                                                                        <Select 
-                                                                                            placeholder="-- Select a lining draw file for eSurvey --" 
-                                                                                            value={selectedLiningFileForEsurvey} 
-                                                                                            onChange={e => setSelectedLiningFileForEsurvey(e.target.value)}
-                                                                                            bg="white"
-                                                                                            borderColor="purple.300"
-                                                                                        >
-                                                                                            {(draftingFiles['liningDrawFiles'] || []).filter(d => d.status === 'Approved').map(doc => (
-                                                                                                <option key={doc._id} value={doc._id}>{doc.name}</option>
-                                                                                            ))}
-                                                                                        </Select>
-                                                                                    </FormControl>
-                                                                                )}
-                                                                                
                                                                                 <Box 
                                                                                     p={6} 
                                                                                     border="2px dashed" 
-                                                                                    borderColor={`${step.color}.300`} 
+                                                                                    borderColor="red.300" 
                                                                                     borderRadius="xl" 
                                                                                     bg="white" 
                                                                                     textAlign="center" 
                                                                                     position="relative" 
-                                                                                    _hover={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? {} : { bg: `${step.color}.50` }} 
+                                                                                    _hover={{ bg: 'red.50' }}
                                                                                     transition="all 0.2s"
-                                                                                    opacity={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 0.5 : 1}
                                                                                 >
                                                                                     <Input 
                                                                                         type="file" 
@@ -905,18 +851,23 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                                                                                         left={0} 
                                                                                         w="100%" 
                                                                                         h="100%" 
-                                                                                        cursor={((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 'not-allowed' : 'pointer'} 
-                                                                                        onChange={(e) => handleDraftingFileUpload(e, step.key)} 
-                                                                                        disabled={uploadingCategory === step.key || (!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')} 
+                                                                                        cursor="pointer"
+                                                                                        onChange={(e) => handleDraftingFileUpload(e, 'mailFiles')} 
+                                                                                        disabled={uploadingCategory === 'mailFiles'} 
                                                                                     />
-                                                                                    <Icon as={FaUpload} color={`${step.color}.500`} w={8} h={8} mb={2} />
-                                                                                    <Text fontSize="md" fontWeight="bold" color={`${step.color}.700`}>
-                                                                                        {((!selectedCollectedFileForConversion && step.key === 'convertedFiles') || (!selectedConvertedFileForLining && step.key === 'liningDrawFiles') || (!selectedLiningFileForEsurvey && step.key === 'esurveyWorkFiles')) ? 'Select a file above first' : 'Drag & Drop or Click to Upload'}
+                                                                                    <Icon as={FaUpload} color="red.500" w={8} h={8} mb={2} />
+                                                                                    <Text fontSize="md" fontWeight="bold" color="red.700">
+                                                                                        Drag & Drop or Click to Upload Mail Files (Max 15 files)
                                                                                     </Text>
-                                                                                    {uploadingCategory === step.key && <Spinner size="md" color={`${step.color}.500`} mt={4} />}
+                                                                                    <Text fontSize="xs" color="gray.500" mt={1}>
+                                                                                        Select up to 15 files at a time
+                                                                                    </Text>
+                                                                                    {uploadingCategory === 'mailFiles' && <Spinner size="md" color="red.500" mt={4} />}
                                                                                 </Box>
                                                                             </VStack>
-                                                                        )}                                                                        <Box>
+                                                                        )}
+                                                                        
+                                                                        <Box>
                                                                             <Text fontWeight="bold" mb={3} color="gray.700">Uploaded Documents</Text>
                                                                             {step.key === 'collectedFiles' ? (
                                                                                 <VStack align="stretch" spacing={6} maxH="500px" overflowY="auto" pr={2}>
@@ -1028,18 +979,20 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                                                                                                         </HStack>
                                                                                                         
                                                                                                         <HStack spacing={1}>
-                                                                                                            <Select 
-                                                                                                                size="xs" 
-                                                                                                                w="120px" 
-                                                                                                                value={file.status || 'Pending'} 
-                                                                                                                onChange={(e) => updateDraftingFileStatus(step.key, file._id, e.target.value)}
-                                                                                                                bg="white"
-                                                                                                                borderRadius="md"
-                                                                                                            >
-                                                                                                                <option value="Pending">Pending</option>
-                                                                                                                <option value="Approved">Approved</option>
-                                                                                                                <option value="Rejected">Rejected</option>
-                                                                                                            </Select>
+                                                                                                            {step.key !== 'mailFiles' && (
+                                                                                                                <Select 
+                                                                                                                    size="xs" 
+                                                                                                                    w="120px" 
+                                                                                                                    value={file.status || 'Pending'} 
+                                                                                                                    onChange={(e) => updateDraftingFileStatus(step.key, file._id, e.target.value)}
+                                                                                                                    bg="white"
+                                                                                                                    borderRadius="md"
+                                                                                                                >
+                                                                                                                    <option value="Pending">Pending</option>
+                                                                                                                    <option value="Approved">Approved</option>
+                                                                                                                    <option value="Rejected">Rejected</option>
+                                                                                                                </Select>
+                                                                                                            )}
                                                                                                             <IconButton 
                                                                                                                 as="a" 
                                                                                                                 href={`${API_BASE_URL}${file.url}`} 
