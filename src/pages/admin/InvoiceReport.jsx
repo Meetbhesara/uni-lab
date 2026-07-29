@@ -13,7 +13,7 @@ import {
     FaFileInvoiceDollar, FaEye, FaCheckCircle, FaClock, FaSearch,
     FaCalendarAlt, FaUser, FaBuilding, FaMapMarkerAlt, FaFilter,
     FaFileAlt, FaCamera, FaFilePdf, FaSyncAlt, FaDownload, FaEnvelope,
-    FaListUl, FaExclamationTriangle, FaMoneyBillWave, FaTimes, FaPrint
+    FaListUl, FaExclamationTriangle, FaMoneyBillWave, FaTimes, FaPrint, FaWhatsapp
 } from 'react-icons/fa';
 import api from '../../api/axios';
 import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
@@ -217,6 +217,40 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
 
+    // Payment Reminder Tab Filters & State
+    const [reminderCompanyId, setReminderCompanyId] = useState('');
+    const [reminderSearch, setReminderSearch] = useState('');
+    const [expandedClientIds, setExpandedClientIds] = useState([]);
+
+    const handleSendWhatsappReminder = (siteEntry) => {
+        const clientName = siteEntry.client?.clientName || 'Valued Client';
+        const siteName = siteEntry.site?.siteName || 'N/A';
+        const invNo = siteEntry.finalInvoiceId || siteEntry.proformaInvoiceId || siteEntry.invoiceDetails?.invoiceId || 'N/A';
+        const billDate = formatDate(siteEntry.invoiceDetails?.generatedAt || siteEntry.invoiceDetails?.invoiceDate || siteEntry.createdAt);
+        const amount = siteEntry.invoiceDetails?.totalAmount || siteEntry.grandTotal || siteEntry.totalAmount || 0;
+        const compName = siteEntry.invoiceDetails?.companyDetails?.companyName || 'Our Company';
+        const phone = siteEntry.client?.phone || siteEntry.client?.contactNumbers?.[0] || siteEntry.client?.contactPerson?.phone || '';
+
+        const message = `*PAYMENT REMINDER*\n\n` +
+            `Dear *${clientName}*,\n` +
+            `This is a gentle reminder regarding your outstanding invoice.\n\n` +
+            `📋 *Invoice No:* ${invNo}\n` +
+            `🏢 *Site:* ${siteName}\n` +
+            `📅 *Bill Date:* ${billDate}\n` +
+            `💰 *Amount:* ₹${Number(amount).toLocaleString('en-IN')}\n` +
+            `🏭 *Company:* ${compName}\n\n` +
+            `Kindly arrange the payment at your earliest convenience. Thank you!`;
+
+        const cleanPhone = (phone || '').replace(/\D/g, '');
+        const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        if (targetPhone) {
+            const url = `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`;
+            window.open(url, '_blank');
+        } else {
+            toast({ title: 'Client Contact Missing', description: 'No mobile number found for this client.', status: 'warning', duration: 3000 });
+        }
+    };
+
     // Fetch schedules
     const fetchVisitSchedules = useCallback(async () => {
         setLoading(true);
@@ -358,11 +392,77 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         
         const stat = s.invoiceStatus || 'Pending';
         const normalizedStat = (stat === 'Completed' || stat === 'Closed') ? 'Closed' : stat;
-        const targetStatus = ['Pending', 'Proforma', 'Final', 'Closed'][activeTab];
+        const targetStatus = ['Pending', 'Proforma', 'Final', 'Reminder', 'Closed'][activeTab];
         const matchTab = normalizedStat === targetStatus;
 
         return matchSearch && matchLedger && matchTab;
     });
+
+    // Payment Reminder Tab Grouped Data
+    const reminderData = React.useMemo(() => {
+        if (activeTab !== 3) return [];
+        
+        // Find all schedules with proforma or final invoices
+        const invoicedSchedules = schedules.filter(s => {
+            const hasInv = s.proformaInvoiceId || s.finalInvoiceId || s.invoiceDetails?.invoiceId || s.proformaInvoicePdf || s.finalInvoicePdf || ['Proforma', 'Final', 'Completed', 'Closed'].includes(s.invoiceStatus);
+            if (!hasInv) return false;
+            
+            // Filter by company if selected
+            if (reminderCompanyId) {
+                const compDetails = s.invoiceDetails?.companyDetails;
+                const selectedComp = companies.find(c => c._id === reminderCompanyId);
+                
+                if (compDetails?._id || compDetails?.id) {
+                    const idMatch = String(compDetails._id || compDetails.id) === String(reminderCompanyId);
+                    if (!idMatch) return false;
+                } else if (selectedComp) {
+                    const selectedName = (selectedComp.companyName || '').toLowerCase();
+                    const compName = (compDetails?.companyName || '').toLowerCase();
+                    if (compName && compName !== selectedName) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        });
+
+        // Group by Client
+        const clientMap = {};
+        invoicedSchedules.forEach(s => {
+            const clientObj = s.client;
+            const clientId = String(clientObj?._id || clientObj?.clientId || clientObj?.clientName || 'unknown');
+            const clientName = clientObj?.clientName || 'Unknown Client';
+            
+            if (!clientMap[clientId]) {
+                clientMap[clientId] = {
+                    clientId,
+                    clientName,
+                    clientObj,
+                    sites: []
+                };
+            }
+            clientMap[clientId].sites.push(s);
+        });
+
+        // Convert map to list and filter by reminderSearch if present
+        const q = reminderSearch.toLowerCase().trim();
+        return Object.values(clientMap).filter(group => {
+            if (!q) return true;
+            const matchClient = group.clientName.toLowerCase().includes(q);
+            const matchSites = group.sites.some(s => 
+                (s.site?.siteName || '').toLowerCase().includes(q) ||
+                (s.finalInvoiceId || s.proformaInvoiceId || s.invoiceDetails?.invoiceId || '').toLowerCase().includes(q)
+            );
+            return matchClient || matchSites;
+        });
+    }, [schedules, activeTab, reminderCompanyId, reminderSearch, companies]);
+
+    // Auto-expand all clients on Payment Reminder tab load so user sees all rows instantly
+    useEffect(() => {
+        if (activeTab === 3 && reminderData.length > 0 && expandedClientIds.length === 0) {
+            setExpandedClientIds(reminderData.map(g => g.clientId));
+        }
+    }, [activeTab, reminderData]);
 
     const stats = {
         total: validSchedules.length,
@@ -804,6 +904,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                 <Tab fontWeight="bold">⏳ Pending</Tab>
                                 <Tab fontWeight="bold">📄 Proforma</Tab>
                                 <Tab fontWeight="bold">✅ Final Invoice</Tab>
+                                <Tab fontWeight="bold">🔔 Payment Reminder</Tab>
                                 <Tab fontWeight="bold">🔒 Closed</Tab>
                             </TabList>
                         </Tabs>
@@ -820,232 +921,486 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                         )}
                     </Flex>
 
-                    {/* ── Filters ── */}
-                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                        <CardBody p={5}>
-                            <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4} alignItems="flex-end">
-                                <InputGroup>
-                                    <InputLeftElement><Icon as={FaSearch} color="gray.400" /></InputLeftElement>
-                                    <Input
-                                        placeholder="Search client, site, operative..."
-                                        value={search}
-                                        onChange={e => setSearch(e.target.value)}
-                                        borderRadius="xl"
-                                        bg="gray.50"
-                                    />
-                                </InputGroup>
-                                <Select placeholder="All Ledger Types" value={filterLedger} onChange={e => setFilterLedger(e.target.value)} borderRadius="xl" bg="gray.50">
-                                    <option value="Full Day">Full Day</option>
-                                    <option value="Half Day">Half Day</option>
-                                </Select>
-                                <Input type="date" placeholder="From Date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} borderRadius="xl" bg="gray.50" />
-                                <Input type="date" placeholder="To Date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} borderRadius="xl" bg="gray.50" />
-                            </SimpleGrid>
-                        </CardBody>
-                    </Card>
+                    {/* ── Filters (For Pending, Proforma, Final, Closed tabs) ── */}
+                    {activeTab !== 3 && (
+                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                            <CardBody p={5}>
+                                <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4} alignItems="flex-end">
+                                    <InputGroup>
+                                        <InputLeftElement><Icon as={FaSearch} color="gray.400" /></InputLeftElement>
+                                        <Input
+                                            placeholder="Search client, site, operative..."
+                                            value={search}
+                                            onChange={e => setSearch(e.target.value)}
+                                            borderRadius="xl"
+                                            bg="gray.50"
+                                        />
+                                    </InputGroup>
+                                    <Select placeholder="All Ledger Types" value={filterLedger} onChange={e => setFilterLedger(e.target.value)} borderRadius="xl" bg="gray.50">
+                                        <option value="Full Day">Full Day</option>
+                                        <option value="Half Day">Half Day</option>
+                                    </Select>
+                                    <Input type="date" placeholder="From Date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} borderRadius="xl" bg="gray.50" />
+                                    <Input type="date" placeholder="To Date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} borderRadius="xl" bg="gray.50" />
+                                </SimpleGrid>
+                            </CardBody>
+                        </Card>
+                    )}
 
-                    {/* ── Table ── */}
-                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                        {/* Legend */}
-                        <Box px={6} pt={4} pb={2}>
-                            <HStack spacing={4}>
-                                <Text fontSize="xs" fontWeight="bold" color="gray.500">LEGEND:</Text>
-                                <HStack spacing={1}>
-                                    <Box w={3} h={3} bg="green.300" borderRadius="sm" />
-                                    <Text fontSize="xs" color="gray.600">Full Day Visit</Text>
-                                </HStack>
-                                <HStack spacing={1}>
-                                    <Box w={3} h={3} bg="orange.300" borderRadius="sm" />
-                                    <Text fontSize="xs" color="gray.600">Half Day Visit</Text>
-                                </HStack>
-                                <HStack spacing={1}>
-                                    <Box w={3} h={3} bg="blue.400" borderRadius="sm" />
-                                    <Text fontSize="xs" color="gray.600">Month Contract</Text>
-                                </HStack>
-                                <HStack spacing={1}>
-                                    <Box w={3} h={3} bg="red.400" borderRadius="sm" />
-                                    <Text fontSize="xs" color="gray.600">Topography Survey</Text>
-                                </HStack>
-                                <HStack spacing={1}>
-                                    <Box w={3} h={3} bg="purple.400" borderRadius="sm" />
-                                    <Text fontSize="xs" color="gray.600">Point Marking</Text>
-                                </HStack>
-                                <Text fontSize="xs" color="gray.400" ml="auto">{groupedGroups.length} entries listed</Text>
-                            </HStack>
-                        </Box>
-                        <Divider />
-                        <CardBody p={0}>
-                            {loading ? (
-                                <Center py={16}><Spinner size="xl" color="blue.500" thickness="4px" /></Center>
-                            ) : groupedGroups.length === 0 ? (
-                                <Center py={16}>
-                                    <VStack spacing={3}>
-                                        <Icon as={FaFileInvoiceDollar} w={12} h={12} color="gray.200" />
-                                        <Text color="gray.400" fontSize="lg">No schedules found</Text>
-                                        <Text color="gray.300" fontSize="sm">Try adjusting your filters or date range</Text>
-                                    </VStack>
-                                </Center>
+                    {/* ── Table & Payment Reminder View ── */}
+                    {activeTab === 3 ? (
+                        <VStack align="stretch" spacing={5}>
+                            {/* Top Control Bar: Company Selector on Top-Left */}
+                            <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="purple.100" bg="purple.50/30">
+                                <CardBody p={4}>
+                                    <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
+                                        {/* Top Left: Our Company Selector */}
+                                        <HStack spacing={3}>
+                                            <Box p={2.5} bg="purple.500" color="white" borderRadius="xl" boxShadow="sm">
+                                                <Icon as={FaBuilding} w={5} h={5} />
+                                            </Box>
+                                            <VStack align="start" spacing={0}>
+                                                <Text fontSize="xs" fontWeight="bold" color="purple.700" textTransform="uppercase" letterSpacing="wider">
+                                                    Filter By Our Company
+                                                </Text>
+                                                <Select
+                                                    size="sm"
+                                                    w={{ base: "full", sm: "300px" }}
+                                                    bg="white"
+                                                    borderRadius="xl"
+                                                    border="2px solid"
+                                                    borderColor="purple.200"
+                                                    fontWeight="bold"
+                                                    color="purple.900"
+                                                    value={reminderCompanyId}
+                                                    onChange={(e) => setReminderCompanyId(e.target.value)}
+                                                >
+                                                    <option value="">All Our Companies</option>
+                                                    {companies.map(c => (
+                                                        <option key={c._id} value={c._id}>{c.companyName}</option>
+                                                    ))}
+                                                </Select>
+                                            </VStack>
+                                        </HStack>
+
+                                        {/* Right: Search Client / Site / Invoice */}
+                                        <InputGroup size="sm" maxW="320px">
+                                            <InputLeftElement pointerEvents="none"><Icon as={FaSearch} color="purple.400" /></InputLeftElement>
+                                            <Input
+                                                placeholder="Search client, site, invoice..."
+                                                bg="white"
+                                                borderRadius="xl"
+                                                border="1px solid"
+                                                borderColor="purple.200"
+                                                value={reminderSearch}
+                                                onChange={(e) => setReminderSearch(e.target.value)}
+                                            />
+                                        </InputGroup>
+                                    </Flex>
+                                </CardBody>
+                            </Card>
+
+                            {/* Clients & Invoices View */}
+                            {reminderData.length === 0 ? (
+                                <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                                    <CardBody p={12} textAlign="center">
+                                        <VStack spacing={3}>
+                                            <Icon as={FaFileInvoiceDollar} w={12} h={12} color="purple.300" />
+                                            <Text fontWeight="bold" color="gray.600" fontSize="lg">No Invoices Found for Payment Reminder</Text>
+                                            <Text fontSize="sm" color="gray.400">
+                                                {reminderCompanyId ? 'No generated invoices found for the selected company.' : 'Generate proforma or final invoices to see them here.'}
+                                            </Text>
+                                        </VStack>
+                                    </CardBody>
+                                </Card>
                             ) : (
-                                <TableContainer overflow="hidden" w="full">
-                                    <Table variant="simple" size="sm" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
-                                        <Thead bg="gray.50">
-                                            <Tr>
-                                                <Th py={4} color="gray.500" fontSize="10px" w="50px">#</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">CLIENT NAME</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">SCHEDULE TYPE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px" textAlign="center" w="160px">SITES & DATA</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px" w="150px">BILL STATUS</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px" textAlign="right" w="150px">ACTIONS</Th>
-                                            </Tr>
-                                        </Thead>
-                                        <Tbody>
-                                            {groupedGroups.map((group, idx) => {
-                                                const totalCount = group.entries.length;
-                                                const completedCount = group.entries.filter(e => e.invoiceStatus === 'Completed').length;
-                                                const pendingCount = totalCount - completedCount;
-                                                const isPending = group.status === 'Pending';
-                                                const siteCount = group.siteGroups ? group.siteGroups.length : 1;
-                                                
-                                                const groupClientId = String(group.client?._id || group.client);
-                                                const isDifferentClient = activeSelectedClientId && groupClientId !== activeSelectedClientId;
+                                <VStack align="stretch" spacing={4}>
+                                    {reminderData.map((group) => {
+                                        const isExpanded = expandedClientIds.includes(group.clientId);
+                                        const totalAmount = group.sites.reduce((sum, s) => {
+                                            const amt = s.invoiceDetails?.totalAmount || s.grandTotal || s.totalAmount || 0;
+                                            return sum + Number(amt);
+                                        }, 0);
 
-                                                // Color variables for main row based on schedule type
-                                                const { bg, border, hoverBg } = rowStyle(group);
+                                        const toggleExpand = () => {
+                                            setExpandedClientIds(prev =>
+                                                prev.includes(group.clientId)
+                                                    ? prev.filter(id => id !== group.clientId)
+                                                    : [...prev, group.clientId]
+                                            );
+                                        };
 
-                                                return (
-                                                    <Tr
-                                                        key={group.groupId}
-                                                        bg={bg}
-                                                        opacity={isDifferentClient ? 0.35 : 1}
-                                                        filter={isDifferentClient ? 'blur(1.2px) grayscale(70%)' : 'none'}
-                                                        pointerEvents={isDifferentClient ? 'none' : 'auto'}
-                                                        _hover={{ bg: isDifferentClient ? bg : hoverBg, transition: 'background 0.15s' }}
-                                                        borderLeft="4px solid"
-                                                        borderLeftColor={isDifferentClient ? 'gray.300' : border}
-                                                        cursor={isDifferentClient ? 'not-allowed' : 'pointer'}
-                                                        onClick={() => {
-                                                            if (isDifferentClient) return;
-                                                            setSelectedGroup(group);
-                                                            setSelectedEntryForDocs(null);
-                                                        }}
-                                                    >
-                                                        <Td py={4} color="gray.400" fontSize="xs">
-                                                            {idx + 1}
-                                                        </Td>
-                                                        <Td py={4}>
-                                                            <HStack spacing={2}>
-                                                                <Icon as={FaBuilding} color="blue.500" w={4} h={4} />
-                                                                <VStack align="start" spacing={0}>
-                                                                    <Text fontSize="sm" fontWeight="black" color="gray.800">
-                                                                        {group.client?.clientName || '—'}
+                                        return (
+                                            <Card
+                                                key={group.clientId}
+                                                borderRadius="2xl"
+                                                shadow="sm"
+                                                border="1px solid"
+                                                borderColor={isExpanded ? 'purple.300' : 'gray.200'}
+                                                overflow="hidden"
+                                                transition="all 0.2s"
+                                            >
+                                                {/* Level 1: Client Header (Clickable) */}
+                                                <CardBody
+                                                    p={5}
+                                                    bg={isExpanded ? 'purple.50/50' : 'white'}
+                                                    cursor="pointer"
+                                                    onClick={toggleExpand}
+                                                    _hover={{ bg: 'purple.50/30' }}
+                                                >
+                                                    <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+                                                        <HStack spacing={4}>
+                                                            <Box p={3} bg="purple.100" color="purple.700" borderRadius="2xl">
+                                                                <Icon as={FaUser} w={5} h={5} />
+                                                            </Box>
+                                                            <VStack align="start" spacing={0}>
+                                                                <HStack spacing={2}>
+                                                                    <Text fontSize="md" fontWeight="800" color="gray.800">
+                                                                        {group.clientName}
                                                                     </Text>
-                                                                    {group.client?.clientAddress && (
-                                                                        <Text fontSize="10px" color="gray.500" noOfLines={1}>
-                                                                            {group.client.clientAddress}
-                                                                        </Text>
-                                                                    )}
-                                                                </VStack>
-                                                            </HStack>
-                                                        </Td>
-                                                        <Td py={4}>
-                                                            <Wrap spacing={1}>
-                                                                {group.uniqueTypes?.map(t => (
-                                                                    <Tag
-                                                                        key={t}
-                                                                        size="sm"
-                                                                        colorScheme={t.includes('Topography') ? 'red' : t.includes('Month') ? 'blue' : t.includes('Point') ? 'purple' : 'green'}
-                                                                        variant="subtle"
-                                                                        fontSize="10px"
-                                                                        fontWeight="bold"
-                                                                        borderRadius="full"
-                                                                    >
-                                                                        {t}
-                                                                    </Tag>
-                                                                ))}
-                                                            </Wrap>
-                                                        </Td>
-                                                        <Td py={4} textAlign="center">
-                                                            <Badge colorScheme="teal" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="11px">
-                                                                <Icon as={FaMapMarkerAlt} mr={1} w={3} h={3} />
-                                                                {siteCount} {siteCount === 1 ? 'Site' : 'Sites'} ({totalCount} entries)
-                                                            </Badge>
-                                                        </Td>
-                                                        <Td py={4}>
-                                                            <Badge
-                                                                colorScheme={group.invoiceId ? 'purple' : isPending ? 'orange' : 'green'}
-                                                                variant="solid"
-                                                                borderRadius="full"
-                                                                px={3}
-                                                                py={1}
-                                                                fontSize="10px"
-                                                                fontWeight="black"
+                                                                    <Badge colorScheme="purple" borderRadius="full" px={2.5} py={0.5} fontSize="xs">
+                                                                        {group.sites.length} {group.sites.length === 1 ? 'Invoice' : 'Invoices'}
+                                                                    </Badge>
+                                                                </HStack>
+                                                                {group.clientObj?.phone && (
+                                                                    <Text fontSize="xs" color="gray.500">
+                                                                        📞 {group.clientObj.phone} {group.clientObj?.email ? `• ✉️ ${group.clientObj.email}` : ''}
+                                                                    </Text>
+                                                                )}
+                                                            </VStack>
+                                                        </HStack>
+
+                                                        <HStack spacing={4}>
+                                                            <VStack align="end" spacing={0}>
+                                                                <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase">Total Billed</Text>
+                                                                <Text fontSize="md" fontWeight="black" color="purple.700">
+                                                                    ₹{totalAmount.toLocaleString('en-IN')}
+                                                                </Text>
+                                                            </VStack>
+                                                            <Button
+                                                                size="sm"
+                                                                colorScheme="purple"
+                                                                variant={isExpanded ? 'solid' : 'outline'}
+                                                                borderRadius="xl"
                                                             >
-                                                                {group.invoiceId ? `📄 ${group.invoiceId}` : isPending ? '⏳ Pending' : '✅ Completed'}
-                                                            </Badge>
-                                                        </Td>
-                                                        <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
-                                                            <HStack justify="flex-end" spacing={2}>
-                                                                {activeTab === 2 && (
-                                                                    <Button size="xs" colorScheme="gray" variant="solid" onClick={() => handleStatusMove(group, 'Closed')}>Mark Closed</Button>
-                                                                )}
-                                                                {activeTab === 3 && (
-                                                                    <Badge colorScheme="gray">Archived</Badge>
-                                                                )}
-                                                                {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
-                                                                    <HStack spacing={1}>
-                                                                        <Tooltip label="Preview Invoice" placement="top">
-                                                                            <IconButton
-                                                                                icon={<FaEye />}
-                                                                                size="sm"
-                                                                                colorScheme="purple"
-                                                                                variant="solid"
-                                                                                borderRadius="full"
-                                                                                aria-label="Preview Invoice"
-                                                                                onClick={() => handlePreviewExistingPdf(
-                                                                                    group.finalInvoicePdf || group.proformaInvoicePdf,
-                                                                                    group.finalInvoiceId || group.proformaInvoiceId,
-                                                                                    group.finalInvoicePdf ? 'Final Invoice' : 'Proforma Invoice'
-                                                                                )}
-                                                                            />
-                                                                        </Tooltip>
-                                                                        <Tooltip label="Open PDF in New Tab" placement="top">
-                                                                            <IconButton
-                                                                                as="a"
-                                                                                href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
-                                                                                target="_blank"
-                                                                                icon={<FaFilePdf />}
-                                                                                size="sm"
-                                                                                colorScheme="red"
-                                                                                variant="ghost"
-                                                                                borderRadius="full"
-                                                                                aria-label="Open PDF"
-                                                                            />
-                                                                        </Tooltip>
-                                                                    </HStack>
-                                                                )}
-                                                                <IconButton
-                                                                    aria-label="View Details"
-                                                                    icon={<FaListUl />}
-                                                                    size="sm"
-                                                                    colorScheme="blue"
-                                                                    variant="ghost"
-                                                                    borderRadius="full"
-                                                                    onClick={() => {
-                                                                        setSelectedGroup(group);
-                                                                        setSelectedEntryForDocs(null);
-                                                                    }}
-                                                                />
-                                                            </HStack>
-                                                        </Td>
-                                                    </Tr>
-                                                );
-                                            })}
-                                        </Tbody>
-                                    </Table>
-                                </TableContainer>
+                                                                {isExpanded ? 'Hide Sites & Invoices' : 'View Sites & Invoices'}
+                                                            </Button>
+                                                        </HStack>
+                                                    </Flex>
+                                                </CardBody>
+
+                                                {/* Level 2: Site Rows Table (Shown when Client is clicked/expanded) */}
+                                                {isExpanded && (
+                                                    <>
+                                                        <Divider />
+                                                        <TableContainer bg="white">
+                                                            <Table size="sm" variant="simple">
+                                                                <Thead bg="gray.50">
+                                                                    <Tr>
+                                                                        <Th py={3} color="gray.500" fontSize="10px">SITE NAME</Th>
+                                                                        <Th py={3} color="gray.500" fontSize="10px">INVOICE NO.</Th>
+                                                                        <Th py={3} color="gray.500" fontSize="10px">BILL DATE</Th>
+                                                                        <Th py={3} color="gray.500" fontSize="10px">TYPE</Th>
+                                                                        <Th py={3} color="gray.500" fontSize="10px" textAlign="right">AMOUNT</Th>
+                                                                        <Th py={3} color="gray.500" fontSize="10px" textAlign="right">ACTIONS</Th>
+                                                                    </Tr>
+                                                                </Thead>
+                                                                <Tbody>
+                                                                    {group.sites.map((siteEntry) => {
+                                                                        const invNo = siteEntry.finalInvoiceId || siteEntry.proformaInvoiceId || siteEntry.invoiceDetails?.invoiceId || '—';
+                                                                        const billDate = formatDate(siteEntry.invoiceDetails?.generatedAt || siteEntry.invoiceDetails?.invoiceDate || siteEntry.createdAt);
+                                                                        const amount = siteEntry.invoiceDetails?.totalAmount || siteEntry.grandTotal || siteEntry.totalAmount || 0;
+                                                                        const isProforma = siteEntry.proformaInvoiceId || siteEntry.invoiceType === 'proforma' || siteEntry.invoiceStatus === 'Proforma';
+                                                                        const pdfUrl = siteEntry.finalInvoicePdf || siteEntry.proformaInvoicePdf;
+
+                                                                        return (
+                                                                            <Tr key={siteEntry._id} _hover={{ bg: 'purple.50/30' }}>
+                                                                                <Td py={3}>
+                                                                                    <HStack spacing={2}>
+                                                                                        <Icon as={FaMapMarkerAlt} color="teal.500" />
+                                                                                        <Text fontWeight="bold" fontSize="xs" color="gray.800">
+                                                                                            {siteEntry.site?.siteName || '—'}
+                                                                                        </Text>
+                                                                                    </HStack>
+                                                                                </Td>
+                                                                                <Td py={3}>
+                                                                                    <Text fontWeight="extrabold" fontSize="xs" color="purple.700">
+                                                                                        {invNo}
+                                                                                    </Text>
+                                                                                </Td>
+                                                                                <Td py={3}>
+                                                                                    <HStack spacing={1}>
+                                                                                        <Icon as={FaCalendarAlt} color="gray.400" w={3} h={3} />
+                                                                                        <Text fontSize="xs" color="gray.700" fontWeight="semibold">
+                                                                                            {billDate}
+                                                                                        </Text>
+                                                                                    </HStack>
+                                                                                </Td>
+                                                                                <Td py={3}>
+                                                                                    <Badge
+                                                                                        colorScheme={isProforma ? 'blue' : 'green'}
+                                                                                        borderRadius="md"
+                                                                                        px={2}
+                                                                                        py={0.5}
+                                                                                        fontSize="10px"
+                                                                                    >
+                                                                                        {isProforma ? 'Proforma' : 'Final Invoice'}
+                                                                                    </Badge>
+                                                                                </Td>
+                                                                                <Td py={3} textAlign="right">
+                                                                                    <Text fontWeight="extrabold" fontSize="xs" color="gray.800">
+                                                                                        ₹{Number(amount).toLocaleString('en-IN')}
+                                                                                    </Text>
+                                                                                </Td>
+                                                                                <Td py={3} textAlign="right">
+                                                                                    <HStack spacing={2} justify="flex-end">
+                                                                                        <Button
+                                                                                            size="xs"
+                                                                                            bg="#25D366"
+                                                                                            color="white"
+                                                                                            _hover={{ bg: '#128C7E' }}
+                                                                                            leftIcon={<FaWhatsapp />}
+                                                                                            borderRadius="lg"
+                                                                                            onClick={() => handleSendWhatsappReminder(siteEntry)}
+                                                                                            title="Send WhatsApp Payment Reminder"
+                                                                                        >
+                                                                                            WhatsApp Reminder
+                                                                                        </Button>
+                                                                                        {pdfUrl && (
+                                                                                            <IconButton
+                                                                                                icon={<FaEye />}
+                                                                                                size="xs"
+                                                                                                colorScheme="purple"
+                                                                                                variant="ghost"
+                                                                                                borderRadius="md"
+                                                                                                aria-label="Preview Invoice"
+                                                                                                title="Preview Invoice"
+                                                                                                onClick={() => handlePreviewExistingPdf(
+                                                                                                    pdfUrl,
+                                                                                                    invNo,
+                                                                                                    isProforma ? 'Proforma Invoice' : 'Final Invoice'
+                                                                                                )}
+                                                                                            />
+                                                                                        )}
+                                                                                    </HStack>
+                                                                                </Td>
+                                                                            </Tr>
+                                                                        );
+                                                                    })}
+                                                                </Tbody>
+                                                            </Table>
+                                                        </TableContainer>
+                                                    </>
+                                                )}
+                                            </Card>
+                                        );
+                                    })}
+                                </VStack>
                             )}
-                        </CardBody>
-                    </Card>
+                        </VStack>
+                    ) : (
+                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                            {/* Legend */}
+                            <Box px={6} pt={4} pb={2}>
+                                <HStack spacing={4}>
+                                    <Text fontSize="xs" fontWeight="bold" color="gray.500">LEGEND:</Text>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="green.300" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Full Day Visit</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="orange.300" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Half Day Visit</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="blue.400" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Month Contract</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="red.400" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Topography Survey</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="purple.400" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Point Marking</Text>
+                                    </HStack>
+                                    <Text fontSize="xs" color="gray.400" ml="auto">{groupedGroups.length} entries listed</Text>
+                                </HStack>
+                            </Box>
+                            <Divider />
+                            <CardBody p={0}>
+                                {loading ? (
+                                    <Center py={16}><Spinner size="xl" color="blue.500" thickness="4px" /></Center>
+                                ) : groupedGroups.length === 0 ? (
+                                    <Center py={16}>
+                                        <VStack spacing={3}>
+                                            <Icon as={FaFileInvoiceDollar} w={12} h={12} color="gray.200" />
+                                            <Text color="gray.400" fontSize="lg">No schedules found</Text>
+                                            <Text color="gray.300" fontSize="sm">Try adjusting your filters or date range</Text>
+                                        </VStack>
+                                    </Center>
+                                ) : (
+                                    <TableContainer overflow="hidden" w="full">
+                                        <Table variant="simple" size="sm" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                                            <Thead bg="gray.50">
+                                                <Tr>
+                                                    <Th py={4} color="gray.500" fontSize="10px" w="50px">#</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">CLIENT NAME</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">SCHEDULE TYPE</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px" textAlign="center" w="160px">SITES & DATA</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px" w="150px">BILL STATUS</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px" textAlign="right" w="150px">ACTIONS</Th>
+                                                </Tr>
+                                            </Thead>
+                                            <Tbody>
+                                                {groupedGroups.map((group, idx) => {
+                                                    const totalCount = group.entries.length;
+                                                    const completedCount = group.entries.filter(e => e.invoiceStatus === 'Completed').length;
+                                                    const pendingCount = totalCount - completedCount;
+                                                    const isPending = group.status === 'Pending';
+                                                    const siteCount = group.siteGroups ? group.siteGroups.length : 1;
+                                                    
+                                                    const groupClientId = String(group.client?._id || group.client);
+                                                    const isDifferentClient = activeSelectedClientId && groupClientId !== activeSelectedClientId;
+
+                                                    // Color variables for main row based on schedule type
+                                                    const { bg, border, hoverBg } = rowStyle(group);
+
+                                                    return (
+                                                        <Tr
+                                                            key={group.groupId}
+                                                            bg={bg}
+                                                            opacity={isDifferentClient ? 0.35 : 1}
+                                                            filter={isDifferentClient ? 'blur(1.2px) grayscale(70%)' : 'none'}
+                                                            pointerEvents={isDifferentClient ? 'none' : 'auto'}
+                                                            _hover={{ bg: isDifferentClient ? bg : hoverBg, transition: 'background 0.15s' }}
+                                                            borderLeft="4px solid"
+                                                            borderLeftColor={isDifferentClient ? 'gray.300' : border}
+                                                            cursor={isDifferentClient ? 'not-allowed' : 'pointer'}
+                                                            onClick={() => {
+                                                                if (isDifferentClient) return;
+                                                                setSelectedGroup(group);
+                                                                setSelectedEntryForDocs(null);
+                                                            }}
+                                                        >
+                                                            <Td py={4} color="gray.400" fontSize="xs">
+                                                                {idx + 1}
+                                                            </Td>
+                                                            <Td py={4}>
+                                                                <HStack spacing={2}>
+                                                                    <Icon as={FaBuilding} color="blue.500" w={4} h={4} />
+                                                                    <VStack align="start" spacing={0}>
+                                                                        <Text fontSize="sm" fontWeight="black" color="gray.800">
+                                                                            {group.client?.clientName || '—'}
+                                                                        </Text>
+                                                                        {group.client?.clientAddress && (
+                                                                            <Text fontSize="10px" color="gray.500" noOfLines={1}>
+                                                                                {group.client.clientAddress}
+                                                                            </Text>
+                                                                        )}
+                                                                    </VStack>
+                                                                </HStack>
+                                                            </Td>
+                                                            <Td py={4}>
+                                                                <Wrap spacing={1}>
+                                                                    {group.uniqueTypes?.map(t => (
+                                                                        <Tag
+                                                                            key={t}
+                                                                            size="sm"
+                                                                            colorScheme={t.includes('Topography') ? 'red' : t.includes('Month') ? 'blue' : t.includes('Point') ? 'purple' : 'green'}
+                                                                            variant="subtle"
+                                                                            fontSize="10px"
+                                                                            fontWeight="bold"
+                                                                            borderRadius="full"
+                                                                        >
+                                                                            {t}
+                                                                        </Tag>
+                                                                    ))}
+                                                                </Wrap>
+                                                            </Td>
+                                                            <Td py={4} textAlign="center">
+                                                                <Badge colorScheme="teal" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="11px">
+                                                                    <Icon as={FaMapMarkerAlt} mr={1} w={3} h={3} />
+                                                                    {siteCount} {siteCount === 1 ? 'Site' : 'Sites'} ({totalCount} entries)
+                                                                </Badge>
+                                                            </Td>
+                                                            <Td py={4}>
+                                                                <Badge
+                                                                    colorScheme={group.invoiceId ? 'purple' : isPending ? 'orange' : 'green'}
+                                                                    variant="solid"
+                                                                    borderRadius="full"
+                                                                    px={3}
+                                                                    py={1}
+                                                                    fontSize="10px"
+                                                                    fontWeight="black"
+                                                                >
+                                                                    {group.invoiceId ? `📄 ${group.invoiceId}` : isPending ? '⏳ Pending' : '✅ Completed'}
+                                                                </Badge>
+                                                            </Td>
+                                                            <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
+                                                                <HStack justify="flex-end" spacing={2}>
+                                                                    {activeTab === 2 && (
+                                                                        <Button size="xs" colorScheme="gray" variant="solid" onClick={() => handleStatusMove(group, 'Closed')}>Mark Closed</Button>
+                                                                    )}
+                                                                    {activeTab === 4 && (
+                                                                        <Badge colorScheme="gray">Archived</Badge>
+                                                                    )}
+                                                                    {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
+                                                                        <HStack spacing={1}>
+                                                                            <Tooltip label="Preview Invoice" placement="top">
+                                                                                <IconButton
+                                                                                    icon={<FaEye />}
+                                                                                    size="sm"
+                                                                                    colorScheme="purple"
+                                                                                    variant="solid"
+                                                                                    borderRadius="full"
+                                                                                    aria-label="Preview Invoice"
+                                                                                    onClick={() => handlePreviewExistingPdf(
+                                                                                        group.finalInvoicePdf || group.proformaInvoicePdf,
+                                                                                        group.finalInvoiceId || group.proformaInvoiceId,
+                                                                                        group.finalInvoicePdf ? 'Final Invoice' : 'Proforma Invoice'
+                                                                                    )}
+                                                                                />
+                                                                            </Tooltip>
+                                                                            <Tooltip label="Open PDF in New Tab" placement="top">
+                                                                                <IconButton
+                                                                                    as="a"
+                                                                                    href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
+                                                                                    target="_blank"
+                                                                                    icon={<FaFilePdf />}
+                                                                                    size="sm"
+                                                                                    colorScheme="red"
+                                                                                    variant="ghost"
+                                                                                    borderRadius="full"
+                                                                                    aria-label="Open PDF"
+                                                                                />
+                                                                            </Tooltip>
+                                                                        </HStack>
+                                                                    )}
+                                                                    <IconButton
+                                                                        aria-label="View Details"
+                                                                        icon={<FaListUl />}
+                                                                        size="sm"
+                                                                        colorScheme="blue"
+                                                                        variant="ghost"
+                                                                        borderRadius="full"
+                                                                        onClick={() => {
+                                                                            setSelectedGroup(group);
+                                                                            setSelectedEntryForDocs(null);
+                                                                        }}
+                                                                    />
+                                                                </HStack>
+                                                            </Td>
+                                                        </Tr>
+                                                    );
+                                                })}
+                                            </Tbody>
+                                        </Table>
+                                    </TableContainer>
+                                )}
+                            </CardBody>
+                        </Card>
+                    )}
                 </VStack>
             </Container>
 

@@ -38,9 +38,27 @@ const AdminProducts = () => {
         try { return JSON.parse(localStorage.getItem(SUBCATEGORIES_STORAGE_KEY) || '{}'); }
         catch { return {}; }
     });
-    const saveSubcategories = (next) => {
+
+    const fetchSubcategories = async () => {
+        try {
+            const res = await api.get('/products/subcategories');
+            if (res.data && res.data.success && res.data.data) {
+                setSubcategories(res.data.data);
+                localStorage.setItem(SUBCATEGORIES_STORAGE_KEY, JSON.stringify(res.data.data));
+            }
+        } catch (err) {
+            console.error('Failed to fetch subcategories from server', err);
+        }
+    };
+
+    const saveSubcategories = async (next) => {
         setSubcategories(next);
         localStorage.setItem(SUBCATEGORIES_STORAGE_KEY, JSON.stringify(next));
+        try {
+            await api.post('/products/subcategories', { subcategories: next });
+        } catch (err) {
+            console.error('Failed to save subcategories to server', err);
+        }
     };
 
     // Subcategory Manager modal (create / edit)
@@ -78,6 +96,23 @@ const AdminProducts = () => {
     const deleteSubcategory = (categoryName, subId) => {
         const updated = (subcategories[categoryName] || []).filter(s => s.id !== subId);
         saveSubcategories({ ...subcategories, [categoryName]: updated });
+    };
+
+    // Subcategory Delete Confirmation Modal State
+    const { isOpen: isSubDeleteOpen, onOpen: onSubDeleteOpen, onClose: onSubDeleteClose } = useDisclosure();
+    const [subToDelete, setSubToDelete] = useState(null); // { categoryName, sub }
+
+    const handleSubDeleteClick = (categoryName, sub) => {
+        setSubToDelete({ categoryName, sub });
+        onSubDeleteOpen();
+    };
+
+    const confirmSubDelete = () => {
+        if (!subToDelete) return;
+        deleteSubcategory(subToDelete.categoryName, subToDelete.sub.id);
+        toast({ title: `Subcategory "${subToDelete.sub.name}" Deleted`, status: "success", duration: 3000 });
+        onSubDeleteClose();
+        setSubToDelete(null);
     };
 
     // Subcategory Viewer modal (browse products in a subcategory)
@@ -209,6 +244,7 @@ const AdminProducts = () => {
 
     useEffect(() => {
         fetchProducts();
+        fetchSubcategories();
     }, [location.pathname]);
 
     const fetchProducts = async (search = '') => {
@@ -667,62 +703,82 @@ const AdminProducts = () => {
                                     </Thead>
                                     <Tbody>
                                         {/* ── Subcategory rows (appear first, styled with premium highlight) ── */}
-                                        {catSubs.map(sub => (
-                                            <Tr
-                                                key={`sub-${sub.id}`}
-                                                bgGradient="linear(to-r, purple.50, indigo.50/40)"
-                                                borderLeft="4px solid"
-                                                borderLeftColor="purple.500"
-                                                _hover={{
-                                                    bgGradient: "linear(to-r, purple.100, indigo.100/60)",
-                                                    shadow: "inner"
-                                                }}
-                                                transition="all 0.2s ease"
-                                                cursor="pointer"
-                                                onClick={() => openSubViewer(categoryName, sub)}
-                                            >
-                                                {/* Product Info — shows highlighted subcategory name & count */}
-                                                <Td py={3}>
-                                                    <Flex align="center" gap={3}>
-                                                        <Box
-                                                            p={2.5}
-                                                            bgGradient="linear(to-br, purple.500, indigo.600)"
-                                                            color="white"
-                                                            borderRadius="xl"
-                                                            boxShadow="0 2px 6px rgba(128, 90, 213, 0.3)"
-                                                            flexShrink={0}
-                                                        >
-                                                            <FiLayers size={18} />
-                                                        </Box>
-                                                        <Stack spacing={0.5}>
-                                                            <HStack spacing={2} align="center">
-                                                                <Text fontWeight="800" color="purple.900" fontSize="sm" letterSpacing="tight">
-                                                                    {sub.name}
-                                                                </Text>
-                                                                <Badge
-                                                                    colorScheme="purple"
-                                                                    variant="solid"
-                                                                    borderRadius="full"
-                                                                    fontSize="10px"
-                                                                    px={2.5}
-                                                                    py={0.5}
-                                                                    fontWeight="extrabold"
+                                        {catSubs.map(sub => {
+                                            // Find the first assigned product that has a photo/image
+                                            const assignedProducts = list.filter(p => sub.productIds.includes(p._id || p.id));
+                                            const firstProductWithImage = assignedProducts.find(p => (p.localImages && p.localImages.length > 0) || (p.images && p.images.length > 0) || (p.photos && p.photos.length > 0));
+                                            const subImgPath = firstProductWithImage ? (firstProductWithImage.localImages?.[0] || firstProductWithImage.images?.[0] || firstProductWithImage.photos?.[0]) : null;
+
+                                            return (
+                                                <Tr
+                                                    key={`sub-${sub.id}`}
+                                                    bgGradient="linear(to-r, purple.50, indigo.50/40)"
+                                                    borderLeft="4px solid"
+                                                    borderLeftColor="purple.500"
+                                                    _hover={{
+                                                        bgGradient: "linear(to-r, purple.100, indigo.100/60)",
+                                                        shadow: "inner"
+                                                    }}
+                                                    transition="all 0.2s ease"
+                                                    cursor="pointer"
+                                                    onClick={() => openSubViewer(categoryName, sub)}
+                                                >
+                                                    {/* Product Info — shows subcategory thumbnail image & name */}
+                                                    <Td py={3}>
+                                                        <Flex align="center" gap={3}>
+                                                            {subImgPath ? (
+                                                                <Image
+                                                                    src={getImageUrl(subImgPath)}
+                                                                    boxSize="40px"
+                                                                    objectFit="contain"
+                                                                    borderRadius="md"
+                                                                    bg="white"
                                                                     boxShadow="sm"
+                                                                    border="1px solid"
+                                                                    borderColor="purple.200"
+                                                                    fallbackSrc="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><rect width='40' height='40' fill='%23f1f5f9'/></svg>"
+                                                                />
+                                                            ) : (
+                                                                <Box
+                                                                    p={2.5}
+                                                                    bgGradient="linear(to-br, purple.500, indigo.600)"
+                                                                    color="white"
+                                                                    borderRadius="xl"
+                                                                    boxShadow="0 2px 6px rgba(128, 90, 213, 0.3)"
+                                                                    flexShrink={0}
                                                                 >
-                                                                    {sub.productIds.length} {sub.productIds.length === 1 ? 'PRODUCT' : 'PRODUCTS'}
-                                                                </Badge>
-                                                            </HStack>
-                                                            <HStack spacing={1} align="center">
-                                                                <Badge variant="outline" colorScheme="purple" fontSize="9px" px={1.5} py={0} borderRadius="md" fontWeight="bold">
-                                                                    SUBCATEGORY
-                                                                </Badge>
-                                                                <Text fontSize="10px" color="purple.600" fontWeight="600">
-                                                                    • Click to view assigned products
-                                                                </Text>
-                                                            </HStack>
-                                                        </Stack>
-                                                    </Flex>
-                                                </Td>
+                                                                    <FiLayers size={18} />
+                                                                </Box>
+                                                            )}
+                                                            <Stack spacing={0.5}>
+                                                                <HStack spacing={2} align="center">
+                                                                    <Text fontWeight="800" color="purple.900" fontSize="sm" letterSpacing="tight">
+                                                                        {sub.name}
+                                                                    </Text>
+                                                                    <Badge
+                                                                        colorScheme="purple"
+                                                                        variant="solid"
+                                                                        borderRadius="full"
+                                                                        fontSize="10px"
+                                                                        px={2.5}
+                                                                        py={0.5}
+                                                                        fontWeight="extrabold"
+                                                                        boxShadow="sm"
+                                                                    >
+                                                                        {sub.productIds.length} {sub.productIds.length === 1 ? 'PRODUCT' : 'PRODUCTS'}
+                                                                    </Badge>
+                                                                </HStack>
+                                                                <HStack spacing={1} align="center">
+                                                                    <Badge variant="outline" colorScheme="purple" fontSize="9px" px={1.5} py={0} borderRadius="md" fontWeight="bold">
+                                                                        SUBCATEGORY
+                                                                    </Badge>
+                                                                    <Text fontSize="10px" color="purple.600" fontWeight="600">
+                                                                        • Click to view assigned products
+                                                                    </Text>
+                                                                </HStack>
+                                                            </Stack>
+                                                        </Flex>
+                                                    </Td>
                                                 {/* All data columns empty for subcategory rows */}
                                                 {canShowVendors && <Td />}
                                                 {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && <Td />}
@@ -755,12 +811,13 @@ const AdminProducts = () => {
                                                             _hover={{ color: 'white', bg: 'red.600' }}
                                                             isDisabled={!canWrite}
                                                             borderRadius="lg"
-                                                            onClick={() => deleteSubcategory(categoryName, sub.id)}
+                                                            onClick={() => handleSubDeleteClick(categoryName, sub)}
                                                         />
                                                     </Stack>
                                                 </Td>
                                             </Tr>
-                                        ))}
+                                        );
+                                    })}
 
                                         {/* ── Standalone product rows (not in any subcategory) ── */}
                                         {standaloneProducts.map((product) => (
@@ -1507,6 +1564,49 @@ const AdminProducts = () => {
                         </Button>
                         <Button colorScheme="red" onClick={confirmDelete} isLoading={isDeleting}>
                             Delete Product
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* Subcategory Deletion Confirmation Modal */}
+            <Modal isOpen={isSubDeleteOpen} onClose={onSubDeleteClose} isCentered motionPreset="slideInBottom">
+                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.500" />
+                <ModalContent borderRadius="2xl" boxShadow="2xl" overflow="hidden">
+                    <ModalHeader borderBottom="1px solid" borderColor="gray.100" py={4} bg="red.50/50">
+                        <HStack spacing={3}>
+                            <Box p={2} bg="red.100" color="red.600" borderRadius="xl">
+                                <FiTrash2 size={18} />
+                            </Box>
+                            <VStack align="start" spacing={0}>
+                                <Text fontWeight="800" fontSize="md" color="gray.800">
+                                    Delete Subcategory
+                                </Text>
+                                <Text fontSize="xs" color="gray.500">
+                                    Confirm subcategory removal
+                                </Text>
+                            </VStack>
+                        </HStack>
+                    </ModalHeader>
+                    <ModalCloseButton top={4} right={4} />
+                    <ModalBody py={6}>
+                        <VStack align="start" spacing={3}>
+                            <Text color="gray.700" fontSize="sm">
+                                Are you sure you want to delete subcategory <Text as="span" fontWeight="extrabold" color="purple.700">"{subToDelete?.sub?.name}"</Text>?
+                            </Text>
+                            <Box bg="purple.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="purple.100" w="full">
+                                <Text fontSize="xs" color="purple.800" fontWeight="600">
+                                    💡 <b>Note:</b> Assigned products will <b>not</b> be deleted. They will simply return to the main category view.
+                                </Text>
+                            </Box>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" borderTop="1px solid" borderColor="gray.100">
+                        <Button variant="ghost" mr={3} borderRadius="xl" onClick={onSubDeleteClose}>
+                            Cancel
+                        </Button>
+                        <Button colorScheme="red" borderRadius="xl" px={5} onClick={confirmSubDelete}>
+                            Yes, Delete Subcategory
                         </Button>
                     </ModalFooter>
                 </ModalContent>
