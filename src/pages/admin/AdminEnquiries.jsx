@@ -353,7 +353,9 @@ const AdminEnquiries = () => {
                     dealerPrice: dealerPrice,
                     sellingPriceStart: startPrice,
                     sellingPriceEnd: endPrice,
-                    calculatedSellingPrice: i.price || 0
+                    calculatedSellingPrice: i.price || 0,
+                    size: i.size || '',
+                    selectedSizes: Array.isArray(i.selectedSizes) ? i.selectedSizes : []
                 };
             });
 
@@ -393,7 +395,9 @@ const AdminEnquiries = () => {
                     dealerPrice: dealerPrice,
                     sellingPriceStart: startPrice,
                     sellingPriceEnd: endPrice,
-                    calculatedSellingPrice: defaultPrice
+                    calculatedSellingPrice: defaultPrice,
+                    size: p.size || '',
+                    selectedSizes: Array.isArray(p.selectedSizes) ? p.selectedSizes : []
                 };
             });
         }
@@ -447,7 +451,8 @@ const AdminEnquiries = () => {
             dealerPrice: dealerPrice,
             sellingPriceStart: startPrice || 0,
             sellingPriceEnd: endPrice || 0,
-            calculatedSellingPrice: defaultPrice
+            calculatedSellingPrice: defaultPrice,
+            size: (Array.isArray(product.sizes) && product.sizes.length > 0) ? product.sizes[0].size : ''
         };
 
         const updatedItems = [...quoteItems, newItem];
@@ -507,6 +512,13 @@ const AdminEnquiries = () => {
             const quantity = parseFloat(item.quantity) || 0;
             const total = price * quantity;
 
+            let sizeHtml = '';
+            if (Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0) {
+                sizeHtml = item.selectedSizes.map(s => `<div style="color: #6b21a8; font-weight: bold; font-size: 12px; margin-top: 3px; line-height: 1.3;">• Size: ${s.size} &nbsp;&nbsp;(Qty: ${s.quantity || 1})</div>`).join('');
+            } else if (item.size) {
+                sizeHtml = `<div style="color: #6b21a8; font-weight: bold; font-size: 12px; margin-top: 3px; line-height: 1.3;">• Size: ${item.size}</div>`;
+            }
+
             return `
                 <tr>
                     <td style="border: 1px solid black; text-align: center; vertical-align: middle;">${index + 1}</td>
@@ -516,7 +528,8 @@ const AdminEnquiries = () => {
                                 <img src="${imgUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
                             </div>
                             <div style="flex: 1;">
-                                <strong style="text-decoration: underline;">${product?.name || 'Product'}</strong><br/>
+                                <strong style="text-decoration: underline;">${product?.name || 'Product'}</strong>
+                                ${sizeHtml}
                                 <div style="font-size: 13px; margin-top: 5px; color: #333;">
                                     ${specs}
                                 </div>
@@ -704,7 +717,9 @@ const AdminEnquiries = () => {
                     quantity: pQuantity,
                     price: pPrice,
                     gst: pGst,
-                    amount: (pPrice * pQuantity)
+                    amount: (pPrice * pQuantity),
+                    size: i.size || '',
+                    selectedSizes: i.selectedSizes || []
                 };
             }),
             htmlContent,
@@ -1636,9 +1651,80 @@ const AdminEnquiries = () => {
                                                         bg="white"
                                                         fallbackSrc="https://via.placeholder.com/50?text=No+Img"
                                                     />
-                                                    <Text fontWeight="bold" fontSize="sm">
-                                                        {item.productId?.name || 'Product'}
-                                                    </Text>
+                                                    <VStack align="start" spacing={0} w="full">
+                                                        <Text fontWeight="bold" fontSize="sm">
+                                                            {item.productId?.name || item.product?.name || 'Product'}
+                                                        </Text>
+                                                        {Array.isArray(item.productId?.sizes) && item.productId.sizes.length > 0 && (
+                                                            <VStack align="start" spacing={1.5} mt={2} p={2.5} bg="purple.50/80" borderRadius="md" border="1px solid" borderColor="purple.200" w="full">
+                                                                <Text fontSize="10px" fontWeight="bold" color="purple.700" letterSpacing="wider">SELECT SIZES & QUANTITIES:</Text>
+                                                                {item.productId.sizes.map((s, sKey) => {
+                                                                    const selectedArr = Array.isArray(item.selectedSizes) ? item.selectedSizes : [];
+                                                                    const found = selectedArr.find(ss => ss.size === s.size);
+                                                                    const isChecked = !!found;
+                                                                    const currentQty = found ? found.quantity : 1;
+
+                                                                    return (
+                                                                        <Flex key={sKey} align="center" justify="space-between" w="full" gap={2}>
+                                                                            <Checkbox
+                                                                                size="sm"
+                                                                                colorScheme="purple"
+                                                                                isChecked={isChecked}
+                                                                                onChange={(e) => {
+                                                                                    let nextArr = [...selectedArr];
+                                                                                    if (e.target.checked) {
+                                                                                        nextArr.push({ size: s.size, quantity: 1 });
+                                                                                    } else {
+                                                                                        nextArr = nextArr.filter(ss => ss.size !== s.size);
+                                                                                    }
+                                                                                    const accumulatedQty = nextArr.reduce((sum, ss) => sum + (Number(ss.quantity) || 1), 0);
+                                                                                    handleItemChange(idx, 'selectedSizes', nextArr);
+                                                                                    handleItemChange(idx, 'quantity', accumulatedQty > 0 ? accumulatedQty : 1);
+                                                                                }}
+                                                                            >
+                                                                                <Text fontSize="xs" fontWeight="600">{s.size}</Text>
+                                                                            </Checkbox>
+
+                                                                            {isChecked && (
+                                                                                <HStack spacing={1}>
+                                                                                    <Text fontSize="10px" color="gray.600" fontWeight="bold">Qty:</Text>
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        size="xs"
+                                                                                        w="55px"
+                                                                                        min={1}
+                                                                                        onWheel={(e) => e.target.blur()}
+                                                                                        value={currentQty}
+                                                                                        onChange={(e) => {
+                                                                                            const raw = e.target.value;
+                                                                                            const val = raw === '' ? '' : Math.max(0, parseInt(raw) || 0);
+                                                                                            const nextArr = selectedArr.map(ss =>
+                                                                                                ss.size === s.size ? { ...ss, quantity: val } : ss
+                                                                                            );
+                                                                                            const accumulatedQty = nextArr.reduce((sum, ss) => sum + (parseInt(ss.quantity) || 0), 0);
+                                                                                            handleItemChange(idx, 'selectedSizes', nextArr);
+                                                                                            handleItemChange(idx, 'quantity', accumulatedQty);
+                                                                                        }}
+                                                                                        onBlur={(e) => {
+                                                                                            if (!e.target.value || parseInt(e.target.value) < 1) {
+                                                                                                const nextArr = selectedArr.map(ss =>
+                                                                                                    ss.size === s.size ? { ...ss, quantity: 1 } : ss
+                                                                                                );
+                                                                                                const accumulatedQty = nextArr.reduce((sum, ss) => sum + (parseInt(ss.quantity) || 1), 0);
+                                                                                                handleItemChange(idx, 'selectedSizes', nextArr);
+                                                                                                handleItemChange(idx, 'quantity', accumulatedQty);
+                                                                                            }
+                                                                                        }}
+                                                                                        bg="white"
+                                                                                    />
+                                                                                </HStack>
+                                                                            )}
+                                                                        </Flex>
+                                                                    );
+                                                                })}
+                                                            </VStack>
+                                                        )}
+                                                    </VStack>
                                                 </HStack>
                                                 <HStack>
                                                     <Text fontSize="xs" fontWeight="bold">Qty:</Text>
@@ -1647,6 +1733,8 @@ const AdminEnquiries = () => {
                                                         type="number"
                                                         w="60px"
                                                         value={item.quantity}
+                                                        isReadOnly={Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0}
+                                                        bg={Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0 ? "purple.50" : "white"}
                                                         onChange={(e) => handleItemChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
                                                     />
                                                     <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>

@@ -317,6 +317,7 @@ const AdminProducts = () => {
         details: [], // Array of { key: '', value: '' }
         alternativeNames: [], // Array of strings
         stock: '',
+        sizes: [], // Array of { size: '', purchasePrice: '', stock: '' }
         videoLinks: [] // Array of strings
     });
 
@@ -397,6 +398,7 @@ const AdminProducts = () => {
                 details: parseDetails(p.details),
                 alternativeNames: Array.isArray(p.alternativeNames) ? p.alternativeNames : [],
                 stock: p.stock ?? '',
+                sizes: Array.isArray(p.sizes) ? p.sizes : [],
                 videoLinks: Array.isArray(p.videoLinks) ? p.videoLinks : []
             });
             setExistingPhotos((p.localImages && p.localImages.length > 0) ? p.localImages : (p.images || p.photos || []));
@@ -512,11 +514,20 @@ const AdminProducts = () => {
 
         if (formData.dealerPrice !== '' && formData.dealerPrice !== null) data.append('dealerPrice', formData.dealerPrice);
         data.append('alternativeNames', JSON.stringify(formData.alternativeNames));
-        if (formData.stock !== '' && formData.stock !== null) data.append('stock', formData.stock);
 
         // Filter out empty vendors and append as stringified array
         const validVendors = formData.vendors.filter(v => v.name?.trim() || (v.price !== '' && v.price !== null));
         data.append('vendors', JSON.stringify(validVendors));
+
+        // Filter valid sizes and compute total stock if size variants exist
+        const validSizes = (formData.sizes || []).filter(s => s.size?.trim() || s.purchasePrice || s.stock);
+        if (validSizes.length > 0) {
+            const accumulatedStock = validSizes.reduce((sum, s) => sum + (Number(s.stock) || 0), 0);
+            data.append('stock', accumulatedStock);
+        } else if (formData.stock !== '' && formData.stock !== null) {
+            data.append('stock', formData.stock);
+        }
+        data.append('sizes', JSON.stringify(validSizes));
 
         // Convert details array back to Object and stringify for transport
         const detailsMap = {};
@@ -716,7 +727,7 @@ const AdminProducts = () => {
                         isDisabled={!canWrite}
                         onClick={() => {
                             setEditingProduct(null);
-                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', videoLinks: [] });
+                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', sizes: [], videoLinks: [] });
                             setFormErrors({});
                             setExistingPhotos([]);
                             setNewPhotos([]);
@@ -1158,6 +1169,119 @@ const AdminProducts = () => {
                                             />
                                             <FormErrorMessage size="xs">{formErrors.description}</FormErrorMessage>
                                         </FormControl>
+
+                                        {/* Product Sizes / Variations */}
+                                        <Box border="1px dashed" borderColor="purple.200" p={4} borderRadius="xl" bg="purple.50/50" mt={2}>
+                                            <Flex justify="space-between" align="center" mb={3}>
+                                                <HStack spacing={2} color="purple.700">
+                                                    <FiPackage size={16} />
+                                                    <Text fontSize="xs" fontWeight="700" letterSpacing="wider">PRODUCT SIZES & STOCK</Text>
+                                                </HStack>
+                                                <Button
+                                                    size="xs"
+                                                    colorScheme="purple"
+                                                    variant="solid"
+                                                    leftIcon={<FiPlus />}
+                                                    onClick={() => {
+                                                        const newSizes = [...(formData.sizes || []), { size: '', purchasePrice: '', stock: '' }];
+                                                        const accumulatedStock = newSizes.reduce((sum, s) => sum + (Number(s.stock) || 0), 0);
+                                                        setFormData({
+                                                            ...formData,
+                                                            sizes: newSizes,
+                                                            stock: accumulatedStock > 0 ? accumulatedStock : formData.stock
+                                                        });
+                                                    }}
+                                                >
+                                                    + Add Size
+                                                </Button>
+                                            </Flex>
+
+                                            <Stack spacing={3}>
+                                                <AnimatePresence>
+                                                    {(formData.sizes || []).map((sItem, sIdx) => (
+                                                        <motion.div
+                                                            key={sIdx}
+                                                            initial={{ opacity: 0, y: -8 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            exit={{ opacity: 0, height: 0 }}
+                                                        >
+                                                            <Flex gap={2} align="flex-end">
+                                                                <FormControl flex={1.2}>
+                                                                    <FormLabel fontSize="10px" color="gray.600" mb={1} fontWeight="bold">SIZE</FormLabel>
+                                                                    <Input
+                                                                        size="sm"
+                                                                        variant="filled"
+                                                                        bg="white"
+                                                                        placeholder="e.g. 10mm"
+                                                                        value={sItem.size}
+                                                                        onChange={(e) => {
+                                                                            const nextSizes = [...formData.sizes];
+                                                                            nextSizes[sIdx].size = e.target.value;
+                                                                            setFormData({ ...formData, sizes: nextSizes });
+                                                                        }}
+                                                                    />
+                                                                </FormControl>
+                                                                <FormControl flex={1}>
+                                                                    <FormLabel fontSize="10px" color="gray.600" mb={1} fontWeight="bold">PURCHASE PRICE</FormLabel>
+                                                                    <InputGroup size="sm">
+                                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="xs" color="gray.400">₹</Text>} />
+                                                                        <Input
+                                                                            type="number"
+                                                                            onWheel={(e) => e.target.blur()}
+                                                                            min={0}
+                                                                            variant="filled"
+                                                                            bg="white"
+                                                                            placeholder="Price"
+                                                                            value={sItem.purchasePrice}
+                                                                            onChange={(e) => {
+                                                                                const nextSizes = [...formData.sizes];
+                                                                                nextSizes[sIdx].purchasePrice = e.target.value;
+                                                                                setFormData({ ...formData, sizes: nextSizes });
+                                                                            }}
+                                                                        />
+                                                                    </InputGroup>
+                                                                </FormControl>
+                                                                <FormControl flex={1}>
+                                                                    <FormLabel fontSize="10px" color="gray.600" mb={1} fontWeight="bold">STOCK</FormLabel>
+                                                                    <Input
+                                                                        type="number"
+                                                                        onWheel={(e) => e.target.blur()}
+                                                                        min={0}
+                                                                        size="sm"
+                                                                        variant="filled"
+                                                                        bg="white"
+                                                                        placeholder="Qty"
+                                                                        value={sItem.stock}
+                                                                        onChange={(e) => {
+                                                                            const nextSizes = [...formData.sizes];
+                                                                            nextSizes[sIdx].stock = e.target.value;
+                                                                            const accum = nextSizes.reduce((sum, item) => sum + (Number(item.stock) || 0), 0);
+                                                                            setFormData({ ...formData, sizes: nextSizes, stock: accum });
+                                                                        }}
+                                                                    />
+                                                                </FormControl>
+                                                                <IconButton
+                                                                    size="sm"
+                                                                    icon={<FiTrash2 />}
+                                                                    colorScheme="red"
+                                                                    variant="ghost"
+                                                                    onClick={() => {
+                                                                        const nextSizes = formData.sizes.filter((_, idx) => idx !== sIdx);
+                                                                        const accum = nextSizes.reduce((sum, item) => sum + (Number(item.stock) || 0), 0);
+                                                                        setFormData({ ...formData, sizes: nextSizes, stock: accum });
+                                                                    }}
+                                                                />
+                                                            </Flex>
+                                                        </motion.div>
+                                                    ))}
+                                                </AnimatePresence>
+                                                {(!formData.sizes || formData.sizes.length === 0) && (
+                                                    <Text fontSize="xs" color="gray.400" textAlign="center">
+                                                        No size variations added. Click "+ Add Size" if this product has size options.
+                                                    </Text>
+                                                )}
+                                            </Stack>
+                                        </Box>
 
                                         {/* ISI Removed */}
                                     </Stack>
