@@ -4,7 +4,7 @@ import {
     Box, Button, Table, Thead, Tbody, Tr, Th, Td, IconButton, useDisclosure,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, ModalFooter,
     FormControl, FormLabel, FormErrorMessage, Input, Textarea, Checkbox, Stack, useToast, Flex,
-    Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, Select, Spinner,
+    Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, InputRightElement, Select, Spinner,
     HStack, VStack, Tag, TagLabel, TagCloseButton, Divider, CheckboxGroup
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch, FiPlay, FiLayers, FiX } from 'react-icons/fi';
@@ -162,6 +162,94 @@ const AdminProducts = () => {
         setWhatsappProduct(product);
         setWhatsappPhone('');
         onWhatsappOpen();
+    };
+
+    // Global WhatsApp Multiple Product Sending
+    const [selectedProductIds, setSelectedProductIds] = useState(new Set());
+    const [isGlobalWhatsappOpen, setIsGlobalWhatsappOpen] = useState(false);
+    const [isGlobalWhatsappSending, setIsGlobalWhatsappSending] = useState(false);
+    const [isFetchingUser, setIsFetchingUser] = useState(false);
+    const [globalWhatsappForm, setGlobalWhatsappForm] = useState({
+        phone: '',
+        companyName: '',
+        contactPersonName: '',
+        email: ''
+    });
+
+    const toggleProductSelection = (productId) => {
+        setSelectedProductIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(productId)) newSet.delete(productId);
+            else newSet.add(productId);
+            return newSet;
+        });
+    };
+
+    const handleGlobalWhatsappOpen = () => {
+        if (selectedProductIds.size === 0) {
+            toast({ title: 'Select products first', status: 'warning' });
+            return;
+        }
+        setGlobalWhatsappForm({ phone: '', companyName: '', contactPersonName: '', email: '' });
+        setIsGlobalWhatsappOpen(true);
+    };
+
+    const onGlobalWhatsappClose = () => {
+        setIsGlobalWhatsappOpen(false);
+    };
+
+    const fetchUserDetails = async (phoneNum) => {
+        const phone = phoneNum.replace(/\D/g, '');
+        if (phone.length === 10) {
+            setIsFetchingUser(true);
+            try {
+                const res = await api.get(`/auth/phone/${phone}`);
+                const u = res.data?.user || res.data;
+                if (u && (u._id || u.phone)) {
+                    setGlobalWhatsappForm(prev => ({
+                        ...prev,
+                        companyName: u.companyName || prev.companyName,
+                        contactPersonName: u.name || u.contactPersonName || prev.contactPersonName,
+                        email: u.email || prev.email
+                    }));
+                }
+            } catch (_) {
+                // Silent catch
+            } finally {
+                setIsFetchingUser(false);
+            }
+        }
+    };
+
+    const handlePhoneChange = (e) => {
+        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        setGlobalWhatsappForm(prev => ({ ...prev, phone: val }));
+        if (val.length === 10) {
+            fetchUserDetails(val);
+        }
+    };
+
+    const handleSendGlobalWhatsapp = async () => {
+        const phone = globalWhatsappForm.phone.replace(/\D/g, '');
+        if (phone.length < 10) {
+            toast({ title: "Valid 10-digit phone number required", status: "error" });
+            return;
+        }
+        setIsGlobalWhatsappSending(true);
+        try {
+            const selectedProducts = products.filter(p => selectedProductIds.has(p._id || p.id));
+            await api.post('/whatsapp/send-multiple-products', {
+                ...globalWhatsappForm,
+                products: selectedProducts
+            });
+            toast({ title: "Products sent successfully on WhatsApp!", status: "success" });
+            setIsGlobalWhatsappOpen(false);
+            setSelectedProductIds(new Set());
+        } catch (err) {
+            toast({ title: "Failed to send", description: err.response?.data?.error || err.message, status: "error" });
+        } finally {
+            setIsGlobalWhatsappSending(false);
+        }
     };
 
     // Super Admin Check — read from sessionStorage first (auth system stores here), fallback to localStorage
@@ -603,6 +691,21 @@ const AdminProducts = () => {
                         />
                     </InputGroup>
 
+                    {selectedProductIds.size > 0 && (
+                        <Button
+                            leftIcon={<FaWhatsapp />}
+                            colorScheme="whatsapp"
+                            size="md"
+                            borderRadius="xl"
+                            boxShadow="lg"
+                            px={6}
+                            w={{ base: 'full', sm: 'auto' }}
+                            onClick={handleGlobalWhatsappOpen}
+                        >
+                            Send ({selectedProductIds.size}) to WhatsApp
+                        </Button>
+                    )}
+
                     <Button
                         leftIcon={<FiPlus />}
                         size="md"
@@ -693,6 +796,7 @@ const AdminProducts = () => {
                                 <Table variant="simple" minW="600px">
                                     <Thead bg="white">
                                         <Tr borderBottom="2px solid" borderBottomColor="gray.50">
+                                            <Th width="40px" py={4}></Th>
                                             <Th py={4}>Product Info</Th>
                                             {canShowVendors && <Th py={4}>Vendor</Th>}
                                             {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && <Th py={4}>Pricing</Th>}
@@ -723,6 +827,7 @@ const AdminProducts = () => {
                                                     cursor="pointer"
                                                     onClick={() => openSubViewer(categoryName, sub)}
                                                 >
+                                                    <Td onClick={(e) => e.stopPropagation()} width="40px" />
                                                     {/* Product Info — shows subcategory thumbnail image & name */}
                                                     <Td py={3}>
                                                         <Flex align="center" gap={3}>
@@ -822,6 +927,14 @@ const AdminProducts = () => {
                                         {/* ── Standalone product rows (not in any subcategory) ── */}
                                         {standaloneProducts.map((product) => (
                                             <Tr key={product._id || product.id} _hover={{ bg: 'gray.50/50' }} transition="0.2s">
+                                                <Td onClick={(e) => e.stopPropagation()} width="40px">
+                                                    <Checkbox
+                                                        isChecked={selectedProductIds.has(product._id || product.id)}
+                                                        onChange={() => toggleProductSelection(product._id || product.id)}
+                                                        colorScheme="green"
+                                                        size="lg"
+                                                    />
+                                                </Td>
                                                 <Td>
                                                     <Flex align="center" gap={4}>
                                                         <Image
@@ -901,15 +1014,6 @@ const AdminProducts = () => {
                                                 )}
                                                 <Td textAlign="right">
                                                     <Stack direction="row" spacing={2} justify="flex-end">
-                                                        <IconButton
-                                                            size="sm"
-                                                            bg="#25D366"
-                                                            color="white"
-                                                            _hover={{ bg: "#128C7E" }}
-                                                            icon={<FaWhatsapp />}
-                                                            aria-label="WhatsApp"
-                                                            onClick={() => handleWhatsappOpen(product)}
-                                                        />
                                                         <IconButton
                                                             size="sm"
                                                             variant="ghost"
@@ -1758,6 +1862,7 @@ const AdminProducts = () => {
                                     <Table variant="simple" minW="700px">
                                         <Thead bg="gray.50">
                                             <Tr borderBottom="2px solid" borderBottomColor="gray.100">
+                                                <Th width="40px" py={4}></Th>
                                                 <Th py={4} fontSize="xs" color="gray.500">Product Info</Th>
                                                 {canShowVendors && <Th py={4} fontSize="xs" color="gray.500">Vendor</Th>}
                                                 {(canShowSellingPrice || canShowDealerPrice || canShowVendors) && <Th py={4} fontSize="xs" color="gray.500">Pricing</Th>}
@@ -1769,6 +1874,14 @@ const AdminProducts = () => {
                                         <Tbody>
                                             {subProducts.map(product => (
                                                 <Tr key={product._id || product.id} _hover={{ bg: 'purple.50' }} transition="0.15s">
+                                                    <Td onClick={(e) => e.stopPropagation()} width="40px">
+                                                        <Checkbox
+                                                            isChecked={selectedProductIds.has(product._id || product.id)}
+                                                            onChange={() => toggleProductSelection(product._id || product.id)}
+                                                            colorScheme="green"
+                                                            size="lg"
+                                                        />
+                                                    </Td>
                                                     {/* Product Info */}
                                                     <Td>
                                                         <Flex align="center" gap={4}>
@@ -1851,16 +1964,6 @@ const AdminProducts = () => {
                                                         <Stack direction="row" spacing={2} justify="flex-end">
                                                             <IconButton
                                                                 size="sm"
-                                                                bg="#25D366"
-                                                                color="white"
-                                                                _hover={{ bg: "#128C7E" }}
-                                                                icon={<FaWhatsapp />}
-                                                                aria-label="WhatsApp"
-                                                                title="Send on WhatsApp"
-                                                                onClick={() => { onSubViewClose(); handleWhatsappOpen(product); }}
-                                                            />
-                                                            <IconButton
-                                                                size="sm"
                                                                 variant="ghost"
                                                                 icon={<FiEdit2 />}
                                                                 aria-label="Edit Product"
@@ -1902,9 +2005,118 @@ const AdminProducts = () => {
                             <Button size="sm" variant="ghost" onClick={onSubViewClose}>Close</Button>
                         </HStack>
                     </ModalFooter>
-
                 </ModalContent>
             </Modal>
+
+            {/* Global WhatsApp Modal */}
+            <Modal isOpen={isGlobalWhatsappOpen} onClose={onGlobalWhatsappClose} isCentered size="lg">
+                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.500" />
+                <ModalContent borderRadius="xl" boxShadow="2xl">
+                    <ModalHeader bg="green.500" color="white" borderTopRadius="xl">
+                        <HStack spacing={2}>
+                            <FaWhatsapp size={20} />
+                            <Text fontSize="lg" fontWeight="bold">Send Selected Products via WhatsApp</Text>
+                        </HStack>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" />
+                    <ModalBody py={6}>
+                        <VStack spacing={4} align="stretch">
+                            <Text fontSize="sm" color="gray.600">
+                                You are about to send <b>{selectedProductIds.size} product(s)</b> via WhatsApp.
+                            </Text>
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="bold">Mobile Number (10 digits)</FormLabel>
+                                <InputGroup>
+                                    <Input 
+                                        type="tel"
+                                        placeholder="10-digit number" 
+                                        maxLength={10}
+                                        value={globalWhatsappForm.phone}
+                                        onChange={handlePhoneChange}
+                                    />
+                                    {isFetchingUser && (
+                                        <InputRightElement>
+                                            <Spinner size="sm" color="green.500" />
+                                        </InputRightElement>
+                                    )}
+                                </InputGroup>
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Company Name</FormLabel>
+                                <Input 
+                                    placeholder="Company Name"
+                                    value={globalWhatsappForm.companyName}
+                                    onChange={e => setGlobalWhatsappForm({...globalWhatsappForm, companyName: e.target.value})}
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Contact Person</FormLabel>
+                                <Input 
+                                    placeholder="Person Name"
+                                    value={globalWhatsappForm.contactPersonName}
+                                    onChange={e => setGlobalWhatsappForm({...globalWhatsappForm, contactPersonName: e.target.value})}
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Email (optional)</FormLabel>
+                                <Input 
+                                    type="email"
+                                    placeholder="Email"
+                                    value={globalWhatsappForm.email}
+                                    onChange={e => setGlobalWhatsappForm({...globalWhatsappForm, email: e.target.value})}
+                                />
+                            </FormControl>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" borderBottomRadius="xl">
+                        <Button variant="ghost" mr={3} onClick={onGlobalWhatsappClose}>Cancel</Button>
+                        <Button 
+                            bg="#25D366" 
+                            color="white" 
+                            _hover={{ bg: "#128C7E" }} 
+                            isLoading={isGlobalWhatsappSending} 
+                            onClick={handleSendGlobalWhatsapp}
+                            leftIcon={<FaWhatsapp />}
+                        >
+                            Send Now
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* Floating Fixed WhatsApp Button on Scroll */}
+            <AnimatePresence>
+                {selectedProductIds.size > 0 && (
+                    <Box
+                        position="fixed"
+                        bottom="30px"
+                        right="30px"
+                        zIndex={1000}
+                        as={motion.div}
+                        initial={{ opacity: 0, y: 50, scale: 0.8 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 50, scale: 0.8 }}
+                    >
+                        <Button
+                            size="lg"
+                            bg="#25D366"
+                            color="white"
+                            _hover={{ bg: "#128C7E", transform: "scale(1.05)" }}
+                            _active={{ bg: "#075E54" }}
+                            boxShadow="0 10px 25px rgba(37, 211, 102, 0.45)"
+                            borderRadius="full"
+                            px={8}
+                            py={6}
+                            fontSize="md"
+                            fontWeight="bold"
+                            leftIcon={<FaWhatsapp size={24} />}
+                            onClick={handleGlobalWhatsappOpen}
+                        >
+                            Send ({selectedProductIds.size}) to WhatsApp
+                        </Button>
+                    </Box>
+                )}
+            </AnimatePresence>
         </Box >
     );
 };

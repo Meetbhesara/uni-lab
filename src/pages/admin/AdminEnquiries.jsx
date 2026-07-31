@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner, Heading } from '@chakra-ui/react';
+import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner, Heading, Tooltip, Tag, TagLabel, TagLeftIcon, Avatar, AvatarBadge } from '@chakra-ui/react';
 import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, FiEdit, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { FaWhatsapp, FaChevronLeft } from 'react-icons/fa';
+import { FaWhatsapp, FaChevronLeft, FaClock, FaBell, FaHistory, FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
 import api from '../../api/axios';
 import { DEMO_ENQUIRIES, DEMO_QUOTATIONS } from '../../data/mockData';
 import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
@@ -23,10 +23,12 @@ const AdminEnquiries = () => {
     const [enquirySearch, setEnquirySearch] = useState('');
     const [activeSearch, setActiveSearch] = useState('');
     const [historySearch, setHistorySearch] = useState('');
+    const [whatsappSearch, setWhatsappSearch] = useState('');
 
     const [enquiryPage, setEnquiryPage] = useState(1);
     const [activePage, setActivePage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
+    const [whatsappPage, setWhatsappPage] = useState(1);
     const ITEMS_PER_PAGE = 20;
 
     // Status Confirmation State
@@ -37,6 +39,21 @@ const AdminEnquiries = () => {
     const { isOpen: isDeleteConfirmOpen, onOpen: onDeleteConfirmOpen, onClose: onDeleteConfirmClose } = useDisclosure();
     const [deleteTarget, setDeleteTarget] = useState({ type: '', id: null });
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // ── Unified Follow-up Modal State (history + add form combined) ──────────
+    const { isOpen: isFollowUpOpen, onOpen: onFollowUpOpen, onClose: onFollowUpClose } = useDisclosure();
+    const [followUpTarget, setFollowUpTarget] = useState(null); // The quotation/enquiry being followed up / viewed
+    const [followUpTargetType, setFollowUpTargetType] = useState('quotation'); // 'quotation' | 'enquiry'
+    const [followUpForm, setFollowUpForm] = useState({
+        remark: '',
+        nextFollowUpDate: ''
+    });
+    const [isSubmittingFollowUp, setIsSubmittingFollowUp] = useState(false);
+
+    // Legacy refs kept for backward compat — unified modal handles both
+    const isHistoryOpen = false;
+    const onHistoryClose = () => {};
+    const historyTarget = null;
 
     const getImageUrl = (path) => {
         if (!path) return 'https://via.placeholder.com/150';
@@ -174,15 +191,16 @@ const AdminEnquiries = () => {
         setCustomNotes("(1) Payment After Performer Invoice\n(2) Transportation And Packing Charge Will be Extra As Per Actual");
     };
 
-    const handleStatusUpdate = (id, status) => {
-        setStatusConfirmData({ id, status });
+    const handleStatusUpdate = (type, id, status) => {
+        setStatusConfirmData({ type, id, status });
         onStatusConfirmOpen();
     };
 
     const confirmStatusUpdate = async () => {
-        const { id, status } = statusConfirmData;
+        const { type, id, status } = statusConfirmData;
         try {
-            await api.put(`/quotations/${id}`, { status });
+            const endpoint = type === 'enquiry' ? `/enquiries/${id}` : `/quotations/${id}`;
+            await api.put(endpoint, { status });
             toast({ 
                 title: `Success`, 
                 description: `Quotation has been moved to ${status} status.`, 
@@ -226,6 +244,72 @@ const AdminEnquiries = () => {
 
     const handleViewQuotation = (quote) => {
         setSelectedQuotation(quote);
+    };
+
+    // ── Open Unified Follow-up Modal (history + form) ────────────────────────
+    const handleOpenFollowUp = (target, type = 'quotation') => {
+        setFollowUpTarget(target);
+        setFollowUpTargetType(type);
+        // Default next follow-up date = today + 2 days
+        const defaultDate = new Date();
+        defaultDate.setDate(defaultDate.getDate() + 2);
+        setFollowUpForm({
+            remark: '',
+            nextFollowUpDate: defaultDate.toISOString().split('T')[0]
+        });
+        onFollowUpOpen();
+    };
+
+    // ── Submit Follow-up ─────────────────────────────────────────────────────
+    const handleSubmitFollowUp = async () => {
+        if (!followUpForm.remark.trim()) {
+            toast({ title: 'Please enter a remark', status: 'warning' });
+            return;
+        }
+        if (!followUpForm.nextFollowUpDate) {
+            toast({ title: 'Please select the next follow-up date', status: 'warning' });
+            return;
+        }
+        setIsSubmittingFollowUp(true);
+        try {
+            const userString = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}';
+            const user = JSON.parse(userString);
+            // Extract the most readable name possible
+            let addedBy = user.name || user.contactPersonName || user.companyName;
+            if (!addedBy && user.email) {
+                // If no name fields exist, use the email prefix (e.g. iatulkanak@gmail.com -> iatulkanak)
+                addedBy = user.email.split('@')[0];
+            }
+            if (!addedBy) addedBy = 'Admin';
+
+            const url = followUpTargetType === 'enquiry'
+                ? `/enquiries/${followUpTarget._id}/follow-up`
+                : `/quotations/${followUpTarget._id}/follow-up`;
+
+            await api.post(url, {
+                remark: followUpForm.remark.trim(),
+                nextFollowUpDate: followUpForm.nextFollowUpDate,
+                addedBy,
+                newStatus: followUpForm.newStatus || undefined
+            });
+            toast({
+                title: '✅ Follow-up Added!',
+                description: `Next follow-up set for ${new Date(followUpForm.nextFollowUpDate).toLocaleDateString('en-GB')}`,
+                status: 'success',
+                duration: 4000
+            });
+            onFollowUpClose();
+            fetchData(); // Refresh quotations
+        } catch (err) {
+            toast({ title: err.response?.data?.msg || 'Failed to add follow-up', status: 'error' });
+        } finally {
+            setIsSubmittingFollowUp(false);
+        }
+    };
+
+    // Legacy stub — no longer opens a separate modal, unified modal handles history
+    const handleOpenHistory = (quotation) => {
+        handleOpenFollowUp(quotation);
     };
 
     const initCreateQuote = () => {
@@ -778,10 +862,19 @@ const AdminEnquiries = () => {
     };
 
 
-    const filteredEnquiries = enquiries.filter(e => {
+    const baseEnquiries = enquiries.filter(e => e.type !== 'whatsapp');
+    const baseWhatsappLogs = enquiries.filter(e => e.type === 'whatsapp');
+
+    const filteredEnquiries = baseEnquiries.filter(e => {
         const term = enquirySearch.toLowerCase();
         return (e.Name || '').toLowerCase().includes(term) ||
                (e.email || '').toLowerCase().includes(term) ||
+               (e.phone || '').toLowerCase().includes(term);
+    });
+
+    const filteredWhatsappLogs = baseWhatsappLogs.filter(e => {
+        const term = whatsappSearch.toLowerCase();
+        return (e.Name || '').toLowerCase().includes(term) ||
                (e.phone || '').toLowerCase().includes(term);
     });
 
@@ -802,6 +895,7 @@ const AdminEnquiries = () => {
     const paginatedEnquiries = filteredEnquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
     const paginatedQuotations = filteredQuotations.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
     const paginatedHistory = filteredHistory.slice((historyPage - 1) * ITEMS_PER_PAGE, historyPage * ITEMS_PER_PAGE);
+    const paginatedWhatsappLogs = filteredWhatsappLogs.slice((whatsappPage - 1) * ITEMS_PER_PAGE, whatsappPage * ITEMS_PER_PAGE);
 
     const PaginationControls = ({ currentPage, totalItems, onPageChange }) => {
         const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
@@ -912,12 +1006,18 @@ const AdminEnquiries = () => {
                 <TabList>
                     <Tab fontWeight="bold">
                         Incoming Enquiries
-                        {enquiries.some(e => !e.isSeen) && (
+                        {baseEnquiries.some(e => !e.isSeen) && (
                             <Badge ml={2} colorScheme="red" borderRadius="full">NEW</Badge>
                         )}
                     </Tab>
                     <Tab fontWeight="bold">Outbound Quotations</Tab>
                     <Tab fontWeight="bold">Processed (History)</Tab>
+                    <Tab fontWeight="bold" color="green.600">
+                        <HStack spacing={1}>
+                            <FaWhatsapp />
+                            <Text>WhatsApp Logs</Text>
+                        </HStack>
+                    </Tab>
                 </TabList>
 
                 {loading ? (
@@ -1020,11 +1120,28 @@ const AdminEnquiries = () => {
                                         <Th>Client</Th>
                                         <Th>Total Value</Th>
                                         <Th>Status</Th>
+                                        <Th>Next Follow-up</Th>
                                         <Th textAlign="right">Action</Th>
                                     </Tr>
                                 </Thead>
                                 <Tbody>
-                                    {paginatedQuotations.map(q => {
+                                {(() => {
+                                    // Pre-calculate the latest quotation ID for each enquiry so we know which ones are active
+                                    const latestIdsMap = new Map();
+                                    quotations.forEach(q => {
+                                        const enqId = q.enquiry?._id || q.enquiryId?._id || q.enquiry || q.enquiryId;
+                                        const key = typeof enqId === 'object' ? enqId.toString() : String(enqId);
+                                        if (!latestIdsMap.has(key)) {
+                                            latestIdsMap.set(key, q);
+                                        } else {
+                                            if (new Date(q.createdAt) > new Date(latestIdsMap.get(key).createdAt)) {
+                                                latestIdsMap.set(key, q);
+                                            }
+                                        }
+                                    });
+                                    const latestQuotationIds = new Set(Array.from(latestIdsMap.values()).map(q => q._id));
+
+                                    return paginatedQuotations.map(q => {
                                         let refSuffix = '';
                                         if (q.refNo) {
                                             const lowerRef = q.refNo.toLowerCase();
@@ -1034,9 +1151,68 @@ const AdminEnquiries = () => {
                                         }
                                         const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
                                         const totalAmt = q.grandTotal || q.totalAmount || 0;
+                                        
+                                        const nextDate = q.nextFollowUp 
+                                            ? new Date(q.nextFollowUp)
+                                            : q.firstFollowUpDate
+                                            ? new Date(q.firstFollowUpDate)
+                                            : (q.status === 'Done' || q.status === 'Reject')
+                                            ? null
+                                            : new Date(new Date(q.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
+                                        
+                                        const today = new Date(); today.setHours(0,0,0,0);
+                                        const isOverdue = nextDate && nextDate <= today;
+                                        const followUpCount = q.followUps?.length || 0;
+                                        
+                                        const isAbsoluteLatest = latestQuotationIds.has(q._id);
+
+                                        let rowBgColor = "transparent";
+                                        let hoverBgColor = "gray.50";
+                                        if (isAbsoluteLatest) {
+                                            if (nextDate) {
+                                                const isToday = nextDate.toDateString() === new Date().toDateString();
+                                                const isPast = nextDate < today;
+                                                
+                                                if (isToday) {
+                                                    rowBgColor = "orange.50";
+                                                    hoverBgColor = "orange.100";
+                                                } else if (isPast) {
+                                                    rowBgColor = "red.50";
+                                                    hoverBgColor = "red.100";
+                                                } else {
+                                                    hoverBgColor = "orange.50";
+                                                }
+                                            } else {
+                                                hoverBgColor = "orange.50";
+                                            }
+                                        }
 
                                         return (
-                                            <Tr key={q._id} _hover={{ bg: "gray.50" }}>
+                                            <Tr
+                                                key={q._id}
+                                                bg={rowBgColor}
+                                                cursor={isAbsoluteLatest ? "pointer" : "not-allowed"}
+                                                _hover={{ bg: hoverBgColor, boxShadow: isAbsoluteLatest ? "0 1px 4px rgba(0,0,0,0.07)" : "none" }}
+                                                transition="background 0.15s"
+                                                opacity={isAbsoluteLatest ? 1 : 0.65}
+                                                onClick={(e) => {
+                                                    // Don't open popup if user clicked a button/icon inside the row
+                                                    if (e.target.closest('button') || e.target.closest('[role="button"]')) return;
+                                                    
+                                                    if (!isAbsoluteLatest) {
+                                                        toast({
+                                                            title: "Cannot Follow-up Old Revision",
+                                                            description: "Follow-ups can only be set on the latest revised quotation for this enquiry.",
+                                                            status: "warning",
+                                                            duration: 4000,
+                                                            position: "top"
+                                                        });
+                                                        return;
+                                                    }
+                                                    handleOpenFollowUp(q);
+                                                }}
+                                                title={isAbsoluteLatest ? "Click to add follow-up" : "This is an old revision. Follow-up is disabled."}
+                                            >
                                                 <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
                                                 <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
                                                 <Td>
@@ -1047,7 +1223,28 @@ const AdminEnquiries = () => {
                                                 </Td>
                                                 <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
                                                 <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
-                                                <Td textAlign="right">
+                                                <Td>
+                                                    <VStack align="start" spacing={0}>
+                                                        {nextDate ? (
+                                                            <Badge
+                                                                colorScheme={isOverdue ? 'red' : 'orange'}
+                                                                variant={isOverdue ? 'solid' : 'subtle'}
+                                                                borderRadius="full"
+                                                                fontSize="10px"
+                                                                px={2}
+                                                            >
+                                                                {isOverdue ? '🔴 DUE: ' : '📅 '}
+                                                                {nextDate.toLocaleDateString('en-GB')}
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge colorScheme="gray" fontSize="10px" borderRadius="full" px={2}>Not Set</Badge>
+                                                        )}
+                                                        {followUpCount > 0 && (
+                                                            <Text fontSize="9px" color="gray.400">{followUpCount} follow-up{followUpCount > 1 ? 's' : ''} done</Text>
+                                                        )}
+                                                    </VStack>
+                                                </Td>
+                                                <Td textAlign="right" onClick={(e) => e.stopPropagation()}>
                                                     <HStack spacing={2} justify="flex-end">
                                                         <IconButton 
                                                             aria-label="View" 
@@ -1087,14 +1284,14 @@ const AdminEnquiries = () => {
                                                             icon={<FiCheck />} 
                                                             size="xs" 
                                                             colorScheme="green" 
-                                                            onClick={() => handleStatusUpdate(q._id, 'Done')} 
+                                                            onClick={() => handleStatusUpdate('quotation', q._id, 'Done')} 
                                                         />
                                                         <IconButton 
                                                             aria-label="Reject" 
                                                             icon={<FiX />} 
                                                             size="xs" 
                                                             colorScheme="red" 
-                                                            onClick={() => handleStatusUpdate(q._id, 'Reject')} 
+                                                            onClick={() => handleStatusUpdate('quotation', q._id, 'Reject')} 
                                                         />
                                                         <IconButton 
                                                             aria-label="Delete" 
@@ -1108,8 +1305,8 @@ const AdminEnquiries = () => {
                                                 </Td>
                                             </Tr>
                                         );
-                                    })}
-                                    {filteredQuotations.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No active quotations found.</Td></Tr>}
+                                    });
+                                })()}
                                 </Tbody>
                             </Table>
                         </Box>
@@ -1193,6 +1390,129 @@ const AdminEnquiries = () => {
                             </Table>
                         </Box>
                         <PaginationControls currentPage={historyPage} totalItems={filteredHistory.length} onPageChange={setHistoryPage} />
+                    </TabPanel>
+
+                    {/* WhatsApp Logs Tab Panel */}
+                    <TabPanel p={0} pt={4}>
+                        <Flex justify="space-between" mb={4} align="center">
+                            <InputGroup maxW="350px" size="sm">
+                                <InputLeftElement pointerEvents="none">
+                                    <FiSearch color="gray.400" />
+                                </InputLeftElement>
+                                <Input 
+                                    placeholder="Search by client name or phone..." 
+                                    borderRadius="xl"
+                                    value={whatsappSearch}
+                                    onChange={(e) => {
+                                        setWhatsappSearch(e.target.value);
+                                        setWhatsappPage(1);
+                                    }}
+                                />
+                            </InputGroup>
+                        </Flex>
+                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
+                            <Table variant="simple" minW="500px">
+                                <Thead bg="green.50">
+                                    <Tr>
+                                        <Th>Date</Th>
+                                        <Th>Client Name & Contact</Th>
+                                        <Th>Products Sent</Th>
+                                        <Th>Next Follow-Up</Th>
+                                        <Th textAlign="right">Action</Th>
+                                    </Tr>
+                                </Thead>
+                                <Tbody>
+                                    {paginatedWhatsappLogs.map(e => (
+                                        <Tr key={e._id} _hover={{ bg: "gray.50" }}>
+                                            <Td fontSize="sm">
+                                                {new Date(e.createdAt).toLocaleDateString('en-GB')}
+                                            </Td>
+                                            <Td>
+                                                <VStack align="start" spacing={0}>
+                                                    <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
+                                                    <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
+                                                    <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
+                                                </VStack>
+                                            </Td>
+                                            <Td>
+                                                <Badge colorScheme="green">{(e.products || []).length} products sent</Badge>
+                                            </Td>
+                                            <Td>
+                                                {(() => {
+                                                    if (e.status === 'Done' || e.status === 'Reject') {
+                                                        return <Badge colorScheme={e.status === 'Done' ? 'green' : 'red'}>{e.status}</Badge>;
+                                                    }
+                                                    
+                                                    const followUpDate = e.nextFollowUp 
+                                                        ? new Date(e.nextFollowUp)
+                                                        : e.firstFollowUpDate
+                                                        ? new Date(e.firstFollowUpDate)
+                                                        : new Date(new Date(e.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
+
+                                                    const dateZero = new Date(followUpDate).setHours(0,0,0,0);
+                                                    const todayZero = new Date().setHours(0,0,0,0);
+                                                    const isOverdue = dateZero < todayZero;
+                                                    const isToday = dateZero === todayZero;
+
+                                                    return (
+                                                        <VStack align="start" spacing={1}>
+                                                            <Text fontSize="sm" fontWeight="bold">
+                                                                {followUpDate.toLocaleDateString('en-GB')}
+                                                            </Text>
+                                                            {isOverdue && <Badge colorScheme="red" variant="solid" fontSize="10px">OVERDUE</Badge>}
+                                                            {isToday && <Badge colorScheme="orange" variant="solid" fontSize="10px">TODAY</Badge>}
+                                                        </VStack>
+                                                    );
+                                                })()}
+                                            </Td>
+                                            <Td textAlign="right">
+                                                <HStack spacing={2} justify="flex-end">
+                                                    <IconButton 
+                                                        aria-label="View Details" 
+                                                        icon={<FiEye />} 
+                                                        size="xs" 
+                                                        variant="outline" 
+                                                        onClick={() => handleViewEnquiry(e)} 
+                                                    />
+                                                    <Button 
+                                                        size="xs" 
+                                                        colorScheme="brand" 
+                                                        variant="outline"
+                                                        onClick={() => handleOpenFollowUp(e, 'enquiry')}
+                                                    >
+                                                        Follow-up {e.followUps?.length > 0 ? `(${e.followUps.length})` : ''}
+                                                    </Button>
+                                                    <IconButton 
+                                                        aria-label="Done" 
+                                                        icon={<FiCheck />} 
+                                                        size="xs" 
+                                                        colorScheme="green" 
+                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Done')} 
+                                                    />
+                                                    <IconButton 
+                                                        aria-label="Reject" 
+                                                        icon={<FiX />} 
+                                                        size="xs" 
+                                                        colorScheme="red" 
+                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Reject')} 
+                                                    />
+                                                    <IconButton 
+                                                        aria-label="Delete" 
+                                                        icon={<FiTrash />} 
+                                                        size="xs" 
+                                                        colorScheme="red" 
+                                                        variant="ghost" 
+                                                        onClick={() => handleDeleteRequest('enquiry', e._id)}
+                                                    />
+                                                </HStack>
+                                            </Td>
+                                        </Tr>
+                                    ))}
+                                    {filteredWhatsappLogs.length === 0 && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
+                                </Tbody>
+                            </Table>
+                        </Box>
+                        <PaginationControls currentPage={whatsappPage} totalItems={filteredWhatsappLogs.length} onPageChange={setWhatsappPage} />
                     </TabPanel>
                 </TabPanels>
                 )}
@@ -1858,8 +2178,181 @@ const AdminEnquiries = () => {
                     </ModalBody>
                 </ModalContent>
             </Modal>
+
+            {/* ─── Unified Follow-up Modal (History + Add Form) ─────────────────── */}
+            <Modal isOpen={isFollowUpOpen} onClose={onFollowUpClose} size="xl" isCentered motionPreset="slideInBottom" scrollBehavior="inside">
+                <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxH="90vh">
+                    <ModalHeader p={0}>
+                        <Box bgGradient="linear(to-r, orange.500, purple.600)" p={5} color="white">
+                            <HStack spacing={3}>
+                                <Box bg="whiteAlpha.300" p={2} borderRadius="xl">
+                                    <FaHistory size={20} />
+                                </Box>
+                                <VStack align="start" spacing={0}>
+                                    <Text fontWeight="black" fontSize="lg">Follow-up</Text>
+                                    <Text fontSize="xs" opacity={0.85}>
+                                        {followUpTargetType === 'quotation' 
+                                            ? `${followUpTarget?.refNo} — ${followUpTarget?.enquiry?.companyName || followUpTarget?.enquiry?.Name || 'Client'}`
+                                            : `WhatsApp Log — ${followUpTarget?.companyName || followUpTarget?.Name || 'Client'}`}
+                                    </Text>
+                                </VStack>
+                                <Box ml="auto">
+                                    <Badge bg="whiteAlpha.300" color="white" borderRadius="full" px={3} py={1} fontSize="xs">
+                                        {followUpTarget?.status || 'Pending'}
+                                    </Badge>
+                                </Box>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} />
+                    <ModalBody p={0} overflowY="auto">
+                        {/* ── ADD NEW FOLLOW-UP FORM (TOP) ─────────────────────────────────────── */}
+                        <Box p={5}>
+                            <HStack mb={4} spacing={2}>
+                                <FaBell color="#DD6B20" />
+                                <Text fontWeight="bold" fontSize="sm" color="orange.700">
+                                    Add New Follow-up
+                                </Text>
+                            </HStack>
+                            <VStack spacing={4} align="stretch">
+                                {/* Remark */}
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="sm" fontWeight="bold" color="gray.700">
+                                        📝 Remark
+                                    </FormLabel>
+                                    <Textarea
+                                        placeholder="e.g. Called client — they need 2 more days to review pricing..."
+                                        value={followUpForm.remark}
+                                        onChange={(e) => setFollowUpForm(prev => ({ ...prev, remark: e.target.value }))}
+                                        borderRadius="xl"
+                                        rows={3}
+                                        bg="gray.50"
+                                        _focus={{ bg: 'white', borderColor: 'orange.400' }}
+                                    />
+                                </FormControl>
+
+                                {/* Next Follow-up Date */}
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="sm" fontWeight="bold" color="gray.700">
+                                        📅 Next Follow-up Date
+                                    </FormLabel>
+                                    <Input
+                                        type="date"
+                                        value={followUpForm.nextFollowUpDate}
+                                        min={new Date().toISOString().split('T')[0]}
+                                        onChange={(e) => setFollowUpForm(prev => ({ ...prev, nextFollowUpDate: e.target.value }))}
+                                        borderRadius="xl"
+                                        bg="gray.50"
+                                        _focus={{ bg: 'white', borderColor: 'orange.400' }}
+                                    />
+                                </FormControl>
+                            </VStack>
+                            
+                            <Button
+                                mt={5}
+                                w="full"
+                                bgGradient="linear(to-r, orange.500, red.500)"
+                                color="white"
+                                borderRadius="xl"
+                                py={6}
+                                leftIcon={<FaBell />}
+                                isLoading={isSubmittingFollowUp}
+                                onClick={handleSubmitFollowUp}
+                                _hover={{ bgGradient: 'linear(to-r, orange.600, red.600)' }}
+                            >
+                                Save Follow-up
+                            </Button>
+                        </Box>
+
+                        {/* ── HISTORY SECTION (BOTTOM) ───────────────────────────────────────────── */}
+                        <Box p={5} bg="gray.50" borderTop="1px solid" borderColor="gray.200">
+                            <HStack mb={3} spacing={2}>
+                                <FaHistory color="#805AD5" />
+                                <Text fontWeight="bold" fontSize="sm" color="purple.700">
+                                    Remark History
+                                </Text>
+                                <Badge colorScheme="purple" borderRadius="full" fontSize="10px">
+                                    {followUpTarget?.followUps?.length || 0} total
+                                </Badge>
+                            </HStack>
+
+                            {followUpTarget?.followUps?.length > 0 ? (
+                                <VStack spacing={0} align="stretch">
+                                    {[...followUpTarget.followUps].reverse().map((fu, i, arr) => {
+                                        const isFirst = i === 0;
+                                        const addedAt = fu.addedAt
+                                            ? new Date(fu.addedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+                                            : 'N/A';
+                                        const nextDate = fu.nextFollowUpDate
+                                            ? new Date(fu.nextFollowUpDate).toLocaleDateString('en-GB')
+                                            : 'N/A';
+                                        return (
+                                            <HStack key={i} spacing={0} align="stretch">
+                                                {/* Timeline dot + line */}
+                                                <VStack spacing={0} align="center" mr={3} minW="24px">
+                                                    <Box
+                                                        w="12px" h="12px" borderRadius="full" mt={2}
+                                                        bg={isFirst ? 'orange.500' : 'purple.400'}
+                                                        border="2px solid"
+                                                        borderColor={isFirst ? 'orange.200' : 'purple.200'}
+                                                        flexShrink={0}
+                                                    />
+                                                    {i < arr.length - 1 && <Box w="2px" flex={1} bg="gray.200" minH="20px" />}
+                                                </VStack>
+                                                {/* Card */}
+                                                <Box
+                                                    flex={1} p={3} mb={2}
+                                                    bg={isFirst ? 'orange.50' : 'white'}
+                                                    borderRadius="xl"
+                                                    border="1px solid"
+                                                    borderColor={isFirst ? 'orange.200' : 'gray.100'}
+                                                >
+                                                    <HStack justify="space-between" mb={1}>
+                                                        <Badge
+                                                            colorScheme={isFirst ? 'orange' : 'purple'}
+                                                            borderRadius="full" px={2} fontSize="10px"
+                                                        >
+                                                            {isFirst ? '🔔 Latest' : `#${arr.length - i}`}
+                                                        </Badge>
+                                                        <Text fontSize="xs" color="gray.400">{addedAt}</Text>
+                                                    </HStack>
+                                                    <Text fontSize="sm" color="gray.800" fontWeight="medium" mb={1}>
+                                                        💬 {fu.remark}
+                                                    </Text>
+                                                    <HStack spacing={4} flexWrap="wrap">
+                                                        <Text fontSize="xs" color="blue.600" fontWeight="bold">
+                                                            📅 Next: {nextDate}
+                                                        </Text>
+                                                        {fu.addedBy && (
+                                                            <Text fontSize="xs" color="gray.500">
+                                                                👤 {fu.addedBy}
+                                                            </Text>
+                                                        )}
+                                                    </HStack>
+                                                </Box>
+                                            </HStack>
+                                        );
+                                    })}
+                                </VStack>
+                            ) : (
+                                <VStack py={6} spacing={2} color="gray.400">
+                                    <FaHistory size={28} />
+                                    <Text fontSize="sm" fontWeight="bold">No follow-ups recorded yet.</Text>
+                                    <Text fontSize="xs">Add the first follow-up above.</Text>
+                                </VStack>
+                            )}
+                        </Box>
+                    </ModalBody>
+                    <ModalFooter p={4} borderTop="1px solid" borderColor="gray.100">
+                        <Button variant="ghost" borderRadius="full" w="full" onClick={onFollowUpClose}>Close</Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
         </Box>
     );
 };
 
 export default AdminEnquiries;
+
