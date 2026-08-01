@@ -852,18 +852,19 @@ const EmployeeMasterForm = () => {
         if (!empList?.length || !month) return;
         setAttendanceLoading(true);
         try {
-            const results = await Promise.all(
-                empList.map(emp =>
-                    api.get(`/employee-master/${emp._id}/attendance-summary?month=${month}`)
-                        .then(r => ({ empId: emp._id, data: r.data.data }))
-                        .catch(() => ({ empId: emp._id, data: null }))
-                )
-            );
-            const cache = {};
-            results.forEach(r => {
-                if (r.data) cache[`${r.empId}_${month}`] = r.data;
+            const res = await api.post('/employee-master/attendance-summaries', {
+                employeeIds: empList.map(e => e._id),
+                month
             });
-            setAttendanceCache(prev => ({ ...prev, ...cache }));
+            if (res.data?.data) {
+                const cache = {};
+                Object.entries(res.data.data).forEach(([empId, summary]) => {
+                    cache[`${empId}_${month}`] = summary;
+                });
+                setAttendanceCache(prev => ({ ...prev, ...cache }));
+            }
+        } catch (err) {
+            console.error("Error fetching bulk attendance summaries:", err);
         } finally {
             setAttendanceLoading(false);
         }
