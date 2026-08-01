@@ -192,9 +192,9 @@ const AdminWhatsappSettings = () => {
         }
     }, [user]);
 
-    // Poll statuses every 3 seconds
+    // Fetch initial status once, then stream updates via real-time SSE (No polling overhead)
     useEffect(() => {
-        const fetchStatuses = async () => {
+        const fetchInitialStatuses = async () => {
             try {
                 // Fetch System Default Status
                 const sysRes = await api.get('/whatsapp/status?sessionId=system_default');
@@ -224,13 +224,44 @@ const AdminWhatsappSettings = () => {
                     setAdminsStatus(statuses);
                 }
             } catch (err) {
-                console.error("Error fetching WhatsApp status:", err);
+                console.error("Error fetching initial WhatsApp status:", err);
             }
         };
 
-        fetchStatuses();
-        const interval = setInterval(fetchStatuses, 3000);
-        return () => clearInterval(interval);
+        fetchInitialStatuses();
+
+        // ─── REAL-TIME SSE LISTENER (Replaces 3-second polling) ───────────
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+        const eventSource = new EventSource(`${baseUrl}/api/events?token=${token}`);
+
+        eventSource.addEventListener('whatsapp-status-changed', (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                const { sessionId, status, qr } = data;
+                const currentUserId = String(user?.id || user?._id || '');
+
+                if (sessionId === 'system_default') {
+                    setSystemStatus({ status, qr });
+                } else if (sessionId === `admin_${currentUserId}`) {
+                    setAdminStatus({ status, qr });
+                } else if (sessionId.startsWith('admin_')) {
+                    const targetId = sessionId.replace('admin_', '');
+                    setAdminsStatus(prev => ({
+                        ...prev,
+                        [targetId]: { status, qr }
+                    }));
+                }
+            } catch (err) {
+                console.error("Error parsing SSE whatsapp-status event:", err);
+            }
+        });
+
+        return () => {
+            eventSource.close();
+        };
     }, [user, adminsList]);
 
     const handleConnect = async (sessionId, setLoader) => {
