@@ -7,12 +7,13 @@ import {
     TabPanels, Tab, TabPanel, AlertDialog, AlertDialogBody, AlertDialogFooter,
     AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, IconButton
 } from '@chakra-ui/react';
-import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar, FiTrash2, FiShield, FiUser } from 'react-icons/fi';
+import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar, FiTrash2, FiShield, FiUser, FiActivity } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import { DEMO_PRODUCTS, DEMO_ENQUIRIES } from '../../data/mockData';
 import { hasPermission } from '../../utils/permissions';
+import HealthModal from '../../components/HealthModal';
 
 
 const MotionBox = motion(Box);
@@ -46,6 +47,8 @@ const AdminDashboard = () => {
     const [admins, setAdmins] = useState([]);
     const [adminsLoading, setAdminsLoading] = useState(true);
     const [adminSearch, setAdminSearch] = useState('');
+
+    const [isHealthOpen, setIsHealthOpen] = useState(false);
 
     // Delete modal state
     const [deleteAccountModal, setDeleteAccountModal] = useState({ isOpen: false, user: null, type: '' });
@@ -254,12 +257,30 @@ const AdminDashboard = () => {
     return (
         <Box>
 
-            {/* Page Title */}
+            {/* Page Title & Health Button */}
             <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="sm" border="1px" borderColor="gray.100" mb={8}>
-                <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text" mb={2}>
-                    Dashboard Overview
-                </Heading>
-                <Text fontSize="sm" color="gray.500">Real-time performance metrics and business health.</Text>
+                <Flex align="center" justify="space-between" wrap="wrap" gap={4}>
+                    <Box>
+                        <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text" mb={1}>
+                            Dashboard Overview
+                        </Heading>
+                        <Text fontSize="sm" color="gray.500">Real-time performance metrics and business health.</Text>
+                    </Box>
+                    <Button
+                        leftIcon={<FiActivity />}
+                        colorScheme="purple"
+                        bgGradient="linear(to-r, purple.600, brand.600)"
+                        color="white"
+                        _hover={{ bgGradient: "linear(to-r, purple.700, brand.700)", transform: "translateY(-1px)" }}
+                        shadow="md"
+                        borderRadius="xl"
+                        px={6}
+                        size="md"
+                        onClick={() => setIsHealthOpen(true)}
+                    >
+                        Server & AI Health Monitor ✨
+                    </Button>
+                </Flex>
             </Box>
 
             {/* Stats Grid */}
@@ -763,6 +784,9 @@ const AdminDashboard = () => {
                     </AlertDialogContent>
                 </AlertDialogOverlay>
             </AlertDialog>
+
+            {/* Health & AI Diagnostics Modal */}
+            <HealthModal isOpen={isHealthOpen} onClose={() => setIsHealthOpen(false)} />
         </Box>
     );
 };
