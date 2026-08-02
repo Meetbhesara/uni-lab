@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 const AdminWhatsappSettings = () => {
     const { user } = useAuth();
     const toast = useToast();
+    const currentUserId = String(user?._id || user?.id || user?.empId || user?.name || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
 
     // Session states
     const [systemStatus, setSystemStatus] = useState({ status: 'disconnected', qr: null });
@@ -535,11 +536,11 @@ const AdminWhatsappSettings = () => {
                         {adminStatus.status === 'disconnected' ? (
                             <Button
                                 colorScheme="purple"
-                                onClick={() => handleConnect(`admin_${user.id}`, setLoadingAdmin)}
+                                onClick={() => handleConnect(`admin_${currentUserId}`, setLoadingAdmin)}
                                 isLoading={loadingAdmin}
                                 w="full"
                                 leftIcon={<Icon as={FiRefreshCw} />}
-                                disabled={!user?.id}
+                                isDisabled={!currentUserId}
                             >
                                 Connect My WhatsApp
                             </Button>
@@ -547,11 +548,11 @@ const AdminWhatsappSettings = () => {
                             <Button
                                 colorScheme="red"
                                 variant="outline"
-                                onClick={() => handleDisconnect(`admin_${user.id}`, setLoadingAdmin)}
+                                onClick={() => handleDisconnect(`admin_${currentUserId}`, setLoadingAdmin)}
                                 isLoading={loadingAdmin}
                                 w="full"
                                 leftIcon={<Icon as={FiXCircle} />}
-                                disabled={!user?.id}
+                                isDisabled={!currentUserId}
                             >
                                 Disconnect My Account
                             </Button>
