@@ -6,6 +6,7 @@ import {
     AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, useDisclosure
 } from '@chakra-ui/react';
 import { FiSmartphone, FiCheckCircle, FiXCircle, FiLoader, FiRefreshCw, FiInfo, FiMapPin, FiSave, FiTrash2 } from 'react-icons/fi';
+import QRCode from 'react-qr-code';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 
@@ -20,6 +21,8 @@ const AdminWhatsappSettings = () => {
 
     const [loadingSystem, setLoadingSystem] = useState(false);
     const [loadingAdmin, setLoadingAdmin] = useState(false);
+    const [systemPhone, setSystemPhone] = useState('');
+    const [adminPhone, setAdminPhone] = useState('');
 
     // Super Admin states
     const [adminsList, setAdminsList] = useState([]);
@@ -195,16 +198,17 @@ const AdminWhatsappSettings = () => {
 
     // Fetch initial status once, then stream updates via real-time SSE (No polling overhead)
     useEffect(() => {
-        const fetchInitialStatuses = async () => {
+        let isMounted = true;
+
+        const fetchStatus = async () => {
             try {
                 // Fetch System Default Status
-                const sysRes = await api.get('/whatsapp/status?sessionId=system_default');
+                const sysRes = await api.get(`/whatsapp/status?sessionId=system_default&_t=${Date.now()}`);
                 setSystemStatus(sysRes.data);
 
                 // Fetch Personal Admin Status
-                const currentUserId = user?.id || user?._id;
                 if (currentUserId) {
-                    const admRes = await api.get(`/whatsapp/status?sessionId=admin_${currentUserId}`);
+                    const admRes = await api.get(`/whatsapp/status?sessionId=admin_${currentUserId}&_t=${Date.now()}`);
                     setAdminStatus(admRes.data);
                 }
 
@@ -215,7 +219,7 @@ const AdminWhatsappSettings = () => {
                         adminsList.map(async (adm) => {
                             const id = String(adm._id || adm.id);
                             try {
-                                const res = await api.get(`/whatsapp/status?sessionId=admin_${id}`);
+                                const res = await api.get(`/whatsapp/status?sessionId=admin_${id}&_t=${Date.now()}`);
                                 statuses[id] = res.data;
                             } catch (e) {
                                 statuses[id] = { status: 'disconnected', qr: null };
@@ -229,61 +233,86 @@ const AdminWhatsappSettings = () => {
             }
         };
 
-        fetchInitialStatuses();
+        fetchStatus();
 
-        // ─── REAL-TIME SSE LISTENER (Replaces 3-second polling) ───────────
-        const token = localStorage.getItem('token');
-        if (!token) return;
+        // ─── POLLING FALLBACK ───────────
+        const pollInterval = setInterval(() => {
+            if (isMounted) fetchStatus();
+        }, 3000);
 
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
-        const eventSource = new EventSource(`${baseUrl}/api/events?token=${token}`);
+        // ─── REAL-TIME SSE LISTENER ───────────
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        if (token) {
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+            const eventSource = new EventSource(`${baseUrl}/api/events?token=${token}`);
 
-        eventSource.addEventListener('whatsapp-status-changed', (e) => {
-            try {
-                const data = JSON.parse(e.data);
-                const { sessionId, status, qr } = data;
-                const currentUserId = String(user?.id || user?._id || '');
+            eventSource.addEventListener('whatsapp-status-changed', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    const { sessionId, status, qr } = data;
 
-                if (sessionId === 'system_default') {
-                    setSystemStatus({ status, qr });
-                } else if (sessionId === `admin_${currentUserId}`) {
-                    setAdminStatus({ status, qr });
-                } else if (sessionId.startsWith('admin_')) {
-                    const targetId = sessionId.replace('admin_', '');
-                    setAdminsStatus(prev => ({
-                        ...prev,
-                        [targetId]: { status, qr }
-                    }));
+                    if (sessionId === 'system_default') {
+                        setSystemStatus({ status, qr });
+                    } else if (sessionId === `admin_${currentUserId}`) {
+                        setAdminStatus({ status, qr });
+                    } else if (sessionId.startsWith('admin_')) {
+                        const targetId = sessionId.replace('admin_', '');
+                        setAdminsStatus(prev => ({
+                            ...prev,
+                            [targetId]: { status, qr }
+                        }));
+                    }
+                } catch (err) {
+                    console.error("Error parsing SSE whatsapp-status event:", err);
                 }
-            } catch (err) {
-                console.error("Error parsing SSE whatsapp-status event:", err);
-            }
-        });
+            });
+            
+            // Clean up EventSource strictly on unmount
+            return () => {
+                isMounted = false;
+                eventSource.close();
+                clearInterval(pollInterval);
+            };
+        }
 
         return () => {
-            eventSource.close();
+            isMounted = false;
+            clearInterval(pollInterval);
         };
     }, [user, adminsList]);
 
-    const handleConnect = async (sessionId, setLoader) => {
+    const handleConnect = async (sessionId, setLoader, phoneNumber = null) => {
         setLoader(true);
+        // Instantly update the UI so it doesn't stay on "Disconnected"
+        if (sessionId === 'system_default') {
+            setSystemStatus(prev => ({ ...prev, status: 'initializing' }));
+        } else {
+            setAdminStatus(prev => ({ ...prev, status: 'initializing' }));
+        }
+
         try {
-            await api.post('/whatsapp/connect', { sessionId });
+            await api.post('/whatsapp/connect', { sessionId, phoneNumber });
             toast({
                 title: "Initializing Connection",
-                description: "Starting the WhatsApp initialization. Please wait for the QR code.",
+                description: "Starting the WhatsApp initialization. Please wait for the QR/Pairing code.",
                 status: "info",
-                duration: 4000,
+                duration: 5000,
                 isClosable: true,
             });
         } catch (err) {
+            console.error(err);
             toast({
-                title: "Failed to Connect",
-                description: err.response?.data?.error || err.message,
+                title: "Failed to connect",
+                description: err.response?.data?.msg || err.message,
                 status: "error",
-                duration: 4000,
-                isClosable: true,
+                duration: 5000,
             });
+            // Revert on failure
+            if (sessionId === 'system_default') {
+                setSystemStatus(prev => ({ ...prev, status: 'disconnected' }));
+            } else {
+                setAdminStatus(prev => ({ ...prev, status: 'disconnected' }));
+            }
         } finally {
             setLoader(false);
         }
@@ -293,6 +322,14 @@ const AdminWhatsappSettings = () => {
         setLoader(true);
         try {
             await api.post('/whatsapp/disconnect', { sessionId });
+            
+            // Instantly update the UI so it doesn't wait for polling/SSE
+            if (sessionId === 'system_default') {
+                setSystemStatus({ status: 'disconnected', qr: null });
+            } else {
+                setAdminStatus({ status: 'disconnected', qr: null });
+            }
+            
             toast({
                 title: "Session Disconnected",
                 description: "WhatsApp session credentials have been deleted.",
@@ -381,6 +418,12 @@ const AdminWhatsappSettings = () => {
                         <Icon as={FiSmartphone} /> Waiting for Scan
                     </Badge>
                 );
+            case 'pairing_code':
+                return (
+                    <Badge colorScheme="orange" variant="solid" borderRadius="full" px={3} py={1} display="inline-flex" alignItems="center" gap={1}>
+                        <Icon as={FiSmartphone} /> Waiting for Pairing
+                    </Badge>
+                );
             case 'disconnected':
             default:
                 return (
@@ -393,15 +436,28 @@ const AdminWhatsappSettings = () => {
 
     const renderQRSection = (sessionState, sessionId, setLoader, loadingState) => {
         if (sessionState.status === 'qr' && sessionState.qr) {
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(sessionState.qr)}`;
             return (
                 <VStack spacing={4} mt={4} p={4} bg="white" borderRadius="xl" border="1px" borderColor="gray.100" align="center">
                     <Text fontWeight="600" fontSize="sm" color="gray.600">Scan this QR code with your phone:</Text>
                     <Box p={3} bg="white" borderRadius="lg" boxShadow="md" border="1px solid" borderColor="gray.200">
-                        <Image src={qrUrl} alt="WhatsApp QR Code" boxSize="250px" />
+                        <QRCode value={sessionState.qr} size={250} />
                     </Box>
                     <Text fontSize="xs" color="gray.400" textAlign="center">
                         {"Open WhatsApp on your phone → Linked Devices → Link a Device"}
+                    </Text>
+                </VStack>
+            );
+        }
+
+        if (sessionState.status === 'pairing_code' && sessionState.qr) {
+            return (
+                <VStack spacing={4} mt={4} p={4} bg="white" borderRadius="xl" border="1px" borderColor="gray.100" align="center">
+                    <Text fontWeight="600" fontSize="sm" color="gray.600">Enter this code on your phone:</Text>
+                    <Box p={4} bg="gray.50" borderRadius="lg" border="2px dashed" borderColor="gray.300">
+                        <Heading size="lg" letterSpacing="widest" color="brand.600">{sessionState.qr}</Heading>
+                    </Box>
+                    <Text fontSize="xs" color="gray.400" textAlign="center">
+                        {"Open WhatsApp → Linked Devices → Link with phone number instead"}
                     </Text>
                 </VStack>
             );
@@ -473,18 +529,29 @@ const AdminWhatsappSettings = () => {
                         {renderQRSection(systemStatus, 'system_default', setLoadingSystem, loadingSystem)}
                     </Box>
 
-                    <Flex gap={3} mt={6} pt={6} borderTop="1px" borderColor="gray.100">
+                    <Flex gap={3} mt={6} pt={6} borderTop="1px" borderColor="gray.100" direction="column">
                         {systemStatus.status === 'disconnected' ? (
-                            <Button
-                                colorScheme="brand"
-                                onClick={() => handleConnect('system_default', setLoadingSystem)}
-                                isLoading={loadingSystem}
-                                w="full"
-                                leftIcon={<Icon as={FiRefreshCw} />}
-                                isDisabled={!user?.isSuperAdmin}
-                            >
-                                Connect WhatsApp
-                            </Button>
+                            <>
+                                <FormControl>
+                                    <FormLabel fontSize="xs" color="gray.500" mb={1}>Link with Phone Number (Optional)</FormLabel>
+                                    <Input 
+                                        size="sm" 
+                                        placeholder="e.g. 919876543210" 
+                                        value={systemPhone} 
+                                        onChange={(e) => setSystemPhone(e.target.value)} 
+                                    />
+                                </FormControl>
+                                <Button
+                                    colorScheme="brand"
+                                    onClick={() => handleConnect('system_default', setLoadingSystem, systemPhone)}
+                                    isLoading={loadingSystem}
+                                    w="full"
+                                    leftIcon={<Icon as={FiRefreshCw} />}
+                                    isDisabled={!user?.isSuperAdmin}
+                                >
+                                    Connect WhatsApp
+                                </Button>
+                            </>
                         ) : (
                             <Button
                                 colorScheme="red"
@@ -529,21 +596,32 @@ const AdminWhatsappSettings = () => {
                             Link your personal or business WhatsApp to send quotations and share product brochures directly from your own number when logged in.
                         </Text>
 
-                        {user?.id && renderQRSection(adminStatus, `admin_${user.id}`, setLoadingAdmin, loadingAdmin)}
+                        {currentUserId && renderQRSection(adminStatus, `admin_${currentUserId}`, setLoadingAdmin, loadingAdmin)}
                     </Box>
 
-                    <Flex gap={3} mt={6} pt={6} borderTop="1px" borderColor="gray.100">
+                    <Flex gap={3} mt={6} pt={6} borderTop="1px" borderColor="gray.100" direction="column">
                         {adminStatus.status === 'disconnected' ? (
-                            <Button
-                                colorScheme="purple"
-                                onClick={() => handleConnect(`admin_${currentUserId}`, setLoadingAdmin)}
-                                isLoading={loadingAdmin}
-                                w="full"
-                                leftIcon={<Icon as={FiRefreshCw} />}
-                                isDisabled={!currentUserId}
-                            >
-                                Connect My WhatsApp
-                            </Button>
+                            <>
+                                <FormControl>
+                                    <FormLabel fontSize="xs" color="gray.500" mb={1}>Link with Phone Number (Optional)</FormLabel>
+                                    <Input 
+                                        size="sm" 
+                                        placeholder="e.g. 919876543210" 
+                                        value={adminPhone} 
+                                        onChange={(e) => setAdminPhone(e.target.value)} 
+                                    />
+                                </FormControl>
+                                <Button
+                                    colorScheme="purple"
+                                    onClick={() => handleConnect(`admin_${currentUserId}`, setLoadingAdmin, adminPhone)}
+                                    isLoading={loadingAdmin}
+                                    w="full"
+                                    leftIcon={<Icon as={FiRefreshCw} />}
+                                    isDisabled={!currentUserId}
+                                >
+                                    Connect My WhatsApp
+                                </Button>
+                            </>
                         ) : (
                             <Button
                                 colorScheme="red"

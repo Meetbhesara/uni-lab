@@ -4545,6 +4545,7 @@ const ScheduleMasterForm = () => {
     const [employees, setEmployees] = useState([]);
     const [vehicles, setVehicles] = useState([]);
     const [instrList, setInstrList] = useState([]);
+    const [instrumentGroups, setInstrumentGroups] = useState([]);
     const [schedules, setSchedules] = useState([]);
     const [isFetchingSchedules, setIsFetchingSchedules] = useState(false);
     const [ledgers, setLedgers] = useState([]);
@@ -4594,12 +4595,13 @@ const ScheduleMasterForm = () => {
         const fetchData = async () => {
             // Use allSettled so that a failure in one API call does not block
             // the others from loading (e.g. ledgers failing must NOT empty the clients list)
-            const [cRes, eRes, vRes, iRes, lRes] = await Promise.allSettled([
+            const [cRes, eRes, vRes, iRes, lRes, igRes] = await Promise.allSettled([
                 api.get('/client-master'),
                 api.get('/employee-master'),
                 api.get('/vehicle-master'),
                 api.get('/instrument-master'),
-                api.get('/site-master/ledgers')
+                api.get('/site-master/ledgers'),
+                api.get('/instrument-master/groups')
             ]);
             if (cRes.status === 'fulfilled' && cRes.value.data.success) setClients(cRes.value.data.data);
             else if (cRes.status === 'rejected') console.error('Failed to load clients:', cRes.reason);
@@ -4615,6 +4617,9 @@ const ScheduleMasterForm = () => {
 
             if (lRes.status === 'fulfilled' && lRes.value.data.success) setLedgers(lRes.value.data.data);
             else if (lRes.status === 'rejected') console.error('Failed to load ledgers:', lRes.reason);
+            
+            if (igRes.status === 'fulfilled' && igRes.value.data.success) setInstrumentGroups(igRes.value.data.data);
+            else if (igRes.status === 'rejected') console.error('Failed to load instrument groups:', igRes.reason);
         };
         fetchData();
     }, []);
@@ -5117,11 +5122,37 @@ const ScheduleMasterForm = () => {
                                                     <Td py={3} maxW="150px">
                                                         {s.instruments?.length > 0 ? (
                                                             <VStack align="start" spacing={1}>
-                                                                {s.instruments.map((i, idx) => (
-                                                                    <Text key={idx} fontSize="xs" color="purple.600" fontWeight="bold">
-                                                                        {i.instrumentName} ({i.serialNo})
-                                                                    </Text>
-                                                                ))}
+                                                                {(() => {
+                                                                    let remainingInstIds = s.instruments.map(i => i._id || i);
+                                                                    let groupsToRender = [];
+                                                                    
+                                                                    if (instrumentGroups && instrumentGroups.length > 0) {
+                                                                        instrumentGroups.forEach(grp => {
+                                                                            const groupInstIds = grp.instruments?.map(i => i._id || i) || [];
+                                                                            if (groupInstIds.length > 0 && groupInstIds.every(id => remainingInstIds.includes(id))) {
+                                                                                groupsToRender.push(grp);
+                                                                                remainingInstIds = remainingInstIds.filter(id => !groupInstIds.includes(id));
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                    
+                                                                    const individualInstrumentsToRender = s.instruments.filter(inst => remainingInstIds.includes(inst._id || inst));
+                                                                    
+                                                                    return (
+                                                                        <>
+                                                                            {groupsToRender.map((grp, idx) => (
+                                                                                <Text key={`grp-${idx}`} fontSize="xs" color="teal.600" fontWeight="bold">
+                                                                                    {grp.groupId} {grp.name ? `- ${grp.name}` : ''} (Group)
+                                                                                </Text>
+                                                                            ))}
+                                                                            {individualInstrumentsToRender.map((i, idx) => (
+                                                                                <Text key={`inst-${idx}`} fontSize="xs" color="purple.600" fontWeight="bold">
+                                                                                    {i.instrumentName} ({i.serialNo})
+                                                                                </Text>
+                                                                            ))}
+                                                                        </>
+                                                                    );
+                                                                })()}
                                                             </VStack>
                                                         ) : (
                                                             <Text fontSize="xs" color="gray.400">--</Text>
@@ -5185,6 +5216,7 @@ const ScheduleMasterForm = () => {
                 employees={employees}
                 vehicles={vehicles}
                 instruments={instrList}
+                instrumentGroups={instrumentGroups}
                 onUpdate={async (payload) => {
                     setIsAssignLoading(true);
                     try {
@@ -5449,7 +5481,7 @@ const ScheduleMasterForm = () => {
     );
 };
 
-const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth, onDeleteSchedule }) => {
+const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, instrumentGroups = [], onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth, onDeleteSchedule }) => {
     const [formData, setFormData] = useState({
         operative: '',
         helpers: [],
@@ -5509,6 +5541,27 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
             ...prev,
             instruments: prev.instruments.includes(id) ? prev.instruments.filter(i => i !== id) : [...prev.instruments, id]
         }));
+    };
+
+    const handleGroupToggle = (groupId) => {
+        const group = instrumentGroups.find(g => g._id === groupId);
+        if (!group) return;
+        const groupInstIds = group.instruments?.map(i => i._id || i) || [];
+        if (groupInstIds.length === 0) return;
+        
+        setFormData(prev => {
+            const current = prev.instruments || [];
+            const allSelected = groupInstIds.every(id => current.includes(id));
+            let newInstruments = [...current];
+            if (allSelected) {
+                newInstruments = newInstruments.filter(id => !groupInstIds.includes(id));
+            } else {
+                groupInstIds.forEach(id => {
+                    if (!newInstruments.includes(id)) newInstruments.push(id);
+                });
+            }
+            return { ...prev, instruments: newInstruments };
+        });
     };
 
     const isCompleted = schedule?.dayStatus === 'Completed';
@@ -5718,8 +5771,51 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
 
                             <FormControl isDisabled={isCompleted}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
-                                    <Icon as={FaWrench} mr={2} color="orange.500" /> Instruments ({formData.instruments.length})
+                                    <Icon as={FaWrench} mr={2} color="orange.500" /> Instruments & Groups ({formData.instruments.length} selected)
                                 </FormLabel>
+                                
+                                {instrumentGroups && instrumentGroups.length > 0 && (
+                                    <Box maxH="140px" overflowY="auto" border="2px solid" borderColor="teal.100" borderRadius="2xl" p={3} bg="teal.50" mb={3}>
+                                        <VStack spacing={2} align="stretch">
+                                            {instrumentGroups.map(grp => {
+                                                const groupInstIds = grp.instruments?.map(i => i._id || i) || [];
+                                                const isSelected = groupInstIds.length > 0 && groupInstIds.every(id => formData.instruments.includes(id));
+                                                return (
+                                                    <HStack 
+                                                        key={grp._id} 
+                                                        py={2} 
+                                                        px={3} 
+                                                        cursor="pointer" 
+                                                        borderRadius="xl" 
+                                                        bg={isSelected ? 'teal.100' : 'white'}
+                                                        border="1px solid"
+                                                        borderColor={isSelected ? 'teal.300' : 'transparent'}
+                                                        _hover={isCompleted ? {} : { bg: isSelected ? 'teal.200' : 'white', borderColor: 'teal.300' }} 
+                                                        onClick={() => !isCompleted && handleGroupToggle(grp._id)}
+                                                        transition="all 0.2s"
+                                                    >
+                                                        <Checkbox 
+                                                            isChecked={isSelected} 
+                                                            colorScheme="teal" 
+                                                            size="md" 
+                                                            pointerEvents="none"
+                                                            borderColor="gray.300" 
+                                                        />
+                                                        <VStack align="start" spacing={0}>
+                                                            <Text fontSize="xs" fontWeight="bold" color={isSelected ? 'teal.800' : 'gray.700'}>
+                                                                Group: {grp.groupId} {grp.name ? `- ${grp.name}` : ''}
+                                                            </Text>
+                                                            <Text fontSize="10px" color="gray.500" fontWeight="bold">
+                                                                {groupInstIds.length} Instruments
+                                                            </Text>
+                                                        </VStack>
+                                                    </HStack>
+                                                );
+                                            })}
+                                        </VStack>
+                                    </Box>
+                                )}
+
                                 <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg="white">
                                     <VStack spacing={2} align="stretch">
                                         {instruments.map(inst => {
