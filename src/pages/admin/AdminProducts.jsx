@@ -1468,7 +1468,30 @@ const AdminProducts = () => {
                                                     exit={{ opacity: 0, scale: 0.5 }}
                                                     style={{ position: 'relative' }}
                                                 >
-                                                    <Image src={getImageUrl(photo)} h="80px" w="full" objectFit="contain" bg="white" borderRadius="xl" />
+                                                    <Image src={getImageUrl(photo)} h="80px" w="full" objectFit="contain" bg="white" borderRadius="xl" border={index === 0 ? "2px solid" : "none"} borderColor="green.400" />
+                                                    {index === 0 && (
+                                                        <Badge position="absolute" top={1} left={1} colorScheme="green" fontSize="0.6rem" boxShadow="sm">PRIMARY</Badge>
+                                                    )}
+                                                    {index !== 0 && (
+                                                        <Button
+                                                            size="xs"
+                                                            position="absolute"
+                                                            bottom={1}
+                                                            left={1}
+                                                            colorScheme="blue"
+                                                            variant="solid"
+                                                            opacity={0.8}
+                                                            _hover={{ opacity: 1 }}
+                                                            onClick={() => {
+                                                                const arr = [...existingPhotos];
+                                                                const [item] = arr.splice(index, 1);
+                                                                arr.unshift(item);
+                                                                setExistingPhotos(arr);
+                                                            }}
+                                                        >
+                                                            Set Primary
+                                                        </Button>
+                                                    )}
                                                     <IconButton
                                                         size="xs"
                                                         position="absolute"
@@ -1481,7 +1504,9 @@ const AdminProducts = () => {
                                                     />
                                                 </motion.div>
                                             ))}
-                                            {newPhotos.map((file, index) => (
+                                            {newPhotos.map((file, index) => {
+                                                const isAbsolutePrimary = index === 0 && existingPhotos.length === 0;
+                                                return (
                                                 <motion.div
                                                     key={`new-${index}`}
                                                     initial={{ opacity: 0, scale: 0.8 }}
@@ -1489,12 +1514,35 @@ const AdminProducts = () => {
                                                     exit={{ opacity: 0, scale: 0.5 }}
                                                     style={{ position: 'relative' }}
                                                 >
-                                                    <Box h="80px" w="full" bg="brand.50" borderRadius="xl" border="1px" borderColor="brand.200" overflow="hidden">
+                                                    <Box h="80px" w="full" bg="brand.50" borderRadius="xl" border={isAbsolutePrimary ? "2px solid" : "1px solid"} borderColor={isAbsolutePrimary ? "green.400" : "brand.200"} overflow="hidden">
                                                         <Flex h="full" align="center" justify="center" flexDir="column" gap={1}>
                                                             <FiImage size={16} color="brand.500" />
                                                             <Text fontSize="8px" fontWeight="bold" noOfLines={1} px={2} textAlign="center">{file.name}</Text>
                                                         </Flex>
                                                     </Box>
+                                                    {isAbsolutePrimary && (
+                                                        <Badge position="absolute" top={1} left={1} colorScheme="green" fontSize="0.6rem" boxShadow="sm">PRIMARY</Badge>
+                                                    )}
+                                                    {index !== 0 && (
+                                                        <Button
+                                                            size="xs"
+                                                            position="absolute"
+                                                            bottom={1}
+                                                            left={1}
+                                                            colorScheme="blue"
+                                                            variant="solid"
+                                                            opacity={0.8}
+                                                            _hover={{ opacity: 1 }}
+                                                            onClick={() => {
+                                                                const arr = [...newPhotos];
+                                                                const [item] = arr.splice(index, 1);
+                                                                arr.unshift(item);
+                                                                setNewPhotos(arr);
+                                                            }}
+                                                        >
+                                                            Set Primary
+                                                        </Button>
+                                                    )}
                                                     <IconButton
                                                         size="xs"
                                                         position="absolute"
@@ -1506,7 +1554,7 @@ const AdminProducts = () => {
                                                         onClick={() => removeNewPhoto(index)}
                                                     />
                                                 </motion.div>
-                                            ))}
+                                            )})}
                                         </AnimatePresence>
                                     </SimpleGrid>
                                     {existingPhotos.length + newPhotos.length === 0 && (

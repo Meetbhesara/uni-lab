@@ -152,8 +152,8 @@ const VehicleMasterForm = () => {
     const [rcFile, setRcFile] = useState(null);
     const [insuranceFile, setInsuranceFile] = useState(null);
     const [pucFile, setPucFile] = useState(null);
-    const [vehiclePhotos, setVehiclePhotos] = useState([]);
-    const [vehiclePhotoPreviews, setVehiclePhotoPreviews] = useState([]);
+    const [existingVehiclePhotos, setExistingVehiclePhotos] = useState([]);
+    const [newVehiclePhotos, setNewVehiclePhotos] = useState([]);
     const [vehicles, setVehicles] = useState([]);
     const [editId, setEditId] = useState(null);
     const [viewVehicle, setViewVehicle] = useState(null);
@@ -238,15 +238,15 @@ const VehicleMasterForm = () => {
     const handleVehiclePhotoChange = (e) => {
         const files = Array.from(e.target.files);
         if (!files.length) return;
-        setVehiclePhotos(prev => [...prev, ...files]);
-
-        const newPreviews = files.map(file => URL.createObjectURL(file));
-        setVehiclePhotoPreviews(prev => [...prev, ...newPreviews]);
+        setNewVehiclePhotos(prev => [...prev, ...files]);
     };
 
-    const removeVehiclePhoto = (index) => {
-        setVehiclePhotos(prev => prev.filter((_, i) => i !== index));
-        setVehiclePhotoPreviews(prev => prev.filter((_, i) => i !== index));
+    const removeExistingVehiclePhoto = (index) => {
+        setExistingVehiclePhotos(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const removeNewVehiclePhoto = (index) => {
+        setNewVehiclePhotos(prev => prev.filter((_, i) => i !== index));
     };
 
 
@@ -279,7 +279,8 @@ const VehicleMasterForm = () => {
             if (rcFile) uploadData.append('rcBook', rcFile);
             if (insuranceFile) uploadData.append('insurancePhoto', insuranceFile);
             if (pucFile) uploadData.append('pucPhoto', pucFile);
-            vehiclePhotos.forEach(file => uploadData.append('vehiclePhotos', file));
+            newVehiclePhotos.forEach(file => uploadData.append('vehiclePhotos', file));
+            existingVehiclePhotos.forEach(url => uploadData.append('existingVehiclePhotos', url));
 
             let response;
             if (editId) {
@@ -294,8 +295,8 @@ const VehicleMasterForm = () => {
                 setRcFile(null);
                 setInsuranceFile(null);
                 setPucFile(null);
-                setVehiclePhotos([]);
-                setVehiclePhotoPreviews([]);
+                setExistingVehiclePhotos([]);
+                setNewVehiclePhotos([]);
                 setEditId(null);
                 fetchVehicles();
             }
@@ -316,6 +317,22 @@ const VehicleMasterForm = () => {
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
         }
+    };
+
+    const handleEdit = (v) => {
+        setEditId(v._id);
+        setFormData({
+            vehicleNumber: v.vehicleNumber || '',
+            vehicleName: v.vehicleName || '',
+            insuranceDate: v.insuranceDate ? v.insuranceDate.substring(0, 10) : '',
+            pucDate: v.pucDate ? v.pucDate.substring(0, 10) : '',
+            serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
+            logInName: v.logInName || user?.name || ''
+        });
+        setExistingVehiclePhotos(v.vehiclePhotos?.map(p => p.url) || []);
+        setNewVehiclePhotos([]);
+        setActiveTab(0);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     return (
@@ -444,21 +461,84 @@ const VehicleMasterForm = () => {
                                             <Text fontSize="sm" fontWeight="bold" color="purple.700">Click to add multiple vehicle photos</Text>
                                         </VStack>
                                     </Box>
-                                    {vehiclePhotoPreviews.length > 0 && (
+                                    {(existingVehiclePhotos.length > 0 || newVehiclePhotos.length > 0) && (
                                         <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mt={4}>
-                                            {vehiclePhotoPreviews.map((src, i) => (
-                                                <Box key={i} position="relative" borderRadius="lg" overflow="hidden" border="1px solid" borderColor="purple.200">
-                                                    <Image src={src} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                            {existingVehiclePhotos.map((url, i) => (
+                                                <Box key={`existing-${i}`} position="relative" borderRadius="lg" overflow="hidden" border={i === 0 ? "2px solid" : "1px solid"} borderColor={i === 0 ? "green.400" : "purple.200"}>
+                                                    <Image src={`${API_BASE_URL}${url}`} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                                    {i === 0 && (
+                                                        <Badge position="absolute" top={1} left={1} colorScheme="green" fontSize="0.6rem" boxShadow="sm">PRIMARY</Badge>
+                                                    )}
+                                                    {i !== 0 && (
+                                                        <Button
+                                                            size="xs"
+                                                            position="absolute"
+                                                            bottom={1}
+                                                            left={1}
+                                                            colorScheme="purple"
+                                                            variant="solid"
+                                                            opacity={0.8}
+                                                            _hover={{ opacity: 1 }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const arr = [...existingVehiclePhotos];
+                                                                const [item] = arr.splice(i, 1);
+                                                                arr.unshift(item);
+                                                                setExistingVehiclePhotos(arr);
+                                                            }}
+                                                        >
+                                                            Set Primary
+                                                        </Button>
+                                                    )}
                                                     <IconButton
                                                         icon={<Icon as={FaTrash} />}
                                                         size="xs"
                                                         colorScheme="red"
                                                         position="absolute"
                                                         top={1} right={1}
-                                                        onClick={(e) => { e.stopPropagation(); removeVehiclePhoto(i); }}
+                                                        onClick={(e) => { e.stopPropagation(); removeExistingVehiclePhoto(i); }}
                                                     />
                                                 </Box>
                                             ))}
+                                            {newVehiclePhotos.map((file, i) => {
+                                                const isAbsolutePrimary = i === 0 && existingVehiclePhotos.length === 0;
+                                                return (
+                                                <Box key={`new-${i}`} position="relative" borderRadius="lg" overflow="hidden" border={isAbsolutePrimary ? "2px solid" : "1px solid"} borderColor={isAbsolutePrimary ? "green.400" : "purple.200"}>
+                                                    <Image src={URL.createObjectURL(file)} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                                    {isAbsolutePrimary && (
+                                                        <Badge position="absolute" top={1} left={1} colorScheme="green" fontSize="0.6rem" boxShadow="sm">PRIMARY</Badge>
+                                                    )}
+                                                    {i !== 0 && (
+                                                        <Button
+                                                            size="xs"
+                                                            position="absolute"
+                                                            bottom={1}
+                                                            left={1}
+                                                            colorScheme="purple"
+                                                            variant="solid"
+                                                            opacity={0.8}
+                                                            _hover={{ opacity: 1 }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const arr = [...newVehiclePhotos];
+                                                                const [item] = arr.splice(i, 1);
+                                                                arr.unshift(item);
+                                                                setNewVehiclePhotos(arr);
+                                                            }}
+                                                        >
+                                                            Set Primary
+                                                        </Button>
+                                                    )}
+                                                    <IconButton
+                                                        icon={<Icon as={FaTrash} />}
+                                                        size="xs"
+                                                        colorScheme="red"
+                                                        position="absolute"
+                                                        top={1} right={1}
+                                                        onClick={(e) => { e.stopPropagation(); removeNewVehiclePhoto(i); }}
+                                                    />
+                                                </Box>
+                                            )})}
                                         </SimpleGrid>
                                     )}
                                 </FormControl>
@@ -515,7 +595,7 @@ const VehicleMasterForm = () => {
                                     <Button variant="outline" colorScheme="gray" borderRadius="xl" h="60px" w="full" onClick={() => {
                                         setEditId(null);
                                         setFormData({ vehicleNumber: '', vehicleName: '', insuranceDate: '', pucDate: '', serviceDate: '', logInName: user?.name || '' });
-                                        setRcFile(null); setInsuranceFile(null); setPucFile(null); setVehiclePhotos([]); setVehiclePhotoPreviews([]);
+                                        setRcFile(null); setInsuranceFile(null); setPucFile(null); setExistingVehiclePhotos([]); setNewVehiclePhotos([]);
                                     }}>
                                         Cancel Edit
                                     </Button>
@@ -572,18 +652,7 @@ const VehicleMasterForm = () => {
                                                     <Td textAlign="center" whiteSpace="nowrap">
                                                         <HStack justify="center" spacing={1}>
                                                             <IconButton aria-label="View" size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} onClick={() => setViewVehicle(v)} />
-                                                            <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => {
-                                                                setEditId(v._id);
-                                                                setFormData({
-                                                                    vehicleNumber: v.vehicleNumber || '',
-                                                                    vehicleName: v.vehicleName || '',
-                                                                    insuranceDate: v.insuranceDate ? v.insuranceDate.substring(0, 10) : '',
-                                                                    pucDate: v.pucDate ? v.pucDate.substring(0, 10) : '',
-                                                                    serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
-                                                                    logInName: v.logInName || user?.name || ''
-                                                                });
-                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                            }} />
+                                                            <IconButton aria-label="Edit" size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
                                                             <IconButton aria-label="Delete" size="sm" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
                                                         </HStack>
                                                     </Td>
@@ -618,18 +687,7 @@ const VehicleMasterForm = () => {
                                                 </VStack>
                                                 <HStack justify="flex-end" spacing={2} pt={2} borderTop="1px solid" borderColor="gray.50">
                                                     <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<FaEye />} onClick={() => setViewVehicle(v)}>View</Button>
-                                                    <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<FaEdit />} onClick={() => {
-                                                        setEditId(v._id);
-                                                        setFormData({
-                                                            vehicleNumber: v.vehicleNumber || '',
-                                                            vehicleName: v.vehicleName || '',
-                                                            insuranceDate: v.insuranceDate ? v.insuranceDate.substring(0, 10) : '',
-                                                            pucDate: v.pucDate ? v.pucDate.substring(0, 10) : '',
-                                                            serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
-                                                            logInName: v.logInName || user?.name || ''
-                                                        });
-                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                    }}>Edit</Button>
+                                                    <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<FaEdit />} onClick={() => handleEdit(v)}>Edit</Button>
                                                 </HStack>
                                             </CardBody>
                                         </Card>
@@ -4840,8 +4898,12 @@ const ScheduleMasterForm = () => {
                     status: 'success',
                     duration: 3000
                 });
+                const targetViewDate = formData.scheduleDate;
                 handleClear();
-                const res = await api.get(`/schedule-master?date=${viewDate}`);
+                if (targetViewDate) {
+                    setViewDate(targetViewDate);
+                }
+                const res = await api.get(`/schedule-master?date=${targetViewDate || viewDate}`);
                 if (res.data.success) setSchedules(res.data.data);
             }
         } catch (error) {
@@ -5618,12 +5680,10 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                         <FormControl isDisabled={isCompleted || isRejected}>
                             <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
                                 <Icon as={FaCalendarAlt} mr={2} color="blue.500" /> Schedule Date
-                                <Text as="span" fontSize="10px" color="gray.400" fontWeight="normal" ml={2}>(Today or future only)</Text>
                             </FormLabel>
                             <Input
                                 type="date"
                                 value={formData.scheduleDate}
-                                min={new Date().toISOString().split('T')[0]}
                                 onChange={(e) => setFormData(prev => ({ ...prev, scheduleDate: e.target.value }))}
                                 borderRadius="2xl"
                                 bg="white"
@@ -5667,13 +5727,29 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                 </FormLabel>
                                 <Select 
                                     value={formData.operative} 
-                                    onChange={(e) => {
+                                    onChange={async (e) => {
                                         const newOp = e.target.value;
                                         setFormData(prev => ({ 
                                             ...prev, 
                                             operative: newOp,
                                             helpers: prev.helpers.filter(h => h !== newOp)
                                         }));
+                                        if (newOp) {
+                                            try {
+                                                const res = await api.get(`/schedule-master/last-assignment/${newOp}`);
+                                                if (res.data.success && res.data.data) {
+                                                    const { helpers, vehicle, instruments } = res.data.data;
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        helpers: helpers && helpers.length > 0 ? helpers : prev.helpers,
+                                                        vehicle: vehicle || prev.vehicle,
+                                                        instruments: instruments && instruments.length > 0 ? instruments : prev.instruments
+                                                    }));
+                                                }
+                                            } catch (err) {
+                                                console.error("Failed to fetch last assignment", err);
+                                            }
+                                        }
                                     }}
                                     borderRadius="2xl" 
                                     bg="white" 
@@ -6071,9 +6147,17 @@ const InstrumentMasterForm = () => {
     const [editId, setEditId] = useState(null);
     const [photoFiles, setPhotoFiles] = useState([]);
     const [photoPreviews, setPhotoPreviews] = useState([]);
+    const [existingPhotos, setExistingPhotos] = useState([]);
+    const [newPhotos, setNewPhotos] = useState([]);
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
     const [activeTab, setActiveTab] = useState(0);
+
+    const tabConfig = [
+        { id: 'form', label: 'Form', permission: 'instrumentMaster_form' },
+        { id: 'view', label: 'View', permission: 'instrumentMaster_view' },
+        { id: 'groups', label: 'Groups', permission: 'instrumentMaster_groups' }
+    ].filter(t => hasPermission(user, t.permission, 'read'));
 
     const [formData, setFormData] = useState({ model: '', serialNo: '', instrumentName: '', notes: '' });
 
@@ -6239,15 +6323,15 @@ const InstrumentMasterForm = () => {
     const handlePhotoChange = (e) => {
         const files = Array.from(e.target.files);
         if (!files.length) return;
-        setPhotoFiles(prev => [...prev, ...files]);
-
-        const newPreviews = files.map(file => URL.createObjectURL(file));
-        setPhotoPreviews(prev => [...prev, ...newPreviews]);
+        setNewPhotos(prev => [...prev, ...files]);
     };
 
-    const removePhoto = (index) => {
-        setPhotoFiles(prev => prev.filter((_, i) => i !== index));
-        setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
+    const removeExistingPhoto = (index) => {
+        setExistingPhotos(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const removeNewPhoto = (index) => {
+        setNewPhotos(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleEdit = (inst) => {
@@ -6258,16 +6342,22 @@ const InstrumentMasterForm = () => {
             instrumentName: inst.instrumentName || '',
             notes: inst.notes || ''
         });
-        setPhotoPreviews(inst.photos?.map(p => `${API_BASE_URL}${p.url}`) || (inst.photo?.url ? [`${API_BASE_URL}${inst.photo.url}`] : []));
-        setPhotoFiles([]);
+        setExistingPhotos(inst.photos?.map(p => p.url) || (inst.photo?.url ? [inst.photo.url] : []));
+        setNewPhotos([]);
+        
+        const formTabIndex = tabConfig.findIndex(t => t.id === 'form');
+        if (formTabIndex !== -1) {
+            setActiveTab(formTabIndex);
+        }
+
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleClear = () => {
         setEditId(null);
         setFormData({ model: '', serialNo: '', instrumentName: '', notes: '' });
-        setPhotoFiles([]);
-        setPhotoPreviews([]);
+        setExistingPhotos([]);
+        setNewPhotos([]);
         document.getElementById('instr-photo-upload').value = '';
     };
 
@@ -6287,7 +6377,8 @@ const InstrumentMasterForm = () => {
             uploadData.append('serialNo', formData.serialNo);
             uploadData.append('instrumentName', formData.instrumentName);
             if (formData.notes) uploadData.append('notes', formData.notes);
-            photoFiles.forEach(file => uploadData.append('photos', file));
+            newPhotos.forEach(file => uploadData.append('photos', file));
+            existingPhotos.forEach(url => uploadData.append('existingPhotos', url));
 
             let response;
             if (editId) {
@@ -6324,12 +6415,6 @@ const InstrumentMasterForm = () => {
             toast({ title: 'Error', description: err.response?.data?.message || 'Delete failed', status: 'error', duration: 3000 });
         }
     };
-
-    const tabConfig = [
-        { id: 'form', label: 'Form', permission: 'instrumentMaster_form' },
-        { id: 'view', label: 'View', permission: 'instrumentMaster_view' },
-        { id: 'groups', label: 'Groups', permission: 'instrumentMaster_groups' }
-    ].filter(t => hasPermission(user, t.permission, 'read'));
 
     return (
         <Box py={8} bg="gray.100" minH="100vh">
@@ -6411,11 +6496,35 @@ const InstrumentMasterForm = () => {
                                         </VStack>
                                     </Box>
 
-                                    {photoPreviews && photoPreviews.length > 0 && (
+                                    {(existingPhotos.length > 0 || newPhotos.length > 0) && (
                                         <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mt={4}>
-                                            {photoPreviews.map((src, i) => (
-                                                <Box key={i} position="relative" borderRadius="lg" overflow="hidden" border="1px solid" borderColor="blue.200">
-                                                    <Image src={src} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                            {existingPhotos.map((url, i) => (
+                                                <Box key={`existing-${i}`} position="relative" borderRadius="lg" overflow="hidden" border={i === 0 ? "2px solid" : "1px solid"} borderColor={i === 0 ? "green.400" : "blue.200"}>
+                                                    <Image src={`${API_BASE_URL}${url}`} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                                    {i === 0 && (
+                                                        <Badge position="absolute" top={1} left={1} colorScheme="green" fontSize="0.6rem" boxShadow="sm">PRIMARY</Badge>
+                                                    )}
+                                                    {i !== 0 && (
+                                                        <Button
+                                                            size="xs"
+                                                            position="absolute"
+                                                            bottom={1}
+                                                            left={1}
+                                                            colorScheme="blue"
+                                                            variant="solid"
+                                                            opacity={0.8}
+                                                            _hover={{ opacity: 1 }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const arr = [...existingPhotos];
+                                                                const [item] = arr.splice(i, 1);
+                                                                arr.unshift(item);
+                                                                setExistingPhotos(arr);
+                                                            }}
+                                                        >
+                                                            Set Primary
+                                                        </Button>
+                                                    )}
                                                     <IconButton
                                                         aria-label="Remove Photo"
                                                         icon={<Icon as={FaTrash} />}
@@ -6423,10 +6532,50 @@ const InstrumentMasterForm = () => {
                                                         colorScheme="red"
                                                         position="absolute"
                                                         top={1} right={1}
-                                                        onClick={(e) => { e.stopPropagation(); removePhoto(i); }}
+                                                        onClick={(e) => { e.stopPropagation(); removeExistingPhoto(i); }}
                                                     />
                                                 </Box>
                                             ))}
+                                            {newPhotos.map((file, i) => {
+                                                const isAbsolutePrimary = i === 0 && existingPhotos.length === 0;
+                                                return (
+                                                <Box key={`new-${i}`} position="relative" borderRadius="lg" overflow="hidden" border={isAbsolutePrimary ? "2px solid" : "1px solid"} borderColor={isAbsolutePrimary ? "green.400" : "blue.200"}>
+                                                    <Image src={URL.createObjectURL(file)} alt="Preview" w="full" h="100px" objectFit="cover" />
+                                                    {isAbsolutePrimary && (
+                                                        <Badge position="absolute" top={1} left={1} colorScheme="green" fontSize="0.6rem" boxShadow="sm">PRIMARY</Badge>
+                                                    )}
+                                                    {i !== 0 && (
+                                                        <Button
+                                                            size="xs"
+                                                            position="absolute"
+                                                            bottom={1}
+                                                            left={1}
+                                                            colorScheme="blue"
+                                                            variant="solid"
+                                                            opacity={0.8}
+                                                            _hover={{ opacity: 1 }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const arr = [...newPhotos];
+                                                                const [item] = arr.splice(i, 1);
+                                                                arr.unshift(item);
+                                                                setNewPhotos(arr);
+                                                            }}
+                                                        >
+                                                            Set Primary
+                                                        </Button>
+                                                    )}
+                                                    <IconButton
+                                                        aria-label="Remove Photo"
+                                                        icon={<Icon as={FaTrash} />}
+                                                        size="xs"
+                                                        colorScheme="red"
+                                                        position="absolute"
+                                                        top={1} right={1}
+                                                        onClick={(e) => { e.stopPropagation(); removeNewPhoto(i); }}
+                                                    />
+                                                </Box>
+                                            )})}
                                         </SimpleGrid>
                                     )}
                                 </FormControl>

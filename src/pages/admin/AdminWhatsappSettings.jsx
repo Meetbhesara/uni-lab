@@ -831,7 +831,11 @@ const AdminWhatsappSettings = () => {
 
                     <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4}>
                         {adminsList
-                            .filter((adm) => String(adm._id || adm.id) !== String(user?.id || user?._id))
+                            .filter((adm) => {
+                                const isSameId = String(adm._id || adm.id) === String(user?.id || user?._id);
+                                const isSameEmail = Boolean(adm.email && user?.email && adm.email === user.email);
+                                return !isSameId && !isSameEmail;
+                            })
                             .map((adm) => {
                                 const id = String(adm._id || adm.id);
                             const statusObj = adminsStatus[id] || { status: 'disconnected', qr: null };
