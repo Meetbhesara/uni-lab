@@ -9,6 +9,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['vite.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
+      workbox: {
+        navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/app/, /\.(pdf|jpg|jpeg|png|gif|svg|dta|doc|docx|xls|xlsx)$/i]
+      },
       manifest: {
         name: 'Uni Engineering',
         short_name: 'UniEng',
