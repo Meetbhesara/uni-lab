@@ -27,96 +27,96 @@ const getCoordinates = () => {
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+        const [loading, setLoading] = useState(true);
 
-    // ── Dynamic Daily & Midnight Auto-Logout (12:00 AM reset) ──────────────────
-    useEffect(() => {
-        const checkSessionExpiry = () => {
+        // ── Dynamic Daily & Midnight Auto-Logout (12:00 AM reset) ──────────────────
+        useEffect(() => {
+            const checkSessionExpiry = () => {
+                const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+                const lastLoginStr = sessionStorage.getItem('lastLoginAt') || localStorage.getItem('lastLoginAt');
+                if (!token || !lastLoginStr) return false;
+
+                const lastLogin = new Date(parseInt(lastLoginStr));
+                const todayMidnight = new Date();
+                todayMidnight.setHours(0, 0, 0, 0);
+
+                // If last login was before today's 12:00 AM midnight, trigger auto logout
+                if (lastLogin.getTime() < todayMidnight.getTime()) {
+                    console.log("Session expired at midnight. Automatic logout triggered, redirecting to Home page.");
+                    logout();
+                    return true;
+                }
+                return false;
+            };
+
+            // Check immediately on mount/update
+            if (checkSessionExpiry()) return;
+
+            // Schedule exact timeout to trigger precisely at next midnight (12:00:00 AM tonight)
+            const scheduleMidnightTimer = () => {
+                const now = new Date();
+                const nextMidnight = new Date();
+                nextMidnight.setHours(24, 0, 0, 0); // exact next midnight
+                const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+                return setTimeout(() => {
+                    console.log("Midnight reached! Automatic logout triggered, redirecting to Home page.");
+                    logout();
+                }, msUntilMidnight);
+            };
+
+            let midnightTimer = scheduleMidnightTimer();
+
+            // Safety interval check (in case tab sleeps/wakes across midnight)
+            const interval = setInterval(() => {
+                const expired = checkSessionExpiry();
+                if (expired) {
+                    clearTimeout(midnightTimer);
+                } else {
+                    clearTimeout(midnightTimer);
+                    midnightTimer = scheduleMidnightTimer();
+                }
+            }, 15 * 60 * 1000); // Check every 15 minutes
+
+            // Also check whenever user switches back to the tab or wakes up computer
+            const handleVisibilityChange = () => {
+                if (document.visibilityState === 'visible') {
+                    checkSessionExpiry();
+                }
+            };
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
+            // Listen for 401 Unauthorized errors from API interceptors
+            const handleSessionExpired = () => {
+                console.log("401 Unauthorized detected. Triggering auto logout, redirecting to Home page.");
+                logout();
+            };
+            window.addEventListener('auth-session-expired', handleSessionExpired);
+
+            return () => {
+                clearTimeout(midnightTimer);
+                clearInterval(interval);
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+                window.removeEventListener('auth-session-expired', handleSessionExpired);
+            };
+        }, [user]);
+
+        useEffect(() => {
+            // Check session storage on load (sessionStorage is cleared when browser/window is closed)
             const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-            const lastLoginStr = sessionStorage.getItem('lastLoginAt') || localStorage.getItem('lastLoginAt');
-            if (!token || !lastLoginStr) return false;
+            const storedUser = sessionStorage.getItem('user') || localStorage.getItem('user');
 
-            const lastLogin = new Date(parseInt(lastLoginStr));
-            const todayMidnight = new Date();
-            todayMidnight.setHours(0, 0, 0, 0);
-
-            // If last login was before today's 12:00 AM midnight, trigger auto logout
-            if (lastLogin.getTime() < todayMidnight.getTime()) {
-                console.log("Session expired at midnight. Automatic logout triggered, redirecting to Home page.");
-                logout();
-                return true;
-            }
-            return false;
-        };
-
-        // Check immediately on mount/update
-        if (checkSessionExpiry()) return;
-
-        // Schedule exact timeout to trigger precisely at next midnight (12:00:00 AM tonight)
-        const scheduleMidnightTimer = () => {
-            const now = new Date();
-            const nextMidnight = new Date();
-            nextMidnight.setHours(24, 0, 0, 0); // exact next midnight
-            const msUntilMidnight = nextMidnight.getTime() - now.getTime();
-
-            return setTimeout(() => {
-                console.log("Midnight reached! Automatic logout triggered, redirecting to Home page.");
-                logout();
-            }, msUntilMidnight);
-        };
-
-        let midnightTimer = scheduleMidnightTimer();
-
-        // Safety interval check (in case tab sleeps/wakes across midnight)
-        const interval = setInterval(() => {
-            const expired = checkSessionExpiry();
-            if (expired) {
-                clearTimeout(midnightTimer);
+            // If sessionStorage is empty but localStorage has token, we require re-login if browser was closed
+            // By using sessionStorage primarily for login state, closing the browser forces re-login
+            if (sessionStorage.getItem('token')) {
+                if (storedUser) {
+                    try { setUser(JSON.parse(storedUser)); } catch (e) {}
+                }
+                refreshUser(); // Background sync on load
             } else {
-                clearTimeout(midnightTimer);
-                midnightTimer = scheduleMidnightTimer();
-            }
-        }, 15 * 60 * 1000); // Check every 15 minutes
-
-        // Also check whenever user switches back to the tab or wakes up computer
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                checkSessionExpiry();
-            }
-        };
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        // Listen for 401 Unauthorized errors from API interceptors
-        const handleSessionExpired = () => {
-            console.log("401 Unauthorized detected. Triggering auto logout, redirecting to Home page.");
-            logout();
-        };
-        window.addEventListener('auth-session-expired', handleSessionExpired);
-
-        return () => {
-            clearTimeout(midnightTimer);
-            clearInterval(interval);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('auth-session-expired', handleSessionExpired);
-        };
-    }, [user]);
-
-    useEffect(() => {
-        // Check session storage on load (sessionStorage is cleared when browser/window is closed)
-        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-        const storedUser = sessionStorage.getItem('user') || localStorage.getItem('user');
-
-        // If sessionStorage is empty but localStorage has token, we require re-login if browser was closed
-        // By using sessionStorage primarily for login state, closing the browser forces re-login
-        if (sessionStorage.getItem('token')) {
-            if (storedUser) {
-                try { setUser(JSON.parse(storedUser)); } catch (e) {}
-            }
-            refreshUser(); // Background sync on load
-        } else {
-            // Browser was closed and re-opened or first visit -> wipe old localStorage sessions to require re-login
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
+                // Browser was closed and re-opened or first visit -> wipe old localStorage sessions to require re-login
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
             localStorage.removeItem('lastLoginAt');
             setLoading(false);
         }

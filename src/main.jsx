@@ -10,6 +10,14 @@ import { registerSW } from 'virtual:pwa-register'
 // Register service worker
 registerSW({ immediate: true })
 
+// ── Global fix: prevent mouse scroll from changing number input values ──────
+// This fires for every <input type="number"> across the entire app.
+document.addEventListener('wheel', (e) => {
+  if (document.activeElement?.type === 'number') {
+    document.activeElement.blur();
+  }
+}, { passive: true });
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);

@@ -13,7 +13,8 @@ import {
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
-    FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight, FaUserCheck, FaUserSlash, FaClipboardList
+    FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight, FaUserCheck, FaUserSlash, FaClipboardList,
+    FaHome, FaWarehouse, FaChevronDown, FaChevronUp
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -924,8 +925,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                         scheduleId,
                         clientId,
                         siteId,
-                        ledger: existingRow?.ledger && existingRow.ledger !== '' ? existingRow.ledger : ledger,
-                        quantity: existingRow?.quantity !== undefined ? existingRow.quantity : quantity,
+                        ledger: existingRow?.ledger ? existingRow.ledger : ledger,
+                        quantity: existingRow?.quantity ? existingRow.quantity : quantity,
                         files: preserveFiles
                     };
                 });
@@ -936,7 +937,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 clientId: '',
                 siteId: '',
                 ledger: '',
-                quantity: 0,
+                quantity: '',
                 files: { photos: [], data: [], dailyReports: [], drawing: [] }
             }]);
         }
@@ -1686,7 +1687,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                             type="number"
                                                             min="0"
                                                             value={row.quantity || ''}
-                                                            onChange={(e) => updateClientSite(idx, 'quantity', Number(e.target.value) || 0)}
+                                                            onChange={(e) => updateClientSite(idx, 'quantity', e.target.value === '' ? '' : (Number(e.target.value) || 0))}
                                                             bg="white"
                                                             borderRadius="lg"
                                                             placeholder="Qty"
@@ -2446,14 +2447,27 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 };
 
 // ── Attendance Sub-Module for Unscheduled Employees ────────────────────────
-const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, canWrite = true, isLoading = false }) => {
+const DAILY_EXPENSE_ITEMS = [
+    { key: 'breakfast', label: 'Breakfast', icon: '🍳', color: 'yellow' },
+    { key: 'lunch',     label: 'Lunch',     icon: '🍱', color: 'orange' },
+    { key: 'dinner',   label: 'Dinner',    icon: '🍽️', color: 'purple' },
+    { key: 'petrol',   label: 'Petrol',    icon: '⛽', color: 'blue'   },
+];
+
+const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, canWrite = true, isLoading = false, onRefresh }) => {
     const toast = useToast();
-    const [attendanceMap, setAttendanceMap] = useState({});
-    const [remarks, setRemarks] = useState({});
-    const [isSaving, setIsSaving] = useState(false);
+    const [attendanceMap, setAttendanceMap]   = useState({});
+    const [remarks, setRemarks]               = useState({});
+    const [locationMap, setLocationMap]       = useState({});   // 'Home' | 'Godown' | ''
+    const [expensesMap, setExpensesMap]       = useState({});   // { empId: { breakfast, lunch, dinner, petrol } }
+    const [fuelTypeMap, setFuelTypeMap]       = useState({});   // { empId: 'Petrol'|'CNG'|'Diesel' }
+    const [otherExpMap, setOtherExpMap]       = useState({});   // { empId: [{ expenseName, amount, files:[] }] }
+    const [filePreviewMap, setFilePreviewMap] = useState({});   // { empId: { breakfast:[...], lunch:[...], ... } }
+    const [expandedMap, setExpandedMap]       = useState({});   // show/hide expense row
+    const [isSaving, setIsSaving]             = useState(false);
     const [savedAttendance, setSavedAttendance] = useState([]);
     const [adminLoggedInEmpIds, setAdminLoggedInEmpIds] = useState(new Set());
-    const [isLinkedAdminMap, setIsLinkedAdminMap] = useState({});
+    const [isLinkedAdminMap, setIsLinkedAdminMap]       = useState({});
     const [isFetchingAttendance, setIsFetchingAttendance] = useState(true);
 
     // Compute IDs of all scheduled operatives + helpers
@@ -2474,14 +2488,10 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     // Employees NOT in the scheduler for this date — and who are Active
     const unscheduledEmployees = useMemo(() => {
         return employees.filter(e => {
-            if (e.status === 'Deactive') return false;           // exclude deactivated employees
-            if (scheduledIds.has(String(e._id))) return false;     // exclude scheduled employees
-            
-            // If employee is linked to an Admin user account, check if they logged into the admin portal today
+            if (e.status === 'Deactive') return false;
+            if (scheduledIds.has(String(e._id))) return false;
             const isAdmin = e.isLinkedAdmin || isLinkedAdminMap[String(e._id)];
-            if (isAdmin && adminLoggedInEmpIds.has(String(e._id))) {
-                return false;                                      // exclude admins who already marked Present via Admin Login
-            }
+            if (isAdmin && adminLoggedInEmpIds.has(String(e._id))) return false;
             return true;
         });
     }, [employees, scheduledIds, adminLoggedInEmpIds, isLinkedAdminMap]);
@@ -2497,18 +2507,20 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                     setSavedAttendance(res.data.data || []);
                     setAdminLoggedInEmpIds(new Set(res.data.adminLoggedInEmpIds || []));
                     setIsLinkedAdminMap(res.data.isLinkedAdminMap || {});
-                    // Pre-fill map from saved
-                    const map = {};
-                    const rem = {};
+                    const map = {}; const rem = {}; const loc = {}; const exp = {};
                     (res.data.data || []).forEach(a => {
                         map[a.employeeId] = a.attendance;
                         rem[a.employeeId] = a.attendanceRemark || '';
+                        loc[a.employeeId] = a.workLocation || '';
+                        exp[a.employeeId] = a.expenses || { breakfast: 0, lunch: 0, dinner: 0, petrol: 0 };
                     });
                     setAttendanceMap(map);
                     setRemarks(rem);
+                    setLocationMap(loc);
+                    setExpensesMap(exp);
                 }
             } catch (err) {
-                // Silently handle — attendance endpoint may not exist yet
+                // Silently handle
             } finally {
                 setIsFetchingAttendance(false);
             }
@@ -2518,20 +2530,65 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
 
     const setStatus = (empId, status) => {
         setAttendanceMap(prev => ({ ...prev, [empId]: status }));
+        // NOTE: location & expenses are independent — do NOT clear them on attendance change
     };
+    const setRemark   = (empId, val) => setRemarks(prev => ({ ...prev, [empId]: val }));
+    const setLocation = (empId, loc) => {
+        const current = locationMap[empId] || '';
+        if (current === loc) return; // already selected — do nothing, prevent blank
+        setLocationMap(prev => ({ ...prev, [empId]: loc }));
+        // auto-expand expense panel when a location is chosen
+        setExpandedMap(prev => ({ ...prev, [empId]: true }));
+    };
+    const setExpenseItem = (empId, key, val) => {
+        setExpensesMap(prev => ({ ...prev, [empId]: { ...(prev[empId] || {}), [key]: val } }));
+    };
+    const setFuelType = (empId, val) => setFuelTypeMap(prev => ({ ...prev, [empId]: val }));
 
-    const setRemark = (empId, val) => {
-        setRemarks(prev => ({ ...prev, [empId]: val }));
+    const getOtherExp = (empId) => otherExpMap[empId] || [];
+    const addOtherExp = (empId) => {
+        setOtherExpMap(prev => ({ ...prev, [empId]: [...(prev[empId] || []), { expenseName: '', amount: '', files: [] }] }));
     };
+    const updateOtherExp = (empId, idx, field, val) => {
+        setOtherExpMap(prev => {
+            const rows = [...(prev[empId] || [])];
+            rows[idx] = { ...rows[idx], [field]: val };
+            return { ...prev, [empId]: rows };
+        });
+    };
+    const removeOtherExp = (empId, idx) => {
+        setOtherExpMap(prev => { const rows = [...(prev[empId] || [])]; rows.splice(idx, 1); return { ...prev, [empId]: rows }; });
+    };
+    const handleExpFile = (empId, expName, e) => {
+        const files = Array.from(e.target.files);
+        const previews = files.map(f => ({ name: f.name, type: f.type.startsWith('image') ? 'image' : 'file', url: URL.createObjectURL(f), file: f }));
+        setFilePreviewMap(prev => ({ ...prev, [empId]: { ...(prev[empId] || {}), [expName]: [...((prev[empId] || {})[expName] || []), ...previews] } }));
+    };
+    const handleOtherFile = (empId, idx, e) => {
+        const files = Array.from(e.target.files);
+        const previews = files.map(f => ({ name: f.name, type: f.type.startsWith('image') ? 'image' : 'file', url: URL.createObjectURL(f), file: f }));
+        setOtherExpMap(prev => {
+            const rows = [...(prev[empId] || [])];
+            rows[idx] = { ...rows[idx], files: [...(rows[idx].files || []), ...previews] };
+            return { ...prev, [empId]: rows };
+        });
+    };
+    const removeExpFile = (empId, expName, i) => {
+        setFilePreviewMap(prev => { const k = { ...(prev[empId] || {}) }; k[expName] = (k[expName] || []).filter((_, j) => j !== i); return { ...prev, [empId]: k }; });
+    };
+    const toggleExpand = (empId) => setExpandedMap(prev => ({ ...prev, [empId]: !prev[empId] }));
 
     const handleSaveAttendance = async () => {
         const entries = unscheduledEmployees
             .filter(e => attendanceMap[e._id])
             .map(e => ({
-                employeeId: e._id,
-                date: attendanceDate,
-                attendance: attendanceMap[e._id],
-                attendanceRemark: remarks[e._id] || ''
+                employeeId:       e._id,
+                date:             attendanceDate,
+                attendance:       attendanceMap[e._id],
+                attendanceRemark: remarks[e._id] || '',
+                workLocation:     locationMap[e._id] || '',
+                expenses:         { ...(expensesMap[e._id] || { breakfast: 0, lunch: 0, dinner: 0, petrol: 0 }), fuelType: fuelTypeMap[e._id] || 'Petrol' },
+                otherExpensesList: (otherExpMap[e._id] || []).map(r => ({ expenseName: r.expenseName, amount: Number(r.amount) || 0 }))
             }));
 
         if (entries.length === 0) {
@@ -2545,6 +2602,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
             if (res.data.success) {
                 toast({ title: '✅ Attendance Saved', description: `${entries.length} record(s) saved successfully`, status: 'success', position: 'top-right', duration: 3000 });
                 setSavedAttendance(res.data.data || entries);
+                if (onRefresh) onRefresh();
             }
         } catch (err) {
             toast({ title: 'Error', description: err.response?.data?.message || 'Failed to save attendance', status: 'error', position: 'top-right' });
@@ -2607,94 +2665,290 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                     </HStack>
                 </Box>
 
-                <Box p={6}>
-                    <TableContainer>
-                        <Table size="sm" variant="simple">
-                            <Thead>
-                                <Tr bg="orange.50">
-                                    <Th color="orange.700" fontSize="xs" fontWeight="black" py={3}>Employee Name</Th>
-                                    <Th textAlign="center" color="orange.700" fontSize="xs" fontWeight="black" py={3}>
-                                        <HStack justify="center" spacing={1}>
-                                            <Icon as={FaUserCheck} color="green.500" />
-                                            <Text>Present</Text>
+                <Box p={4}>
+                    <VStack spacing={3} align="stretch">
+                        {unscheduledEmployees.map((emp, idx) => {
+                            const status   = attendanceMap[emp._id] || '';
+                            const location = locationMap[emp._id]   || '';
+                            const expenses = expensesMap[emp._id]   || {};
+                            const expanded = expandedMap[emp._id]   || false;
+                            const saved    = savedAttendance.find(a => a.employeeId === emp._id);
+                            const isPresent = status === 'Present';
+                            const hasLocation = !!location;
+
+                            return (
+                                <Box
+                                    key={emp._id}
+                                    bg={idx % 2 === 0 ? 'white' : 'orange.50'}
+                                    border="1px solid"
+                                    borderColor={hasLocation ? 'orange.200' : 'gray.100'}
+                                    borderRadius="xl"
+                                    overflow="hidden"
+                                    transition="all 0.2s"
+                                    boxShadow={hasLocation ? 'sm' : 'none'}
+                                >
+                                    {/* ── Main Row ── */}
+                                    <HStack px={4} py={3} spacing={3} wrap="wrap">
+                                        {/* Dot + Name */}
+                                        <HStack spacing={2} flex="1" minW="120px">
+                                            <Box w={2} h={2} borderRadius="full" flexShrink={0}
+                                                bg={status === 'Present' ? 'green.400' : status === 'Absent' ? 'red.400' : 'gray.200'}
+                                            />
+                                            <Text fontWeight="bold" fontSize="sm" color="gray.700">{emp.name}</Text>
+                                            {saved && (
+                                                <Badge colorScheme={saved.attendance === 'Present' ? 'green' : saved.attendance === 'Half Day' ? 'orange' : 'red'}
+                                                    fontSize="9px" borderRadius="full" px={2}>Saved</Badge>
+                                            )}
                                         </HStack>
-                                    </Th>
-                                    <Th textAlign="center" color="orange.700" fontSize="xs" fontWeight="black" py={3}>
-                                        <HStack justify="center" spacing={1}>
-                                            <Icon as={FaUserSlash} color="red.400" />
-                                            <Text>Absent</Text>
+
+                                        {/* Present / Absent Buttons */}
+                                        <HStack spacing={2}>
+                                            <Button
+                                                size="xs" borderRadius="full" minW="52px"
+                                                colorScheme={status === 'Present' ? 'green' : 'gray'}
+                                                variant={status === 'Present' ? 'solid' : 'outline'}
+                                                onClick={() => setStatus(emp._id, status === 'Present' ? '' : 'Present')}
+                                                isDisabled={!canWrite}
+                                            >
+                                                {status === 'Present' ? '✓ P' : 'P'}
+                                            </Button>
+                                            <Button
+                                                size="xs" borderRadius="full" minW="52px"
+                                                colorScheme={status === 'Absent' ? 'red' : 'gray'}
+                                                variant={status === 'Absent' ? 'solid' : 'outline'}
+                                                onClick={() => setStatus(emp._id, status === 'Absent' ? '' : 'Absent')}
+                                                isDisabled={!canWrite}
+                                            >
+                                                {status === 'Absent' ? '✓ A' : 'A'}
+                                            </Button>
                                         </HStack>
-                                    </Th>
-                                    <Th color="orange.700" fontSize="xs" fontWeight="black" py={3}>Remark</Th>
-                                </Tr>
-                            </Thead>
-                            <Tbody>
-                                {unscheduledEmployees.map((emp, idx) => {
-                                    const status = attendanceMap[emp._id] || '';
-                                    const saved = savedAttendance.find(a => a.employeeId === emp._id);
-                                    return (
-                                        <Tr key={emp._id}
-                                            bg={idx % 2 === 0 ? 'white' : 'orange.50'}
-                                            _hover={{ bg: 'yellow.50' }}
-                                            transition="background 0.15s"
-                                        >
-                                            <Td py={3}>
-                                                <HStack spacing={2}>
-                                                    <Box w={2} h={2} borderRadius="full"
-                                                        bg={status === 'Present' ? 'green.400' : status === 'Absent' ? 'red.400' : 'gray.200'}
-                                                    />
-                                                    <Text fontWeight="bold" fontSize="sm" color="gray.700">{emp.name}</Text>
-                                                    {saved && (
-                                                        <Badge colorScheme={saved.attendance === 'Present' ? 'green' : saved.attendance === 'Half Day' ? 'orange' : 'red'}
-                                                            fontSize="9px" borderRadius="full" px={2}>
-                                                            Saved
-                                                        </Badge>
-                                                    )}
-                                                </HStack>
-                                            </Td>
-                                            <Td textAlign="center">
+
+                                        {/* HOME / GODOWN / OFFICE — always visible, independent of attendance */}
+                                        <HStack spacing={2}>
+                                            <Button
+                                                size="xs" borderRadius="full" minW="70px"
+                                                leftIcon={<Icon as={FaHome} />}
+                                                colorScheme={location === 'Home' ? 'blue' : 'gray'}
+                                                variant={location === 'Home' ? 'solid' : 'outline'}
+                                                onClick={() => setLocation(emp._id, 'Home')}
+                                                isDisabled={!canWrite}
+                                            >
+                                                Home
+                                            </Button>
+                                            <Button
+                                                size="xs" borderRadius="full" minW="76px"
+                                                leftIcon={<Icon as={FaWarehouse} />}
+                                                colorScheme={location === 'Godown' ? 'teal' : 'gray'}
+                                                variant={location === 'Godown' ? 'solid' : 'outline'}
+                                                onClick={() => setLocation(emp._id, 'Godown')}
+                                                isDisabled={!canWrite}
+                                            >
+                                                Godown
+                                            </Button>
+                                            <Button
+                                                size="xs" borderRadius="full" minW="70px"
+                                                leftIcon={<Icon as={FaBuilding} />}
+                                                colorScheme={location === 'Office' ? 'purple' : 'gray'}
+                                                variant={location === 'Office' ? 'solid' : 'outline'}
+                                                onClick={() => setLocation(emp._id, 'Office')}
+                                                isDisabled={!canWrite}
+                                            >
+                                                Office
+                                            </Button>
+                                        </HStack>
+
+                                        {/* Remark */}
+                                        <Input
+                                            size="xs" borderRadius="lg" maxW="160px"
+                                            placeholder="Remark..."
+                                            value={remarks[emp._id] || ''}
+                                            onChange={e => setRemark(emp._id, e.target.value)}
+                                            isDisabled={!status || !canWrite}
+                                        />
+
+                                        {/* Expand expenses toggle — only when location is set */}
+                                        {hasLocation && (
+                                            <Tooltip label={expanded ? 'Hide expenses' : 'Add daily expenses'}>
                                                 <Button
-                                                    size="xs"
-                                                    borderRadius="full"
-                                                    colorScheme={status === 'Present' ? 'green' : 'gray'}
-                                                    variant={status === 'Present' ? 'solid' : 'outline'}
-                                                    onClick={() => setStatus(emp._id, status === 'Present' ? '' : 'Present')}
+                                                    size="xs" variant="ghost"
+                                                    colorScheme="orange"
+                                                    rightIcon={<Icon as={expanded ? FaChevronUp : FaChevronDown} />}
+                                                    onClick={() => toggleExpand(emp._id)}
                                                     isDisabled={!canWrite}
-                                                    minW="60px"
                                                 >
-                                                    {status === 'Present' ? '✓ P' : 'P'}
+                                                    Expenses
                                                 </Button>
-                                            </Td>
-                                            <Td textAlign="center">
-                                                <Button
-                                                    size="xs"
-                                                    borderRadius="full"
-                                                    colorScheme={status === 'Absent' ? 'red' : 'gray'}
-                                                    variant={status === 'Absent' ? 'solid' : 'outline'}
-                                                    onClick={() => setStatus(emp._id, status === 'Absent' ? '' : 'Absent')}
-                                                    isDisabled={!canWrite}
-                                                    minW="60px"
-                                                >
-                                                    {status === 'Absent' ? '✓ A' : 'A'}
-                                                </Button>
-                                            </Td>
-                                            <Td>
-                                                <Input
-                                                    size="xs"
-                                                    placeholder="Optional remark..."
-                                                    value={remarks[emp._id] || ''}
-                                                    onChange={e => setRemark(emp._id, e.target.value)}
-                                                    borderRadius="lg"
-                                                    maxW="180px"
-                                                    isDisabled={!status || !canWrite}
-                                                />
-                                            </Td>
-                                        </Tr>
-                                    );
-                                })}
-                            </Tbody>
-                        </Table>
-                    </TableContainer>
+                                            </Tooltip>
+                                        )}
+                                    </HStack>
+
+                                    {/* ── Expense Panel (collapsible) ── */}
+                                    {hasLocation && expanded && (
+                                        <Box mx={3} mb={3}>
+                                            {/* Standard Meals & Travel */}
+                                            <Card borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100" mb={3}>
+                                                <CardBody p={4}>
+                                                    <Heading size="xs" mb={4} color="gray.700" display="flex" alignItems="center">
+                                                        <Icon as={FaUtensils} mr={2} color="blue.500" /> Standard Meals &amp; Travel
+                                                    </Heading>
+                                                    <VStack spacing={3} align="stretch">
+                                                        {['breakfast', 'lunch', 'dinner', 'petrol'].map(expName => (
+                                                            <VStack key={expName} align="stretch" spacing={1} bg="gray.50" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                                                <HStack align="center" w="full" justify="space-between">
+                                                                    <FormLabel fontSize="sm" fontWeight="bold" textTransform="capitalize" m={0} minW="70px">
+                                                                        {expName === 'petrol' ? 'Fuel' : expName}
+                                                                    </FormLabel>
+                                                                    {expName === 'petrol' && (
+                                                                        <Select
+                                                                            size="sm" w="90px"
+                                                                            value={fuelTypeMap[emp._id] || 'Petrol'}
+                                                                            onChange={e => setFuelType(emp._id, e.target.value)}
+                                                                            borderRadius="lg" bg="white"
+                                                                        >
+                                                                            <option value="Petrol">Petrol</option>
+                                                                            <option value="CNG">CNG</option>
+                                                                            <option value="Diesel">Diesel</option>
+                                                                        </Select>
+                                                                    )}
+                                                                    <HStack flex={1} maxW="160px">
+                                                                        <InputGroup size="sm">
+                                                                            <InputLeftElement>
+                                                                                <Icon as={expName === 'petrol' ? FaGasPump : FaRupeeSign} color="gray.400" fontSize="xs" />
+                                                                            </InputLeftElement>
+                                                                            <Input
+                                                                                type="number" placeholder="0" bg="white" borderRadius="lg"
+                                                                                value={expenses[expName] === 0 || expenses[expName] === undefined ? '' : expenses[expName]}
+                                                                                onChange={e => setExpenseItem(emp._id, expName, e.target.value === '' ? 0 : Number(e.target.value))}
+                                                                                isDisabled={!canWrite}
+                                                                            />
+                                                                        </InputGroup>
+                                                                    </HStack>
+                                                                    <Tooltip label={`Upload ${expName} bills/photos`}>
+                                                                        <IconButton
+                                                                            icon={<Icon as={FaCloudUploadAlt} />}
+                                                                            colorScheme="blue" variant="outline" size="sm" borderRadius="lg"
+                                                                            onClick={() => document.getElementById(`uexp-${emp._id}-${expName}`).click()}
+                                                                            isDisabled={!canWrite}
+                                                                        />
+                                                                    </Tooltip>
+                                                                    <input type="file" id={`uexp-${emp._id}-${expName}`} hidden multiple
+                                                                        onChange={e => handleExpFile(emp._id, expName, e)}
+                                                                        accept="image/*,.pdf,.doc,.docx"
+                                                                    />
+                                                                </HStack>
+                                                                {/* File previews */}
+                                                                {((filePreviewMap[emp._id] || {})[expName] || []).length > 0 && (
+                                                                    <HStack overflowX="auto" py={1} spacing={2}>
+                                                                        {(filePreviewMap[emp._id][expName]).map((f, i) => (
+                                                                            <Box key={i} position="relative" minW="36px" h="36px" borderRadius="md" overflow="hidden" border="1px solid" borderColor="gray.200" flexShrink={0}>
+                                                                                {f.type === 'image'
+                                                                                    ? <Image src={f.url} w="full" h="full" objectFit="cover" />
+                                                                                    : <Center w="full" h="full" bg="gray.100"><Icon as={FaFileAlt} color="blue.500" /></Center>
+                                                                                }
+                                                                                <IconButton aria-label="view" icon={<Icon as={FaPaperclip} />} size="xs" colorScheme="blue"
+                                                                                    position="absolute" bottom={0} left={0} opacity={0.85}
+                                                                                    onClick={() => window.open(f.url, '_blank')}
+                                                                                />
+                                                                                <IconButton aria-label="remove" icon={<Icon as={FaTrash} />} size="xs" colorScheme="red"
+                                                                                    position="absolute" top={0} right={0} opacity={0.85}
+                                                                                    onClick={() => removeExpFile(emp._id, expName, i)}
+                                                                                />
+                                                                            </Box>
+                                                                        ))}
+                                                                    </HStack>
+                                                                )}
+                                                            </VStack>
+                                                        ))}
+                                                    </VStack>
+                                                </CardBody>
+                                            </Card>
+
+                                            {/* Other Custom Expenses */}
+                                            <Card borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                                                <CardBody p={4}>
+                                                    <HStack justify="space-between" mb={3}>
+                                                        <Heading size="xs" color="gray.700" display="flex" alignItems="center">
+                                                            <Icon as={FaPlus} mr={2} color="green.500" /> Other Custom Expenses
+                                                        </Heading>
+                                                        <Button size="xs" colorScheme="green" variant="ghost" leftIcon={<FaPlus />}
+                                                            onClick={() => addOtherExp(emp._id)} isDisabled={!canWrite}>
+                                                            Add Row
+                                                        </Button>
+                                                    </HStack>
+                                                    <VStack spacing={2}>
+                                                        {getOtherExp(emp._id).length === 0 && (
+                                                            <Text fontSize="xs" color="gray.400" textAlign="center" py={2}>No custom expenses added.</Text>
+                                                        )}
+                                                        {getOtherExp(emp._id).map((row, idx) => (
+                                                            <VStack key={idx} w="full" bg="gray.50" p={2} borderRadius="lg" align="stretch" border="1px solid" borderColor="gray.100" spacing={1}>
+                                                                <HStack>
+                                                                    <Input placeholder="Expense Name" size="sm" bg="white" borderRadius="lg"
+                                                                        value={row.expenseName}
+                                                                        onChange={e => updateOtherExp(emp._id, idx, 'expenseName', e.target.value)}
+                                                                        isDisabled={!canWrite}
+                                                                    />
+                                                                    <InputGroup size="sm" maxW="120px">
+                                                                        <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
+                                                                        <Input type="number" placeholder="Amount" bg="white" borderRadius="lg"
+                                                                            value={row.amount}
+                                                                            onChange={e => updateOtherExp(emp._id, idx, 'amount', e.target.value)}
+                                                                            isDisabled={!canWrite}
+                                                                        />
+                                                                    </InputGroup>
+                                                                    <Tooltip label="Upload bills">
+                                                                        <IconButton size="sm" aria-label="upload"
+                                                                            icon={<Icon as={FaCloudUploadAlt} />}
+                                                                            colorScheme="blue" variant="outline" borderRadius="lg"
+                                                                            onClick={() => document.getElementById(`uother-${emp._id}-${idx}`).click()}
+                                                                            isDisabled={!canWrite}
+                                                                        />
+                                                                    </Tooltip>
+                                                                    <input type="file" id={`uother-${emp._id}-${idx}`} hidden multiple
+                                                                        onChange={e => handleOtherFile(emp._id, idx, e)}
+                                                                        accept="image/*,.pdf,.doc,.docx"
+                                                                    />
+                                                                    <IconButton size="sm" aria-label="remove" colorScheme="red" variant="ghost"
+                                                                        icon={<Icon as={FaTrash} />}
+                                                                        onClick={() => removeOtherExp(emp._id, idx)}
+                                                                        isDisabled={!canWrite}
+                                                                    />
+                                                                </HStack>
+                                                                {/* File previews for other */}
+                                                                {(row.files || []).length > 0 && (
+                                                                    <HStack overflowX="auto" py={1} spacing={2}>
+                                                                        {row.files.map((f, i) => (
+                                                                            <Box key={i} position="relative" minW="36px" h="36px" borderRadius="md" overflow="hidden" border="1px solid" borderColor="gray.200" flexShrink={0}>
+                                                                                {f.type === 'image'
+                                                                                    ? <Image src={f.url} w="full" h="full" objectFit="cover" />
+                                                                                    : <Center w="full" h="full" bg="gray.100"><Icon as={FaFileAlt} color="blue.500" /></Center>
+                                                                                }
+                                                                                <IconButton aria-label="view" icon={<Icon as={FaPaperclip} />} size="xs" colorScheme="blue"
+                                                                                    position="absolute" bottom={0} left={0} opacity={0.85}
+                                                                                    onClick={() => window.open(f.url, '_blank')}
+                                                                                />
+                                                                                <IconButton aria-label="remove" icon={<Icon as={FaTrash} />} size="xs" colorScheme="red"
+                                                                                    position="absolute" top={0} right={0} opacity={0.85}
+                                                                                    onClick={() => {
+                                                                                        const newFiles = [...row.files];
+                                                                                        newFiles.splice(i, 1);
+                                                                                        updateOtherExp(emp._id, idx, 'files', newFiles);
+                                                                                    }}
+                                                                                />
+                                                                            </Box>
+                                                                        ))}
+                                                                    </HStack>
+                                                                )}
+                                                            </VStack>
+                                                        ))}
+                                                    </VStack>
+                                                </CardBody>
+                                            </Card>
+                                        </Box>
+                                    )}
+                                </Box>
+                            );
+                        })}
+                    </VStack>
 
                     <Flex justify="flex-end" mt={4}>
                         <Button
@@ -3229,6 +3483,7 @@ const MoneyTransferSection = ({
                     daySchedules={daySchedules}
                     attendanceDate={transferDate}
                     canWrite={canWriteAttendance}
+                    onRefresh={onRefresh}
                 />
             )}
 

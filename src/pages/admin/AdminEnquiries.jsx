@@ -338,28 +338,61 @@ const AdminEnquiries = () => {
         let initialItems = [];
 
         if (lastQuote) {
-            // If updating, take everything from the last quote as the base
-            initialItems = lastQuote.items.map(i => {
+            // Build a map: productId -> merged item (to avoid duplicate cards for same product)
+            const itemMap = new Map();
+
+            lastQuote.items.forEach(i => {
                 const product = i.product || i.productId || {};
+                const productId = product._id || product;
                 const endPrice = parseFloat(product.sellingPriceEnd) || 0;
                 const startPrice = parseFloat(product.sellingPriceStart) || 0;
                 const dealerPrice = parseFloat(product.dealerPrice) || 0;
+                const defaultCalibPrice = parseFloat(product.calibrationSellingPriceEnd) || parseFloat(product.calibrationSellingPriceStart) || 0;
 
-                return {
-                    productId: product,
-                    quantity: i.quantity || 1,
-                    price: i.price || 0,
-                    gst: i.gst || 18,
-                    dealerPrice: dealerPrice,
-                    sellingPriceStart: startPrice,
-                    sellingPriceEnd: endPrice,
-                    calculatedSellingPrice: i.price || 0,
-                    size: i.size || '',
-                    selectedSizes: Array.isArray(i.selectedSizes) ? i.selectedSizes : []
-                };
+                if (itemMap.has(productId)) {
+                    // Merge: same product exists already — update calibration options
+                    const existing = itemMap.get(productId);
+                    if (i.isCalibration) {
+                        // This row is the calibration entry
+                        existing.calibrationOptions.calibrated = true;
+                        existing.calibrationPrice = i.price || existing.calibrationPrice || defaultCalibPrice;
+                        existing.calibrationQuantity = i.quantity || 1;
+                        existing.calibrationGst = i.gst || 18;
+                    } else {
+                        // This row is the standard (no-calibration) entry
+                        existing.calibrationOptions.standard = true;
+                        existing.price = i.price || existing.price;
+                        existing.quantity = i.quantity || 1;
+                        existing.gst = i.gst || 18;
+                    }
+                } else {
+                    // First time seeing this product
+                    const newEntry = {
+                        productId: product,
+                        quantity: i.quantity || 1,
+                        price: i.isCalibration ? (endPrice > 0 ? endPrice : startPrice) : (i.price || 0),
+                        gst: i.isCalibration ? 18 : (i.gst || 18),
+                        dealerPrice: dealerPrice,
+                        sellingPriceStart: startPrice,
+                        sellingPriceEnd: endPrice,
+                        calculatedSellingPrice: i.price || 0,
+                        size: i.size || '',
+                        selectedSizes: Array.isArray(i.selectedSizes) ? i.selectedSizes : [],
+                        calibrationPrice: i.isCalibration ? (i.price || defaultCalibPrice) : defaultCalibPrice,
+                        calibrationQuantity: i.isCalibration ? (i.quantity || 1) : undefined,
+                        calibrationGst: i.isCalibration ? (i.gst || 18) : undefined,
+                        calibrationOptions: {
+                            standard: !i.isCalibration,
+                            calibrated: !!i.isCalibration
+                        }
+                    };
+                    itemMap.set(productId, newEntry);
+                }
             });
 
-            // Also check if any items from the enquiry are NOT in the last quote (unlikely but possible)
+            initialItems = Array.from(itemMap.values());
+
+            // Also check if any items from the enquiry are NOT in the last quote
             (selectedEnquiry.products || []).forEach(p => {
                 const pId = p.productId?._id || p.productId;
                 const alreadyIn = initialItems.some(ii => (ii.productId?._id || ii.productId) === pId);
@@ -373,7 +406,9 @@ const AdminEnquiries = () => {
                         dealerPrice: parseFloat(product.dealerPrice) || 0,
                         sellingPriceStart: parseFloat(product.sellingPriceStart) || 0,
                         sellingPriceEnd: parseFloat(product.sellingPriceEnd) || 0,
-                        calculatedSellingPrice: parseFloat(product.sellingPriceEnd) || parseFloat(product.sellingPriceStart) || 0
+                        calculatedSellingPrice: parseFloat(product.sellingPriceEnd) || parseFloat(product.sellingPriceStart) || 0,
+                        calibrationPrice: (parseFloat(product.calibrationSellingPriceEnd) || parseFloat(product.calibrationSellingPriceStart) || 0),
+                        calibrationOptions: { standard: true, calibrated: false }
                     });
                 }
             });
@@ -397,7 +432,9 @@ const AdminEnquiries = () => {
                     sellingPriceEnd: endPrice,
                     calculatedSellingPrice: defaultPrice,
                     size: p.size || '',
-                    selectedSizes: Array.isArray(p.selectedSizes) ? p.selectedSizes : []
+                    selectedSizes: Array.isArray(p.selectedSizes) ? p.selectedSizes : [],
+                    calibrationPrice: (parseFloat(product.calibrationSellingPriceEnd) || parseFloat(product.calibrationSellingPriceStart) || 0),
+                    calibrationOptions: { standard: true, calibrated: false }
                 };
             });
         }
@@ -452,7 +489,9 @@ const AdminEnquiries = () => {
             sellingPriceStart: startPrice || 0,
             sellingPriceEnd: endPrice || 0,
             calculatedSellingPrice: defaultPrice,
-            size: (Array.isArray(product.sizes) && product.sizes.length > 0) ? product.sizes[0].size : ''
+            size: (Array.isArray(product.sizes) && product.sizes.length > 0) ? product.sizes[0].size : '',
+            calibrationPrice: (parseFloat(product.calibrationSellingPriceEnd) || parseFloat(product.calibrationSellingPriceStart) || 0),
+            calibrationOptions: { standard: true, calibrated: false }
         };
 
         const updatedItems = [...quoteItems, newItem];
@@ -465,10 +504,22 @@ const AdminEnquiries = () => {
         let gstAmt = 0;
         items.forEach(item => {
             const price = parseFloat(item.price) || 0;
+            const cPrice = parseFloat(item.calibrationPrice) || 0;
             const gst = parseFloat(item.gst) || 0;
-            const itemTotal = price * item.quantity;
-            sub += itemTotal;
-            gstAmt += itemTotal * (gst / 100);
+            const cGst = parseFloat(item.calibrationGst !== undefined ? item.calibrationGst : item.gst) || 0;
+            const qty = item.quantity || 1;
+            const cQty = item.calibrationQuantity !== undefined ? item.calibrationQuantity : qty;
+            
+            if (item.calibrationOptions?.standard !== false) {
+                const itemTotal = price * qty;
+                sub += itemTotal;
+                gstAmt += itemTotal * (gst / 100);
+            }
+            if (item.calibrationOptions?.calibrated === true) {
+                const itemTotal = cPrice * cQty;
+                sub += itemTotal;
+                gstAmt += itemTotal * (cGst / 100);
+            }
         });
 
         setQuoteTotals(prev => {
@@ -500,12 +551,56 @@ const AdminEnquiries = () => {
         setNewPolicy({ label: '', value: '' });
     };
 
+    const cleanQuotationHtml = (html) => {
+        if (!html) return html;
+
+        // 1. Normalize bullet entities & nbsp
+        let str = html
+            .replace(/&bull;|&#8226;|&#x2022;/gi, '•')
+            .replace(/&nbsp;/gi, ' ');
+
+        // 2. Replace contiguous block of size divs into a single comma-separated div
+        const contiguousBlockRegex = /(?:<(div|p|span)[^>]*>\s*•?\s*Size\s*[:-]?(?:(?!<\/(div|p|span)>)[\s\S])*<\/(div|p|span)>\s*)+/gi;
+
+        str = str.replace(contiguousBlockRegex, (match) => {
+            const individualTags = match.match(/<(div|p|span)[^>]*>[\s\S]*?<\/(div|p|span)>/gi) || [];
+            const items = [];
+            individualTags.forEach(tagStr => {
+                let inner = tagStr.replace(/^<(div|p|span)[^>]*>/i, '').replace(/<\/(div|p|span)>$/i, '').trim();
+                const qtyMatch = inner.match(/\(Qty:\s*(\d+)\)/i);
+                const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+                inner = inner.replace(/\(Qty:\s*\d+\)/gi, '');
+                const cleanSize = inner.replace(/^\s*•?\s*Size\s*(:-|:)?\s*/i, '').trim();
+                if (cleanSize) {
+                    items.push(qty > 1 ? `${cleanSize} (Qty: ${qty})` : cleanSize);
+                }
+            });
+            if (items.length === 0) return match;
+            return `<div style="color: #6b21a8; font-weight: bold; font-size: 12px; margin-top: 3px; line-height: 1.3;">${items.join(', ')}</div>`;
+        });
+
+        // 3. Fallback for any remaining uncaptured standalone "• Size: X (Qty: 1)" or "• Size: X" strings
+        str = str.replace(/•?\s*Size\s*[:-]?\s*([^<(\n]+?)(?:\s*\(Qty:\s*(\d+)\))?/gi, (fullMatch, sizeVal, qtyStr) => {
+            const clean = (sizeVal || '').trim();
+            if (!clean) return fullMatch;
+            const qty = qtyStr ? parseInt(qtyStr, 10) : 1;
+            return qty > 1 ? `${clean} (Qty: ${qty})` : clean;
+        });
+
+        return str;
+    };
+
     const generateHTML = (enquiry, items, totals, selectedPolicies, notes, refNo, discount, partyName, address, mobile, email, contactPerson) => {
         const date = new Date().toLocaleDateString('en-GB');
 
         const productRows = items.map((item, index) => {
             const product = item.productId;
-            const specs = product?.details ? Object.entries(product.details).map(([k, v]) => `${k} :- ${v}`).join('<br/>') : '';
+            const specs = product?.details ? Object.entries(product.details).map(([k, v]) => {
+                if (k.toLowerCase().trim() === 'size') {
+                    return (v || '').replace(/^size\s*(:-|:)?\s*/i, '').trim();
+                }
+                return `${k} :- ${v}`;
+            }).filter(Boolean).join('<br/>') : '';
             const imgPath = product?.images?.[0] || product?.photos?.[0] || product?.image;
             const imgUrl = getImageUrl(imgPath);
             const price = parseFloat(item.price) || 0;
@@ -514,9 +609,20 @@ const AdminEnquiries = () => {
 
             let sizeHtml = '';
             if (Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0) {
-                sizeHtml = item.selectedSizes.map(s => `<div style="color: #6b21a8; font-weight: bold; font-size: 12px; margin-top: 3px; line-height: 1.3;">• Size: ${s.size} &nbsp;&nbsp;(Qty: ${s.quantity || 1})</div>`).join('');
+                const formattedSizes = item.selectedSizes.map(s => {
+                    const cleanSize = (s.size || '').replace(/^size\s*(:-|:)?\s*/i, '').trim();
+                    const qty = Number(s.quantity) || 1;
+                    return qty > 1 ? `${cleanSize} (Qty: ${qty})` : cleanSize;
+                }).filter(Boolean).join(', ');
+
+                if (formattedSizes) {
+                    sizeHtml = `<div style="color: #6b21a8; font-weight: bold; font-size: 12px; margin-top: 3px; line-height: 1.3;">${formattedSizes}</div>`;
+                }
             } else if (item.size) {
-                sizeHtml = `<div style="color: #6b21a8; font-weight: bold; font-size: 12px; margin-top: 3px; line-height: 1.3;">• Size: ${item.size}</div>`;
+                const cleanSize = (item.size || '').replace(/^size\s*(:-|:)?\s*/i, '').trim();
+                if (cleanSize) {
+                    sizeHtml = `<div style="color: #6b21a8; font-weight: bold; font-size: 12px; margin-top: 3px; line-height: 1.3;">${cleanSize}</div>`;
+                }
             }
 
             return `
@@ -529,10 +635,13 @@ const AdminEnquiries = () => {
                             </div>
                             <div style="flex: 1;">
                                 <strong style="text-decoration: underline;">${product?.name || 'Product'}</strong>
+                                ${item.isCalibration ? '<div style="color: #6b21a8; font-weight: bold; font-size: 13px; margin-top: 3px;">(NABL CALIBRATION)</div>' : ''}
                                 ${sizeHtml}
+                                ${item.isCalibration ? '' : `
                                 <div style="font-size: 13px; margin-top: 5px; color: #333;">
                                     ${specs}
                                 </div>
+                                `}
                             </div>
                         </div>
                     </td>
@@ -692,12 +801,60 @@ const AdminEnquiries = () => {
 
         setIsSubmittingQuote(true);
 
-        // Generate a temporary ref no for display (real one is created on backend)
-        const year = new Date().getFullYear();
-        const tempRefNo = `XXXXXX-${year}`;
-        const discount = parseFloat(quoteDiscount) || 0;
+        try {
+            // Generate a temporary ref no for display (real one is created on backend)
+            const year = new Date().getFullYear();
+            const tempRefNo = `XXXXXX-${year}`;
+            const flattenedItems = quoteItems.flatMap(i => {
+            const rows = [];
+            if (i.calibrationOptions?.standard !== false) {
+                rows.push({
+                    ...i,
+                    price: parseFloat(i.price) || 0,
+                    quantity: i.quantity || 1,
+                    gst: parseFloat(i.gst) || 18,
+                    isCalibration: false
+                });
+            }
+            if (i.calibrationOptions?.calibrated === true) {
+                rows.push({
+                    ...i,
+                    price: parseFloat(i.calibrationPrice) || 0,
+                    quantity: i.calibrationQuantity !== undefined ? i.calibrationQuantity : (i.quantity || 1),
+                    gst: parseFloat(i.calibrationGst !== undefined ? i.calibrationGst : i.gst) || 18,
+                    isCalibration: true
+                });
+            }
+            if (rows.length === 0) {
+                rows.push({
+                    ...i,
+                    price: parseFloat(i.price) || 0,
+                    quantity: i.quantity || 1,
+                    gst: parseFloat(i.gst) || 18,
+                    isCalibration: false
+                });
+            }
+            return rows;
+        });
+
+        // Calculate totals for flattened items just for HTML generation to be accurate
+        const flatTotals = {
+            subtotal: 0,
+            gst: 0,
+            total: 0,
+            packaging: quoteTotals.packaging || 0,
+            packagingGst: quoteTotals.packagingGst || 0
+        };
+        flattenedItems.forEach(item => {
+            const itemTotal = item.price * (item.quantity || 1);
+            flatTotals.subtotal += itemTotal;
+            flatTotals.gst += itemTotal * ((parseFloat(item.gst) || 0) / 100);
+        });
+        const finalDiscount = parseFloat(quoteDiscount) || 0;
+        flatTotals.total = flatTotals.subtotal + flatTotals.gst + flatTotals.packaging + flatTotals.packagingGst - finalDiscount;
+
         const htmlContent = generateHTML(
-            selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, tempRefNo, discount,
+            selectedEnquiry, flattenedItems, flatTotals, policies, customNotes, tempRefNo, finalDiscount,
             quotePartyName, quoteAddress, quoteMobile, quoteEmail, quoteContactPerson
         );
 
@@ -708,7 +865,7 @@ const AdminEnquiries = () => {
             email: quoteEmail,
             phone: quoteMobile,
             address: quoteAddress,
-            items: quoteItems.map(i => {
+            items: flattenedItems.map(i => {
                 const pPrice = parseFloat(i.price) || 0;
                 const pQuantity = parseFloat(i.quantity) || 0;
                 const pGst = parseFloat(i.gst) || 0;
@@ -719,22 +876,22 @@ const AdminEnquiries = () => {
                     gst: pGst,
                     amount: (pPrice * pQuantity),
                     size: i.size || '',
-                    selectedSizes: i.selectedSizes || []
+                    selectedSizes: i.selectedSizes || [],
+                    isCalibration: i.isCalibration
                 };
             }),
             htmlContent,
             status: 'Sent',
             packaging: quoteTotals.packaging || 0,
             packagingGst: quoteTotals.packagingGst || 0,
-            discount
+            discount: finalDiscount
         };
 
-        try {
             const response = await api.post('/quotations', payload);
             // Now regenerate HTML with the actual ref number from backend
             if (response.data?.refNo) {
                 const finalHtml = generateHTML(
-                    selectedEnquiry, quoteItems, quoteTotals, policies, customNotes, response.data.refNo, discount,
+                    selectedEnquiry, flattenedItems, flatTotals, policies, customNotes, response.data.refNo, finalDiscount,
                     quotePartyName, quoteAddress, quoteMobile, quoteEmail, quoteContactPerson
                 );
                 await api.put(`/quotations/${response.data._id}`, { htmlContent: finalHtml });
@@ -1655,6 +1812,51 @@ const AdminEnquiries = () => {
                                                         <Text fontWeight="bold" fontSize="sm">
                                                             {item.productId?.name || item.product?.name || 'Product'}
                                                         </Text>
+                                                        {(item.productId?.hasCalibration || item.product?.hasCalibration) && (
+                                                            <Flex direction="column" mt={2} p={2} bg="blue.50" borderRadius="md" border="1px solid" borderColor="blue.200" w="full">
+                                                                <Text fontSize="10px" fontWeight="bold" color="blue.700" mb={2}>CALIBRATION OPTIONS:</Text>
+                                                                <HStack spacing={4}>
+                                                                    <Checkbox 
+                                                                        size="sm" 
+                                                                        colorScheme="blue"
+                                                                        isChecked={item.calibrationOptions?.standard !== false}
+                                                                        onChange={(e) => {
+                                                                            const isChecked = e.target.checked;
+                                                                            const calibratedChecked = item.calibrationOptions?.calibrated === true;
+                                                                            if (!isChecked && !calibratedChecked) {
+                                                                                toast({ title: "Must select at least one option", status: "warning" });
+                                                                                return;
+                                                                            }
+                                                                            handleItemChange(idx, 'calibrationOptions', {
+                                                                                ...item.calibrationOptions,
+                                                                                standard: isChecked
+                                                                            });
+                                                                        }}
+                                                                    >
+                                                                        <Text fontSize="xs" fontWeight="600">No Calibration</Text>
+                                                                    </Checkbox>
+                                                                    <Checkbox 
+                                                                        size="sm" 
+                                                                        colorScheme="blue"
+                                                                        isChecked={item.calibrationOptions?.calibrated === true}
+                                                                        onChange={(e) => {
+                                                                            const isChecked = e.target.checked;
+                                                                            const standardChecked = item.calibrationOptions?.standard !== false;
+                                                                            if (!isChecked && !standardChecked) {
+                                                                                toast({ title: "Must select at least one option", status: "warning" });
+                                                                                return;
+                                                                            }
+                                                                            handleItemChange(idx, 'calibrationOptions', {
+                                                                                ...item.calibrationOptions,
+                                                                                calibrated: isChecked
+                                                                            });
+                                                                        }}
+                                                                    >
+                                                                        <Text fontSize="xs" fontWeight="600">With Calibration</Text>
+                                                                    </Checkbox>
+                                                                </HStack>
+                                                            </Flex>
+                                                        )}
                                                         {Array.isArray(item.productId?.sizes) && item.productId.sizes.length > 0 && (
                                                             <VStack align="start" spacing={1.5} mt={2} p={2.5} bg="purple.50/80" borderRadius="md" border="1px solid" borderColor="purple.200" w="full">
                                                                 <Text fontSize="10px" fontWeight="bold" color="purple.700" letterSpacing="wider">SELECT SIZES & QUANTITIES:</Text>
@@ -1727,82 +1929,126 @@ const AdminEnquiries = () => {
                                                     </VStack>
                                                 </HStack>
                                                 <HStack>
-                                                    <Text fontSize="xs" fontWeight="bold">Qty:</Text>
-                                                    <Input
-                                                        size="xs"
-                                                        type="number"
-                                                        w="60px"
-                                                        value={item.quantity}
-                                                        isReadOnly={Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0}
-                                                        bg={Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0 ? "purple.50" : "white"}
-                                                        onChange={(e) => handleItemChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                                                    />
                                                     <Button size="sm" colorScheme="red" variant="ghost" onClick={() => handleRemoveItem(idx)}>
                                                         <FiTrash />
                                                     </Button>
                                                 </HStack>
                                             </HStack>
-                                            <Stack direction={{ base: 'column', md: 'row' }} spacing={3}>
-                                                <FormControl isRequired>
-                                                    <Flex justify="space-between" align="center" mb={1}>
-                                                        <FormLabel fontSize="xs" mb={0}>Unit Price (₹)</FormLabel>
-                                                    </Flex>
-                                                    <Input
-                                                        type="number"
-                                                        value={item.price}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            if (val < 0) return; // Prevent negative
-                                                            handleItemChange(idx, 'price', e.target.value);
-                                                        }}
-                                                        onWheel={(e) => e.target.blur()} // Prevent scroll change
-                                                        sx={{
-                                                            '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
-                                                                '-webkit-appearance': 'none',
-                                                                margin: 0,
-                                                            },
-                                                            '&': {
-                                                                '-moz-appearance': 'textfield',
-                                                            },
-                                                        }}
-                                                        bg="white"
-                                                    />
-                                                    <Box mt={1} fontSize="10px" color="gray.500">
-                                                        {(isSuperAdmin || canShowDealerPrice) && isGlobalDealerPrice
-                                                            ? `Dealer: ₹${item.dealerPrice || 0}`
-                                                            : `Sell: ₹${item.sellingPriceStart || 0} - ${item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'}`
-                                                        }
+                                            
+                                            {item.calibrationOptions?.standard !== false && (
+                                                <Stack direction={{ base: 'column', md: 'row' }} spacing={3} mt={2} bg="gray.50" p={2} borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                    <FormControl width={{ base: "full", md: "100px" }}>
+                                                        <FormLabel fontSize="xs" mb={1}>Qty (No Calib)</FormLabel>
+                                                        <Input
+                                                            size="sm"
+                                                            type="number"
+                                                            value={item.quantity}
+                                                            isReadOnly={Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0}
+                                                            bg={Array.isArray(item.selectedSizes) && item.selectedSizes.length > 0 ? "purple.50" : "white"}
+                                                            onChange={(e) => handleItemChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormControl isRequired>
+                                                        <Flex justify="space-between" align="center" mb={1}>
+                                                            <FormLabel fontSize="xs" mb={0}>Unit Price (No Calib)</FormLabel>
+                                                        </Flex>
+                                                        <Input
+                                                            type="number"
+                                                            size="sm"
+                                                            value={item.price}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (val < 0) return; // Prevent negative
+                                                                handleItemChange(idx, 'price', e.target.value);
+                                                            }}
+                                                            onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                            sx={{ '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': { '-webkit-appearance': 'none', margin: 0 }, '&': { '-moz-appearance': 'textfield' } }}
+                                                            bg="white"
+                                                        />
+                                                        <Box mt={1} fontSize="10px" color="gray.500">
+                                                            {(isSuperAdmin || canShowDealerPrice) && isGlobalDealerPrice
+                                                                ? `Dealer: ₹${item.dealerPrice || 0}`
+                                                                : `Sell: ₹${item.sellingPriceStart || 0} - ${item.sellingPriceEnd > 0 ? `₹${item.sellingPriceEnd}` : 'N/A'}`
+                                                            }
+                                                        </Box>
+                                                    </FormControl>
+                                                    <FormControl width={{ base: "full", md: "100px" }}>
+                                                        <FormLabel fontSize="xs" mb={1}>GST (%)</FormLabel>
+                                                        <Input
+                                                            type="number"
+                                                            size="sm"
+                                                            value={item.gst}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (val < 0) return; // Prevent negative
+                                                                handleItemChange(idx, 'gst', e.target.value);
+                                                            }}
+                                                            onWheel={(e) => e.target.blur()}
+                                                            sx={{ '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': { '-webkit-appearance': 'none', margin: 0 }, '&': { '-moz-appearance': 'textfield' } }}
+                                                            bg="white"
+                                                        />
+                                                    </FormControl>
+                                                    <Box alignSelf={{ base: 'flex-start', md: 'center' }} pt={4}>
+                                                        <Text fontSize="sm" fontWeight="bold" whiteSpace="nowrap">
+                                                            Total: ₹{((parseFloat(item.price) || 0) * (item.quantity || 1)).toLocaleString()}
+                                                        </Text>
                                                     </Box>
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel fontSize="xs">GST (%)</FormLabel>
-                                                    <Input
-                                                        type="number"
-                                                        value={item.gst}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            if (val < 0) return; // Prevent negative
-                                                            handleItemChange(idx, 'gst', e.target.value);
-                                                        }}
-                                                        onWheel={(e) => e.target.blur()} // Prevent scroll change
-                                                        sx={{
-                                                            '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': {
-                                                                '-webkit-appearance': 'none',
-                                                                margin: 0,
-                                                            },
-                                                            '&': {
-                                                                '-moz-appearance': 'textfield',
-                                                            },
-                                                        }}
-                                                        bg="white"
-                                                    />
-                                                </FormControl>
-                                                <Box alignSelf={{ base: 'flex-start', md: 'center' }}>
-                                                    <Text fontSize="sm" fontWeight="bold" whiteSpace="nowrap">
-                                                        Total: ₹{((parseFloat(item.price) || 0) * item.quantity).toLocaleString()}
-                                                    </Text>
-                                                </Box>
-                                            </Stack>
+                                                </Stack>
+                                            )}
+                                            
+                                            {item.calibrationOptions?.calibrated === true && (
+                                                <Stack direction={{ base: 'column', md: 'row' }} spacing={3} mt={2} bg="blue.50" p={2} borderRadius="md" border="1px solid" borderColor="blue.200">
+                                                    <FormControl width={{ base: "full", md: "100px" }}>
+                                                        <FormLabel fontSize="xs" mb={1}>Qty (Calib)</FormLabel>
+                                                        <Input
+                                                            size="sm"
+                                                            type="number"
+                                                            value={item.calibrationQuantity !== undefined ? item.calibrationQuantity : item.quantity}
+                                                            bg="white"
+                                                            onChange={(e) => handleItemChange(idx, 'calibrationQuantity', parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormControl isRequired>
+                                                        <Flex justify="space-between" align="center" mb={1}>
+                                                            <FormLabel fontSize="xs" mb={0}>Unit Price (Calib)</FormLabel>
+                                                        </Flex>
+                                                        <Input
+                                                            type="number"
+                                                            size="sm"
+                                                            value={item.calibrationPrice}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (val < 0) return; // Prevent negative
+                                                                handleItemChange(idx, 'calibrationPrice', e.target.value);
+                                                            }}
+                                                            onWheel={(e) => e.target.blur()} // Prevent scroll change
+                                                            sx={{ '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': { '-webkit-appearance': 'none', margin: 0 }, '&': { '-moz-appearance': 'textfield' } }}
+                                                            bg="white"
+                                                        />
+                                                    </FormControl>
+                                                    <FormControl width={{ base: "full", md: "100px" }}>
+                                                        <FormLabel fontSize="xs" mb={1}>GST (%)</FormLabel>
+                                                        <Input
+                                                            type="number"
+                                                            size="sm"
+                                                            value={item.calibrationGst !== undefined ? item.calibrationGst : item.gst}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (val < 0) return; // Prevent negative
+                                                                handleItemChange(idx, 'calibrationGst', e.target.value);
+                                                            }}
+                                                            onWheel={(e) => e.target.blur()}
+                                                            sx={{ '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': { '-webkit-appearance': 'none', margin: 0 }, '&': { '-moz-appearance': 'textfield' } }}
+                                                            bg="white"
+                                                        />
+                                                    </FormControl>
+                                                    <Box alignSelf={{ base: 'flex-start', md: 'center' }} pt={4}>
+                                                        <Text fontSize="sm" fontWeight="bold" whiteSpace="nowrap">
+                                                            Total: ₹{((parseFloat(item.calibrationPrice) || 0) * (item.calibrationQuantity !== undefined ? item.calibrationQuantity : (item.quantity || 1))).toLocaleString()}
+                                                        </Text>
+                                                    </Box>
+                                                </Stack>
+                                            )}
                                         </Box>
                                     ))}
 
@@ -2025,7 +2271,7 @@ const AdminEnquiries = () => {
                                 onClick={() => {
                                     const win = window.open('', '_blank');
                                     win.document.write(`<html><head><style>@media print{ * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } button{display:none} img { max-width: 100%; height: auto; } }</style></head><body>`);
-                                    win.document.write(selectedQuotation.htmlContent);
+                                    win.document.write(cleanQuotationHtml(selectedQuotation.htmlContent));
                                     win.document.write(`
                                         <script>
                                             window.onload = function() {
@@ -2051,7 +2297,7 @@ const AdminEnquiries = () => {
                                 p={4}
                                 boxShadow="xl"
                                 mx="auto"
-                                dangerouslySetInnerHTML={{ __html: selectedQuotation.htmlContent }}
+                                dangerouslySetInnerHTML={{ __html: cleanQuotationHtml(selectedQuotation.htmlContent) }}
                             />
                         )}
                         {!selectedQuotation?.htmlContent && (

@@ -7,7 +7,7 @@ import {
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer,
-    NumberInput, NumberInputField, Spinner, Textarea
+    NumberInput, NumberInputField, Spinner, Textarea, Alert, AlertIcon
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
@@ -5275,6 +5275,7 @@ const ScheduleMasterForm = () => {
                 isOpen={isAssignOpen}
                 onClose={onAssignClose}
                 schedule={assignTarget}
+                schedules={schedules}
                 employees={employees}
                 vehicles={vehicles}
                 instruments={instrList}
@@ -5543,7 +5544,7 @@ const ScheduleMasterForm = () => {
     );
 };
 
-const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicles, instruments, instrumentGroups = [], onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth, onDeleteSchedule }) => {
+const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], employees, vehicles, instruments, instrumentGroups = [], onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth, onDeleteSchedule }) => {
     const [formData, setFormData] = useState({
         operative: '',
         helpers: [],
@@ -5553,6 +5554,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
         endDate: '',
         scheduleDate: ''
     });
+    const [conflictWarning, setConflictWarning] = useState('');
     const [requiredToday, setRequiredToday] = useState(true);
     const [showResumeInput, setShowResumeInput] = useState(false);
     const [resumeDate, setResumeDate] = useState('');
@@ -5696,6 +5698,12 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                             />
                         </FormControl>
 
+                        {conflictWarning && (
+                            <Alert status="warning" borderRadius="xl" mb={4} size="sm">
+                                <AlertIcon />
+                                {conflictWarning}
+                            </Alert>
+                        )}
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                             <FormControl isDisabled={isCompleted || isRejected}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
@@ -5739,11 +5747,48 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                                                 const res = await api.get(`/schedule-master/last-assignment/${newOp}`);
                                                 if (res.data.success && res.data.data) {
                                                     const { helpers, vehicle, instruments } = res.data.data;
+
+                                                    // Determine busy resources for today (ignoring current schedule & rejected)
+                                                    let busyHelpers = new Set();
+                                                    let busyVehicles = new Set();
+                                                    let busyInstruments = new Set();
+
+                                                    schedules.forEach(s => {
+                                                        if (s._id !== schedule?._id && s.dayStatus !== 'Rejected') {
+                                                            if (s.helpers) s.helpers.forEach(h => busyHelpers.add(h._id || h));
+                                                            if (s.vehicle) busyVehicles.add(s.vehicle._id || s.vehicle);
+                                                            if (s.instruments) s.instruments.forEach(i => busyInstruments.add(i._id || i));
+                                                        }
+                                                    });
+
+                                                    const lastHelpers = helpers || [];
+                                                    const availableHelpers = lastHelpers.filter(h => !busyHelpers.has(h._id || h));
+                                                    const availableVehicle = vehicle && !busyVehicles.has(vehicle._id || vehicle) ? vehicle : null;
+                                                    const lastInstruments = instruments || [];
+                                                    const availableInstruments = lastInstruments.filter(i => !busyInstruments.has(i._id || i));
+
+                                                    let droppedMessages = [];
+                                                    if (lastHelpers.length > 0 && availableHelpers.length < lastHelpers.length) {
+                                                        droppedMessages.push("some/all helpers");
+                                                    }
+                                                    if (vehicle && !availableVehicle) {
+                                                        droppedMessages.push("vehicle");
+                                                    }
+                                                    if (lastInstruments.length > 0 && availableInstruments.length < lastInstruments.length) {
+                                                        droppedMessages.push("some instruments");
+                                                    }
+
+                                                    if (droppedMessages.length > 0) {
+                                                        setConflictWarning(`Notice: ${newOp === formData.operative ? 'The' : 'Their'} last used ${droppedMessages.join(' and ')} are busy today and could not be auto-filled.`);
+                                                    } else {
+                                                        setConflictWarning('');
+                                                    }
+
                                                     setFormData(prev => ({
                                                         ...prev,
-                                                        helpers: helpers && helpers.length > 0 ? helpers : prev.helpers,
-                                                        vehicle: vehicle || prev.vehicle,
-                                                        instruments: instruments && instruments.length > 0 ? instruments : prev.instruments
+                                                        helpers: availableHelpers.length > 0 ? availableHelpers : prev.helpers,
+                                                        vehicle: availableVehicle || prev.vehicle,
+                                                        instruments: availableInstruments.length > 0 ? availableInstruments : prev.instruments
                                                     }));
                                                 }
                                             } catch (err) {
@@ -5788,8 +5833,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                         )}
 
                         <FormControl isDisabled={isCompleted}>
-                            <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                            <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider" display="flex" flexWrap="wrap" alignItems="center">
                                 <Icon as={FaUsers} mr={2} /> Helpers ({formData.helpers.length})
+                                {formData.helpers.length > 0 && (
+                                    <Text as="span" ml={1} color="gray.500" fontWeight="bold" textTransform="none" fontSize="10px">
+                                        - {employees.filter(e => formData.helpers.includes(e._id)).map(e => e.name).join(', ')}
+                                    </Text>
+                                )}
                             </FormLabel>
                             <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg="white">
                                 <SimpleGrid columns={2} spacing={3}>
@@ -5826,8 +5876,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
 
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                             <FormControl isDisabled={isCompleted}>
-                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider" display="flex" flexWrap="wrap" alignItems="center">
                                     <Icon as={FaCar} mr={2} color="red.500" /> Assigned Vehicle
+                                    {formData.vehicle && (
+                                        <Text as="span" ml={1} color="gray.500" fontWeight="bold" textTransform="none" fontSize="10px">
+                                            - {vehicles.find(v => v._id === formData.vehicle)?.vehicleNumber}
+                                        </Text>
+                                    )}
                                 </FormLabel>
                                 <Select 
                                     value={formData.vehicle} 
@@ -5846,8 +5901,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, employees, vehicle
                             </FormControl>
 
                             <FormControl isDisabled={isCompleted}>
-                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
+                                <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider" display="flex" flexWrap="wrap" alignItems="center">
                                     <Icon as={FaWrench} mr={2} color="orange.500" /> Instruments & Groups ({formData.instruments.length} selected)
+                                    {formData.instruments.length > 0 && (
+                                        <Text as="span" ml={1} color="gray.500" fontWeight="bold" textTransform="none" fontSize="10px">
+                                            - {instruments.filter(i => formData.instruments.includes(i._id)).map(i => i.serialNo || i.instrumentNumber || i.instrumentName).join(', ')}
+                                        </Text>
+                                    )}
                                 </FormLabel>
                                 
                                 {instrumentGroups && instrumentGroups.length > 0 && (

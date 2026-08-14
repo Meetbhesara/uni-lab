@@ -5,7 +5,7 @@ import {
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, ModalFooter,
     FormControl, FormLabel, FormErrorMessage, Input, Textarea, Checkbox, Stack, useToast, Flex,
     Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, InputRightElement, Select, Spinner,
-    HStack, VStack, Tag, TagLabel, TagCloseButton, Divider, CheckboxGroup
+    HStack, VStack, Tag, TagLabel, TagCloseButton, Divider, CheckboxGroup, Switch
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch, FiPlay, FiLayers, FiX } from 'react-icons/fi';
 import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp, FaLayerGroup } from 'react-icons/fa';
@@ -318,7 +318,12 @@ const AdminProducts = () => {
         alternativeNames: [], // Array of strings
         stock: '',
         sizes: [], // Array of { size: '', purchasePrice: '', stock: '' }
-        videoLinks: [] // Array of strings
+        videoLinks: [], // Array of strings
+        hasCalibration: false,
+        calibrationSellingPriceStart: '',
+        calibrationSellingPriceEnd: '',
+        calibrationDealerPrice: '',
+        calibrationVendors: []
     });
 
     const [formErrors, setFormErrors] = useState({});
@@ -399,7 +404,12 @@ const AdminProducts = () => {
                 alternativeNames: Array.isArray(p.alternativeNames) ? p.alternativeNames : [],
                 stock: p.stock ?? '',
                 sizes: Array.isArray(p.sizes) ? p.sizes : [],
-                videoLinks: Array.isArray(p.videoLinks) ? p.videoLinks : []
+                videoLinks: Array.isArray(p.videoLinks) ? p.videoLinks : [],
+                hasCalibration: p.hasCalibration || false,
+                calibrationSellingPriceStart: p.calibrationSellingPriceStart ?? '',
+                calibrationSellingPriceEnd: p.calibrationSellingPriceEnd ?? '',
+                calibrationDealerPrice: p.calibrationDealerPrice ?? '',
+                calibrationVendors: Array.isArray(p.calibrationVendors) ? p.calibrationVendors : []
             });
             setExistingPhotos((p.localImages && p.localImages.length > 0) ? p.localImages : (p.images || p.photos || []));
             setNewPhotos([]);
@@ -519,6 +529,17 @@ const AdminProducts = () => {
         const validVendors = formData.vendors.filter(v => v.name?.trim() || (v.price !== '' && v.price !== null));
         data.append('vendors', JSON.stringify(validVendors));
 
+        data.append('hasCalibration', formData.hasCalibration);
+        if (formData.calibrationSellingPriceStart !== '' && formData.calibrationSellingPriceStart !== null) 
+            data.append('calibrationSellingPriceStart', formData.calibrationSellingPriceStart);
+        if (formData.calibrationSellingPriceEnd !== '' && formData.calibrationSellingPriceEnd !== null) 
+            data.append('calibrationSellingPriceEnd', formData.calibrationSellingPriceEnd);
+        if (formData.calibrationDealerPrice !== '' && formData.calibrationDealerPrice !== null) 
+            data.append('calibrationDealerPrice', formData.calibrationDealerPrice);
+
+        const validCalibrationVendors = formData.calibrationVendors.filter(v => v.name?.trim() || (v.price !== '' && v.price !== null));
+        data.append('calibrationVendors', JSON.stringify(validCalibrationVendors));
+
         // Filter valid sizes and compute total stock if size variants exist
         const validSizes = (formData.sizes || []).filter(s => s.size?.trim() || s.purchasePrice || s.stock);
         if (validSizes.length > 0) {
@@ -574,7 +595,7 @@ const AdminProducts = () => {
             onClose();
             // Reset
             setEditingProduct(null);
-            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', videoLinks: [] });
+            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', videoLinks: [], hasCalibration: false, calibrationSellingPriceStart: '', calibrationSellingPriceEnd: '', calibrationDealerPrice: '', calibrationVendors: [] });
             setFormErrors({});
             setExistingPhotos([]);
             setNewPhotos([]);
@@ -727,7 +748,7 @@ const AdminProducts = () => {
                         isDisabled={!canWrite}
                         onClick={() => {
                             setEditingProduct(null);
-                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', sizes: [], videoLinks: [] });
+                            setFormData({ name: '', description: '', category: '', pdf: '', sellingPriceStart: '', sellingPriceEnd: '', dealerPrice: '', vendors: [], details: [], alternativeNames: [], stock: '', sizes: [], videoLinks: [], hasCalibration: false, calibrationSellingPriceStart: '', calibrationSellingPriceEnd: '', calibrationDealerPrice: '', calibrationVendors: [] });
                             setFormErrors({});
                             setExistingPhotos([]);
                             setNewPhotos([]);
@@ -1131,7 +1152,7 @@ const AdminProducts = () => {
                                                 </Button>
                                             </Flex>
                                             <Stack spacing={2}>
-                                                {formData.alternativeNames.map((altName, index) => (
+                                                {(formData.alternativeNames || []).map((altName, index) => (
                                                     <Flex key={index} gap={2}>
                                                         <Input
                                                             size="sm"
@@ -1362,7 +1383,7 @@ const AdminProducts = () => {
 
                                                 <Stack spacing={3}>
                                                     <AnimatePresence>
-                                                        {formData.vendors.map((v, index) => (
+                                                        {(formData.vendors || []).map((v, index) => (
                                                             <motion.div
                                                                 key={index}
                                                                 initial={{ opacity: 0, y: -10 }}
@@ -1714,7 +1735,7 @@ const AdminProducts = () => {
 
                                     <Stack spacing={3} maxH="300px" overflowY="auto" pr={2}>
                                         <AnimatePresence>
-                                            {formData.details.map((detail, index) => (
+                                            {(formData.details || []).map((detail, index) => (
                                                 <motion.div
                                                     key={index}
                                                     initial={{ opacity: 0, x: -10 }}
@@ -1762,6 +1783,132 @@ const AdminProducts = () => {
                                     <FormLabel fontSize="xs" fontWeight="700" color="gray.500">PDF BROCHURE LINK</FormLabel>
                                     <Input variant="filled" placeholder="https://..." value={formData.pdf} onChange={(e) => setFormData({ ...formData, pdf: e.target.value })} />
                                 </FormControl>
+
+                                <Box bg="white" p={6} borderRadius="xl" boxShadow="sm" border="1px" borderColor="gray.100">
+                                    <Flex align="center" justify="space-between" mb={4}>
+                                        <Flex align="center" gap={2} color="brand.600">
+                                            <FiSettings /> <Text fontWeight="700" fontSize="sm">CALIBRATION REQUIRED?</Text>
+                                        </Flex>
+                                        <Switch 
+                                            colorScheme="brand" 
+                                            isChecked={formData.hasCalibration} 
+                                            onChange={(e) => setFormData({ ...formData, hasCalibration: e.target.checked })} 
+                                        />
+                                    </Flex>
+                                    
+                                    {formData.hasCalibration && (
+                                        <Stack spacing={4} mt={4} pt={4} borderTop="1px dashed" borderColor="gray.200">
+                                            <Text fontSize="xs" fontWeight="bold" color="gray.500">CALIBRATION COMMERCIALS</Text>
+                                            <SimpleGrid columns={2} spacing={4}>
+                                                <FormControl isInvalid={!!formErrors.calibrationSellingPriceStart}>
+                                                    <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (START)</FormLabel>
+                                                    <InputGroup size="md">
+                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                        <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.calibrationSellingPriceStart} onChange={(e) => {
+                                                            setFormData({ ...formData, calibrationSellingPriceStart: e.target.value });
+                                                            if (formErrors.calibrationSellingPriceStart) setFormErrors({ ...formErrors, calibrationSellingPriceStart: '' });
+                                                        }} />
+                                                    </InputGroup>
+                                                    <FormErrorMessage fontSize="10px">{formErrors.calibrationSellingPriceStart}</FormErrorMessage>
+                                                </FormControl>
+                                                <FormControl isInvalid={!!formErrors.calibrationSellingPriceEnd}>
+                                                    <FormLabel fontSize="xs" fontWeight="700" color="gray.500">SELLING PRICE (END)</FormLabel>
+                                                    <InputGroup size="md">
+                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                        <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.calibrationSellingPriceEnd} onChange={(e) => {
+                                                            setFormData({ ...formData, calibrationSellingPriceEnd: e.target.value });
+                                                            if (formErrors.calibrationSellingPriceEnd) setFormErrors({ ...formErrors, calibrationSellingPriceEnd: '' });
+                                                        }} />
+                                                    </InputGroup>
+                                                    <FormErrorMessage fontSize="10px">{formErrors.calibrationSellingPriceEnd}</FormErrorMessage>
+                                                </FormControl>
+                                            </SimpleGrid>
+
+                                            <SimpleGrid columns={{ base: 1, md: 1 }} spacing={4}>
+                                                <FormControl isInvalid={!!formErrors.calibrationDealerPrice}>
+                                                    <FormLabel fontSize="xs" fontWeight="700" color="gray.500">DEALER PRICE</FormLabel>
+                                                    <InputGroup size="md">
+                                                        <InputLeftElement pointerEvents='none' children={<Text fontSize="sm" color="gray.400">₹</Text>} />
+                                                        <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={formData.calibrationDealerPrice} onChange={(e) => {
+                                                            setFormData({ ...formData, calibrationDealerPrice: e.target.value });
+                                                            if (formErrors.calibrationDealerPrice) setFormErrors({ ...formErrors, calibrationDealerPrice: '' });
+                                                        }} />
+                                                    </InputGroup>
+                                                    <FormErrorMessage fontSize="10px">{formErrors.calibrationDealerPrice}</FormErrorMessage>
+                                                </FormControl>
+                                            </SimpleGrid>
+
+                                            <Box border="1px dashed" borderColor="gray.200" p={4} borderRadius="xl" bg="gray.50">
+                                                <Flex justify="space-between" align="center" mb={4}>
+                                                    <Text fontSize="sm" fontWeight="bold" color="brand.600">Calibration Vendors & Purchase Prices</Text>
+                                                    <Button size="sm" colorScheme="brand" variant="outline" onClick={() => {
+                                                        setFormData(prev => ({ ...prev, calibrationVendors: [...prev.calibrationVendors, { name: '', price: '' }] }));
+                                                    }}>
+                                                        + Add
+                                                    </Button>
+                                                </Flex>
+
+                                                <Stack spacing={3}>
+                                                    <AnimatePresence>
+                                                        {(formData.calibrationVendors || []).map((v, index) => (
+                                                            <motion.div
+                                                                key={index}
+                                                                initial={{ opacity: 0, y: -10 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                exit={{ opacity: 0, height: 0 }}
+                                                            >
+                                                                <Flex gap={3} align="flex-start">
+                                                                    <FormControl flex={1}>
+                                                                        <FormLabel fontSize="10px" color="gray.500">VENDOR NAME</FormLabel>
+                                                                        <Input size="sm" variant="filled" placeholder="Vendor Name" value={v.name} onChange={(e) => {
+                                                                            const newVendors = [...formData.calibrationVendors];
+                                                                            newVendors[index].name = e.target.value;
+                                                                            setFormData({ ...formData, calibrationVendors: newVendors });
+                                                                        }} />
+                                                                    </FormControl>
+                                                                    <FormControl flex={1} isInvalid={!!formErrors[`cal_vendor_price_${index}`]}>
+                                                                        <FormLabel fontSize="10px" color="gray.500">PURCHASE PRICE</FormLabel>
+                                                                        <InputGroup size="sm">
+                                                                            <InputLeftElement pointerEvents='none' children={<Text fontSize="xs" color="gray.400">₹</Text>} />
+                                                                            <Input type="number" onWheel={(e) => e.target.blur()} min={0} variant="filled" value={v.price} onChange={(e) => {
+                                                                                const newVendors = [...formData.calibrationVendors];
+                                                                                newVendors[index].price = e.target.value;
+                                                                                setFormData({ ...formData, calibrationVendors: newVendors });
+                                                                                if (formErrors[`cal_vendor_price_${index}`]) {
+                                                                                    const newErrors = { ...formErrors };
+                                                                                    delete newErrors[`cal_vendor_price_${index}`];
+                                                                                    setFormErrors(newErrors);
+                                                                                }
+                                                                            }} />
+                                                                        </InputGroup>
+                                                                        <FormErrorMessage fontSize="10px">{formErrors[`cal_vendor_price_${index}`]}</FormErrorMessage>
+                                                                    </FormControl>
+                                                                    <IconButton
+                                                                        aria-label="Remove Vendor"
+                                                                        icon={<FiTrash2 />}
+                                                                        size="sm"
+                                                                        colorScheme="red"
+                                                                        variant="ghost"
+                                                                        mt={6}
+                                                                        onClick={() => {
+                                                                            const newVendors = formData.calibrationVendors.filter((_, i) => i !== index);
+                                                                            setFormData({ ...formData, calibrationVendors: newVendors });
+                                                                        }}
+                                                                    />
+                                                                </Flex>
+                                                            </motion.div>
+                                                        ))}
+                                                    </AnimatePresence>
+                                                    {formData.calibrationVendors.length === 0 && (
+                                                        <Text fontSize="xs" color="gray.400" textAlign="center" py={2}>
+                                                            No calibration vendors added yet.
+                                                        </Text>
+                                                    )}
+                                                </Stack>
+                                            </Box>
+                                        </Stack>
+                                    )}
+                                </Box>
                             </Stack>
                         </SimpleGrid>
                     </ModalBody>
