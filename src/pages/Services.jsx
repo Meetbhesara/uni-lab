@@ -5594,6 +5594,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
     }, [schedule, isOpen]);
 
     const handleHelperToggle = (id) => {
+        if (!formData.operative || isCompleted || isRejected) return;
         setFormData(prev => ({
             ...prev,
             helpers: prev.helpers.includes(id) ? prev.helpers.filter(h => h !== id) : [...prev.helpers, id]
@@ -5601,6 +5602,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
     };
 
     const handleInstrumentToggle = (id) => {
+        if (!formData.operative || isCompleted || isRejected) return;
         setFormData(prev => ({
             ...prev,
             instruments: prev.instruments.includes(id) ? prev.instruments.filter(i => i !== id) : [...prev.instruments, id]
@@ -5608,6 +5610,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
     };
 
     const handleGroupToggle = (groupId) => {
+        if (!formData.operative || isCompleted || isRejected) return;
         const group = instrumentGroups.find(g => g._id === groupId);
         if (!group) return;
         const groupInstIds = group.instruments?.map(i => i._id || i) || [];
@@ -5632,6 +5635,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
     const isPaused = schedule?.dayStatus === 'Paused';
     const isRejected = schedule?.dayStatus === 'Rejected';
     const isMonthType = schedule?.scheduleType === 'MONTH';
+    const isResourceDisabled = isCompleted || isRejected || !formData.operative;
 
     return (
         <>
@@ -5698,12 +5702,6 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                             />
                         </FormControl>
 
-                        {conflictWarning && (
-                            <Alert status="warning" borderRadius="xl" mb={4} size="sm">
-                                <AlertIcon />
-                                {conflictWarning}
-                            </Alert>
-                        )}
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                             <FormControl isDisabled={isCompleted || isRejected}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider">
@@ -5767,23 +5765,6 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                     const lastInstruments = instruments || [];
                                                     const availableInstruments = lastInstruments.filter(i => !busyInstruments.has(i._id || i));
 
-                                                    let droppedMessages = [];
-                                                    if (lastHelpers.length > 0 && availableHelpers.length < lastHelpers.length) {
-                                                        droppedMessages.push("some/all helpers");
-                                                    }
-                                                    if (vehicle && !availableVehicle) {
-                                                        droppedMessages.push("vehicle");
-                                                    }
-                                                    if (lastInstruments.length > 0 && availableInstruments.length < lastInstruments.length) {
-                                                        droppedMessages.push("some instruments");
-                                                    }
-
-                                                    if (droppedMessages.length > 0) {
-                                                        setConflictWarning(`Notice: ${newOp === formData.operative ? 'The' : 'Their'} last used ${droppedMessages.join(' and ')} are busy today and could not be auto-filled.`);
-                                                    } else {
-                                                        setConflictWarning('');
-                                                    }
-
                                                     setFormData(prev => ({
                                                         ...prev,
                                                         helpers: availableHelpers.length > 0 ? availableHelpers : prev.helpers,
@@ -5832,16 +5813,16 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                             </FormControl>
                         )}
 
-                        <FormControl isDisabled={isCompleted}>
+                        <FormControl isDisabled={isResourceDisabled}>
                             <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider" display="flex" flexWrap="wrap" alignItems="center">
-                                <Icon as={FaUsers} mr={2} /> Helpers ({formData.helpers.length})
+                                <Icon as={FaUsers} mr={2} /> Helpers ({formData.helpers.length}) {!formData.operative && "(Select Operative First)"}
                                 {formData.helpers.length > 0 && (
                                     <Text as="span" ml={1} color="gray.500" fontWeight="bold" textTransform="none" fontSize="10px">
                                         - {employees.filter(e => formData.helpers.includes(e._id)).map(e => e.name).join(', ')}
                                     </Text>
                                 )}
                             </FormLabel>
-                            <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg="white">
+                            <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg={isResourceDisabled ? "gray.50" : "white"}>
                                 <SimpleGrid columns={2} spacing={3}>
                                     {employees.filter(e => (e.status !== 'Deactive' || formData.helpers.includes(e._id)) && e._id !== formData.operative).map(e => {
                                         const isSelected = formData.helpers.includes(e._id);
@@ -5850,13 +5831,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                 key={e._id} 
                                                 py={2} 
                                                 px={3} 
-                                                cursor="pointer" 
+                                                cursor={isResourceDisabled ? "not-allowed" : "pointer"} 
                                                 borderRadius="xl" 
                                                 bg={isSelected ? 'blue.50' : 'gray.50'}
                                                 border="1px solid"
                                                 borderColor={isSelected ? 'blue.200' : 'transparent'}
-                                                _hover={isCompleted ? {} : { bg: isSelected ? 'blue.100' : 'blue.50', borderColor: 'blue.200' }} 
-                                                onClick={() => !isCompleted && handleHelperToggle(e._id)}
+                                                _hover={isResourceDisabled ? {} : { bg: isSelected ? 'blue.100' : 'blue.50', borderColor: 'blue.200' }} 
+                                                onClick={() => !isResourceDisabled && handleHelperToggle(e._id)}
                                                 transition="all 0.2s"
                                             >
                                                 <Checkbox 
@@ -5865,6 +5846,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                     size="md" 
                                                     pointerEvents="none"
                                                     borderColor="gray.300" 
+                                                    isDisabled={isResourceDisabled}
                                                 />
                                                 <Text fontSize="xs" fontWeight="bold" color={isSelected ? 'blue.800' : 'gray.700'}>{e.name}</Text>
                                             </HStack>
@@ -5875,7 +5857,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                         </FormControl>
 
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                            <FormControl isDisabled={isCompleted}>
+                            <FormControl isDisabled={isResourceDisabled}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider" display="flex" flexWrap="wrap" alignItems="center">
                                     <Icon as={FaCar} mr={2} color="red.500" /> Assigned Vehicle
                                     {formData.vehicle && (
@@ -5892,17 +5874,18 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                     border="2px solid"
                                     borderColor="gray.100"
                                     _focus={{ borderColor: 'blue.400', boxShadow: 'none' }}
-                                    placeholder="Select Vehicle"
+                                    placeholder={formData.operative ? "Select Vehicle" : "Select Operative First"}
                                     fontWeight="bold"
                                     h="50px"
+                                    isDisabled={isResourceDisabled}
                                 >
                                     {vehicles.map(v => <option key={v._id} value={v._id}>{v.vehicleNumber} - {v.vehicleName}</option>)}
                                 </Select>
                             </FormControl>
 
-                            <FormControl isDisabled={isCompleted}>
+                            <FormControl isDisabled={isResourceDisabled}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider" display="flex" flexWrap="wrap" alignItems="center">
-                                    <Icon as={FaWrench} mr={2} color="orange.500" /> Instruments & Groups ({formData.instruments.length} selected)
+                                    <Icon as={FaWrench} mr={2} color="orange.500" /> Instruments & Groups ({formData.instruments.length} selected) {!formData.operative && "(Select Operative First)"}
                                     {formData.instruments.length > 0 && (
                                         <Text as="span" ml={1} color="gray.500" fontWeight="bold" textTransform="none" fontSize="10px">
                                             - {instruments.filter(i => formData.instruments.includes(i._id)).map(i => i.serialNo || i.instrumentNumber || i.instrumentName).join(', ')}
@@ -5911,7 +5894,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                 </FormLabel>
                                 
                                 {instrumentGroups && instrumentGroups.length > 0 && (
-                                    <Box maxH="140px" overflowY="auto" border="2px solid" borderColor="teal.100" borderRadius="2xl" p={3} bg="teal.50" mb={3}>
+                                    <Box maxH="140px" overflowY="auto" border="2px solid" borderColor="teal.100" borderRadius="2xl" p={3} bg={isResourceDisabled ? "gray.50" : "teal.50"} mb={3}>
                                         <VStack spacing={2} align="stretch">
                                             {instrumentGroups.map(grp => {
                                                 const groupInstIds = grp.instruments?.map(i => i._id || i) || [];
@@ -5921,13 +5904,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                         key={grp._id} 
                                                         py={2} 
                                                         px={3} 
-                                                        cursor="pointer" 
+                                                        cursor={isResourceDisabled ? "not-allowed" : "pointer"} 
                                                         borderRadius="xl" 
                                                         bg={isSelected ? 'teal.100' : 'white'}
                                                         border="1px solid"
                                                         borderColor={isSelected ? 'teal.300' : 'transparent'}
-                                                        _hover={isCompleted ? {} : { bg: isSelected ? 'teal.200' : 'white', borderColor: 'teal.300' }} 
-                                                        onClick={() => !isCompleted && handleGroupToggle(grp._id)}
+                                                        _hover={isResourceDisabled ? {} : { bg: isSelected ? 'teal.200' : 'white', borderColor: 'teal.300' }} 
+                                                        onClick={() => !isResourceDisabled && handleGroupToggle(grp._id)}
                                                         transition="all 0.2s"
                                                     >
                                                         <Checkbox 
@@ -5936,6 +5919,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                             size="md" 
                                                             pointerEvents="none"
                                                             borderColor="gray.300" 
+                                                            isDisabled={isResourceDisabled}
                                                         />
                                                         <VStack align="start" spacing={0}>
                                                             <Text fontSize="xs" fontWeight="bold" color={isSelected ? 'teal.800' : 'gray.700'}>
@@ -5952,7 +5936,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                     </Box>
                                 )}
 
-                                <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg="white">
+                                <Box maxH="180px" overflowY="auto" border="2px solid" borderColor="gray.100" borderRadius="2xl" p={4} bg={isResourceDisabled ? "gray.50" : "white"}>
                                     <VStack spacing={2} align="stretch">
                                         {instruments.map(inst => {
                                             const isSelected = formData.instruments.includes(inst._id);
@@ -5961,13 +5945,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                     key={inst._id} 
                                                     py={2} 
                                                     px={3} 
-                                                    cursor="pointer" 
+                                                    cursor={isResourceDisabled ? "not-allowed" : "pointer"} 
                                                     borderRadius="xl" 
                                                     bg={isSelected ? 'orange.50' : 'gray.50'}
                                                     border="1px solid"
                                                     borderColor={isSelected ? 'orange.200' : 'transparent'}
-                                                    _hover={isCompleted ? {} : { bg: isSelected ? 'orange.100' : 'orange.50', borderColor: 'orange.200' }} 
-                                                    onClick={() => !isCompleted && handleInstrumentToggle(inst._id)}
+                                                    _hover={isResourceDisabled ? {} : { bg: isSelected ? 'orange.100' : 'orange.50', borderColor: 'orange.200' }} 
+                                                    onClick={() => !isResourceDisabled && handleInstrumentToggle(inst._id)}
                                                     transition="all 0.2s"
                                                 >
                                                     <Checkbox 
@@ -5976,6 +5960,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                         size="md" 
                                                         pointerEvents="none"
                                                         borderColor="gray.300" 
+                                                        isDisabled={isResourceDisabled}
                                                     />
                                                     <VStack align="start" spacing={0}>
                                                         <Text fontSize="xs" fontWeight="bold" color={isSelected ? 'orange.800' : 'gray.700'}>
