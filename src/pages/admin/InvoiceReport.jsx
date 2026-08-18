@@ -1,3 +1,4 @@
+// Last updated: 2026-08-17T15:03:00.954Z
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box, Container, VStack, HStack, Text, Heading, Badge, Button, IconButton,
@@ -13,7 +14,8 @@ import {
     FaFileInvoiceDollar, FaEye, FaCheckCircle, FaClock, FaSearch,
     FaCalendarAlt, FaUser, FaBuilding, FaMapMarkerAlt, FaFilter,
     FaFileAlt, FaCamera, FaFilePdf, FaSyncAlt, FaDownload, FaEnvelope,
-    FaListUl, FaExclamationTriangle, FaMoneyBillWave, FaTimes, FaPrint, FaWhatsapp
+    FaListUl, FaExclamationTriangle, FaMoneyBillWave, FaTimes, FaPrint, FaWhatsapp,
+    FaBell, FaHistory
 } from 'react-icons/fa';
 import api from '../../api/axios';
 import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
@@ -64,7 +66,7 @@ const generateNextInvoiceId = (schedulesList, type, companyDetails) => {
     const fyStr = getFinancialYearString(new Date());
     const prefix = getCompanyPrefix(companyDetails);
     let maxNum = 0;
-    
+
     if (type === 'PROFORMA') {
         schedulesList.forEach(s => {
             let idStr = s.proformaInvoiceId || (s.invoiceType === 'proforma' ? s.invoiceDetails?.invoiceId : null);
@@ -96,27 +98,27 @@ const generateNextInvoiceId = (schedulesList, type, companyDetails) => {
 const rowStyle = (s) => {
     const sType = s.scheduleType;
     let ledg = s.ledger;
-    
+
     // If it's a grouped row, check the ledger of its first entry
     if (s.entries && s.entries.length > 0) {
         ledg = ledg || s.entries[0]?.ledger;
     }
 
     if (sType === 'TOPOGRAPHY SURVEY') {
-        return { bg: 'red.50', border: 'red.400', hoverBg: 'red.100' };
+        return { bg: 'white', border: 'gray.200', hoverBg: 'gray.50' };
     }
     if (sType === 'MONTH') {
-        return { bg: 'blue.50', border: 'blue.400', hoverBg: 'blue.100' };
+        return { bg: 'white', border: 'gray.200', hoverBg: 'gray.50' };
     }
     if (sType === 'POINT MARKING') {
-        return { bg: 'purple.50', border: 'purple.400', hoverBg: 'purple.100' };
+        return { bg: 'white', border: 'gray.200', hoverBg: 'gray.50' };
     }
-    
+
     // VISIT / others: color based on ledger if present (Full Day = green, Half Day = orange)
     const ledgerVal = ledg || 'Full Day';
-    if (ledgerVal === 'Full Day') return { bg: 'green.50', border: 'green.300', hoverBg: 'green.100' };
-    if (ledgerVal === 'Half Day') return { bg: 'orange.50', border: 'orange.300', hoverBg: 'orange.100' };
-    
+    if (ledgerVal === 'Full Day') return { bg: 'white', border: 'gray.200', hoverBg: 'gray.50' };
+    if (ledgerVal === 'Half Day') return { bg: 'white', border: 'gray.200', hoverBg: 'gray.50' };
+
     return { bg: 'white', border: 'gray.200', hoverBg: 'gray.50' };
 };
 
@@ -171,7 +173,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
     // Missing Site Ledger Instruction Modal state
     const [missingLedgerSitesModal, setMissingLedgerSitesModal] = useState({ isOpen: false, sites: [] });
-    
+
     // Group Details popup state
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [selectedEntryForDocs, setSelectedEntryForDocs] = useState(null);
@@ -195,9 +197,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     // Tabs & Invoice Form state
     const [activeTab, setActiveTab] = useState(0);
     const [companies, setCompanies] = useState([]);
-    const [invoiceForm, setInvoiceForm] = useState({ 
-        isOpen: false, type: '', entries: [], entryConfigs: {}, 
-        companyDetails: null, 
+    const [invoiceForm, setInvoiceForm] = useState({
+        isOpen: false, type: '', entries: [], entryConfigs: {},
+        companyDetails: null,
         invoiceId: '',
         buyerDetails: { name: '', address: '', gstin: '', stateName: '', stateCode: '24', contactPerson: '', contact: '' },
         shipToDetails: { name: '', address: '', gstin: '', stateName: '', stateCode: '24', contactPerson: '', contact: '' },
@@ -207,6 +209,29 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
     const [loading, setLoading] = useState(false);
     const [updatingId, setUpdatingId] = useState(null);
+    // ── Closed Tab Summary Stats (Total Closed, UPI Closed, CASH Closed) ──
+    const closedSummaryStats = React.useMemo(() => {
+        const closedSchedules = schedules.filter(s => s.invoiceStatus === 'Closed' || s.invoiceStatus === 'Completed' || s.closedDate);
+        let totalAmt = 0;
+        let upiAmt = 0;
+        let cashAmt = 0;
+
+        closedSchedules.forEach(s => {
+            const amt = calculateEntryAmount(s, s.invoiceDetails);
+            totalAmt += amt;
+            const mode = (s.paymentMode || '').toUpperCase();
+            if (mode.includes('UPI') || s.transactionNo) {
+                upiAmt += amt;
+            } else if (mode.includes('CASH') || s.receiverName) {
+                cashAmt += amt;
+            } else {
+                upiAmt += amt;
+            }
+        });
+
+        return { totalAmt, upiAmt, cashAmt, count: closedSchedules.length };
+    }, [schedules]);
+
     const [cashUpiModal, setCashUpiModal] = useState({
         isOpen: false,
         mode: 'UPI', // 'UPI' or 'CASH'
@@ -219,6 +244,71 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     });
 
     // Preview Modal State
+    // ── Payment Reminder Follow-Up & Invoice Detail State ──
+    const [selectedInvoiceDetail, setSelectedInvoiceDetail] = useState(null);
+    const { isOpen: isFollowUpOpen, onOpen: onFollowUpOpen, onClose: onFollowUpClose } = useDisclosure();
+    const [followUpTarget, setFollowUpTarget] = useState(null);
+    const [followUpForm, setFollowUpForm] = useState({
+        remark: '',
+        nextFollowUpDate: ''
+    });
+    const [isSubmittingFollowUp, setIsSubmittingFollowUp] = useState(false);
+
+    const handleOpenFollowUp = (inv, group = null) => {
+        setFollowUpTarget({ inv, group });
+        const defaultDate = new Date();
+        defaultDate.setDate(defaultDate.getDate() + 7);
+        setFollowUpForm({
+            remark: '',
+            nextFollowUpDate: defaultDate.toISOString().split('T')[0]
+        });
+        onFollowUpOpen();
+    };
+
+    const handleSubmitFollowUp = async () => {
+        if (!followUpForm.remark.trim()) {
+            toast({ title: 'Please enter a remark', status: 'warning', duration: 3000 });
+            return;
+        }
+        if (!followUpForm.nextFollowUpDate) {
+            toast({ title: 'Please select the next follow-up date', status: 'warning', duration: 3000 });
+            return;
+        }
+        setIsSubmittingFollowUp(true);
+        try {
+            const userString = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}';
+            let user = {};
+            try { user = JSON.parse(userString); } catch (e) { }
+            let addedBy = user.name || user.contactPersonName || user.companyName;
+            if (!addedBy && user.email) addedBy = user.email.split('@')[0];
+            if (!addedBy) addedBy = 'Admin';
+
+            const invId = followUpTarget?.inv?.invoiceId && followUpTarget.inv.invoiceId !== '—'
+                ? followUpTarget.inv.invoiceId
+                : (followUpTarget?.inv?.entries?.[0]?._id || followUpTarget?.inv?.invoiceKey);
+
+            await api.post(`/schedule-master/invoice/${encodeURIComponent(invId)}/follow-up`, {
+                remark: followUpForm.remark.trim(),
+                nextFollowUpDate: followUpForm.nextFollowUpDate,
+                addedBy
+            });
+
+            toast({
+                title: '✅ Follow-up Saved!',
+                description: `Next follow-up set for ${new Date(followUpForm.nextFollowUpDate).toLocaleDateString('en-GB')}`,
+                status: 'success',
+                duration: 4000
+            });
+
+            onFollowUpClose();
+            fetchVisitSchedules(activeTab);
+        } catch (err) {
+            toast({ title: err.response?.data?.message || 'Failed to save follow-up', status: 'error', duration: 3000 });
+        } finally {
+            setIsSubmittingFollowUp(false);
+        }
+    };
+
     const [previewModal, setPreviewModal] = useState({
         isOpen: false,
         htmlContent: '',
@@ -259,7 +349,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             const entries = invoiceGroup.entries || [];
             const html = generateInvoiceHtml(formLike, entries, formLike.type);
             const fullPdfUrl = pdfUrl ? (pdfUrl.startsWith('http') ? pdfUrl : `${API_BASE_URL}${pdfUrl.startsWith('/') ? '' : '/'}${pdfUrl}`) : '';
-            
+
             setPreviewModal({
                 isOpen: true,
                 htmlContent: html,
@@ -306,7 +396,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
     const handleOpenSiteDrawer = (siteObj, invGroup = null, specificEntry = null) => {
         const siteKey = String(siteObj?._id || siteObj?.siteName || '').toLowerCase().trim();
-        
+
         const entry = specificEntry ||
             invGroup?.entries?.find(e => String(e.site?._id || e.site?.siteName || '').toLowerCase().trim() === siteKey) ||
             invGroup?.entries?.[0] ||
@@ -314,7 +404,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
         const clientObj = entry?.client || selectedClientModal?.clientObj || null;
         const matchedEntries = schedules.filter(s => String(s.site?._id || s.site?.siteName || '').toLowerCase().trim() === siteKey);
-        
+
         const invoiceGroupObj = invGroup || (entry ? {
             invoiceKey: entry.finalInvoiceId || entry.proformaInvoiceId || entry._id,
             invoiceId: entry.finalInvoiceId || entry.proformaInvoiceId || entry.invoiceDetails?.invoiceId || '—',
@@ -352,7 +442,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
         const reminderType = isTaxInvoice ? '*TAX INVOICE PAYMENT REMINDER*' : '*PROFORMA INVOICE PAYMENT REMINDER*';
         const invoiceTypeLabel = isTaxInvoice ? 'Tax Invoice' : 'Proforma Invoice';
-        const invNo = isTaxInvoice 
+        const invNo = isTaxInvoice
             ? (siteEntry.finalInvoiceId || siteEntry.invoiceDetails?.invoiceId || 'N/A')
             : (siteEntry.proformaInvoiceId || siteEntry.invoiceDetails?.invoiceId || 'N/A');
 
@@ -388,7 +478,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             const res = await api.get(`/schedule-master?${params.toString()}`);
             if (res.data.success) {
                 const rawData = res.data.data;
-                
+
                 // Map documents inline
                 const formattedSchedules = rawData.map(s => {
                     let docs = s.uploadedDocuments || [];
@@ -400,7 +490,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                         allDocuments: docs
                     };
                 });
-                
+
                 setSchedules(formattedSchedules);
                 // Do not auto-select entries on load as per user request
                 // setSelectedEntries(formattedSchedules.filter(s => s.invoiceStatus !== 'Completed').map(s => s._id));
@@ -412,7 +502,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         }
     }, [filterDateFrom, filterDateTo]);
 
-    useEffect(() => { fetchVisitSchedules(); }, [fetchVisitSchedules]);
+    useEffect(() => { fetchVisitSchedules(); }, [activeTab, fetchVisitSchedules]);
 
     useEffect(() => {
         const fetchCompanies = async () => {
@@ -445,10 +535,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         setUpdatingId(schedule._id);
         try {
             await api.patch(`/schedule-master/invoice-status/${schedule._id}`, { invoiceStatus: next });
-            
+
             setSchedules(prev => {
                 const nextSchedules = prev.map(s => s._id === schedule._id ? { ...s, invoiceStatus: next } : s);
-                
+
                 // Keep popup group values synchronized in real-time
                 if (selectedGroup) {
                     setSelectedGroup(prevGroup => {
@@ -461,7 +551,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                         };
                     });
                 }
-                
+
                 return nextSchedules;
             });
 
@@ -480,7 +570,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         const isTopo = (s.scheduleType || '').toUpperCase().includes('TOPOGRAPHY');
 
         const hasMailFile = (s.draftingWorkFiles?.mailFiles && s.draftingWorkFiles.mailFiles.length > 0) ||
-                            (s.allDocuments && s.allDocuments.some(d => d.isMail || d.url?.includes('/drawing/') || d.url?.includes('/drafting/')));
+            (s.allDocuments && s.allDocuments.some(d => d.isMail || d.url?.includes('/drawing/') || d.url?.includes('/drafting/')));
 
         // Topography Surveys require at least 1 Mail file uploaded
         if (isTopo) {
@@ -505,7 +595,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             const isReport = d.url?.includes('/Daily_report/') || d.url?.includes('dailyReports') || d.name?.toLowerCase().includes('report');
             const isData = d.url?.includes('/data/') || d.url?.includes('dataFiles') || (d.url?.includes('site_') && d.url?.includes('data'));
             const isDrawing = d.url?.includes('/drawing/') || (d.url?.includes('site_') && d.url?.includes('drawing'));
-            
+
             return isPhoto || isReport || isData || isDrawing;
         }));
 
@@ -520,7 +610,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             s.site?.siteName?.toLowerCase().includes(q) ||
             s.operative?.name?.toLowerCase().includes(q);
         const matchLedger = !filterLedger || s.ledger === filterLedger;
-        
+
         const stat = s.invoiceStatus || 'Pending';
         const normalizedStat = (stat === 'Completed' || stat === 'Closed') ? 'Closed' : stat;
         const targetStatus = ['Pending', 'Proforma', 'Final', 'Reminder', 'Closed'][activeTab];
@@ -612,12 +702,16 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             if (statuses.every(s => s === 'PAID')) paymentStatus = 'PAID';
             else if (statuses.some(s => s === 'PAID' || s === 'PARTIAL')) paymentStatus = 'PARTIAL';
             else if (statuses.some(s => s === 'OVERDUE')) paymentStatus = 'OVERDUE';
-            clientMap[clientId].invoices.push({ ...inv, sites, totalAmt, paymentStatus });
+            const followUps = inv.entries.find(e => e.followUps && e.followUps.length > 0)?.followUps || [];
+            const nextFollowUp = inv.entries.find(e => e.nextFollowUp)?.nextFollowUp || null;
+            if (paymentStatus !== 'PAID') {
+                clientMap[clientId].invoices.push({ ...inv, sites, totalAmt, paymentStatus, followUps, nextFollowUp });
+            }
         });
 
         // STEP 3: Build final list, apply search + type + status filters
         const q = reminderSearch.toLowerCase().trim();
-        return Object.values(clientMap).filter(group => {
+        return Object.values(clientMap).filter(group => group.invoices.length > 0).filter(group => {
             if (!q && !reminderInvoiceTypeFilter && !reminderPaymentStatusFilter) return true;
             const matchClient = !q || group.clientName.toLowerCase().includes(q);
             const matchInvoices = !q || group.invoices.some(inv =>
@@ -675,18 +769,18 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             const siteId = s.site?._id || s.site;
             if (!clientId || !siteId) return;
             const sType = s.scheduleType || 'VISIT';
-            
+
             // If the entry is part of a generated invoice, group by that invoice ID. 
             // This prevents multi-site invoices from splitting apart in the Proforma/Final tabs.
             const invId = s.invoiceDetails?.invoiceId || s.finalInvoiceId || s.proformaInvoiceId;
             let groupKey;
-            
+
             if (activeTab > 0 && invId) {
                 groupKey = `inv-${invId}`;
             } else {
                 groupKey = `client-${clientId}`;
             }
-            
+
             if (!groups[groupKey]) {
                 groups[groupKey] = {
                     groupId: groupKey,
@@ -703,7 +797,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         list.forEach(g => {
             // Sort entries date-wise ascending
             g.entries.sort((a, b) => new Date(a.scheduleDate) - new Date(b.scheduleDate));
-            
+
             // Organize entries by site under this client
             const siteGroupsMap = {};
             g.entries.forEach(e => {
@@ -733,11 +827,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 }
             });
             g.uniqueTypes = Array.from(typesSet);
-            
+
             // Outer status is Pending if at least one entry inside is pending
             const hasPending = g.entries.some(e => e.invoiceStatus !== 'Completed');
             g.status = hasPending ? 'Pending' : 'Completed';
-            
+
             // Find earliest pending date
             const pendingEntries = g.entries.filter(e => e.invoiceStatus !== 'Completed');
             if (pendingEntries.length > 0) {
@@ -750,13 +844,13 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             // Find latest entry date
             const sortedAll = [...g.entries].sort((a, b) => new Date(b.scheduleDate) - new Date(a.scheduleDate));
             g.latestEntryDate = sortedAll[0]?.scheduleDate || null;
-            
+
             // Find PDFs and IDs
             g.proformaInvoicePdf = g.entries.find(e => e.proformaInvoicePdf)?.proformaInvoicePdf || null;
             g.finalInvoicePdf = g.entries.find(e => e.finalInvoicePdf)?.finalInvoicePdf || null;
             g.proformaInvoiceId = g.entries.find(e => e.proformaInvoiceId)?.proformaInvoiceId || null;
             g.finalInvoiceId = g.entries.find(e => e.finalInvoiceId)?.finalInvoiceId || null;
-            
+
             // Find invoice generation timestamp for proper sorting
             g.latestInvoiceDate = g.entries.find(e => e.invoiceDetails?.generatedAt)?.invoiceDetails?.generatedAt || g.latestEntryDate;
         });
@@ -765,11 +859,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         list.sort((a, b) => {
             if (a.status === 'Pending' && b.status !== 'Pending') return -1;
             if (a.status !== 'Pending' && b.status === 'Pending') return 1;
-            
+
             if (a.status === 'Pending' && b.status === 'Pending') {
                 return new Date(a.earliestPendingDate) - new Date(b.earliestPendingDate);
             }
-            
+
             return new Date(b.latestInvoiceDate) - new Date(a.latestInvoiceDate);
         });
 
@@ -783,11 +877,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         }
 
         const entriesToInvoice = schedules.filter(s => selectedEntries.includes(s._id));
-        
+
         // Ensure all selected entries belong to the SAME client
         const firstClient = entriesToInvoice[0].client?._id || entriesToInvoice[0].client;
         const allSameClient = entriesToInvoice.every(e => (e.client?._id || e.client) === firstClient);
-        
+
         if (!allSameClient) {
             toast({ title: 'Cannot generate invoice for multiple clients', description: 'Please select entries belonging to the same client.', status: 'error', duration: 5000 });
             return;
@@ -923,10 +1017,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             const gstPct = Number(invoiceForm.gstPercentage || 18);
             const taxAmount = subTotal * (gstPct / 100);
             const totalAmount = subTotal + taxAmount;
-            
+
             // Build the pdf HTML
             const pdfHtml = generateInvoiceHtml(invoiceForm, invoiceForm.entries, invoiceForm.type);
-            
+
             // Call generate-invoice endpoint
             const res = await api.post('/schedule-master/generate-invoice', {
                 entryIds: invoiceForm.entries.map(e => e._id),
@@ -1038,8 +1132,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         try {
             setLoading(true);
             const entriesToMove = group.entries.filter(e => selectedEntries.includes(e._id));
-            if(entriesToMove.length === 0) {
-                toast({title: 'No entries selected', status:'warning'});
+            if (entriesToMove.length === 0) {
+                toast({ title: 'No entries selected', status: 'warning' });
                 return;
             }
             for (const entry of entriesToMove) {
@@ -1048,7 +1142,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             toast({ title: `Moved to ${newStatus}`, status: 'success' });
             setSelectedGroup(null);
             fetchVisitSchedules();
-        } catch(e) {
+        } catch (e) {
             toast({ title: 'Error moving entries', status: 'error' });
         } finally {
             setLoading(false);
@@ -1083,32 +1177,81 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                         />
                     </Flex>
 
-                    {/* ── Stats Cards ── */}
-                    <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4}>
-                        {[
-                            { label: 'Total Visits', value: stats.total, color: 'blue', icon: FaBuilding },
-                            { label: 'Pending Bills', value: stats.pending, color: 'orange', icon: FaClock },
-                            { label: 'Completed Bills', value: stats.completed, color: 'green', icon: FaCheckCircle },
-                            { label: 'Full Day', value: stats.fullDay, color: 'teal', icon: FaCalendarAlt },
-                            { label: 'Half Day', value: stats.halfDay, color: 'purple', icon: FaCalendarAlt },
-                        ].map(({ label, value, color, icon }) => (
-                            <Card key={label} borderRadius="xl" shadow="sm" border="1px solid" borderColor={`${color}.100`} bg={`${color}.50`}>
-                                <CardBody p={4}>
+                    {/* ── Closed Tab Summary Stats Cards (When Closed Tab Active) ── */}
+                    {activeTab === 4 ? (
+                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+                            <Card borderRadius="2xl" shadow="sm" bg="black" color="white" border="1px solid" borderColor="gray.800">
+                                <CardBody p={5}>
                                     <HStack justify="space-between">
-                                        <VStack align="start" spacing={0}>
-                                            <Text fontSize="xs" color={`${color}.600`} fontWeight="bold" textTransform="uppercase">{label}</Text>
-                                            <Heading size="xl" color={`${color}.700`}>{value}</Heading>
+                                        <VStack align="start" spacing={1}>
+                                            <Text fontSize="xs" color="gray.400" fontWeight="bold" textTransform="uppercase" letterSpacing="wider">🔒 Total Amount Closed</Text>
+                                            <Heading size="lg" color="white" fontWeight="900">₹{closedSummaryStats.totalAmt.toLocaleString('en-IN')}</Heading>
+                                            <Badge colorScheme="green" variant="solid" borderRadius="full" px={2.5} fontSize="10px">{closedSummaryStats.count} Closed Invoices</Badge>
                                         </VStack>
-                                        <Icon as={icon} w={7} h={7} color={`${color}.300`} />
+                                        <Box bg="whiteAlpha.200" p={3} borderRadius="2xl">
+                                            <Icon as={FaCheckCircle} w={8} h={8} color="emerald.400" />
+                                        </Box>
                                     </HStack>
                                 </CardBody>
                             </Card>
-                        ))}
-                    </SimpleGrid>
+
+                            <Card borderRadius="2xl" shadow="sm" bg="gray.900" color="white" border="1px solid" borderColor="gray.800">
+                                <CardBody p={5}>
+                                    <HStack justify="space-between">
+                                        <VStack align="start" spacing={1}>
+                                            <Text fontSize="xs" color="purple.300" fontWeight="bold" textTransform="uppercase" letterSpacing="wider">💳 Closed with UPI</Text>
+                                            <Heading size="lg" color="white" fontWeight="900">₹{closedSummaryStats.upiAmt.toLocaleString('en-IN')}</Heading>
+                                            <Badge colorScheme="purple" variant="solid" borderRadius="full" px={2.5} fontSize="10px">UPI Transfer</Badge>
+                                        </VStack>
+                                        <Box bg="purple.900" p={3} borderRadius="2xl">
+                                            <Icon as={FaMoneyBillWave} w={8} h={8} color="purple.300" />
+                                        </Box>
+                                    </HStack>
+                                </CardBody>
+                            </Card>
+
+                            <Card borderRadius="2xl" shadow="sm" bg="gray.900" color="white" border="1px solid" borderColor="gray.800">
+                                <CardBody p={5}>
+                                    <HStack justify="space-between">
+                                        <VStack align="start" spacing={1}>
+                                            <Text fontSize="xs" color="teal.300" fontWeight="bold" textTransform="uppercase" letterSpacing="wider">💵 Closed with CASH</Text>
+                                            <Heading size="lg" color="white" fontWeight="900">₹{closedSummaryStats.cashAmt.toLocaleString('en-IN')}</Heading>
+                                            <Badge colorScheme="teal" variant="solid" borderRadius="full" px={2.5} fontSize="10px">Cash Received</Badge>
+                                        </VStack>
+                                        <Box bg="teal.900" p={3} borderRadius="2xl">
+                                            <Icon as={FaMoneyBillWave} w={8} h={8} color="teal.300" />
+                                        </Box>
+                                    </HStack>
+                                </CardBody>
+                            </Card>
+                        </SimpleGrid>
+                    ) : (
+                        <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4}>
+                            {[
+                                { label: 'Total Visits', value: stats.total, color: 'blue', icon: FaBuilding },
+                                { label: 'Pending Bills', value: stats.pending, color: 'orange', icon: FaClock },
+                                { label: 'Completed Bills', value: stats.completed, color: 'green', icon: FaCheckCircle },
+                                { label: 'Full Day', value: stats.fullDay, color: 'teal', icon: FaCalendarAlt },
+                                { label: 'Half Day', value: stats.halfDay, color: 'purple', icon: FaCalendarAlt },
+                            ].map(({ label, value, color, icon }) => (
+                                <Card key={label} borderRadius="xl" shadow="sm" border="1px solid" borderColor={`${color}.100`} bg={`${color}.50`}>
+                                    <CardBody p={4}>
+                                        <HStack justify="space-between">
+                                            <VStack align="start" spacing={0}>
+                                                <Text fontSize="xs" color={`${color}.600`} fontWeight="bold" textTransform="uppercase">{label}</Text>
+                                                <Heading size="xl" color={`${color}.700`}>{value}</Heading>
+                                            </VStack>
+                                            <Icon as={icon} w={7} h={7} color={`${color}.300`} />
+                                        </HStack>
+                                    </CardBody>
+                                </Card>
+                            ))}
+                        </SimpleGrid>
+                    )}
 
                     {/* ── Tabs & Global Actions ── */}
                     <Flex justify="space-between" align="center">
-                        <Tabs variant="soft-rounded" colorScheme="blue" index={activeTab} onChange={(idx) => { setActiveTab(idx); setSelectedGroup(null); setSelectedEntries([]); }}>
+                        <Tabs variant="soft-rounded" colorScheme="blue" index={activeTab} onChange={(idx) => { setActiveTab(idx); setSelectedGroup(null); setSelectedEntries([]); fetchVisitSchedules(); }}>
                             <TabList bg="white" p={2} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
                                 <Tab fontWeight="bold">⏳ Pending</Tab>
                                 <Tab fontWeight="bold">📄 Proforma</Tab>
@@ -1117,7 +1260,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                 <Tab fontWeight="bold">🔒 Closed</Tab>
                             </TabList>
                         </Tabs>
-                        
+
                         {selectedEntries.length > 0 && (
                             <HStack bg="white" p={2} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
                                 <HStack spacing={2} px={2} mr={2} borderRight="1px solid" borderColor="gray.200">
@@ -1231,7 +1374,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                             {/* ── Client Cards ── */}
                             {loading ? (
                                 <VStack spacing={3}>
-                                    {[1,2,3].map(i => (
+                                    {[1, 2, 3].map(i => (
                                         <Card key={i} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" w="full">
                                             <CardBody p={5}>
                                                 <HStack spacing={4}>
@@ -1270,6 +1413,28 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         const pendingAmt = group.invoices.filter(i => i.paymentStatus !== 'PAID').reduce((s, i) => s + Number(i.totalAmt || 0), 0);
                                         const hasOverdue = group.invoices.some(i => i.paymentStatus === 'OVERDUE');
                                         const allPaid = group.invoices.every(i => i.paymentStatus === 'PAID');
+                                        const siteCount = group.invoices.flatMap(i => i.sites).filter((s, idx, arr) => s && arr.findIndex(x => (x?._id || x?.siteName) === (s?._id || s?.siteName)) === idx).length;
+
+                                        const unpaidInvs = group.invoices.filter(i => i.paymentStatus !== 'PAID' && (i.nextFollowUp || (i.followUps && i.followUps.length > 0)));
+                                        let earliestDate = null;
+                                        unpaidInvs.forEach(i => {
+                                            let dStr = null;
+                                            if (i.nextFollowUp) dStr = i.nextFollowUp;
+                                            else if (i.followUps && i.followUps.length > 0) dStr = i.followUps[i.followUps.length - 1].nextFollowUpDate;
+                                            if (dStr) {
+                                                const d = new Date(dStr);
+                                                if (!earliestDate || d < earliestDate) earliestDate = d;
+                                            }
+                                        });
+                                        let nClientStr = null; let bClientCol = null; let nClientLabel = null;
+                                        if (earliestDate) {
+                                            nClientStr = formatDate(earliestDate);
+                                            const todayStr = new Date().toISOString().split('T')[0];
+                                            const fnStr = earliestDate.toISOString().split('T')[0];
+                                            if (fnStr < todayStr) { bClientCol = 'red'; nClientLabel = 'OVERDUE'; }
+                                            else if (fnStr === todayStr) { bClientCol = 'orange'; nClientLabel = 'TODAY'; }
+                                            else { bClientCol = 'purple'; nClientLabel = 'UPCOMING'; }
+                                        }
 
                                         const toggleExpand = () => setExpandedClientIds(prev =>
                                             prev.includes(group.clientId) ? prev.filter(id => id !== group.clientId) : [...prev, group.clientId]
@@ -1315,6 +1480,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     </Text>
                                                                     {hasOverdue && <Badge colorScheme="red" variant="solid" borderRadius="full" px={2} fontSize="10px">⚠️ OVERDUE</Badge>}
                                                                     {allPaid && <Badge colorScheme="green" variant="solid" borderRadius="full" px={2} fontSize="10px">✅ ALL PAID</Badge>}
+                                                                    {earliestDate && (
+                                                                        <Badge colorScheme={bClientCol} variant="solid" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="bold">
+                                                                            🔔 FOLLOW-UP {nClientLabel}: {nClientStr}
+                                                                        </Badge>
+                                                                    )}
                                                                     <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2} fontSize="10px">
                                                                         {group.invoices.length} Invoice{group.invoices.length !== 1 ? 's' : ''}
                                                                     </Badge>
@@ -1374,13 +1544,13 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                             <Modal
                                 isOpen={!!selectedClientModal}
                                 onClose={() => setSelectedClientModal(null)}
-                                size="6xl"
+                                size="full"
                                 isCentered
                                 scrollBehavior="inside"
                                 motionPreset="slideInBottom"
                             >
                                 <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.600" />
-                                <ModalContent borderRadius="3xl" overflow="hidden" maxH="92vh">
+                                <ModalContent maxW={{ base: "98vw", lg: "95vw", xl: "1480px" }} w="100%" borderRadius="3xl" overflow="hidden" maxH="94vh">
                                     {selectedClientModal && (() => {
                                         const group = selectedClientModal;
                                         const client = group.clientObj || {};
@@ -1392,22 +1562,22 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         return (
                                             <>
                                                 <ModalHeader p={0}>
-                                                    <Box bgGradient="linear(to-r, purple.700, blue.600)" p={6} color="white">
+                                                    <Box bgGradient="linear(to-r, blue.600, indigo.600)" p={6} color="white">
                                                         <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
                                                             <HStack spacing={4}>
-                                                                <Box p={3.5} bg="whiteAlpha.200" borderRadius="2xl">
-                                                                    <Icon as={FaBuilding} w={8} h={8} />
+                                                                <Box p={3.5} bg="blue.600" borderRadius="2xl" shadow="sm">
+                                                                    <Icon as={FaBuilding} w={7} h={7} />
                                                                 </Box>
                                                                 <VStack align="start" spacing={1}>
                                                                     <HStack spacing={3} wrap="wrap">
-                                                                        <Text fontWeight="black" fontSize="2xl">{group.clientName}</Text>
+                                                                        <Text fontWeight="900" fontSize="2xl" color="white">{group.clientName}</Text>
                                                                         {client.clientId && (
-                                                                            <Badge colorScheme="whiteAlpha" variant="solid" borderRadius="full" px={2.5}>
+                                                                            <Badge bg="whiteAlpha.300" color="white" borderRadius="full" px={2.5} py={0.5} fontSize="xs">
                                                                                 ID: {client.clientId}
                                                                             </Badge>
                                                                         )}
                                                                     </HStack>
-                                                                    <HStack spacing={3} wrap="wrap" fontSize="xs" opacity={0.9}>
+                                                                    <HStack spacing={4} wrap="wrap" fontSize="xs" color="gray.300">
                                                                         {client.clientAddress && <Text>📍 {client.clientAddress}</Text>}
                                                                         {(client.contactPerson?.phone || client.contactNumbers?.[0]) && (
                                                                             <Text>📞 {client.contactPerson?.phone || client.contactNumbers?.[0]}</Text>
@@ -1418,26 +1588,30 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                 </VStack>
                                                             </HStack>
 
-                                                            <HStack spacing={4} wrap="wrap">
-                                                                <Box bg="whiteAlpha.200" px={4} py={2} borderRadius="xl" textAlign="center">
-                                                                    <Text fontSize="10px" textTransform="uppercase" opacity={0.8} fontWeight="bold">Total Invoices</Text>
-                                                                    <Text fontSize="lg" fontWeight="black">{group.invoices.length}</Text>
+                                                            <HStack spacing={3} wrap="wrap">
+                                                                <Box bg="whiteAlpha.150" border="1px solid" borderColor="whiteAlpha.300" px={4} py={2} borderRadius="xl" textAlign="center">
+                                                                    <Text fontSize="10px" textTransform="uppercase" color="gray.300" fontWeight="bold">Total Invoices</Text>
+                                                                    <Text fontSize="lg" fontWeight="900" color="white">{group.invoices.length}</Text>
                                                                 </Box>
-                                                                <Box bg="whiteAlpha.200" px={4} py={2} borderRadius="xl" textAlign="center">
-                                                                    <Text fontSize="10px" textTransform="uppercase" opacity={0.8} fontWeight="bold">Total Billed</Text>
-                                                                    <Text fontSize="lg" fontWeight="black">₹{totalAmt.toLocaleString('en-IN')}</Text>
+                                                                <Box bg="whiteAlpha.150" border="1px solid" borderColor="whiteAlpha.300" px={4} py={2} borderRadius="xl" textAlign="center">
+                                                                    <Text fontSize="10px" textTransform="uppercase" color="gray.300" fontWeight="bold">Total Billed</Text>
+                                                                    <Text fontSize="lg" fontWeight="900" color="white">₹{totalAmt.toLocaleString('en-IN')}</Text>
                                                                 </Box>
-                                                                <Box bg={pendingAmt > 0 ? "orange.400" : "green.400"} px={4} py={2} borderRadius="xl" textAlign="center">
-                                                                    <Text fontSize="10px" textTransform="uppercase" fontWeight="bold">Pending Amount</Text>
-                                                                    <Text fontSize="lg" fontWeight="black">₹{pendingAmt.toLocaleString('en-IN')}</Text>
+                                                                <Box bg={pendingAmt > 0 ? "amber.500" : "emerald.500"} px={4} py={2} borderRadius="xl" textAlign="center">
+                                                                    <Text fontSize="10px" textTransform="uppercase" color="white" fontWeight="bold">Pending Amount</Text>
+                                                                    <Text fontSize="lg" fontWeight="900" color="white">₹{pendingAmt.toLocaleString('en-IN')}</Text>
                                                                 </Box>
                                                             </HStack>
                                                         </Flex>
                                                     </Box>
-                                                    <Tabs index={clientModalTab} onChange={setClientModalTab} variant="enclosed" colorScheme="purple">
-                                                        <TabList bg="gray.50" px={6} pt={3} borderBottom="1px solid" borderColor="gray.200">
-                                                            <Tab fontWeight="bold">🧾 Invoices ({group.invoices.length})</Tab>
-                                                            <Tab fontWeight="bold">📍 Sites Breakdown ({allSites.length})</Tab>
+                                                    <Tabs index={clientModalTab} onChange={setClientModalTab} variant="enclosed">
+                                                        <TabList bg="gray.100" px={6} pt={2} borderBottom="1px solid" borderColor="gray.300">
+                                                            <Tab fontWeight="extrabold" color="gray.700" _selected={{ color: 'blue.700', bg: 'white', borderColor: 'gray.300', borderBottomColor: 'white' }}>
+                                                                🧾 Invoices List ({group.invoices.length})
+                                                            </Tab>
+                                                            <Tab fontWeight="extrabold" color="gray.700" _selected={{ color: 'blue.700', bg: 'white', borderColor: 'gray.300', borderBottomColor: 'white' }}>
+                                                                📍 Sites Breakdown ({allSites.length})
+                                                            </Tab>
                                                         </TabList>
                                                     </Tabs>
                                                 </ModalHeader>
@@ -1446,192 +1620,184 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                 <ModalBody p={6} bg="gray.50" overflowY="auto">
                                                     <Tabs index={clientModalTab} onChange={setClientModalTab} variant="unstyled">
                                                         <TabPanels>
-                                                            {/* TAB 1: INVOICES LIST (TAX & PROFORMA) */}
+                                                            {/* TAB 1: INVOICES LIST (ROW-WISE TABLE) */}
                                                             <TabPanel p={0}>
-                                                                <VStack spacing={4} align="stretch">
-                                                                    {group.invoices.map((inv, invIdx) => {
-                                                                        const psBadge = { PAID: { color: 'green', label: '✅ PAID' }, PARTIAL: { color: 'yellow', label: '🟡 PARTIAL' }, PENDING: { color: 'orange', label: '🟠 PENDING' }, OVERDUE: { color: 'red', label: '🔴 OVERDUE' } };
-                                                                        const ps = psBadge[inv.paymentStatus] || psBadge.PENDING;
-                                                                        const billDate = formatDate(inv.generatedAt || inv.entries?.[0]?.invoiceDetails?.generatedAt);
-                                                                        const invSites = inv.sites.filter((s, idx, arr) => s && arr.findIndex(x => (x?._id || x?.siteName) === (s?._id || s?.siteName)) === idx);
-                                                                        const isCombined = invSites.length > 1;
+                                                                <VStack spacing={3} align="stretch">
+                                                                    <Box px={1} pb={1}>
+                                                                        <Text fontSize="xs" color="gray.600" fontWeight="bold">
+                                                                            💡 Click any row below to open the complete invoice details, line items, PDF preview & WhatsApp reminder.
+                                                                        </Text>
+                                                                    </Box>
+                                                                    <TableContainer border="1.5px solid" borderColor="gray.300" borderRadius="2xl" bg="white" shadow="sm" overflowX="auto">
+                                                                        <Table variant="simple" size="sm">
+                                                                            <Thead bg="gray.100">
+                                                                                <Tr borderBottom="2px solid" borderColor="gray.300">
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900" w="40px">#</Th>
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900">INVOICE NO.</Th>
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900">TYPE</Th>
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900">BILL DATE</Th>
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900">SITES COVERED</Th>
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900" textAlign="center">NEXT FOLLOW-UP</Th>
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900" textAlign="right">AMOUNT (₹)</Th>
+                                                                                    <Th py={3.5} color="gray.800" fontSize="11px" fontWeight="900" textAlign="right" whiteSpace="nowrap" minW="330px">ACTIONS</Th>
+                                                                                </Tr>
+                                                                            </Thead>
+                                                                            <Tbody>
+                                                                                {group.invoices.map((inv, invIdx) => {
+                                                                                    const psBadge = { PAID: { color: 'green', label: '✅ PAID' }, PARTIAL: { color: 'yellow', label: '🟡 PARTIAL' }, PENDING: { color: 'orange', label: '🟠 PENDING' }, OVERDUE: { color: 'red', label: '🔴 OVERDUE' } };
+                                                                                    const ps = psBadge[inv.paymentStatus] || psBadge.PENDING;
+                                                                                    const billDate = formatDate(inv.generatedAt || inv.entries?.[0]?.invoiceDetails?.generatedAt || inv.entries?.[0]?.createdAt);
+                                                                                    const invSites = inv.sites.filter((s, idx, arr) => s && arr.findIndex(x => (x?._id || x?.siteName) === (s?._id || s?.siteName)) === idx);
+                                                                                    const isCombined = invSites.length > 1;
 
-                                                                        return (
-                                                                            <Card key={inv.invoiceKey || invIdx} borderRadius="2xl" variant="outline" border="2px solid" borderColor={inv.isTaxInvoice ? "green.200" : "blue.200"} bg="white" shadow="sm">
-                                                                                <CardBody p={5}>
-                                                                                    <VStack align="stretch" spacing={4}>
-                                                                                        {/* Header of the Invoice */}
-                                                                                        <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3}>
-                                                                                            <HStack spacing={3}>
-                                                                                                <Box p={3} bg={inv.isTaxInvoice ? 'green.100' : 'blue.100'} color={inv.isTaxInvoice ? 'green.700' : 'blue.700'} borderRadius="2xl">
-                                                                                                    <Icon as={FaFileInvoiceDollar} w={6} h={6} />
-                                                                                                </Box>
-                                                                                                <VStack align="start" spacing={0.5}>
-                                                                                                    <HStack spacing={2} wrap="wrap">
-                                                                                                        <Text fontSize="lg" fontWeight="black" color="gray.800">
-                                                                                                            {inv.invoiceId}
+                                                                                    return (
+                                                                                        <Tr
+                                                                                            key={inv.invoiceKey || invIdx}
+                                                                                            cursor="pointer"
+                                                                                            borderBottom="1px solid"
+                                                                                            borderColor="gray.200"
+                                                                                            _hover={{ bg: "blue.50/60", transition: "background 0.15s" }}
+                                                                                            onClick={() => setSelectedInvoiceDetail({ inv, group })}
+                                                                                        >
+                                                                                            <Td py={3.5} fontSize="xs" color="gray.500" fontWeight="bold">
+                                                                                                {invIdx + 1}
+                                                                                            </Td>
+                                                                                            <Td py={3.5}>
+                                                                                                <HStack spacing={2}>
+                                                                                                    <Icon as={FaFileInvoiceDollar} color={inv.isTaxInvoice ? 'blue.700' : 'blue.500'} w={4} h={4} />
+                                                                                                    <VStack align="start" spacing={0}>
+                                                                                                        <Text fontSize="sm" fontWeight="900" color="gray.900">
+                                                                                                            {inv.invoiceId && inv.invoiceId !== '—' ? inv.invoiceId : 'Direct Closed'}
                                                                                                         </Text>
-                                                                                                        <Badge colorScheme={inv.isTaxInvoice ? 'green' : 'blue'} variant="solid" borderRadius="full" px={2.5} py={0.5} fontSize="xs" fontWeight="black">
-                                                                                                            {inv.isTaxInvoice ? '🧾 TAX INVOICE' : '📋 PROFORMA INVOICE'}
-                                                                                                        </Badge>
-                                                                                                        <Badge colorScheme={ps.color} variant="solid" borderRadius="full" px={2.5} py={0.5} fontSize="xs" fontWeight="black">
-                                                                                                            {ps.label}
-                                                                                                        </Badge>
                                                                                                         {isCombined && (
-                                                                                                            <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2.5} py={0.5} fontSize="xs" fontWeight="black">
-                                                                                                                🔗 Combined Multi-Site Invoice ({invSites.length} Sites)
-                                                                                                            </Badge>
+                                                                                                            <Text fontSize="10px" color="blue.700" fontWeight="bold">
+                                                                                                                🔗 {invSites.length} Sites Combined
+                                                                                                            </Text>
                                                                                                         )}
-                                                                                                    </HStack>
-                                                                                                    <HStack spacing={3} fontSize="xs" color="gray.500">
-                                                                                                        <HStack spacing={1}>
-                                                                                                            <Icon as={FaCalendarAlt} color="gray.400" />
-                                                                                                            <Text>Date: {billDate}</Text>
-                                                                                                        </HStack>
-                                                                                                        {inv.entries?.[0]?.invoiceDetails?.companyDetails?.companyName && (
-                                                                                                            <Text>• Billed From: <b>{inv.entries[0].invoiceDetails.companyDetails.companyName}</b></Text>
-                                                                                                        )}
-                                                                                                    </HStack>
-                                                                                                </VStack>
-                                                                                            </HStack>
-
-                                                                                            <VStack align="end" spacing={0}>
-                                                                                                <Text fontSize="xs" color="gray.400" fontWeight="bold" textTransform="uppercase">Invoice Grand Total</Text>
-                                                                                                <Text fontSize="xl" fontWeight="black" color="purple.700">₹{Number(inv.totalAmt || 0).toLocaleString('en-IN')}</Text>
-                                                                                            </VStack>
-                                                                                        </Flex>
-
-                                                                                        {/* Sites included */}
-                                                                                        <Box bg="gray.50" p={3} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                                                                            <Text fontSize="11px" fontWeight="bold" color="gray.500" textTransform="uppercase" mb={2}>
-                                                                                                📍 {isCombined ? `Sites Covered in this Single Invoice (${invSites.length}) — Click any site to view details` : 'Site Covered — Click to view details'}
-                                                                                            </Text>
-                                                                                            <Wrap spacing={2}>
-                                                                                                {invSites.map((site, si) => (
-                                                                                                    <Tag
-                                                                                                        key={si}
-                                                                                                        size="md"
-                                                                                                        colorScheme="teal"
-                                                                                                        borderRadius="full"
-                                                                                                        px={3}
-                                                                                                        py={1.5}
-                                                                                                        cursor="pointer"
-                                                                                                        _hover={{ bg: 'teal.100', transform: 'scale(1.03)', shadow: 'sm' }}
-                                                                                                        transition="all 0.15s"
-                                                                                                        onClick={() => handleOpenSiteDrawer(site, inv)}
-                                                                                                    >
-                                                                                                        <Icon as={FaMapMarkerAlt} mr={1.5} />
-                                                                                                        <Text fontWeight="bold">{site?.siteName || 'Site'}</Text>
-                                                                                                        {site?.siteLocation && <Text fontSize="xs" ml={1} opacity={0.8}>({site.siteLocation})</Text>}
-                                                                                                        <Badge ml={1.5} colorScheme="teal" variant="solid" fontSize="9px" borderRadius="full">
-                                                                                                            View Details ↗
-                                                                                                        </Badge>
-                                                                                                    </Tag>
-                                                                                                ))}
-                                                                                            </Wrap>
-                                                                                        </Box>
-
-                                                                                        {/* Work entries / Line items inside this invoice */}
-                                                                                        <TableContainer border="1px solid" borderColor="gray.200" borderRadius="xl">
-                                                                                            <Table size="sm" variant="simple">
-                                                                                                <Thead bg="gray.100">
-                                                                                                    <Tr>
-                                                                                                        <Th fontSize="10px">DATE</Th>
-                                                                                                        <Th fontSize="10px">SITE NAME (CLICK FOR DETAILS)</Th>
-                                                                                                        <Th fontSize="10px">TYPE / LEDGER</Th>
-                                                                                                        <Th fontSize="10px">OPERATIVE</Th>
-                                                                                                        <Th fontSize="10px" textAlign="right">AMOUNT</Th>
-                                                                                                    </Tr>
-                                                                                                </Thead>
-                                                                                                <Tbody>
-                                                                                                    {inv.entries.map((entry, ei) => (
-                                                                                                        <Tr key={entry._id || ei} _hover={{ bg: 'teal.50' }}>
-                                                                                                            <Td fontSize="xs" fontWeight="semibold">{formatDate(entry.scheduleDate)}</Td>
-                                                                                                            <Td
-                                                                                                                fontSize="xs"
-                                                                                                                fontWeight="bold"
-                                                                                                                color="teal.700"
-                                                                                                                cursor="pointer"
-                                                                                                                _hover={{ textDecoration: 'underline', color: 'teal.900' }}
-                                                                                                                onClick={() => handleOpenSiteDrawer(entry.site, inv, entry)}
-                                                                                                            >
-                                                                                                                📍 {entry.site?.siteName || '—'}
-                                                                                                            </Td>
-                                                                                                            <Td fontSize="xs">
-                                                                                                                <Tag size="sm" colorScheme="purple" variant="subtle" borderRadius="full" fontSize="10px">
-                                                                                                                    {entry.scheduleType || 'VISIT'}
-                                                                                                                </Tag>
-                                                                                                                {entry.ledger && (
-                                                                                                                    <Tag size="sm" colorScheme="gray" variant="subtle" borderRadius="full" fontSize="10px" ml={1}>
-                                                                                                                        {entry.ledger}
-                                                                                                                    </Tag>
-                                                                                                                )}
-                                                                                                            </Td>
-                                                                                                            <Td fontSize="xs" color="gray.600">{entry.operative?.name || '—'}</Td>
-                                                                                                            <Td fontSize="xs" fontWeight="bold" textAlign="right" color="gray.800">
-                                                                                                                ₹{calculateEntryAmount(entry, inv.invoiceDetails).toLocaleString('en-IN')}
-                                                                                                            </Td>
-                                                                                                        </Tr>
-                                                                                                    ))}
-                                                                                                </Tbody>
-                                                                                            </Table>
-                                                                                        </TableContainer>
-
-                                                                                        {/* Action Buttons */}
-                                                                                        <Flex justify="flex-end" align="center" gap={3} pt={2} borderTop="1px solid" borderColor="gray.100" wrap="wrap">
-                                                                                            <Button
-                                                                                                size="sm"
-                                                                                                colorScheme="teal"
-                                                                                                variant="outline"
-                                                                                                borderRadius="xl"
-                                                                                                leftIcon={<FaListUl />}
-                                                                                                onClick={() => {
-                                                                                                    const firstEntry = inv.entries[0];
-                                                                                                    handleOpenSiteDrawer(firstEntry?.site, inv, firstEntry);
-                                                                                                }}
-                                                                                            >
-                                                                                                View Documents & Full Details
-                                                                                            </Button>
-                                                                                            <Button
-                                                                                                size="sm"
-                                                                                                colorScheme="purple"
-                                                                                                borderRadius="xl"
-                                                                                                leftIcon={<FaEye />}
-                                                                                                onClick={() => handlePreviewExistingPdf(inv.pdfUrl, inv.invoiceId, inv.isTaxInvoice ? 'Tax Invoice' : 'Proforma Invoice', inv)}
-                                                                                            >
-                                                                                                Preview Invoice PDF
-                                                                                            </Button>
-                                                                                            {inv.pdfUrl && (
-                                                                                                <Button
-                                                                                                    as="a"
-                                                                                                    href={inv.pdfUrl.startsWith('http') ? inv.pdfUrl : `${API_BASE_URL}${inv.pdfUrl.startsWith('/') ? '' : '/'}${inv.pdfUrl}`}
-                                                                                                    target="_blank"
-                                                                                                    size="sm"
-                                                                                                    colorScheme="red"
-                                                                                                    variant="outline"
-                                                                                                    borderRadius="xl"
-                                                                                                    leftIcon={<FaFilePdf />}
+                                                                                                    </VStack>
+                                                                                                </HStack>
+                                                                                            </Td>
+                                                                                            <Td py={3.5}>
+                                                                                                <Badge
+                                                                                                    bg={inv.isTaxInvoice ? 'blue.100' : inv.invoiceId && inv.invoiceId !== '—' ? 'purple.100' : 'gray.100'}
+                                                                                                    color={inv.isTaxInvoice ? 'blue.900' : inv.invoiceId && inv.invoiceId !== '—' ? 'purple.900' : 'gray.800'}
+                                                                                                    border="1px solid"
+                                                                                                    borderColor={inv.isTaxInvoice ? 'blue.400' : inv.invoiceId && inv.invoiceId !== '—' ? 'purple.400' : 'gray.400'}
+                                                                                                    borderRadius="full"
+                                                                                                    px={2.5}
+                                                                                                    py={0.5}
+                                                                                                    fontSize="10px"
+                                                                                                    fontWeight="900"
                                                                                                 >
-                                                                                                    Open PDF
-                                                                                                </Button>
-                                                                                            )}
-                                                                                            <Button
-                                                                                                size="sm"
-                                                                                                bg="#25D366"
-                                                                                                color="white"
-                                                                                                _hover={{ bg: '#128C7E' }}
-                                                                                                borderRadius="xl"
-                                                                                                leftIcon={<FaWhatsapp />}
-                                                                                                onClick={() => handleSendWhatsappReminder(inv.entries[0])}
-                                                                                            >
-                                                                                                WhatsApp Reminder
-                                                                                            </Button>
-                                                                                        </Flex>
-                                                                                    </VStack>
-                                                                                </CardBody>
-                                                                            </Card>
-                                                                        );
-                                                                    })}
+                                                                                                    {inv.isTaxInvoice ? '🧾 TAX INVOICE' : inv.invoiceId && inv.invoiceId !== '—' ? '📄 PROFORMA' : '🔒 DIRECT CLOSED'}
+                                                                                                </Badge>
+                                                                                            </Td>
+                                                                                            <Td py={3.5} fontSize="xs" fontWeight="bold" color="gray.800">
+                                                                                                <HStack spacing={1.5}>
+                                                                                                    <Icon as={FaCalendarAlt} color="gray.500" w={3} h={3} />
+                                                                                                    <Text>{billDate}</Text>
+                                                                                                </HStack>
+                                                                                            </Td>
+                                                                                            <Td py={3.5}>
+                                                                                                <Wrap spacing={1}>
+                                                                                                    {invSites.map((site, si) => (
+                                                                                                        <Tag key={si} size="sm" colorScheme="teal" borderRadius="full" fontSize="10px" fontWeight="extrabold">
+                                                                                                            📍 {site?.siteName || 'Site'}
+                                                                                                        </Tag>
+                                                                                                    ))}
+                                                                                                </Wrap>
+                                                                                            </Td>
+                                                                                            <Td py={3.5} textAlign="center">
+                                                                                                {(() => {
+                                                                                                    let nStr = '—'; let bCol = 'gray'; let nLabel = 'NO DATE';
+                                                                                                    let dStr = null;
+                                                                                                    if (inv.nextFollowUp) dStr = inv.nextFollowUp;
+                                                                                                    else if (inv.followUps && inv.followUps.length > 0) dStr = inv.followUps[inv.followUps.length - 1].nextFollowUpDate;
+                                                                                                    if (dStr) {
+                                                                                                        const fD = new Date(dStr);
+                                                                                                        nStr = formatDate(fD);
+                                                                                                        const todayStr = new Date().toISOString().split('T')[0];
+                                                                                                        const fnStr = fD.toISOString().split('T')[0];
+                                                                                                        if (fnStr < todayStr) { bCol = 'red'; nLabel = 'OVERDUE'; }
+                                                                                                        else if (fnStr === todayStr) { bCol = 'orange'; nLabel = 'TODAY'; }
+                                                                                                        else { bCol = 'purple'; nLabel = 'UPCOMING'; }
+                                                                                                    }
+                                                                                                    return (
+                                                                                                        <VStack spacing={0.5}>
+                                                                                                            <Text fontSize="11px" fontWeight="bold" color={bCol === 'gray' ? 'gray.400' : 'gray.800'}>{nStr}</Text>
+                                                                                                            {dStr && <Badge colorScheme={bCol} fontSize="9px" px={2} borderRadius="full">{nLabel}</Badge>}
+                                                                                                        </VStack>
+                                                                                                    );
+                                                                                                })()}
+                                                                                            </Td>
+                                                                                            <Td py={3.5} textAlign="right" fontSize="sm" fontWeight="900" color="gray.900">
+                                                                                                ₹{Number(inv.totalAmt || 0).toLocaleString('en-IN')}
+                                                                                            </Td>
+                                                                                            <Td py={3.5} textAlign="right" onClick={(e) => e.stopPropagation()} whiteSpace="nowrap" minW="380px">
+                                                                                                <HStack spacing={1.5} justify="flex-end">
+                                                                                                    <Button
+                                                                                                        size="xs"
+                                                                                                        bgGradient="linear(to-r, orange.500, red.500)"
+                                                                                                        color="white"
+                                                                                                        _hover={{ bgGradient: 'linear(to-r, orange.600, red.600)' }}
+                                                                                                        borderRadius="lg"
+                                                                                                        fontWeight="bold"
+                                                                                                        leftIcon={<FaBell />}
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation();
+                                                                                                            handleOpenFollowUp(inv, group);
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        Follow-up ({inv.followUps?.length || 0})
+                                                                                                    </Button>
+                                                                                                    <Button
+                                                                                                        size="xs"
+                                                                                                        colorScheme="blue"
+                                                                                                        variant="solid"
+                                                                                                        borderRadius="lg"
+                                                                                                        fontWeight="bold"
+                                                                                                        rightIcon={<FaEye />}
+                                                                                                        onClick={() => {
+                                                                                                            const siteObj = inv.sites?.[0] || inv.entries?.[0]?.site;
+                                                                                                            handleOpenSiteDrawer(siteObj, inv);
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        View Details
+                                                                                                    </Button>
+                                                                                                    {!inv.isTaxInvoice && (
+                                                                                                        <Button
+                                                                                                            size="xs"
+                                                                                                            colorScheme="purple"
+                                                                                                            variant="solid"
+                                                                                                            borderRadius="lg"
+                                                                                                            fontWeight="bold"
+                                                                                                            leftIcon={<FaFileInvoiceDollar />}
+                                                                                                            onClick={() => validateAndPrepareGlobalInvoice(inv.entries, 'FINAL')}
+                                                                                                        >
+                                                                                                            Generate Final Invoice
+                                                                                                        </Button>
+                                                                                                    )}
+                                                                                                    {inv.paymentStatus !== 'PAID' && (
+                                                                                                        <Button
+                                                                                                            size="xs"
+                                                                                                            colorScheme="green"
+                                                                                                            variant="solid"
+                                                                                                            borderRadius="lg"
+                                                                                                            fontWeight="bold"
+                                                                                                            leftIcon={<FaCheckCircle />}
+                                                                                                            onClick={() => handleMarkInvoiceClosed(inv)}
+                                                                                                        >
+                                                                                                            Mark Closed
+                                                                                                        </Button>
+                                                                                                    )}
+                                                                                                </HStack>
+                                                                                            </Td>
+                                                                                        </Tr>
+                                                                                    );
+                                                                                })}
+                                                                            </Tbody>
+                                                                        </Table>
+                                                                    </TableContainer>
                                                                 </VStack>
                                                             </TabPanel>
 
@@ -1641,94 +1807,279 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     {allSites.map((site, si) => {
                                                                         const siteInvoices = group.invoices.filter(inv => inv.sites.some(s => (s?._id || s?.siteName) === (site?._id || site?.siteName)));
                                                                         const siteEntries = siteInvoices.flatMap(inv => inv.entries.filter(e => (e.site?._id || e.site?.siteName) === (site?._id || site?.siteName)));
+                                                                        const siteTotal = siteEntries.reduce((s, e) => s + calculateEntryAmount(e), 0);
 
                                                                         return (
-                                                                            <Card key={site?._id || si} borderRadius="2xl" variant="outline" border="1px solid" borderColor="teal.200" bg="white" _hover={{ shadow: 'md' }} transition="all 0.15s">
-                                                                                <CardBody p={5}>
-                                                                                    <VStack align="stretch" spacing={4}>
-                                                                                        <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
-                                                                                            <HStack
-                                                                                                spacing={3}
-                                                                                                cursor="pointer"
-                                                                                                onClick={() => handleOpenSiteDrawer(site, siteInvoices[0], siteEntries[0])}
-                                                                                                _hover={{ opacity: 0.8 }}
-                                                                                            >
-                                                                                                <Box p={3} bg="teal.100" color="teal.700" borderRadius="2xl">
-                                                                                                    <Icon as={FaMapMarkerAlt} w={5} h={5} />
-                                                                                                </Box>
-                                                                                                <VStack align="start" spacing={0}>
-                                                                                                    <HStack spacing={2}>
-                                                                                                        <Text fontSize="md" fontWeight="black" color="gray.800">{site?.siteName}</Text>
-                                                                                                        <Badge colorScheme="teal" fontSize="10px">Click to View Site</Badge>
-                                                                                                    </HStack>
-                                                                                                    {site?.siteAddress && <Text fontSize="xs" color="gray.500">📍 {site.siteAddress}</Text>}
-                                                                                                </VStack>
-                                                                                            </HStack>
-                                                                                            <HStack spacing={2}>
-                                                                                                <Badge colorScheme="purple" borderRadius="full" px={3} py={1}>
-                                                                                                    {siteInvoices.length} Invoice(s) Generated
-                                                                                                </Badge>
-                                                                                                <Button
-                                                                                                    size="sm"
-                                                                                                    colorScheme="teal"
-                                                                                                    variant="solid"
-                                                                                                    borderRadius="xl"
-                                                                                                    leftIcon={<FaEye />}
-                                                                                                    onClick={() => handleOpenSiteDrawer(site, siteInvoices[0], siteEntries[0])}
-                                                                                                >
-                                                                                                    View Site Details & Docs
-                                                                                                </Button>
-                                                                                            </HStack>
-                                                                                        </Flex>
+                                                                            <Card key={si} borderRadius="2xl" border="1px solid" borderColor="gray.200" bg="white" shadow="xs">
+                                                                                <CardBody p={4}>
+                                                                                    <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={3}>
+                                                                                        <HStack spacing={2}>
+                                                                                            <Icon as={FaMapMarkerAlt} color="teal.500" w={4} h={4} />
+                                                                                            <Text fontWeight="extrabold" fontSize="md" color="gray.800">
+                                                                                                {site?.siteName || 'Site'}
+                                                                                            </Text>
+                                                                                            {site?.siteLocation && (
+                                                                                                <Text fontSize="xs" color="gray.500">({site.siteLocation})</Text>
+                                                                                            )}
+                                                                                        </HStack>
+                                                                                        <Badge colorScheme="teal" borderRadius="full" px={2.5} py={0.5} fontSize="xs" fontWeight="bold">
+                                                                                            {siteInvoices.length} Invoice{siteInvoices.length !== 1 ? 's' : ''} • ₹{siteTotal.toLocaleString('en-IN')}
+                                                                                        </Badge>
+                                                                                    </Flex>
+                                                                                    <TableContainer border="1px solid" borderColor="gray.200" borderRadius="xl">
+                                                                                        <Table size="xs" variant="simple">
+                                                                                            <Thead bg="gray.50">
+                                                                                                <Tr>
+                                                                                                    <Th py={4} color="gray.500" fontSize="10px" w="40px">#</Th>
+                                                                                                    {activeTab === 4 ? (
+                                                                                                        <>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px">INVOICE NO. & TYPE</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px">CLIENT NAME</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px">SITES COVERED</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px" textAlign="center">PAYMENT METHOD</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px" textAlign="right">CLOSED AMOUNT (₹)</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px" textAlign="right" minW="260px">ACTIONS</Th>
+                                                                                                        </>
+                                                                                                    ) : (
+                                                                                                        <>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px">CLIENT NAME</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px">SCHEDULE TYPE</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px" textAlign="center" w="160px">SITES & DATA</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px" w="150px">BILL STATUS</Th>
+                                                                                                            <Th py={4} color="gray.500" fontSize="10px" textAlign="right" w="150px">ACTIONS</Th>
+                                                                                                        </>
+                                                                                                    )}
+                                                                                                </Tr>
+                                                                                            </Thead>
+                                                                                            <Tbody>
+                                                                                                {groupedGroups.map((group, idx) => {
+                                                                                                    const totalCount = group.entries.length;
+                                                                                                    const completedCount = group.entries.filter(e => e.invoiceStatus === 'Completed').length;
+                                                                                                    const pendingCount = totalCount - completedCount;
+                                                                                                    const isPending = group.status === 'Pending';
+                                                                                                    const siteCount = group.siteGroups ? group.siteGroups.length : 1;
 
-                                                                                        {/* Invoices attached to this site */}
-                                                                                        <Box>
-                                                                                            <Text fontSize="11px" fontWeight="bold" color="gray.400" textTransform="uppercase" mb={2}>Invoices for this Site</Text>
-                                                                                            <Wrap spacing={2}>
-                                                                                                {siteInvoices.map((inv, ii) => (
-                                                                                                    <Tag key={ii} size="lg" colorScheme={inv.isTaxInvoice ? 'green' : 'blue'} borderRadius="xl" p={2}>
-                                                                                                        <Icon as={FaFileInvoiceDollar} mr={2} />
-                                                                                                        <Text fontWeight="bold">{inv.invoiceId}</Text>
-                                                                                                        <Badge ml={2} colorScheme={inv.isTaxInvoice ? 'green' : 'blue'} fontSize="10px">
-                                                                                                            {inv.isTaxInvoice ? 'Tax' : 'Proforma'}
-                                                                                                        </Badge>
-                                                                                                        {inv.sites.length > 1 && (
-                                                                                                            <Badge ml={1} colorScheme="purple" fontSize="9px">
-                                                                                                                🔗 Combined ({inv.sites.length} Sites)
-                                                                                                            </Badge>
-                                                                                                        )}
-                                                                                                    </Tag>
-                                                                                                ))}
-                                                                                            </Wrap>
-                                                                                        </Box>
+                                                                                                    const groupClientId = String(group.client?._id || group.client);
+                                                                                                    const groupTotalAmt = group.entries.reduce((sum, e) => sum + calculateEntryAmount(e, e.invoiceDetails), 0);
+                                                                                                    const paymentMode = group.entries.find(e => e.paymentMode)?.paymentMode || (group.entries.find(e => e.transactionNo)?.transactionNo ? 'UPI' : (group.entries.find(e => e.receiverName)?.receiverName ? 'CASH' : null));
+                                                                                                    const isDifferentClient = activeSelectedClientId && groupClientId !== activeSelectedClientId;
 
-                                                                                        {/* Work entries table */}
-                                                                                        <TableContainer border="1px solid" borderColor="gray.100" borderRadius="xl">
-                                                                                            <Table size="sm" variant="simple">
-                                                                                                <Thead bg="gray.50">
-                                                                                                    <Tr>
-                                                                                                        <Th fontSize="10px">DATE</Th>
-                                                                                                        <Th fontSize="10px">WORK TYPE</Th>
-                                                                                                        <Th fontSize="10px">INVOICE NO.</Th>
-                                                                                                        <Th fontSize="10px" textAlign="right">AMOUNT</Th>
-                                                                                                    </Tr>
-                                                                                                </Thead>
-                                                                                                <Tbody>
-                                                                                                    {siteEntries.map((e, ei) => {
-                                                                                                        const eInvId = e.finalInvoiceId || e.proformaInvoiceId || e.invoiceDetails?.invoiceId || '—';
-                                                                                                        return (
-                                                                                                            <Tr key={e._id || ei}>
-                                                                                                                <Td fontSize="xs">{formatDate(e.scheduleDate)}</Td>
-                                                                                                                <Td fontSize="xs" fontWeight="semibold">{e.scheduleType || 'VISIT'} {e.ledger ? `(${e.ledger})` : ''}</Td>
-                                                                                                                <Td fontSize="xs" fontWeight="bold" color="purple.700">{eInvId}</Td>
-                                                                                                                <Td fontSize="xs" fontWeight="bold" textAlign="right">₹{calculateEntryAmount(e, e.invoiceDetails).toLocaleString('en-IN')}</Td>
-                                                                                                            </Tr>
-                                                                                                        );
-                                                                                                    })}
-                                                                                                </Tbody>
-                                                                                            </Table>
-                                                                                        </TableContainer>
-                                                                                    </VStack>
+                                                                                                    const { bg, border, hoverBg } = rowStyle(group);
+
+                                                                                                    return (
+                                                                                                        <Tr
+                                                                                                            key={group.groupId}
+                                                                                                            bg={bg}
+                                                                                                            opacity={isDifferentClient ? 0.35 : 1}
+                                                                                                            filter={isDifferentClient ? 'blur(1.2px) grayscale(70%)' : 'none'}
+                                                                                                            pointerEvents={isDifferentClient ? 'none' : 'auto'}
+                                                                                                            _hover={{ bg: isDifferentClient ? bg : hoverBg, transition: 'background 0.15s' }}
+                                                                                                            borderLeft="4px solid"
+                                                                                                            borderLeftColor={isDifferentClient ? 'gray.300' : border}
+                                                                                                            cursor={isDifferentClient ? 'not-allowed' : 'pointer'}
+                                                                                                            onClick={() => {
+                                                                                                                if (isDifferentClient) return;
+                                                                                                                setSelectedGroup(group);
+                                                                                                                setSelectedEntryForDocs(null);
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            <Td py={4} color="gray.400" fontSize="xs">
+                                                                                                                {idx + 1}
+                                                                                                            </Td>
+                                                                                                            {activeTab === 4 ? (
+                                                                                                                <>
+                                                                                                                    {/* INVOICE NO. & TYPE */}
+                                                                                                                    <Td py={4}>
+                                                                                                                        <VStack align="start" spacing={1}>
+                                                                                                                            <Text fontSize="sm" fontWeight="900" color="gray.900">
+                                                                                                                                {group.finalInvoiceId || group.proformaInvoiceId || group.invoiceId || '🔒 DIRECT CLOSED'}
+                                                                                                                            </Text>
+                                                                                                                            <Badge
+                                                                                                                                colorScheme={group.finalInvoiceId || group.finalInvoicePdf ? 'blue' : group.proformaInvoiceId || group.proformaInvoicePdf ? 'purple' : 'green'}
+                                                                                                                                variant="solid"
+                                                                                                                                borderRadius="full"
+                                                                                                                                px={2}
+                                                                                                                                py={0.5}
+                                                                                                                                fontSize="9px"
+                                                                                                                                fontWeight="black"
+                                                                                                                            >
+                                                                                                                                {group.finalInvoiceId || group.finalInvoicePdf ? '🧾 TAX INVOICE' : group.proformaInvoiceId || group.proformaInvoicePdf ? '📄 PROFORMA' : '🔒 DIRECT CLOSED'}
+                                                                                                                            </Badge>
+                                                                                                                        </VStack>
+                                                                                                                    </Td>
+
+                                                                                                                    {/* CLIENT NAME */}
+                                                                                                                    <Td py={4}>
+                                                                                                                        <HStack spacing={2}>
+                                                                                                                            <Icon as={FaBuilding} color="blue.500" w={4} h={4} />
+                                                                                                                            <VStack align="start" spacing={0}>
+                                                                                                                                <Text fontSize="sm" fontWeight="black" color="gray.800">
+                                                                                                                                    {group.client?.clientName || '—'}
+                                                                                                                                </Text>
+                                                                                                                                {group.client?.clientAddress && (
+                                                                                                                                    <Text fontSize="10px" color="gray.500" noOfLines={1}>
+                                                                                                                                        {group.client.clientAddress}
+                                                                                                                                    </Text>
+                                                                                                                                )}
+                                                                                                                            </VStack>
+                                                                                                                        </HStack>
+                                                                                                                    </Td>
+
+                                                                                                                    {/* SITES COVERED */}
+                                                                                                                    <Td py={4}>
+                                                                                                                        <Wrap spacing={1}>
+                                                                                                                            {group.siteGroups?.map((s, si) => (
+                                                                                                                                <Tag key={si} size="sm" colorScheme="teal" borderRadius="full" fontSize="10px" fontWeight="extrabold">
+                                                                                                                                    📍 {s?.siteName || s?.site?.siteName || 'Site'}
+                                                                                                                                </Tag>
+                                                                                                                            )) || (
+                                                                                                                                    <Tag size="sm" colorScheme="teal" borderRadius="full" fontSize="10px" fontWeight="extrabold">
+                                                                                                                                        📍 {group.entries?.[0]?.site?.siteName || 'Site'}
+                                                                                                                                    </Tag>
+                                                                                                                                )}
+                                                                                                                        </Wrap>
+                                                                                                                    </Td>
+
+                                                                                                                    {/* PAYMENT METHOD */}
+                                                                                                                    <Td py={4} textAlign="center">
+                                                                                                                        <Badge
+                                                                                                                            colorScheme={paymentMode === 'UPI' ? 'purple' : paymentMode === 'CASH' ? 'teal' : 'green'}
+                                                                                                                            variant="solid"
+                                                                                                                            borderRadius="full"
+                                                                                                                            px={3}
+                                                                                                                            py={1}
+                                                                                                                            fontSize="10px"
+                                                                                                                            fontWeight="black"
+                                                                                                                        >
+                                                                                                                            {paymentMode === 'UPI' ? '💳 UPI' : paymentMode === 'CASH' ? '💵 CASH' : '💳 PAID'}
+                                                                                                                        </Badge>
+                                                                                                                    </Td>
+
+                                                                                                                    {/* CLOSED AMOUNT (₹) */}
+                                                                                                                    <Td py={4} textAlign="right" fontWeight="900" fontSize="sm" color="gray.900">
+                                                                                                                        ₹{groupTotalAmt > 0 ? groupTotalAmt.toLocaleString('en-IN') : '—'}
+                                                                                                                    </Td>
+                                                                                                                </>
+                                                                                                            ) : (
+                                                                                                                <>
+                                                                                                                    <Td py={4}>
+                                                                                                                        <HStack spacing={2}>
+                                                                                                                            <Icon as={FaBuilding} color="blue.500" w={4} h={4} />
+                                                                                                                            <VStack align="start" spacing={0}>
+                                                                                                                                <Text fontSize="sm" fontWeight="black" color="gray.800">
+                                                                                                                                    {group.client?.clientName || '—'}
+                                                                                                                                </Text>
+                                                                                                                                {group.client?.clientAddress && (
+                                                                                                                                    <Text fontSize="10px" color="gray.500" noOfLines={1}>
+                                                                                                                                        {group.client.clientAddress}
+                                                                                                                                    </Text>
+                                                                                                                                )}
+                                                                                                                            </VStack>
+                                                                                                                        </HStack>
+                                                                                                                    </Td>
+                                                                                                                    <Td py={4}>
+                                                                                                                        <Wrap spacing={1}>
+                                                                                                                            {group.uniqueTypes?.map(t => (
+                                                                                                                                <Tag
+                                                                                                                                    key={t}
+                                                                                                                                    size="sm"
+                                                                                                                                    colorScheme={t.includes('Topography') ? 'red' : t.includes('Month') ? 'blue' : t.includes('Point') ? 'purple' : 'green'}
+                                                                                                                                    variant="subtle"
+                                                                                                                                    fontSize="10px"
+                                                                                                                                    fontWeight="bold"
+                                                                                                                                    borderRadius="full"
+                                                                                                                                >
+                                                                                                                                    {t}
+                                                                                                                                </Tag>
+                                                                                                                            ))}
+                                                                                                                        </Wrap>
+                                                                                                                    </Td>
+                                                                                                                    <Td py={4} textAlign="center">
+                                                                                                                        <Badge colorScheme="teal" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="11px">
+                                                                                                                            <Icon as={FaMapMarkerAlt} mr={1} w={3} h={3} />
+                                                                                                                            {siteCount} {siteCount === 1 ? 'Site' : 'Sites'} ({totalCount} entries)
+                                                                                                                        </Badge>
+                                                                                                                    </Td>
+                                                                                                                    <Td py={4}>
+                                                                                                                        <Badge
+                                                                                                                            colorScheme={group.invoiceId ? 'purple' : isPending ? 'orange' : 'green'}
+                                                                                                                            variant="solid"
+                                                                                                                            borderRadius="full"
+                                                                                                                            px={3}
+                                                                                                                            py={1}
+                                                                                                                            fontSize="10px"
+                                                                                                                            fontWeight="black"
+                                                                                                                        >
+                                                                                                                            {group.invoiceId ? `📄 ${group.invoiceId}` : isPending ? '⏳ Pending' : '✅ Completed'}
+                                                                                                                        </Badge>
+                                                                                                                    </Td>
+                                                                                                                </>
+                                                                                                            )}
+                                                                                                            <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
+                                                                                                                <HStack justify="flex-end" spacing={1.5}>
+                                                                                                                    {activeTab === 2 && (
+                                                                                                                        <Button size="xs" colorScheme="green" variant="solid" borderRadius="lg" leftIcon={<FaCheckCircle />} onClick={() => handleStatusMove(group, 'Closed')}>
+                                                                                                                            Mark Closed
+                                                                                                                        </Button>
+                                                                                                                    )}
+                                                                                                                    {activeTab === 4 && (
+                                                                                                                        <Button size="xs" colorScheme="orange" variant="outline" borderRadius="lg" leftIcon={<FaSyncAlt />} onClick={() => handleStatusMove(group, 'Final')}>
+                                                                                                                            Reopen
+                                                                                                                        </Button>
+                                                                                                                    )}
+                                                                                                                    {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
+                                                                                                                        <>
+                                                                                                                            <Tooltip label="Preview Invoice" placement="top">
+                                                                                                                                <IconButton
+                                                                                                                                    icon={<FaEye />}
+                                                                                                                                    size="xs"
+                                                                                                                                    colorScheme="purple"
+                                                                                                                                    variant="solid"
+                                                                                                                                    borderRadius="lg"
+                                                                                                                                    aria-label="Preview Invoice"
+                                                                                                                                    onClick={() => handlePreviewExistingPdf(
+                                                                                                                                        group.finalInvoicePdf || group.proformaInvoicePdf,
+                                                                                                                                        group.finalInvoiceId || group.proformaInvoiceId,
+                                                                                                                                        group.finalInvoicePdf ? 'Final Invoice' : 'Proforma Invoice'
+                                                                                                                                    )}
+                                                                                                                                />
+                                                                                                                            </Tooltip>
+                                                                                                                            <Tooltip label="Open PDF in New Tab" placement="top">
+                                                                                                                                <IconButton
+                                                                                                                                    as="a"
+                                                                                                                                    href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
+                                                                                                                                    target="_blank"
+                                                                                                                                    icon={<FaFilePdf />}
+                                                                                                                                    size="xs"
+                                                                                                                                    colorScheme="red"
+                                                                                                                                    variant="solid"
+                                                                                                                                    borderRadius="lg"
+                                                                                                                                    aria-label="Open PDF"
+                                                                                                                                />
+                                                                                                                            </Tooltip>
+                                                                                                                        </>
+                                                                                                                    )}
+                                                                                                                    <Button
+                                                                                                                        size="xs"
+                                                                                                                        colorScheme="blue"
+                                                                                                                        variant="solid"
+                                                                                                                        borderRadius="lg"
+                                                                                                                        leftIcon={<FaListUl />}
+                                                                                                                        onClick={() => {
+                                                                                                                            setSelectedGroup(group);
+                                                                                                                            setSelectedEntryForDocs(null);
+                                                                                                                        }}
+                                                                                                                    >
+                                                                                                                        View Details
+                                                                                                                    </Button>
+                                                                                                                </HStack>
+                                                                                                            </Td>
+                                                                                                        </Tr>
+                                                                                                    );
+                                                                                                })}
+                                                                                            </Tbody>
+                                                                                        </Table>
+                                                                                    </TableContainer>
                                                                                 </CardBody>
                                                                             </Card>
                                                                         );
@@ -1739,13 +2090,352 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     </Tabs>
                                                 </ModalBody>
                                                 <ModalFooter borderTop="1px solid" borderColor="gray.200" bg="white">
-                                                    <Button variant="ghost" borderRadius="xl" onClick={() => setSelectedClientModal(null)}>Close</Button>
+                                                    <Button size="sm" variant="ghost" borderRadius="xl" onClick={() => setSelectedClientModal(null)}>
+                                                        Close
+                                                    </Button>
                                                 </ModalFooter>
                                             </>
                                         );
                                     })()}
                                 </ModalContent>
                             </Modal>
+
+                        </VStack>
+                    ) : (
+                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                            {/* Legend */}
+                            <Box px={6} pt={4} pb={2}>
+                                <HStack spacing={4}>
+                                    <Text fontSize="xs" fontWeight="bold" color="gray.500">LEGEND:</Text>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="green.300" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Full Day Visit</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="orange.300" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Half Day Visit</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="blue.400" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Month Contract</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="red.400" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Topography Survey</Text>
+                                    </HStack>
+                                    <HStack spacing={1}>
+                                        <Box w={3} h={3} bg="purple.400" borderRadius="sm" />
+                                        <Text fontSize="xs" color="gray.600">Point Marking</Text>
+                                    </HStack>
+                                    <Text fontSize="xs" color="gray.400" ml="auto">{groupedGroups.length} entries listed</Text>
+                                </HStack>
+                            </Box>
+                            <Divider />
+                            <CardBody p={0}>
+                                {loading ? (
+                                    <Center py={16}><Spinner size="xl" color="blue.500" thickness="4px" /></Center>
+                                ) : groupedGroups.length === 0 ? (
+                                    <Center py={16}>
+                                        <VStack spacing={3}>
+                                            <Icon as={FaFileInvoiceDollar} w={12} h={12} color="gray.200" />
+                                            <Text color="gray.400" fontSize="lg">No schedules found</Text>
+                                            <Text color="gray.300" fontSize="sm">Try adjusting your filters or date range</Text>
+                                        </VStack>
+                                    </Center>
+                                ) : (
+                                    <TableContainer overflow="hidden" w="full">
+                                        <Table variant="simple" size="sm" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                                            <Thead bg="blue.50" borderBottom="2px solid" borderColor="blue.200">
+                                                <Tr>
+                                                    <Th py={4} color="blue.800" fontSize="10px" w="40px" fontWeight="black">#</Th>
+                                                    {activeTab === 4 ? (
+                                                        <>
+                                                            <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">INVOICE NO. & TYPE</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">CLIENT NAME</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">SITES COVERED</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="center" fontWeight="black">PAYMENT DETAILS</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="right" fontWeight="black">CLOSED AMOUNT (₹)</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="right" minW="260px" fontWeight="black">ACTIONS</Th>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">CLIENT NAME</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">SCHEDULE TYPE</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="center" w="160px" fontWeight="black">SITES & DATA</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" w="150px" fontWeight="black">BILL STATUS</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="right" w="150px" fontWeight="black">ACTIONS</Th>
+                                                        </>
+                                                    )}
+                                                </Tr>
+                                            </Thead>
+                                            <Tbody>
+                                                {groupedGroups.map((group, idx) => {
+                                                    const totalCount = group.entries.length;
+                                                    const completedCount = group.entries.filter(e => e.invoiceStatus === 'Completed').length;
+                                                    const pendingCount = totalCount - completedCount;
+                                                    const isPending = group.status === 'Pending';
+                                                    const siteCount = group.siteGroups ? group.siteGroups.length : 1;
+
+                                                    const groupClientId = String(group.client?._id || group.client);
+                                                    const groupTotalAmt = group.entries.reduce((sum, e) => sum + calculateEntryAmount(e, e.invoiceDetails), 0);
+                                                    const paymentMode = group.entries.find(e => e.paymentMode)?.paymentMode || (group.entries.find(e => e.transactionNo)?.transactionNo ? 'UPI' : (group.entries.find(e => e.receiverName)?.receiverName ? 'CASH' : null));
+                                                    const receiverName = group.entries.find(e => e.receiverName)?.receiverName;
+                                                    const transactionNo = group.entries.find(e => e.transactionNo)?.transactionNo;
+                                                    const closedDate = group.entries.find(e => e.closedDate)?.closedDate;
+                                                    const isDifferentClient = activeSelectedClientId && groupClientId !== activeSelectedClientId;
+
+                                                    const { bg, border, hoverBg } = rowStyle(group);
+                                                    const rowBg = activeTab === 4 ? "white" : bg;
+                                                    const rowHoverBg = activeTab === 4 ? "gray.50" : hoverBg;
+
+                                                    return (
+                                                        <Tr
+                                                            key={group.groupId}
+                                                            bg={rowBg}
+                                                            opacity={isDifferentClient ? 0.35 : 1}
+                                                            filter={isDifferentClient ? 'blur(1.2px) grayscale(70%)' : 'none'}
+                                                            pointerEvents={isDifferentClient ? 'none' : 'auto'}
+                                                            _hover={{ bg: isDifferentClient ? rowBg : rowHoverBg, transition: 'background 0.15s' }}
+                                                            borderLeft="4px solid"
+                                                            borderLeftColor={isDifferentClient ? 'gray.300' : border}
+                                                            cursor={isDifferentClient ? 'not-allowed' : 'pointer'}
+                                                            onClick={() => {
+                                                                if (isDifferentClient) return;
+                                                                if (activeTab === 4) {
+                                                                    const siteObj = group.siteGroups?.[0]?.site || group.entries?.[0]?.site;
+                                                                    handleOpenSiteDrawer(siteObj, group);
+                                                                } else {
+                                                                    setSelectedGroup(group);
+                                                                    setSelectedEntryForDocs(null);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Td py={4} color="gray.400" fontSize="xs">
+                                                                {idx + 1}
+                                                            </Td>
+                                                            {activeTab === 4 ? (
+                                                                <>
+                                                                    {/* INVOICE NO. & TYPE */}
+                                                                    <Td py={4}>
+                                                                        <VStack align="start" spacing={1}>
+                                                                            <Text fontSize="sm" fontWeight="900" color="gray.900">
+                                                                                {group.finalInvoiceId || group.proformaInvoiceId || group.invoiceId || '🔒 DIRECT CLOSED'}
+                                                                            </Text>
+                                                                            <Badge
+                                                                                colorScheme={group.finalInvoiceId || group.finalInvoicePdf ? 'blue' : group.proformaInvoiceId || group.proformaInvoicePdf ? 'purple' : 'green'}
+                                                                                variant="subtle"
+                                                                                border="1px solid"
+                                                                                borderRadius="full"
+                                                                                px={2}
+                                                                                py={0.5}
+                                                                                fontSize="9px"
+                                                                                fontWeight="black"
+                                                                            >
+                                                                                {group.finalInvoiceId || group.finalInvoicePdf ? '🧾 TAX INVOICE' : group.proformaInvoiceId || group.proformaInvoicePdf ? '📄 PROFORMA' : '🔒 DIRECT CLOSED'}
+                                                                            </Badge>
+                                                                        </VStack>
+                                                                    </Td>
+
+                                                                    {/* CLIENT NAME */}
+                                                                    <Td py={4}>
+                                                                        <HStack spacing={2}>
+                                                                            <Icon as={FaBuilding} color="blue.500" w={4} h={4} />
+                                                                            <VStack align="start" spacing={0}>
+                                                                                <Text fontSize="sm" fontWeight="black" color="gray.800">
+                                                                                    {group.client?.clientName || '—'}
+                                                                                </Text>
+                                                                                {group.client?.clientAddress && (
+                                                                                    <Text fontSize="10px" color="gray.500" noOfLines={1}>
+                                                                                        {group.client.clientAddress}
+                                                                                    </Text>
+                                                                                )}
+                                                                            </VStack>
+                                                                        </HStack>
+                                                                    </Td>
+
+                                                                    {/* SITES COVERED */}
+                                                                    <Td py={4}>
+                                                                        <Wrap spacing={1}>
+                                                                            {group.siteGroups?.map((s, si) => (
+                                                                                <Tag key={si} size="sm" colorScheme="teal" variant="subtle" border="1px solid" borderRadius="full" fontSize="10px" fontWeight="extrabold">
+                                                                                    📍 {s?.siteName || s?.site?.siteName || 'Site'}
+                                                                                </Tag>
+                                                                            )) || (
+                                                                                    <Tag size="sm" colorScheme="teal" variant="subtle" border="1px solid" borderRadius="full" fontSize="10px" fontWeight="extrabold">
+                                                                                        📍 {group.entries?.[0]?.site?.siteName || 'Site'}
+                                                                                    </Tag>
+                                                                                )}
+                                                                        </Wrap>
+                                                                    </Td>
+
+                                                                    {/* PAYMENT DETAILS */}
+                                                                    <Td py={4} textAlign="center">
+                                                                        <VStack spacing={1} align="center">
+                                                                            <Badge
+                                                                                colorScheme={paymentMode === 'UPI' ? 'purple' : paymentMode === 'CASH' ? 'teal' : 'green'}
+                                                                                variant="subtle"
+                                                                                border="1px solid"
+                                                                                borderRadius="full"
+                                                                                px={3}
+                                                                                py={1}
+                                                                                fontSize="10px"
+                                                                                fontWeight="black"
+                                                                            >
+                                                                                {paymentMode === 'UPI' ? '💳 UPI' : paymentMode === 'CASH' ? '💵 CASH' : '💳 PAID'}
+                                                                            </Badge>
+                                                                            {receiverName && (
+                                                                                <Text fontSize="9px" color="gray.600" fontWeight="bold">
+                                                                                    👤 {receiverName}
+                                                                                </Text>
+                                                                            )}
+                                                                            {transactionNo && (
+                                                                                <Text fontSize="9px" color="gray.600" fontWeight="bold">
+                                                                                    🔢 {transactionNo}
+                                                                                </Text>
+                                                                            )}
+                                                                            {closedDate && (
+                                                                                <Text fontSize="9px" color="gray.500" fontWeight="bold">
+                                                                                    📅 {formatDate(closedDate)}
+                                                                                </Text>
+                                                                            )}
+                                                                        </VStack>
+                                                                    </Td>
+
+                                                                    {/* CLOSED AMOUNT (₹) */}
+                                                                    <Td py={4} textAlign="right" fontWeight="900" fontSize="sm" color="gray.900">
+                                                                        ₹{groupTotalAmt > 0 ? groupTotalAmt.toLocaleString('en-IN') : '—'}
+                                                                    </Td>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Td py={4}>
+                                                                        <HStack spacing={2}>
+                                                                            <Icon as={FaBuilding} color="blue.500" w={4} h={4} />
+                                                                            <VStack align="start" spacing={0}>
+                                                                                <Text fontSize="sm" fontWeight="black" color="gray.800">
+                                                                                    {group.client?.clientName || '—'}
+                                                                                </Text>
+                                                                                {group.client?.clientAddress && (
+                                                                                    <Text fontSize="10px" color="gray.500" noOfLines={1}>
+                                                                                        {group.client.clientAddress}
+                                                                                    </Text>
+                                                                                )}
+                                                                            </VStack>
+                                                                        </HStack>
+                                                                    </Td>
+                                                                    <Td py={4}>
+                                                                        <Wrap spacing={1}>
+                                                                            {group.uniqueTypes?.map(t => (
+                                                                                <Tag
+                                                                                    key={t}
+                                                                                    size="sm"
+                                                                                    colorScheme={t.includes('Topography') ? 'red' : t.includes('Month') ? 'blue' : t.includes('Point') ? 'purple' : 'green'}
+                                                                                    variant="subtle"
+                                                                                    fontSize="10px"
+                                                                                    fontWeight="bold"
+                                                                                    borderRadius="full"
+                                                                                >
+                                                                                    {t}
+                                                                                </Tag>
+                                                                            ))}
+                                                                        </Wrap>
+                                                                    </Td>
+                                                                    <Td py={4} textAlign="center">
+                                                                        <Badge colorScheme="teal" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="11px">
+                                                                            <Icon as={FaMapMarkerAlt} mr={1} w={3} h={3} />
+                                                                            {siteCount} {siteCount === 1 ? 'Site' : 'Sites'} ({totalCount} entries)
+                                                                        </Badge>
+                                                                    </Td>
+                                                                    <Td py={4}>
+                                                                        <Badge
+                                                                            colorScheme={group.invoiceId ? 'purple' : isPending ? 'orange' : 'green'}
+                                                                            variant="solid"
+                                                                            borderRadius="full"
+                                                                            px={3}
+                                                                            py={1}
+                                                                            fontSize="10px"
+                                                                            fontWeight="black"
+                                                                        >
+                                                                            {group.invoiceId ? `📄 ${group.invoiceId}` : isPending ? '⏳ Pending' : '✅ Completed'}
+                                                                        </Badge>
+                                                                    </Td>
+                                                                </>
+                                                            )}
+                                                            <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
+                                                                <HStack justify="flex-end" spacing={1.5}>
+                                                                    {activeTab === 2 && (
+                                                                        <Button size="xs" colorScheme="green" variant="solid" borderRadius="lg" leftIcon={<FaCheckCircle />} onClick={() => handleStatusMove(group, 'Closed')}>
+                                                                            Mark Closed
+                                                                        </Button>
+                                                                    )}
+                                                                    {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
+                                                                        <>
+                                                                            <Tooltip label="Preview Invoice" placement="top">
+                                                                                <IconButton
+                                                                                    icon={<FaEye />}
+                                                                                    size="xs"
+                                                                                    colorScheme="purple"
+                                                                                    variant="solid"
+                                                                                    borderRadius="lg"
+                                                                                    aria-label="Preview Invoice"
+                                                                                    onClick={() => handlePreviewExistingPdf(
+                                                                                        group.finalInvoicePdf || group.proformaInvoicePdf,
+                                                                                        group.finalInvoiceId || group.proformaInvoiceId,
+                                                                                        group.finalInvoicePdf ? 'Final Invoice' : 'Proforma Invoice'
+                                                                                    )}
+                                                                                />
+                                                                            </Tooltip>
+                                                                            <Tooltip label="Open PDF in New Tab" placement="top">
+                                                                                <IconButton
+                                                                                    as="a"
+                                                                                    href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
+                                                                                    target="_blank"
+                                                                                    icon={<FaFilePdf />}
+                                                                                    size="xs"
+                                                                                    colorScheme="red"
+                                                                                    variant="solid"
+                                                                                    borderRadius="lg"
+                                                                                    aria-label="Open PDF"
+                                                                                />
+                                                                            </Tooltip>
+                                                                        </>
+                                                                    )}
+                                                                    <Button
+                                                                        size="xs"
+                                                                        colorScheme="gray"
+                                                                        bg="gray.800"
+                                                                        color="white"
+                                                                        _hover={{ bg: 'gray.700' }}
+                                                                        variant="solid"
+                                                                        borderRadius="lg"
+                                                                        leftIcon={<FaListUl />}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (activeTab === 4) {
+                                                                                const siteObj = group.siteGroups?.[0]?.site || group.entries?.[0]?.site;
+                                                                                handleOpenSiteDrawer(siteObj, group);
+                                                                            } else {
+                                                                                setSelectedGroup(group);
+                                                                                setSelectedEntryForDocs(null);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        View Details
+                                                                    </Button>
+                                                                </HStack>
+                                                            </Td>
+                                                        </Tr>
+                                                    );
+                                                })}
+                                            </Tbody>
+                                        </Table>
+                                    </TableContainer>
+                                )}
+                            </CardBody>
+                        </Card>
+                    )}
+                </VStack>
+            </Container>
 
                             {/* ── Site Detail Drawer ── */}
                             <Modal
@@ -1770,6 +2460,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         const ps = inv?.paymentStatus || 'PENDING';
                                         const psBadge = { PAID: 'green', PARTIAL: 'yellow', PENDING: 'orange', OVERDUE: 'red' };
                                         const psLabel = { PAID: '✅ PAID', PARTIAL: '🟡 PARTIAL', PENDING: '🟠 PENDING', OVERDUE: '🔴 OVERDUE' };
+                                        const isDirectClosed = (inv?.invoiceId === '—' || !inv?.invoiceId) && !inv?.pdfUrl;
 
                                         // Aggregate all documents across all entries in this invoice group
                                         const allEntries = inv?.entries || [e0];
@@ -1790,7 +2481,15 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                             { label: '📎 Other Documents', files: otherDocs, color: 'gray' },
                                         ].filter(c => c.files.length > 0);
 
-                                        const uniqueSites = inv?.sites?.filter((s, idx, arr) => s && arr.findIndex(x => (x?._id || x?.siteName) === (s?._id || s?.siteName)) === idx) || [site];
+                                        let uniqueSites = [];
+                                        if (inv?.siteGroups) {
+                                            uniqueSites = inv.siteGroups.map(sg => sg.site).filter(Boolean);
+                                        } else if (inv?.entries) {
+                                            uniqueSites = inv.entries.map(e => e.site).filter((s, idx, arr) => s && arr.findIndex(x => (x?._id || x?.siteName) === (s?._id || s?.siteName)) === idx);
+                                        } else if (inv?.sites) {
+                                            uniqueSites = inv.sites.filter((s, idx, arr) => s && arr.findIndex(x => (x?._id || x?.siteName) === (s?._id || s?.siteName)) === idx);
+                                        }
+                                        if (uniqueSites.length === 0 && site.siteName) uniqueSites = [site];
 
                                         return (
                                             <>
@@ -1803,15 +2502,23 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                 </Box>
                                                                 <VStack align="start" spacing={0.5}>
                                                                     <HStack spacing={2} wrap="wrap">
-                                                                        <Text fontWeight="black" fontSize="2xl">📍 {site.siteName || 'Site Details'}</Text>
-                                                                        {site.siteId && (
+                                                                        <Text fontWeight="black" fontSize="2xl">
+                                                                            {uniqueSites.length > 1 ? `🏢 ${client.clientName || 'Client Details'} — ${uniqueSites.length} Sites Covered` : `📍 ${site.siteName || 'Site Details'}`}
+                                                                        </Text>
+                                                                        {site.siteId && uniqueSites.length === 1 && (
                                                                             <Badge colorScheme="whiteAlpha" variant="solid" borderRadius="full" px={2.5}>
                                                                                 ID: {site.siteId}
                                                                             </Badge>
                                                                         )}
-                                                                        <Badge colorScheme={inv?.isTaxInvoice ? 'green' : 'blue'} variant="solid" borderRadius="full" px={2.5} fontSize="xs">
-                                                                            {inv?.isTaxInvoice ? '🧾 TAX INVOICE' : '📋 PROFORMA'}
-                                                                        </Badge>
+                                                                        {isDirectClosed ? (
+                                                                            <Badge colorScheme="gray" variant="solid" borderRadius="full" px={2.5} fontSize="xs">
+                                                                                🔒 DIRECT CLOSED
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <Badge colorScheme={inv?.isTaxInvoice ? 'green' : 'blue'} variant="solid" borderRadius="full" px={2.5} fontSize="xs">
+                                                                                {inv?.isTaxInvoice ? '🧾 TAX INVOICE' : '📋 PROFORMA'}
+                                                                            </Badge>
+                                                                        )}
                                                                         <Badge colorScheme={psBadge[ps] || 'orange'} variant="solid" borderRadius="full" px={2.5} fontSize="xs">
                                                                             {psLabel[ps] || ps}
                                                                         </Badge>
@@ -1819,7 +2526,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     <HStack spacing={3} wrap="wrap" fontSize="xs" opacity={0.9}>
                                                                         <Text>🏢 Client: <b>{client.clientName || '—'}</b></Text>
                                                                         {site.siteAddress && <Text>• 📍 {site.siteAddress}</Text>}
-                                                                        {inv?.invoiceId && <Text>• Invoice No: <b>{inv.invoiceId}</b></Text>}
+                                                                        {!isDirectClosed && inv?.invoiceId && inv.invoiceId !== '—' && <Text>• Invoice No: <b>{inv.invoiceId}</b></Text>}
                                                                     </HStack>
                                                                 </VStack>
                                                             </HStack>
@@ -1829,8 +2536,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     <Tabs index={siteDrawerTab} onChange={setSiteDrawerTab} variant="enclosed" colorScheme="teal">
                                                         <TabList bg="gray.50" borderBottom="1px solid" borderColor="gray.200" px={5} pt={2}>
                                                             <Tab fontWeight="bold" fontSize="sm">📍 Site & Work Overview</Tab>
-                                                            <Tab fontWeight="bold" fontSize="sm">🧾 Invoice Details</Tab>
-                                                            <Tab fontWeight="bold" fontSize="sm">📁 Documents {docCategories.length > 0 ? `(${docCategories.reduce((s,c)=>s+c.files.length,0)})` : ''}</Tab>
+                                                            <Tab fontWeight="bold" fontSize="sm">{isDirectClosed ? '💰 Payment Details' : '🧾 Invoice Details'}</Tab>
+                                                            <Tab fontWeight="bold" fontSize="sm">📁 Documents {docCategories.length > 0 ? `(${docCategories.reduce((s, c) => s + c.files.length, 0)})` : ''}</Tab>
                                                         </TabList>
                                                     </Tabs>
                                                 </ModalHeader>
@@ -1842,21 +2549,22 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             <TabPanel p={0}>
                                                                 <VStack spacing={5} align="stretch">
                                                                     {/* Site Details Card (First & Prominent) */}
-                                                                    <Card borderRadius="2xl" variant="outline" border="2px solid" borderColor="teal.300" bg="white" shadow="sm">
+                                                                    {uniqueSites.map((sObj, sIdx) => (
+                                                                    <Card key={sIdx} borderRadius="2xl" variant="outline" border="2px solid" borderColor="teal.300" bg="white" shadow="sm">
                                                                         <CardBody p={5}>
                                                                             <Text fontSize="xs" fontWeight="black" color="teal.600" textTransform="uppercase" letterSpacing="wider" mb={3}>
-                                                                                📍 Site Information — {site.siteName}
+                                                                                📍 Site Information — {sObj.siteName}
                                                                             </Text>
                                                                             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                                                                                 {[
-                                                                                    { label: 'Site Name', value: site.siteName },
-                                                                                    { label: 'Site ID', value: site.siteId },
-                                                                                    { label: 'Address', value: site.siteAddress },
-                                                                                    { label: 'Location', value: site.siteLocation },
-                                                                                    { label: 'State', value: site.stateName || site.state },
-                                                                                    { label: 'State Code', value: site.stateCode },
-                                                                                    { label: 'Work For', value: site.workForAppley },
-                                                                                    { label: 'Status', value: site.status },
+                                                                                    { label: 'Site Name', value: sObj.siteName },
+                                                                                    { label: 'Site ID', value: sObj.siteId },
+                                                                                    { label: 'Address', value: sObj.siteAddress },
+                                                                                    { label: 'Location', value: sObj.siteLocation },
+                                                                                    { label: 'State', value: sObj.stateName || sObj.state },
+                                                                                    { label: 'State Code', value: sObj.stateCode },
+                                                                                    { label: 'Work For', value: sObj.workForAppley },
+                                                                                    { label: 'Status', value: sObj.status },
                                                                                 ].filter(r => r.value).map(r => (
                                                                                     <Box key={r.label}>
                                                                                         <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase">{r.label}</Text>
@@ -1864,11 +2572,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                     </Box>
                                                                                 ))}
                                                                             </SimpleGrid>
-                                                                            {site.contactPersons?.length > 0 && (
+                                                                            {sObj.contactPersons?.length > 0 && (
                                                                                 <Box mt={4} pt={3} borderTop="1px solid" borderColor="gray.100">
                                                                                     <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" mb={2}>Site Contact Persons</Text>
                                                                                     <Wrap spacing={2}>
-                                                                                        {site.contactPersons.map((cp, ci) => (
+                                                                                        {sObj.contactPersons.map((cp, ci) => (
                                                                                             <Tag key={ci} size="md" colorScheme="teal" borderRadius="full">
                                                                                                 👤 {cp.name} {cp.phone ? `— 📞 ${cp.phone}` : ''}
                                                                                             </Tag>
@@ -1878,6 +2586,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                             )}
                                                                         </CardBody>
                                                                     </Card>
+                                                                    ))}
 
                                                                     {/* Work entries for this site */}
                                                                     <Card borderRadius="2xl" variant="outline" border="1px solid" borderColor="blue.200" bg="white">
@@ -1936,6 +2645,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             <TabPanel p={0}>
                                                                 <VStack spacing={5} align="stretch">
                                                                     {/* Invoice Details Card */}
+                                                                    {!isDirectClosed && (
                                                                     <Card borderRadius="2xl" variant="outline" border="1px solid" borderColor="purple.200">
                                                                         <CardBody p={6}>
                                                                             <HStack justify="space-between" mb={4}>
@@ -1986,6 +2696,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                             </VStack>
                                                                         </CardBody>
                                                                     </Card>
+                                                                    )}
 
                                                                     {/* Payment History */}
                                                                     {allEntries.some(e => e.paymentRemark || e.paymentAmount) && (
@@ -2009,6 +2720,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     )}
 
                                                                     {/* Invoice Actions */}
+                                                                    {!isDirectClosed && (
                                                                     <Card borderRadius="2xl" variant="outline" border="1px solid" borderColor="gray.200">
                                                                         <CardBody p={4}>
                                                                             <Text fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider" mb={3}>Invoice Actions</Text>
@@ -2050,6 +2762,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                             </HStack>
                                                                         </CardBody>
                                                                     </Card>
+                                                                    )}
                                                                 </VStack>
                                                             </TabPanel>
 
@@ -2122,7 +2835,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     </Tabs>
                                                 </ModalBody>
                                                 <ModalFooter borderTop="1px solid" borderColor="gray.200" bg="white" gap={2}>
-                                                    {inv?.pdfUrl && (
+                                                    {!isDirectClosed && inv?.pdfUrl && (
                                                         <>
                                                             <Button size="sm" leftIcon={<FaEye />} colorScheme="purple" borderRadius="xl"
                                                                 onClick={() => handlePreviewExistingPdf(inv.pdfUrl, inv.invoiceId, inv.isTaxInvoice ? 'Tax Invoice' : 'Proforma Invoice')}>
@@ -2140,213 +2853,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                     })()}
                                 </ModalContent>
                             </Modal>
-                        </VStack>
-                    ) : (
-                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                            {/* Legend */}
-                            <Box px={6} pt={4} pb={2}>
-                                <HStack spacing={4}>
-                                    <Text fontSize="xs" fontWeight="bold" color="gray.500">LEGEND:</Text>
-                                    <HStack spacing={1}>
-                                        <Box w={3} h={3} bg="green.300" borderRadius="sm" />
-                                        <Text fontSize="xs" color="gray.600">Full Day Visit</Text>
-                                    </HStack>
-                                    <HStack spacing={1}>
-                                        <Box w={3} h={3} bg="orange.300" borderRadius="sm" />
-                                        <Text fontSize="xs" color="gray.600">Half Day Visit</Text>
-                                    </HStack>
-                                    <HStack spacing={1}>
-                                        <Box w={3} h={3} bg="blue.400" borderRadius="sm" />
-                                        <Text fontSize="xs" color="gray.600">Month Contract</Text>
-                                    </HStack>
-                                    <HStack spacing={1}>
-                                        <Box w={3} h={3} bg="red.400" borderRadius="sm" />
-                                        <Text fontSize="xs" color="gray.600">Topography Survey</Text>
-                                    </HStack>
-                                    <HStack spacing={1}>
-                                        <Box w={3} h={3} bg="purple.400" borderRadius="sm" />
-                                        <Text fontSize="xs" color="gray.600">Point Marking</Text>
-                                    </HStack>
-                                    <Text fontSize="xs" color="gray.400" ml="auto">{groupedGroups.length} entries listed</Text>
-                                </HStack>
-                            </Box>
-                            <Divider />
-                            <CardBody p={0}>
-                                {loading ? (
-                                    <Center py={16}><Spinner size="xl" color="blue.500" thickness="4px" /></Center>
-                                ) : groupedGroups.length === 0 ? (
-                                    <Center py={16}>
-                                        <VStack spacing={3}>
-                                            <Icon as={FaFileInvoiceDollar} w={12} h={12} color="gray.200" />
-                                            <Text color="gray.400" fontSize="lg">No schedules found</Text>
-                                            <Text color="gray.300" fontSize="sm">Try adjusting your filters or date range</Text>
-                                        </VStack>
-                                    </Center>
-                                ) : (
-                                    <TableContainer overflow="hidden" w="full">
-                                        <Table variant="simple" size="sm" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
-                                            <Thead bg="gray.50">
-                                                <Tr>
-                                                    <Th py={4} color="gray.500" fontSize="10px" w="50px">#</Th>
-                                                    <Th py={4} color="gray.500" fontSize="10px">CLIENT NAME</Th>
-                                                    <Th py={4} color="gray.500" fontSize="10px">SCHEDULE TYPE</Th>
-                                                    <Th py={4} color="gray.500" fontSize="10px" textAlign="center" w="160px">SITES & DATA</Th>
-                                                    <Th py={4} color="gray.500" fontSize="10px" w="150px">BILL STATUS</Th>
-                                                    <Th py={4} color="gray.500" fontSize="10px" textAlign="right" w="150px">ACTIONS</Th>
-                                                </Tr>
-                                            </Thead>
-                                            <Tbody>
-                                                {groupedGroups.map((group, idx) => {
-                                                    const totalCount = group.entries.length;
-                                                    const completedCount = group.entries.filter(e => e.invoiceStatus === 'Completed').length;
-                                                    const pendingCount = totalCount - completedCount;
-                                                    const isPending = group.status === 'Pending';
-                                                    const siteCount = group.siteGroups ? group.siteGroups.length : 1;
-                                                    
-                                                    const groupClientId = String(group.client?._id || group.client);
-                                                    const isDifferentClient = activeSelectedClientId && groupClientId !== activeSelectedClientId;
-
-                                                    // Color variables for main row based on schedule type
-                                                    const { bg, border, hoverBg } = rowStyle(group);
-
-                                                    return (
-                                                        <Tr
-                                                            key={group.groupId}
-                                                            bg={bg}
-                                                            opacity={isDifferentClient ? 0.35 : 1}
-                                                            filter={isDifferentClient ? 'blur(1.2px) grayscale(70%)' : 'none'}
-                                                            pointerEvents={isDifferentClient ? 'none' : 'auto'}
-                                                            _hover={{ bg: isDifferentClient ? bg : hoverBg, transition: 'background 0.15s' }}
-                                                            borderLeft="4px solid"
-                                                            borderLeftColor={isDifferentClient ? 'gray.300' : border}
-                                                            cursor={isDifferentClient ? 'not-allowed' : 'pointer'}
-                                                            onClick={() => {
-                                                                if (isDifferentClient) return;
-                                                                setSelectedGroup(group);
-                                                                setSelectedEntryForDocs(null);
-                                                            }}
-                                                        >
-                                                            <Td py={4} color="gray.400" fontSize="xs">
-                                                                {idx + 1}
-                                                            </Td>
-                                                            <Td py={4}>
-                                                                <HStack spacing={2}>
-                                                                    <Icon as={FaBuilding} color="blue.500" w={4} h={4} />
-                                                                    <VStack align="start" spacing={0}>
-                                                                        <Text fontSize="sm" fontWeight="black" color="gray.800">
-                                                                            {group.client?.clientName || '—'}
-                                                                        </Text>
-                                                                        {group.client?.clientAddress && (
-                                                                            <Text fontSize="10px" color="gray.500" noOfLines={1}>
-                                                                                {group.client.clientAddress}
-                                                                            </Text>
-                                                                        )}
-                                                                    </VStack>
-                                                                </HStack>
-                                                            </Td>
-                                                            <Td py={4}>
-                                                                <Wrap spacing={1}>
-                                                                    {group.uniqueTypes?.map(t => (
-                                                                        <Tag
-                                                                            key={t}
-                                                                            size="sm"
-                                                                            colorScheme={t.includes('Topography') ? 'red' : t.includes('Month') ? 'blue' : t.includes('Point') ? 'purple' : 'green'}
-                                                                            variant="subtle"
-                                                                            fontSize="10px"
-                                                                            fontWeight="bold"
-                                                                            borderRadius="full"
-                                                                        >
-                                                                            {t}
-                                                                        </Tag>
-                                                                    ))}
-                                                                </Wrap>
-                                                            </Td>
-                                                            <Td py={4} textAlign="center">
-                                                                <Badge colorScheme="teal" variant="solid" borderRadius="full" px={3} py={0.5} fontSize="11px">
-                                                                    <Icon as={FaMapMarkerAlt} mr={1} w={3} h={3} />
-                                                                    {siteCount} {siteCount === 1 ? 'Site' : 'Sites'} ({totalCount} entries)
-                                                                </Badge>
-                                                            </Td>
-                                                            <Td py={4}>
-                                                                <Badge
-                                                                    colorScheme={group.invoiceId ? 'purple' : isPending ? 'orange' : 'green'}
-                                                                    variant="solid"
-                                                                    borderRadius="full"
-                                                                    px={3}
-                                                                    py={1}
-                                                                    fontSize="10px"
-                                                                    fontWeight="black"
-                                                                >
-                                                                    {group.invoiceId ? `📄 ${group.invoiceId}` : isPending ? '⏳ Pending' : '✅ Completed'}
-                                                                </Badge>
-                                                            </Td>
-                                                            <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
-                                                                <HStack justify="flex-end" spacing={2}>
-                                                                    {activeTab === 2 && (
-                                                                        <Button size="xs" colorScheme="gray" variant="solid" onClick={() => handleStatusMove(group, 'Closed')}>Mark Closed</Button>
-                                                                    )}
-                                                                    {activeTab === 4 && (
-                                                                        <Badge colorScheme="gray">Archived</Badge>
-                                                                    )}
-                                                                    {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
-                                                                        <HStack spacing={1}>
-                                                                            <Tooltip label="Preview Invoice" placement="top">
-                                                                                <IconButton
-                                                                                    icon={<FaEye />}
-                                                                                    size="sm"
-                                                                                    colorScheme="purple"
-                                                                                    variant="solid"
-                                                                                    borderRadius="full"
-                                                                                    aria-label="Preview Invoice"
-                                                                                    onClick={() => handlePreviewExistingPdf(
-                                                                                        group.finalInvoicePdf || group.proformaInvoicePdf,
-                                                                                        group.finalInvoiceId || group.proformaInvoiceId,
-                                                                                        group.finalInvoicePdf ? 'Final Invoice' : 'Proforma Invoice'
-                                                                                    )}
-                                                                                />
-                                                                            </Tooltip>
-                                                                            <Tooltip label="Open PDF in New Tab" placement="top">
-                                                                                <IconButton
-                                                                                    as="a"
-                                                                                    href={`${API_BASE_URL}${group.finalInvoicePdf || group.proformaInvoicePdf}`}
-                                                                                    target="_blank"
-                                                                                    icon={<FaFilePdf />}
-                                                                                    size="sm"
-                                                                                    colorScheme="red"
-                                                                                    variant="ghost"
-                                                                                    borderRadius="full"
-                                                                                    aria-label="Open PDF"
-                                                                                />
-                                                                            </Tooltip>
-                                                                        </HStack>
-                                                                    )}
-                                                                    <IconButton
-                                                                        aria-label="View Details"
-                                                                        icon={<FaListUl />}
-                                                                        size="sm"
-                                                                        colorScheme="blue"
-                                                                        variant="ghost"
-                                                                        borderRadius="full"
-                                                                        onClick={() => {
-                                                                            setSelectedGroup(group);
-                                                                            setSelectedEntryForDocs(null);
-                                                                        }}
-                                                                    />
-                                                                </HStack>
-                                                            </Td>
-                                                        </Tr>
-                                                    );
-                                                })}
-                                            </Tbody>
-                                        </Table>
-                                    </TableContainer>
-                                )}
-                            </CardBody>
-                        </Card>
-                    )}
-                </VStack>
-            </Container>
-
             {/* ── Group Details & Billing Checkbox Modal ── */}
             <Modal isOpen={!!selectedGroup} onClose={() => { setSelectedGroup(null); setSelectedEntryForDocs(null); }} size="5xl" isCentered scrollBehavior="inside" motionPreset="slideInBottom">
                 <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.600" />
@@ -2535,7 +3041,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                     const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('/drafting/') || d.url?.includes('site_') && (d.url?.includes('drawing') || d.url?.includes('drafting')));
                                                                                                     const expenseReceipts = docs.filter(d => d.url?.includes('expense_') || d.url?.includes('otherExpense_') || d.category);
                                                                                                     const topographyMails = docs.filter(d => d.isMail || d.url?.includes('/drawing/') || d.url?.includes('/drafting/'));
-                                                                                                    
+
                                                                                                     const formatDateTime = (dateStr) => {
                                                                                                         if (!dateStr) return '—';
                                                                                                         const d = new Date(dateStr);
@@ -2555,7 +3061,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                                     Uploaded Documents: Month Contract
                                                                                                                 </Text>
                                                                                                             </Flex>
-                                                                                                            
+
                                                                                                             {docs.length === 0 ? (
                                                                                                                 <Center py={6} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.300">
                                                                                                                     <VStack spacing={2}>
@@ -2725,7 +3231,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                     const drawing = docs.filter(d => d.url?.includes('/drawing/') || d.url?.includes('site_') && d.url?.includes('drawing'));
                                                                                                     const expenseReceipts = docs.filter(d => d.url?.includes('expense_') || d.url?.includes('otherExpense_') || d.category);
                                                                                                     const topographyMails = docs.filter(d => d.isMail);
-                                                                                                    
+
                                                                                                     const formatDateTime = (dateStr) => {
                                                                                                         if (!dateStr) return '—';
                                                                                                         const d = new Date(dateStr);
@@ -2745,7 +3251,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                                     Uploaded Documents: {formatDate(entry.scheduleDate)}
                                                                                                                 </Text>
                                                                                                             </Flex>
-                                                                                                            
+
                                                                                                             {docs.length === 0 ? (
                                                                                                                 <Center py={6} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.300">
                                                                                                                     <VStack spacing={2}>
@@ -2918,13 +3424,13 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                                     <Box>
                                         <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">Billing Company Selection</Text>
-                                        <Select 
-                                            value={invoiceForm.companyDetails?._id || ''} 
+                                        <Select
+                                            value={invoiceForm.companyDetails?._id || ''}
                                             onChange={(e) => {
                                                 const selected = companies.find(c => c._id === e.target.value);
                                                 const newInvoiceId = generateNextInvoiceId(schedules, invoiceForm.type, selected);
-                                                setInvoiceForm(prev => ({ 
-                                                    ...prev, 
+                                                setInvoiceForm(prev => ({
+                                                    ...prev,
                                                     companyDetails: selected || null,
                                                     invoiceId: newInvoiceId
                                                 }));
@@ -2941,8 +3447,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                     </Box>
                                     <Box>
                                         <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">Invoice No.</Text>
-                                        <Input 
-                                            value={invoiceForm.invoiceId} 
+                                        <Input
+                                            value={invoiceForm.invoiceId}
                                             onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceId: e.target.value }))}
                                             bg="white"
                                             fontWeight="bold"
@@ -2956,8 +3462,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                     <Text fontSize="xs" fontWeight="black" color="blue.800" textTransform="uppercase" mb={2}>
                                         📅 Include Visit Schedule Date(s) in Item Description?
                                     </Text>
-                                    <RadioGroup 
-                                        value={invoiceForm.includeDates !== false ? 'yes' : 'no'} 
+                                    <RadioGroup
+                                        value={invoiceForm.includeDates !== false ? 'yes' : 'no'}
                                         onChange={(val) => setInvoiceForm(prev => ({ ...prev, includeDates: val === 'yes' }))}
                                     >
                                         <HStack spacing={6}>
@@ -3057,10 +3563,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                 <HStack spacing={6} align="center">
                                     <Box>
                                         <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.700">GST Type</Text>
-                                        <RadioGroup 
-                                            value={invoiceForm.gstType} 
-                                            onChange={(val) => setInvoiceForm(prev => ({ 
-                                                ...prev, 
+                                        <RadioGroup
+                                            value={invoiceForm.gstType}
+                                            onChange={(val) => setInvoiceForm(prev => ({
+                                                ...prev,
                                                 gstType: val,
                                                 gstPercentage: 18  // always 18% total regardless of type
                                             }))}
@@ -3116,9 +3622,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     <Tr key={entry._id}>
                                                         <Td fontSize="xs" fontWeight="bold">{formatDate(entry.scheduleDate)}</Td>
                                                         <Td>
-                                                            <Select 
-                                                                size="sm" 
-                                                                value={conf.instrument || 'Total Station'} 
+                                                            <Select
+                                                                size="sm"
+                                                                value={conf.instrument || 'Total Station'}
                                                                 onChange={(e) => setInvoiceForm(prev => ({
                                                                     ...prev,
                                                                     entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, instrument: e.target.value } }
@@ -3132,21 +3638,21 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             </Select>
                                                         </Td>
                                                         <Td>
-                                                            <Input 
-                                                                size="sm" 
-                                                                placeholder="e.g. LEVELING SURVEY" 
+                                                            <Input
+                                                                size="sm"
+                                                                placeholder="e.g. LEVELING SURVEY"
                                                                 w="130px"
-                                                                value={conf.extraDescription || ''} 
+                                                                value={conf.extraDescription || ''}
                                                                 onChange={(e) => setInvoiceForm(prev => ({
                                                                     ...prev,
                                                                     entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, extraDescription: e.target.value } }
-                                                                }))} 
+                                                                }))}
                                                             />
                                                         </Td>
                                                         <Td>
-                                                            <Select 
-                                                                size="sm" 
-                                                                value={conf.ledger || ''} 
+                                                            <Select
+                                                                size="sm"
+                                                                value={conf.ledger || ''}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
                                                                     const selectedLedger = entry.site?.ledgerItems?.find(l => (l.ledger || '').trim().toLowerCase() === val.trim().toLowerCase());
@@ -3154,8 +3660,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                         ...prev,
                                                                         entryConfigs: {
                                                                             ...prev.entryConfigs,
-                                                                            [entry._id]: { 
-                                                                                ...conf, 
+                                                                            [entry._id]: {
+                                                                                ...conf,
                                                                                 ledger: val,
                                                                                 ledgerName: val,
                                                                                 rate: selectedLedger ? selectedLedger.amount : conf.rate,
@@ -3172,51 +3678,51 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             </Select>
                                                         </Td>
                                                         <Td>
-                                                            <Input 
-                                                                size="sm" 
+                                                            <Input
+                                                                size="sm"
                                                                 w="90px"
                                                                 placeholder="e.g. 998349"
-                                                                value={conf.hsnSac || ''} 
+                                                                value={conf.hsnSac || ''}
                                                                 onChange={(e) => setInvoiceForm(prev => ({
                                                                     ...prev,
                                                                     entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, hsnSac: e.target.value } }
-                                                                }))} 
+                                                                }))}
                                                             />
                                                         </Td>
                                                         <Td>
-                                                            <Input 
-                                                                size="sm" 
-                                                                type="number" 
+                                                            <Input
+                                                                size="sm"
+                                                                type="number"
                                                                 w="90px"
-                                                                value={conf.rate || 0} 
+                                                                value={conf.rate || 0}
                                                                 onChange={(e) => setInvoiceForm(prev => ({
                                                                     ...prev,
                                                                     entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, rate: Number(e.target.value) } }
-                                                                }))} 
+                                                                }))}
                                                             />
                                                         </Td>
                                                         <Td>
-                                                            <Input 
-                                                                size="sm" 
-                                                                type="number" 
+                                                            <Input
+                                                                size="sm"
+                                                                type="number"
                                                                 w="70px"
-                                                                value={conf.qty || 0} 
+                                                                value={conf.qty || 0}
                                                                 onChange={(e) => setInvoiceForm(prev => ({
                                                                     ...prev,
                                                                     entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, qty: Number(e.target.value) } }
-                                                                }))} 
+                                                                }))}
                                                             />
                                                         </Td>
                                                         <Td>
-                                                            <Input 
-                                                                size="sm" 
+                                                            <Input
+                                                                size="sm"
                                                                 w="70px"
                                                                 placeholder="FD / HD"
-                                                                value={conf.shortName || ''} 
+                                                                value={conf.shortName || ''}
                                                                 onChange={(e) => setInvoiceForm(prev => ({
                                                                     ...prev,
                                                                     entryConfigs: { ...prev.entryConfigs, [entry._id]: { ...conf, shortName: e.target.value } }
-                                                                }))} 
+                                                                }))}
                                                             />
                                                         </Td>
                                                         <Td isNumeric fontWeight="bold" color="blue.600">
@@ -3233,11 +3739,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                     </ModalBody>
                     <ModalFooter bg="gray.50" py={4} px={6}>
                         <Flex w="full" justify="space-between" align="center">
-                            <Button 
+                            <Button
                                 leftIcon={<FaEye />}
-                                colorScheme="blue" 
-                                variant="outline" 
-                                borderRadius="full" 
+                                colorScheme="blue"
+                                variant="outline"
+                                borderRadius="full"
                                 px={6}
                                 onClick={handlePreviewInvoiceForm}
                             >
@@ -3245,8 +3751,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                             </Button>
                             <HStack spacing={3}>
                                 <Button variant="ghost" borderRadius="full" onClick={() => setInvoiceForm(prev => ({ ...prev, isOpen: false }))}>Cancel</Button>
-                                <Button 
-                                    colorScheme={invoiceForm.type === 'PROFORMA' ? 'purple' : 'green'} 
+                                <Button
+                                    colorScheme={invoiceForm.type === 'PROFORMA' ? 'purple' : 'green'}
                                     borderRadius="full"
                                     px={6}
                                     leftIcon={<FaCheckCircle />}
@@ -3262,12 +3768,12 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             </Modal>
 
             {/* ── Invoice Preview Modal (HTML Live Preview & PDF Viewer) ── */}
-            <Modal 
-                isOpen={previewModal.isOpen} 
-                onClose={() => setPreviewModal(prev => ({ ...prev, isOpen: false }))} 
-                size="6xl" 
-                isCentered 
-                scrollBehavior="inside" 
+            <Modal
+                isOpen={previewModal.isOpen}
+                onClose={() => setPreviewModal(prev => ({ ...prev, isOpen: false }))}
+                size="6xl"
+                isCentered
+                scrollBehavior="inside"
                 motionPreset="slideInBottom"
             >
                 <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
@@ -3442,10 +3948,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                         <Button variant="ghost" borderRadius="full" mr={3} onClick={() => setMissingLedgerSitesModal({ isOpen: false, sites: [] })}>
                             Dismiss
                         </Button>
-                        <Button 
-                            colorScheme="orange" 
-                            borderRadius="full" 
-                            px={6} 
+                        <Button
+                            colorScheme="orange"
+                            borderRadius="full"
+                            px={6}
                             leftIcon={<FaMapMarkerAlt />}
                             onClick={() => {
                                 setMissingLedgerSitesModal({ isOpen: false, sites: [] });
@@ -3462,11 +3968,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 </ModalContent>
             </Modal>
             {/* ── Cash / UPI Payment Entry Modal ── */}
-            <Modal 
-                isOpen={cashUpiModal.isOpen} 
-                onClose={() => setCashUpiModal(prev => ({ ...prev, isOpen: false }))} 
-                size="lg" 
-                isCentered 
+            <Modal
+                isOpen={cashUpiModal.isOpen}
+                onClose={() => setCashUpiModal(prev => ({ ...prev, isOpen: false }))}
+                size="lg"
+                isCentered
                 motionPreset="slideInBottom"
             >
                 <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
@@ -3639,6 +4145,187 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                     </ModalFooter>
                 </ModalContent>
             </Modal>
+
+            {/* ── Payment Follow-Up Modal ── */}
+            <Modal isOpen={isFollowUpOpen} onClose={onFollowUpClose} size="xl" isCentered motionPreset="slideInBottom" scrollBehavior="inside">
+                <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxH="90vh">
+                    <ModalHeader p={0}>
+                        <Box bgGradient="linear(to-r, orange.500, purple.600)" p={5} color="white">
+                            <HStack spacing={3}>
+                                <Box bg="whiteAlpha.300" p={2.5} borderRadius="xl">
+                                    <FaHistory size={20} />
+                                </Box>
+                                <VStack align="start" spacing={0}>
+                                    <Text fontWeight="black" fontSize="lg">Payment Follow-up</Text>
+                                    <Text fontSize="xs" opacity={0.9}>
+                                        Invoice: <b>{followUpTarget?.inv?.invoiceId || 'N/A'}</b> • {followUpTarget?.group?.clientName || followUpTarget?.inv?.clientName || 'Valued Client'}
+                                    </Text>
+                                </VStack>
+                                <Box ml="auto">
+                                    <Badge bg="whiteAlpha.300" color="white" borderRadius="full" px={3} py={1} fontSize="xs" fontWeight="bold">
+                                        ₹{Number(followUpTarget?.inv?.totalAmt || 0).toLocaleString('en-IN')}
+                                    </Badge>
+                                </Box>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} />
+                    <ModalBody p={0} overflowY="auto">
+                        {/* Add New Follow-Up Form */}
+                        <Box p={5} bg="white">
+                            <HStack mb={3} spacing={2}>
+                                <FaBell color="#DD6B20" />
+                                <Text fontWeight="extrabold" fontSize="sm" color="orange.700">
+                                    Add New Payment Follow-up
+                                </Text>
+                            </HStack>
+                            <VStack spacing={4} align="stretch">
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">
+                                        📝 Follow-up Remark / Client Response
+                                    </FormLabel>
+                                    <Textarea
+                                        placeholder="e.g. Spoke with Accounts team — payment of ₹14,000 promised by next Monday..."
+                                        value={followUpForm.remark}
+                                        onChange={(e) => setFollowUpForm(prev => ({ ...prev, remark: e.target.value }))}
+                                        borderRadius="xl"
+                                        rows={3}
+                                        bg="gray.50"
+                                        _focus={{ bg: 'white', borderColor: 'orange.400' }}
+                                    />
+                                </FormControl>
+
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">
+                                        📅 Next Follow-up Date (Auto +7 Days Default)
+                                    </FormLabel>
+                                    <Input
+                                        type="date"
+                                        value={followUpForm.nextFollowUpDate}
+                                        min={new Date().toISOString().split('T')[0]}
+                                        onChange={(e) => setFollowUpForm(prev => ({ ...prev, nextFollowUpDate: e.target.value }))}
+                                        borderRadius="xl"
+                                        bg="gray.50"
+                                        _focus={{ bg: 'white', borderColor: 'orange.400' }}
+                                    />
+                                </FormControl>
+                            </VStack>
+
+                            <Button
+                                mt={5}
+                                w="full"
+                                bgGradient="linear(to-r, orange.500, red.500)"
+                                color="white"
+                                borderRadius="xl"
+                                py={6}
+                                leftIcon={<FaBell />}
+                                isLoading={isSubmittingFollowUp}
+                                onClick={handleSubmitFollowUp}
+                                _hover={{ bgGradient: 'linear(to-r, orange.600, red.600)' }}
+                            >
+                                Save Follow-up Remark
+                            </Button>
+                        </Box>
+
+                        {/* Remark History Timeline */}
+                        <Box p={5} bg="gray.50" borderTop="1px solid" borderColor="gray.200">
+                            <HStack mb={3} spacing={2}>
+                                <FaHistory color="#805AD5" />
+                                <Text fontWeight="extrabold" fontSize="sm" color="purple.700">
+                                    Remark History Timeline
+                                </Text>
+                                <Badge colorScheme="purple" borderRadius="full" fontSize="10px">
+                                    {followUpTarget?.inv?.followUps?.length || 0} Total Remarks
+                                </Badge>
+                            </HStack>
+
+                            {followUpTarget?.inv?.followUps?.length > 0 ? (
+                                <VStack spacing={0} align="stretch">
+                                    {[...followUpTarget.inv.followUps].reverse().map((fu, i, arr) => {
+                                        const isFirst = i === 0;
+                                        const addedAt = fu.addedAt
+                                            ? new Date(fu.addedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                                            : 'N/A';
+                                        const nextDate = fu.nextFollowUpDate
+                                            ? new Date(fu.nextFollowUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                                            : 'N/A';
+                                        return (
+                                            <HStack key={i} spacing={0} align="stretch">
+                                                {/* Timeline Node */}
+                                                <VStack spacing={0} align="center" mr={3} minW="24px">
+                                                    <Box
+                                                        w="12px"
+                                                        h="12px"
+                                                        borderRadius="full"
+                                                        mt={2}
+                                                        bg={isFirst ? 'orange.500' : 'purple.400'}
+                                                        border="2px solid"
+                                                        borderColor={isFirst ? 'orange.200' : 'purple.200'}
+                                                        flexShrink={0}
+                                                    />
+                                                    {i < arr.length - 1 && <Box w="2px" flex={1} bg="gray.200" minH="20px" />}
+                                                </VStack>
+
+                                                {/* Timeline Card */}
+                                                <Box
+                                                    flex={1}
+                                                    p={3.5}
+                                                    mb={2.5}
+                                                    bg={isFirst ? 'orange.50' : 'white'}
+                                                    borderRadius="xl"
+                                                    border="1px solid"
+                                                    borderColor={isFirst ? 'orange.200' : 'gray.200'}
+                                                    shadow="2xs"
+                                                >
+                                                    <HStack justify="space-between" mb={1}>
+                                                        <HStack spacing={2}>
+                                                            <Badge
+                                                                colorScheme={isFirst ? 'orange' : 'purple'}
+                                                                borderRadius="full"
+                                                                px={2}
+                                                                fontSize="10px"
+                                                                fontWeight="bold"
+                                                            >
+                                                                {isFirst ? '🔔 Latest' : `#${arr.length - i}`}
+                                                            </Badge>
+                                                            {fu.addedBy && (
+                                                                <Text fontSize="xs" fontWeight="bold" color="gray.600">
+                                                                    👤 {fu.addedBy}
+                                                                </Text>
+                                                            )}
+                                                        </HStack>
+                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold">{addedAt}</Text>
+                                                    </HStack>
+                                                    <Text fontSize="sm" color="gray.800" fontWeight="medium" mb={1.5}>
+                                                        💬 {fu.remark}
+                                                    </Text>
+                                                    {fu.nextFollowUpDate && (
+                                                        <Text fontSize="xs" color="blue.600" fontWeight="extrabold">
+                                                            📅 Next Follow-up: {nextDate}
+                                                        </Text>
+                                                    )}
+                                                </Box>
+                                            </HStack>
+                                        );
+                                    })}
+                                </VStack>
+                            ) : (
+                                <Box py={8} textAlign="center" color="gray.500">
+                                    <Text fontSize="sm" fontWeight="bold">No previous remarks yet.</Text>
+                                    <Text fontSize="xs">Add your first follow-up note above to schedule the next reminder.</Text>
+                                </Box>
+                            )}
+                        </Box>
+                    </ModalBody>
+                    <ModalFooter bg="gray.100" p={3} borderTop="1px solid" borderColor="gray.200">
+                        <Button size="sm" variant="ghost" borderRadius="xl" onClick={onFollowUpClose}>
+                            Close
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
         </Box>
     );
 };
