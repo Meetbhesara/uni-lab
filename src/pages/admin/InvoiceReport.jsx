@@ -251,7 +251,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         invoiceId: '',
         invoiceType: 'proforma',
         clientName: '',
-        isSending: false
+        isSending: false,
+        additionalDocUrls: [] // selected doc URLs to send with invoice
     });
 
     const handleOpenWhatsappModal = (itemOrGroup) => {
@@ -277,7 +278,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             invoiceId: invId,
             invoiceType: type,
             clientName: clientObj?.clientName || itemOrGroup.buyerDetails?.name || 'Valued Client',
-            isSending: false
+            isSending: false,
+            additionalDocUrls: itemOrGroup.additionalDocUrls || []
         });
     };
 
@@ -297,7 +299,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 pdfUrl: whatsappModal.pdfUrl,
                 invoiceId: whatsappModal.invoiceId,
                 invoiceType: whatsappModal.invoiceType,
-                clientName: whatsappModal.clientName
+                clientName: whatsappModal.clientName,
+                additionalDocUrls: whatsappModal.additionalDocUrls || []
             });
 
             if (res.data.success) {
@@ -479,6 +482,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     // Site Detail Drawer
     const [siteDrawer, setSiteDrawer] = useState({ isOpen: false, entry: null, siteObj: null, clientObj: null, invoiceGroup: null });
     const [siteDrawerTab, setSiteDrawerTab] = useState(0);
+    const [selectedDocUrls, setSelectedDocUrls] = useState(new Set()); // tracks checked docs in TAB 3
 
     const handleOpenSiteDrawer = (siteObj, invGroup = null, specificEntry = null) => {
         const siteKey = String(siteObj?._id || siteObj?.siteName || '').toLowerCase().trim();
@@ -510,6 +514,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             invoiceGroup: invoiceGroupObj
         });
         setSiteDrawerTab(0);
+        setSelectedDocUrls(new Set()); // reset doc checkboxes on fresh open
     };
 
     const handleSendWhatsappReminder = (siteEntry) => {
@@ -1859,7 +1864,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                             <Td py={3.5} textAlign="right" fontSize="sm" fontWeight="900" color="gray.900">
                                                                                                 ₹{Number(inv.totalAmt || 0).toLocaleString('en-IN')}
                                                                                             </Td>
-                                                                                            <Td py={3.5} textAlign="right" onClick={(e) => e.stopPropagation()} whiteSpace="nowrap" minW="380px">
+                                                                                            <Td py={3.5} textAlign="right" onClick={(e) => e.stopPropagation()} whiteSpace="nowrap" minW="470px">
                                                                                                 <HStack spacing={1.5} justify="flex-end">
                                                                                                     <Button
                                                                                                         size="xs"
@@ -1876,6 +1881,27 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                     >
                                                                                                         Follow-up ({inv.followUps?.length || 0})
                                                                                                     </Button>
+                                                                                                    {/* WhatsApp Reminder */}
+                                                                                                    {inv.paymentStatus !== 'PAID' && (
+                                                                                                        <Button
+                                                                                                            size="xs"
+                                                                                                            colorScheme="whatsapp"
+                                                                                                            bg="#25D366"
+                                                                                                            color="white"
+                                                                                                            _hover={{ bg: '#128C7E' }}
+                                                                                                            borderRadius="lg"
+                                                                                                            fontWeight="bold"
+                                                                                                            leftIcon={<FaWhatsapp />}
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation();
+                                                                                                                const entry = inv.entries?.[0];
+                                                                                                                if (entry) handleSendWhatsappReminder(entry);
+                                                                                                                else toast({ title: 'No entry found', status: 'warning', duration: 2000 });
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            WA Reminder
+                                                                                                        </Button>
+                                                                                                    )}
                                                                                                     <Button
                                                                                                         size="xs"
                                                                                                         colorScheme="blue"
@@ -1890,7 +1916,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                     >
                                                                                                         View Details
                                                                                                     </Button>
-                                                                                                    {!inv.isTaxInvoice && (
+                                                                                                    {!inv.isTaxInvoice ? (
                                                                                                         <Button
                                                                                                             size="xs"
                                                                                                             colorScheme="purple"
@@ -1902,8 +1928,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                         >
                                                                                                             Generate Final Invoice
                                                                                                         </Button>
+                                                                                                    ) : (
+                                                                                                        <Box minW="154px" h="24px" display="inline-block" />
                                                                                                     )}
-                                                                                                    {inv.paymentStatus !== 'PAID' && (
+                                                                                                    {inv.paymentStatus !== 'PAID' ? (
                                                                                                         <Button
                                                                                                             size="xs"
                                                                                                             colorScheme="green"
@@ -1915,6 +1943,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                         >
                                                                                                             Mark Closed
                                                                                                         </Button>
+                                                                                                    ) : (
+                                                                                                        <Box minW="102px" h="24px" display="inline-block" />
                                                                                                     )}
                                                                                                 </HStack>
                                                                                             </Td>
@@ -2546,6 +2576,26 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                             </Tooltip>
                                                                         </>
                                                                     )}
+                                                                    {/* Payment Reminder text message via WhatsApp */}
+                                                                    <Tooltip label="Send Payment Reminder via WhatsApp" placement="top">
+                                                                        <Button
+                                                                            size="xs"
+                                                                            bg="#25D366"
+                                                                            color="white"
+                                                                            _hover={{ bg: '#128C7E' }}
+                                                                            borderRadius="lg"
+                                                                            fontWeight="bold"
+                                                                            leftIcon={<FaWhatsapp />}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const entry = group.entries?.[0];
+                                                                                if (entry) handleSendWhatsappReminder(entry);
+                                                                                else toast({ title: 'No entry found', status: 'warning', duration: 2000 });
+                                                                            }}
+                                                                        >
+                                                                            WA Reminder
+                                                                        </Button>
+                                                                    </Tooltip>
                                                                     <Button
                                                                         size="xs"
                                                                         colorScheme="gray"
@@ -2683,7 +2733,12 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                         <TabList bg="gray.50" borderBottom="1px solid" borderColor="gray.200" px={5} pt={2}>
                                                             <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }} fontSize="sm">📍 Site & Work Overview</Tab>
                                                             <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }} fontSize="sm">{isDirectClosed ? '💰 Payment Details' : '🧾 Invoice Details'}</Tab>
-                                                            <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }} fontSize="sm">📁 Documents {docCategories.length > 0 ? `(${docCategories.reduce((s, c) => s + c.files.length, 0)})` : ''}</Tab>
+                                                            <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }} fontSize="sm">
+                                                                📁 Documents {docCategories.length > 0 ? `(${docCategories.reduce((s, c) => s + c.files.length, 0)})` : ''}
+                                                                {selectedDocUrls.size > 0 && (
+                                                                    <Badge ml={1} colorScheme="teal" borderRadius="full" fontSize="9px">{selectedDocUrls.size} ✓</Badge>
+                                                                )}
+                                                            </Tab>
                                                         </TabList>
                                                     </Tabs>
                                                 </ModalHeader>
@@ -2915,62 +2970,144 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     </Card>
                                                                 ) : (
                                                                     <VStack spacing={4} align="stretch">
-                                                                        {docCategories.map((cat) => (
-                                                                            <Card key={cat.label} borderRadius="2xl" variant="outline" border="1px solid" borderColor={`${cat.color}.200`}>
-                                                                                <CardBody p={4}>
-                                                                                    <HStack justify="space-between" mb={3}>
-                                                                                        <Text fontSize="xs" fontWeight="black" color={`${cat.color}.600`} textTransform="uppercase" letterSpacing="wider">
-                                                                                            {cat.label}
-                                                                                        </Text>
-                                                                                        <Badge colorScheme={cat.color} borderRadius="full" px={2}>{cat.files.length} file{cat.files.length !== 1 ? 's' : ''}</Badge>
-                                                                                    </HStack>
-                                                                                    <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
-                                                                                        {cat.files.map((f, fi) => {
-                                                                                            const isImage = f.url?.match(/\.(jpe?g|png|gif|webp)$/i) || f.name?.match(/\.(jpe?g|png|gif|webp)$/i);
-                                                                                            const isPdf = f.url?.match(/\.pdf$/i) || f.name?.match(/\.pdf$/i);
-                                                                                            const fileUrl = f.url?.startsWith('http') ? f.url : `${f.url}`;
+                                                                        {/* Selected count banner */}
+                                                                        {selectedDocUrls.size > 0 && (
+                                                                            <Flex align="center" justify="space-between" bg="teal.50" border="1px solid" borderColor="teal.200" borderRadius="xl" px={4} py={2.5}>
+                                                                                <HStack spacing={2}>
+                                                                                    <Icon as={FaCheckCircle} color="teal.500" />
+                                                                                    <Text fontSize="sm" fontWeight="bold" color="teal.700">
+                                                                                        {selectedDocUrls.size} document{selectedDocUrls.size !== 1 ? 's' : ''} selected — will be sent with WhatsApp reminder
+                                                                                    </Text>
+                                                                                </HStack>
+                                                                                <Button size="xs" variant="ghost" colorScheme="teal" onClick={() => setSelectedDocUrls(new Set())}>
+                                                                                    Clear All
+                                                                                </Button>
+                                                                            </Flex>
+                                                                        )}
 
-                                                                                            return (
-                                                                                                <Box
-                                                                                                    key={fi}
-                                                                                                    borderRadius="xl"
-                                                                                                    overflow="hidden"
-                                                                                                    border="1px solid"
-                                                                                                    borderColor={`${cat.color}.100`}
-                                                                                                    bg="white"
-                                                                                                    shadow="sm"
-                                                                                                    cursor="pointer"
-                                                                                                    _hover={{ shadow: 'md', borderColor: `${cat.color}.300` }}
-                                                                                                    transition="all 0.15s"
-                                                                                                    onClick={() => f.url && window.open(fileUrl, '_blank')}
-                                                                                                >
-                                                                                                    {isImage ? (
-                                                                                                        <Box h="80px" overflow="hidden">
-                                                                                                            <img src={fileUrl} alt={f.name} style={{ width: '100%', height: '80px', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+                                                                        {docCategories.map((cat) => {
+                                                                            const catUrls = cat.files.map(f => f.url).filter(Boolean);
+                                                                            const allSelected = catUrls.length > 0 && catUrls.every(u => selectedDocUrls.has(u));
+                                                                            const someSelected = catUrls.some(u => selectedDocUrls.has(u));
+
+                                                                            const toggleCatAll = () => {
+                                                                                setSelectedDocUrls(prev => {
+                                                                                    const next = new Set(prev);
+                                                                                    if (allSelected) {
+                                                                                        catUrls.forEach(u => next.delete(u));
+                                                                                    } else {
+                                                                                        catUrls.forEach(u => next.add(u));
+                                                                                    }
+                                                                                    return next;
+                                                                                });
+                                                                            };
+
+                                                                            return (
+                                                                                <Card key={cat.label} borderRadius="2xl" variant="outline" border="1px solid" borderColor={`${cat.color}.200`}>
+                                                                                    <CardBody p={4}>
+                                                                                        <HStack justify="space-between" mb={3}>
+                                                                                            <HStack spacing={3}>
+                                                                                                <Checkbox
+                                                                                                    colorScheme={cat.color}
+                                                                                                    isChecked={allSelected}
+                                                                                                    isIndeterminate={someSelected && !allSelected}
+                                                                                                    onChange={toggleCatAll}
+                                                                                                    size="md"
+                                                                                                />
+                                                                                                <Text fontSize="xs" fontWeight="black" color={`${cat.color}.600`} textTransform="uppercase" letterSpacing="wider">
+                                                                                                    {cat.label}
+                                                                                                </Text>
+                                                                                            </HStack>
+                                                                                            <HStack spacing={2}>
+                                                                                                {someSelected && (
+                                                                                                    <Badge colorScheme="teal" borderRadius="full" px={2} fontSize="9px">
+                                                                                                        {catUrls.filter(u => selectedDocUrls.has(u)).length} selected
+                                                                                                    </Badge>
+                                                                                                )}
+                                                                                                <Badge colorScheme={cat.color} borderRadius="full" px={2}>{cat.files.length} file{cat.files.length !== 1 ? 's' : ''}</Badge>
+                                                                                            </HStack>
+                                                                                        </HStack>
+                                                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
+                                                                                            {cat.files.map((f, fi) => {
+                                                                                                const isImage = f.url?.match(/\.(jpe?g|png|gif|webp)$/i) || f.name?.match(/\.(jpe?g|png|gif|webp)$/i);
+                                                                                                const isPdf = f.url?.match(/\.pdf$/i) || f.name?.match(/\.pdf$/i);
+                                                                                                const fileUrl = f.url?.startsWith('http') ? f.url : `${f.url}`;
+                                                                                                const isChecked = !!f.url && selectedDocUrls.has(f.url);
+
+                                                                                                const toggleDoc = (e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    if (!f.url) return;
+                                                                                                    setSelectedDocUrls(prev => {
+                                                                                                        const next = new Set(prev);
+                                                                                                        if (next.has(f.url)) next.delete(f.url);
+                                                                                                        else next.add(f.url);
+                                                                                                        return next;
+                                                                                                    });
+                                                                                                };
+
+                                                                                                return (
+                                                                                                    <Box
+                                                                                                        key={fi}
+                                                                                                        borderRadius="xl"
+                                                                                                        overflow="hidden"
+                                                                                                        border="2px solid"
+                                                                                                        borderColor={isChecked ? `${cat.color}.400` : `${cat.color}.100`}
+                                                                                                        bg={isChecked ? `${cat.color}.50` : 'white'}
+                                                                                                        shadow={isChecked ? 'md' : 'sm'}
+                                                                                                        transition="all 0.15s"
+                                                                                                        position="relative"
+                                                                                                    >
+                                                                                                        {/* Checkbox overlay top-left */}
+                                                                                                        <Box
+                                                                                                            position="absolute"
+                                                                                                            top={2}
+                                                                                                            left={2}
+                                                                                                            zIndex={2}
+                                                                                                            bg="white"
+                                                                                                            borderRadius="md"
+                                                                                                            p={0.5}
+                                                                                                            shadow="sm"
+                                                                                                            onClick={toggleDoc}
+                                                                                                        >
+                                                                                                            <Checkbox
+                                                                                                                colorScheme={cat.color}
+                                                                                                                isChecked={isChecked}
+                                                                                                                onChange={toggleDoc}
+                                                                                                                size="md"
+                                                                                                            />
                                                                                                         </Box>
-                                                                                                    ) : (
-                                                                                                        <Flex h="60px" align="center" justify="center" bg={`${cat.color}.50`}>
-                                                                                                            <Icon as={isPdf ? FaFilePdf : FaFileAlt} w={8} h={8} color={`${cat.color}.400`} />
-                                                                                                        </Flex>
-                                                                                                    )}
-                                                                                                    <Box p={2}>
-                                                                                                        <Text fontSize="11px" fontWeight="bold" color="gray.700" noOfLines={1} title={f.name}>{f.name || 'Document'}</Text>
-                                                                                                        {f.uploadedAt && <Text fontSize="10px" color="gray.400">{formatDate(f.uploadedAt)}</Text>}
+
+                                                                                                        {/* Thumbnail / icon area (click to open) */}
+                                                                                                        <Box cursor="pointer" onClick={() => f.url && window.open(fileUrl, '_blank')}>
+                                                                                                            {isImage ? (
+                                                                                                                <Box h="80px" overflow="hidden">
+                                                                                                                    <img src={fileUrl} alt={f.name} style={{ width: '100%', height: '80px', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+                                                                                                                </Box>
+                                                                                                            ) : (
+                                                                                                                <Flex h="60px" align="center" justify="center" bg={isChecked ? `${cat.color}.100` : `${cat.color}.50`}>
+                                                                                                                    <Icon as={isPdf ? FaFilePdf : FaFileAlt} w={8} h={8} color={`${cat.color}.400`} />
+                                                                                                                </Flex>
+                                                                                                            )}
+                                                                                                            <Box p={2}>
+                                                                                                                <Text fontSize="11px" fontWeight="bold" color="gray.700" noOfLines={1} title={f.name}>{f.name || 'Document'}</Text>
+                                                                                                                {f.uploadedAt && <Text fontSize="10px" color="gray.400">{formatDate(f.uploadedAt)}</Text>}
+                                                                                                            </Box>
+                                                                                                        </Box>
                                                                                                     </Box>
-                                                                                                </Box>
-                                                                                            );
-                                                                                        })}
-                                                                                    </SimpleGrid>
-                                                                                </CardBody>
-                                                                            </Card>
-                                                                        ))}
+                                                                                                );
+                                                                                            })}
+                                                                                        </SimpleGrid>
+                                                                                    </CardBody>
+                                                                                </Card>
+                                                                            );
+                                                                        })}
                                                                     </VStack>
                                                                 )}
                                                             </TabPanel>
                                                         </TabPanels>
                                                     </Tabs>
                                                 </ModalBody>
-                                                <ModalFooter borderTop="1px solid" borderColor="gray.200" bg="white" gap={2}>
+                                                <ModalFooter borderTop="1px solid" borderColor="gray.200" bg="white" gap={2} wrap="wrap">
                                                     {!isDirectClosed && inv?.pdfUrl && (
                                                         <>
                                                             <Button size="sm" leftIcon={<FaEye />} colorScheme="purple" borderRadius="xl"
@@ -2980,6 +3117,23 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             <Button as="a" href={`${inv.pdfUrl}`} target="_blank" size="sm" leftIcon={<FaFilePdf />} colorScheme="red" variant="outline" borderRadius="xl">Open PDF</Button>
                                                         </>
                                                     )}
+                                                    {selectedDocUrls.size > 0 ? (
+                                                        <Button
+                                                            size="sm"
+                                                            colorScheme="whatsapp"
+                                                            borderRadius="xl"
+                                                            leftIcon={<FaWhatsapp />}
+                                                            onClick={() => {
+                                                                if (!siteDrawer.entry) return;
+                                                                handleOpenWhatsappModal({
+                                                                    ...siteDrawer.invoiceGroup,
+                                                                    additionalDocUrls: Array.from(selectedDocUrls)
+                                                                });
+                                                            }}
+                                                        >
+                                                            Send WhatsApp + {selectedDocUrls.size} Docs
+                                                        </Button>
+                                                    ) : null}
                                                     <Button size="sm" variant="ghost" borderRadius="xl" onClick={() => setSiteDrawer(p => ({ ...p, isOpen: false }))}>Close</Button>
                                                 </ModalFooter>
                                             </>
@@ -4511,6 +4665,30 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                     Recipient: {whatsappModal.clientName}
                                 </Text>
                             </FormControl>
+
+                            {/* Selected documents list */}
+                            {whatsappModal.additionalDocUrls?.length > 0 && (
+                                <Box border="1px solid" borderColor="teal.200" borderRadius="xl" p={3} bg="teal.50">
+                                    <HStack mb={2} spacing={2}>
+                                        <Icon as={FaCheckCircle} color="teal.500" w={4} h={4} />
+                                        <Text fontSize="xs" fontWeight="black" color="teal.700" textTransform="uppercase" letterSpacing="wider">
+                                            {whatsappModal.additionalDocUrls.length} document{whatsappModal.additionalDocUrls.length !== 1 ? 's' : ''} will be sent
+                                        </Text>
+                                    </HStack>
+                                    <VStack align="stretch" spacing={1} maxH="120px" overflowY="auto">
+                                        {whatsappModal.additionalDocUrls.map((url, i) => {
+                                            const fname = url.split('/').pop() || `Document ${i + 1}`;
+                                            const isPdf = url.match(/\.pdf$/i);
+                                            return (
+                                                <HStack key={i} spacing={2} px={2} py={1} bg="white" borderRadius="lg" border="1px solid" borderColor="teal.100">
+                                                    <Icon as={isPdf ? FaFilePdf : FaFileAlt} color="teal.500" w={3} h={3} flexShrink={0} />
+                                                    <Text fontSize="11px" color="gray.700" noOfLines={1} title={fname} flex={1}>{fname}</Text>
+                                                </HStack>
+                                            );
+                                        })}
+                                    </VStack>
+                                </Box>
+                            )}
                         </VStack>
                     </ModalBody>
                     <ModalFooter borderTop="1px solid" borderColor="gray.100">
