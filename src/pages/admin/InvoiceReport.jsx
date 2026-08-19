@@ -70,7 +70,7 @@ const generateNextInvoiceId = (schedulesList, type, companyDetails) => {
     if (type === 'PROFORMA') {
         schedulesList.forEach(s => {
             let idStr = s.proformaInvoiceId || (s.invoiceType === 'proforma' ? s.invoiceDetails?.invoiceId : null);
-            if (idStr && idStr.startsWith('PRM/')) {
+            if (idStr && idStr.includes('PRM/')) {
                 const parts = idStr.split('/');
                 const lastPart = parts[parts.length - 1];
                 const num = parseInt(lastPart, 10);
@@ -78,11 +78,11 @@ const generateNextInvoiceId = (schedulesList, type, companyDetails) => {
             }
         });
         const nextSeq = String(maxNum + 1).padStart(4, '0');
-        return `PRM/${nextSeq}`;
+        return `PRM/${prefix}/${nextSeq}`;
     } else {
         schedulesList.forEach(s => {
             let idStr = s.finalInvoiceId || (s.invoiceType === 'final' ? s.invoiceDetails?.invoiceId : null);
-            if (idStr && idStr.includes(fyStr) && idStr.includes(prefix)) {
+            if (idStr && idStr.includes(fyStr)) {
                 const parts = idStr.split('/');
                 const lastPart = parts[parts.length - 1];
                 const num = parseInt(lastPart, 10);
@@ -242,6 +242,92 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         remark: '',
         isSubmitting: false
     });
+
+    // WhatsApp Send Modal State
+    const [whatsappModal, setWhatsappModal] = useState({
+        isOpen: false,
+        phone: '',
+        pdfUrl: '',
+        invoiceId: '',
+        invoiceType: 'proforma',
+        clientName: '',
+        isSending: false
+    });
+
+    const handleOpenWhatsappModal = (itemOrGroup) => {
+        const clientObj = itemOrGroup.client || itemOrGroup.entries?.[0]?.client;
+        const rawPhone = clientObj?.phone || clientObj?.contactNumbers?.[0] || clientObj?.contactPerson?.phone || itemOrGroup.buyerDetails?.phone || itemOrGroup.buyerDetails?.contact || '';
+        const cleanPhone = (rawPhone || '').replace(/\D/g, '');
+        
+        const invId = itemOrGroup.finalInvoiceId || itemOrGroup.proformaInvoiceId || itemOrGroup.invoiceId || itemOrGroup.invoiceDetails?.invoiceId || '';
+        const pdfUrl = itemOrGroup.finalInvoicePdf || itemOrGroup.proformaInvoicePdf || itemOrGroup.pdfUrl || itemOrGroup.invoiceDetails?.pdfUrl || null;
+        
+        const isFinal = Boolean(itemOrGroup.finalInvoicePdf || itemOrGroup.finalInvoiceId || itemOrGroup.invoiceStatus === 'Final' || itemOrGroup.invoiceStatus === 'Completed');
+        const type = isFinal ? 'final' : 'proforma';
+
+        if (!pdfUrl) {
+            toast({ title: 'Invoice PDF Missing', description: 'No PDF found for this invoice. Please generate PDF first.', status: 'warning', duration: 3000 });
+            return;
+        }
+
+        setWhatsappModal({
+            isOpen: true,
+            phone: cleanPhone,
+            pdfUrl: pdfUrl,
+            invoiceId: invId,
+            invoiceType: type,
+            clientName: clientObj?.clientName || itemOrGroup.buyerDetails?.name || 'Valued Client',
+            isSending: false
+        });
+    };
+
+    const handleSendWhatsappInvoice = async () => {
+        const targetPhone = (whatsappModal.phone || '').trim();
+        const cleanPhone = targetPhone.replace(/\D/g, '');
+        
+        if (!cleanPhone || cleanPhone.length < 10) {
+            toast({ title: 'Invalid Phone Number', description: 'Please enter a valid 10-digit mobile number.', status: 'warning' });
+            return;
+        }
+
+        setWhatsappModal(prev => ({ ...prev, isSending: true }));
+        try {
+            const res = await api.post('/whatsapp/send-invoice', {
+                phone: targetPhone,
+                pdfUrl: whatsappModal.pdfUrl,
+                invoiceId: whatsappModal.invoiceId,
+                invoiceType: whatsappModal.invoiceType,
+                clientName: whatsappModal.clientName
+            });
+
+            if (res.data.success) {
+                toast({
+                    title: 'WhatsApp Invoice Sent!',
+                    description: res.data.msg || `Invoice PDF sent successfully to ${targetPhone}.`,
+                    status: 'success',
+                    duration: 4000
+                });
+                setWhatsappModal(prev => ({ ...prev, isOpen: false }));
+            } else {
+                toast({ title: 'Failed to Send', description: res.data.error || 'WhatsApp send failed', status: 'error' });
+            }
+        } catch (error) {
+            console.error('[WhatsApp Send Error]', error);
+            const errMsg = error.response?.data?.error || error.message || 'Error sending WhatsApp invoice';
+            if (errMsg.includes('not ready')) {
+                toast({
+                    title: 'Admin WhatsApp Disconnected',
+                    description: 'Your personal Admin WhatsApp line is not connected. Please connect your WhatsApp account in Admin WhatsApp Settings.',
+                    status: 'warning',
+                    duration: 6000
+                });
+            } else {
+                toast({ title: 'WhatsApp Send Error', description: errMsg, status: 'error' });
+            }
+        } finally {
+            setWhatsappModal(prev => ({ ...prev, isSending: false }));
+        }
+    };
 
     // Preview Modal State
     // ── Payment Reminder Follow-Up & Invoice Detail State ──
@@ -612,7 +698,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         const matchLedger = !filterLedger || s.ledger === filterLedger;
 
         const stat = s.invoiceStatus || 'Pending';
-        const normalizedStat = (stat === 'Completed' || stat === 'Closed') ? 'Closed' : stat;
+        const isDirectClosed = !!s.closedDate;
+        const effectiveStat = isDirectClosed ? 'Closed' : stat;
+        const normalizedStat = (effectiveStat === 'Completed' || effectiveStat === 'Closed') ? 'Closed' : effectiveStat;
         const targetStatus = ['Pending', 'Proforma', 'Final', 'Reminder', 'Closed'][activeTab];
         const matchTab = normalizedStat === targetStatus;
 
@@ -964,15 +1052,14 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             console.error("Error fetching companies in validateAndPrepareGlobalInvoice", e);
         }
 
-        // Determine next Invoice ID based on Financial Year and selected Company Prefix
-        const initialCompany = freshCompanies.length > 0 ? freshCompanies[0] : null;
-        const actualType = type === 'CASH_UPI' ? 'FINAL' : type;
-        const nextInvoiceId = generateNextInvoiceId(schedules, actualType, initialCompany);
+        // Grab existing details if available (e.g. from a previously generated Proforma)
+        const existingDetails = entriesToInvoice.find(e => e.invoiceDetails)?.invoiceDetails;
 
         const baseClient = entriesToInvoice[0].client;
         const baseSite = entriesToInvoice[0].site;
 
-        const buyerDetailsObj = {
+        // Auto-fill Buyer Details from existing or fallback to Client Master
+        const buyerDetailsObj = existingDetails?.buyerDetails || {
             name: baseClient?.clientName || 'NA',
             address: baseClient?.clientAddress || 'NA',
             gstin: baseClient?.gstNo || 'NA',
@@ -982,8 +1069,28 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             contact: baseClient?.contactPerson?.phone || (baseClient?.contactNumbers?.[0] || 'NA'),
         };
 
-        // Ship To is an EXACT copy of Buyer To details by default
-        const shipToDetailsObj = { ...buyerDetailsObj };
+        // Auto-fill Ship To Details
+        const shipToDetailsObj = existingDetails?.shipToDetails || { ...buyerDetailsObj };
+
+        // Attempt to retain previously selected company or fallback to first
+        let initialCompany = freshCompanies.length > 0 ? freshCompanies[0] : null;
+        if (existingDetails?.companyDetails) {
+            const matchedComp = freshCompanies.find(c => String(c._id) === String(existingDetails.companyDetails._id) || c.prefix === existingDetails.companyDetails.prefix);
+            if (matchedComp) initialCompany = matchedComp;
+        }
+
+        // Determine next Invoice ID based on Financial Year and selected Company Prefix
+        const actualType = type === 'CASH_UPI' ? 'FINAL' : type;
+        const nextInvoiceId = generateNextInvoiceId(schedules, actualType, initialCompany);
+
+        // Auto-fill Entry Configs (rates, items) from existing
+        if (existingDetails?.entryConfigs) {
+            Object.keys(existingDetails.entryConfigs).forEach(entryId => {
+                if (initialConfigs[entryId]) {
+                    initialConfigs[entryId] = { ...initialConfigs[entryId], ...existingDetails.entryConfigs[entryId] };
+                }
+            });
+        }
 
         setInvoiceForm({
             isOpen: true,
@@ -997,10 +1104,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             buyerDetails: buyerDetailsObj,
             shipToDetails: shipToDetailsObj,
             invoiceId: nextInvoiceId,
-            description: '',
+            description: existingDetails?.description || '',
             targetGroup: null, // No longer bound to a single group
-            gstType: ((baseSite?.stateCode || baseClient?.stateCode || '24') === '24') ? 'CGST_SGST' : 'IGST',
-            gstPercentage: 18
+            gstType: existingDetails?.gstType || (((baseSite?.stateCode || baseClient?.stateCode || '24') === '24') ? 'CGST_SGST' : 'IGST'),
+            gstPercentage: existingDetails?.gstPercentage || 18
         });
     };
 
@@ -1046,6 +1153,24 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
             if (res.data.success) {
                 toast({ title: 'Invoice Generated successfully!', status: 'success' });
+                const returnedPdfUrl = res.data.data?.pdfUrl || pdfUrl;
+                const invType = invoiceForm.type === 'PROFORMA' ? 'proforma' : 'final';
+                const clientPhone = invoiceForm.buyerDetails?.contact || invoiceForm.buyerDetails?.phone || invoiceForm.entries?.[0]?.client?.phone || '';
+                const cleanPhone = (clientPhone || '').replace(/\D/g, '');
+
+                if (returnedPdfUrl) {
+                    setTimeout(() => {
+                        setWhatsappModal({
+                            isOpen: true,
+                            phone: cleanPhone,
+                            pdfUrl: returnedPdfUrl,
+                            invoiceId: invoiceForm.invoiceId,
+                            invoiceType: invType,
+                            clientName: invoiceForm.buyerDetails?.name || invoiceForm.buyerDetails?.companyName || 'Valued Client',
+                            isSending: false
+                        });
+                    }, 500);
+                }
             } else {
                 toast({ title: 'Warning', description: res.data.message, status: 'warning' });
             }
@@ -1445,8 +1570,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                 key={group.clientId}
                                                 borderRadius="2xl"
                                                 shadow="sm"
-                                                border="2px solid"
-                                                borderColor={hasOverdue ? 'red.200' : isExpanded ? 'purple.300' : 'gray.100'}
+                                                border="1px solid"
+                                                borderColor={hasOverdue ? 'red.200' : 'gray.200'}
                                                 overflow="hidden"
                                                 transition="all 0.2s"
                                                 _hover={{ shadow: 'md' }}
@@ -1460,15 +1585,15 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                         setSelectedClientModal(group);
                                                         setClientModalTab(0);
                                                     }}
-                                                    _hover={{ bg: hasOverdue ? 'red.100/50' : 'purple.50/50' }}
+                                                    _hover={{ bg: hasOverdue ? 'red.50' : 'gray.50' }}
                                                 >
                                                     <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
                                                         <HStack spacing={4}>
                                                             <Box
                                                                 p={3}
-                                                                bgGradient={hasOverdue ? 'linear(to-br, red.400, orange.400)' : 'linear(to-br, purple.500, blue.500)'}
-                                                                color="white"
-                                                                borderRadius="2xl"
+                                                                bg={hasOverdue ? 'red.50' : 'gray.800'}
+                                                                color={hasOverdue ? 'red.500' : 'white'}
+                                                                borderRadius="xl"
                                                                 boxShadow="sm"
                                                             >
                                                                 <Icon as={FaBuilding} w={5} h={5} />
@@ -1478,17 +1603,17 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     <Text fontSize="md" fontWeight="black" color="gray.800">
                                                                         {group.clientName}
                                                                     </Text>
-                                                                    {hasOverdue && <Badge colorScheme="red" variant="solid" borderRadius="full" px={2} fontSize="10px">⚠️ OVERDUE</Badge>}
-                                                                    {allPaid && <Badge colorScheme="green" variant="solid" borderRadius="full" px={2} fontSize="10px">✅ ALL PAID</Badge>}
+                                                                    {hasOverdue && <Badge bg="red.50" color="red.600" borderRadius="full" px={2} fontSize="10px" border="1px solid" borderColor="red.200">⚠️ OVERDUE</Badge>}
+                                                                    {allPaid && <Badge bg="green.50" color="green.600" borderRadius="full" px={2} fontSize="10px" border="1px solid" borderColor="green.200">✅ ALL PAID</Badge>}
                                                                     {earliestDate && (
-                                                                        <Badge colorScheme={bClientCol} variant="solid" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="bold">
+                                                                        <Badge bg={hasOverdue ? 'red.500' : 'gray.700'} color="white" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="bold">
                                                                             🔔 FOLLOW-UP {nClientLabel}: {nClientStr}
                                                                         </Badge>
                                                                     )}
-                                                                    <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2} fontSize="10px">
+                                                                    <Badge bg="gray.100" color="gray.600" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="bold">
                                                                         {group.invoices.length} Invoice{group.invoices.length !== 1 ? 's' : ''}
                                                                     </Badge>
-                                                                    <Badge colorScheme="teal" variant="subtle" borderRadius="full" px={2} fontSize="10px">
+                                                                    <Badge bg="gray.100" color="gray.600" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="bold">
                                                                         {group.invoices.flatMap(i => i.sites).filter((s, idx, arr) => s && arr.findIndex(x => (x?._id || x?.siteName) === (s?._id || s?.siteName)) === idx).length} Site(s)
                                                                     </Badge>
                                                                 </HStack>
@@ -1508,20 +1633,21 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
                                                         <HStack spacing={6} wrap="wrap" justify="flex-end">
                                                             <VStack align="center" spacing={0}>
-                                                                <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase">Total Billed</Text>
-                                                                <Text fontSize="lg" fontWeight="black" color="purple.700">₹{totalAmt.toLocaleString('en-IN')}</Text>
+                                                                <Text fontSize="10px" fontWeight="bold" color="gray.500" textTransform="uppercase">Total Billed</Text>
+                                                                <Text fontSize="lg" fontWeight="black" color="gray.800">₹{totalAmt.toLocaleString('en-IN')}</Text>
                                                             </VStack>
                                                             {pendingAmt > 0 && (
                                                                 <VStack align="center" spacing={0}>
-                                                                    <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase">Pending</Text>
-                                                                    <Text fontSize="lg" fontWeight="black" color={hasOverdue ? 'red.600' : 'orange.500'}>₹{pendingAmt.toLocaleString('en-IN')}</Text>
+                                                                    <Text fontSize="10px" fontWeight="bold" color="gray.500" textTransform="uppercase">Pending</Text>
+                                                                    <Text fontSize="lg" fontWeight="black" color={hasOverdue ? 'red.600' : 'gray.800'}>₹{pendingAmt.toLocaleString('en-IN')}</Text>
                                                                 </VStack>
                                                             )}
                                                             <Button
                                                                 size="sm"
-                                                                colorScheme={hasOverdue ? 'red' : 'purple'}
-                                                                variant="solid"
-                                                                borderRadius="xl"
+                                                                bg={hasOverdue ? 'red.600' : 'gray.800'}
+                                                                color="white"
+                                                                _hover={{ bg: hasOverdue ? 'red.700' : 'black' }}
+                                                                borderRadius="full"
                                                                 leftIcon={<FaEye />}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -1562,22 +1688,22 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         return (
                                             <>
                                                 <ModalHeader p={0}>
-                                                    <Box bgGradient="linear(to-r, blue.600, indigo.600)" p={6} color="white">
+                                                    <Box bg="gray.800" p={6} borderBottom="1px solid" borderColor="gray.900">
                                                         <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
                                                             <HStack spacing={4}>
-                                                                <Box p={3.5} bg="blue.600" borderRadius="2xl" shadow="sm">
+                                                                <Box p={3.5} bg="gray.700" color="white" borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.600">
                                                                     <Icon as={FaBuilding} w={7} h={7} />
                                                                 </Box>
                                                                 <VStack align="start" spacing={1}>
                                                                     <HStack spacing={3} wrap="wrap">
-                                                                        <Text fontWeight="900" fontSize="2xl" color="white">{group.clientName}</Text>
+                                                                        <Text fontWeight="black" fontSize="2xl" color="white">{group.clientName}</Text>
                                                                         {client.clientId && (
-                                                                            <Badge bg="whiteAlpha.300" color="white" borderRadius="full" px={2.5} py={0.5} fontSize="xs">
+                                                                            <Badge bg="gray.700" color="gray.200" borderRadius="full" px={2.5} py={0.5} fontSize="xs">
                                                                                 ID: {client.clientId}
                                                                             </Badge>
                                                                         )}
                                                                     </HStack>
-                                                                    <HStack spacing={4} wrap="wrap" fontSize="xs" color="gray.300">
+                                                                    <HStack spacing={4} wrap="wrap" fontSize="xs" color="gray.400" fontWeight="bold">
                                                                         {client.clientAddress && <Text>📍 {client.clientAddress}</Text>}
                                                                         {(client.contactPerson?.phone || client.contactNumbers?.[0]) && (
                                                                             <Text>📞 {client.contactPerson?.phone || client.contactNumbers?.[0]}</Text>
@@ -1589,27 +1715,27 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             </HStack>
 
                                                             <HStack spacing={3} wrap="wrap">
-                                                                <Box bg="whiteAlpha.150" border="1px solid" borderColor="whiteAlpha.300" px={4} py={2} borderRadius="xl" textAlign="center">
-                                                                    <Text fontSize="10px" textTransform="uppercase" color="gray.300" fontWeight="bold">Total Invoices</Text>
-                                                                    <Text fontSize="lg" fontWeight="900" color="white">{group.invoices.length}</Text>
+                                                                <Box bg="gray.700" border="1px solid" borderColor="gray.600" px={4} py={2} borderRadius="xl" textAlign="center">
+                                                                    <Text fontSize="10px" textTransform="uppercase" color="gray.400" fontWeight="bold">Total Invoices</Text>
+                                                                    <Text fontSize="lg" fontWeight="black" color="white">{group.invoices.length}</Text>
                                                                 </Box>
-                                                                <Box bg="whiteAlpha.150" border="1px solid" borderColor="whiteAlpha.300" px={4} py={2} borderRadius="xl" textAlign="center">
-                                                                    <Text fontSize="10px" textTransform="uppercase" color="gray.300" fontWeight="bold">Total Billed</Text>
-                                                                    <Text fontSize="lg" fontWeight="900" color="white">₹{totalAmt.toLocaleString('en-IN')}</Text>
+                                                                <Box bg="gray.700" border="1px solid" borderColor="gray.600" px={4} py={2} borderRadius="xl" textAlign="center">
+                                                                    <Text fontSize="10px" textTransform="uppercase" color="gray.400" fontWeight="bold">Total Billed</Text>
+                                                                    <Text fontSize="lg" fontWeight="black" color="white">₹{totalAmt.toLocaleString('en-IN')}</Text>
                                                                 </Box>
-                                                                <Box bg={pendingAmt > 0 ? "amber.500" : "emerald.500"} px={4} py={2} borderRadius="xl" textAlign="center">
+                                                                <Box bg={pendingAmt > 0 ? "red.600" : "green.600"} border="1px solid" borderColor={pendingAmt > 0 ? "red.500" : "green.500"} px={4} py={2} borderRadius="xl" textAlign="center">
                                                                     <Text fontSize="10px" textTransform="uppercase" color="white" fontWeight="bold">Pending Amount</Text>
-                                                                    <Text fontSize="lg" fontWeight="900" color="white">₹{pendingAmt.toLocaleString('en-IN')}</Text>
+                                                                    <Text fontSize="lg" fontWeight="black" color="white">₹{pendingAmt.toLocaleString('en-IN')}</Text>
                                                                 </Box>
                                                             </HStack>
                                                         </Flex>
                                                     </Box>
                                                     <Tabs index={clientModalTab} onChange={setClientModalTab} variant="enclosed">
-                                                        <TabList bg="gray.100" px={6} pt={2} borderBottom="1px solid" borderColor="gray.300">
-                                                            <Tab fontWeight="extrabold" color="gray.700" _selected={{ color: 'blue.700', bg: 'white', borderColor: 'gray.300', borderBottomColor: 'white' }}>
+                                                        <TabList bg="gray.50" px={6} pt={2} borderBottom="1px solid" borderColor="gray.200">
+                                                            <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }}>
                                                                 🧾 Invoices List ({group.invoices.length})
                                                             </Tab>
-                                                            <Tab fontWeight="extrabold" color="gray.700" _selected={{ color: 'blue.700', bg: 'white', borderColor: 'gray.300', borderBottomColor: 'white' }}>
+                                                            <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }}>
                                                                 📍 Sites Breakdown ({allSites.length})
                                                             </Tab>
                                                         </TabList>
@@ -2017,11 +2143,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                             )}
                                                                                                             <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
                                                                                                                 <HStack justify="flex-end" spacing={1.5}>
-                                                                                                                    {activeTab === 2 && (
-                                                                                                                        <Button size="xs" colorScheme="green" variant="solid" borderRadius="lg" leftIcon={<FaCheckCircle />} onClick={() => handleStatusMove(group, 'Closed')}>
-                                                                                                                            Mark Closed
-                                                                                                                        </Button>
-                                                                                                                    )}
                                                                                                                     {activeTab === 4 && (
                                                                                                                         <Button size="xs" colorScheme="orange" variant="outline" borderRadius="lg" leftIcon={<FaSyncAlt />} onClick={() => handleStatusMove(group, 'Final')}>
                                                                                                                             Reopen
@@ -2055,6 +2176,21 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                                                                     variant="solid"
                                                                                                                                     borderRadius="lg"
                                                                                                                                     aria-label="Open PDF"
+                                                                                                                                />
+                                                                                                                            </Tooltip>
+                                                                                                                            <Tooltip label="Send Invoice via WhatsApp" placement="top">
+                                                                                                                                <IconButton
+                                                                                                                                    icon={<FaWhatsapp />}
+                                                                                                                                    size="xs"
+                                                                                                                                    bg="#25D366"
+                                                                                                                                    color="white"
+                                                                                                                                    _hover={{ bg: '#128C7E' }}
+                                                                                                                                    borderRadius="lg"
+                                                                                                                                    aria-label="Send WhatsApp"
+                                                                                                                                    onClick={(e) => {
+                                                                                                                                        e.stopPropagation();
+                                                                                                                                        handleOpenWhatsappModal(group);
+                                                                                                                                    }}
                                                                                                                                 />
                                                                                                                             </Tooltip>
                                                                                                                         </>
@@ -2272,7 +2408,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                     <Td py={4} textAlign="center">
                                                                         <VStack spacing={1} align="center">
                                                                             <Badge
-                                                                                colorScheme={paymentMode === 'UPI' ? 'purple' : paymentMode === 'CASH' ? 'teal' : 'green'}
+                                                                                colorScheme={paymentMode === 'UPI' ? 'purple' : 'teal'}
                                                                                 variant="subtle"
                                                                                 border="1px solid"
                                                                                 borderRadius="full"
@@ -2281,7 +2417,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                 fontSize="10px"
                                                                                 fontWeight="black"
                                                                             >
-                                                                                {paymentMode === 'UPI' ? '💳 UPI' : paymentMode === 'CASH' ? '💵 CASH' : '💳 PAID'}
+                                                                                {paymentMode === 'UPI' ? '💳 UPI' : paymentMode === 'CASH' ? '💵 CASH' : '💵 CASH/UPI'}
                                                                             </Badge>
                                                                             {receiverName && (
                                                                                 <Text fontSize="9px" color="gray.600" fontWeight="bold">
@@ -2363,11 +2499,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             )}
                                                             <Td py={4} textAlign="right" onClick={(e) => e.stopPropagation()}>
                                                                 <HStack justify="flex-end" spacing={1.5}>
-                                                                    {activeTab === 2 && (
-                                                                        <Button size="xs" colorScheme="green" variant="solid" borderRadius="lg" leftIcon={<FaCheckCircle />} onClick={() => handleStatusMove(group, 'Closed')}>
-                                                                            Mark Closed
-                                                                        </Button>
-                                                                    )}
                                                                     {(group.proformaInvoicePdf || group.finalInvoicePdf) && (
                                                                         <>
                                                                             <Tooltip label="Preview Invoice" placement="top">
@@ -2396,6 +2527,21 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                     variant="solid"
                                                                                     borderRadius="lg"
                                                                                     aria-label="Open PDF"
+                                                                                />
+                                                                            </Tooltip>
+                                                                            <Tooltip label="Send Invoice via WhatsApp" placement="top">
+                                                                                <IconButton
+                                                                                    icon={<FaWhatsapp />}
+                                                                                    size="xs"
+                                                                                    bg="#25D366"
+                                                                                    color="white"
+                                                                                    _hover={{ bg: '#128C7E' }}
+                                                                                    borderRadius="lg"
+                                                                                    aria-label="Send WhatsApp"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleOpenWhatsappModal(group);
+                                                                                    }}
                                                                                 />
                                                                             </Tooltip>
                                                                         </>
@@ -2494,19 +2640,19 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         return (
                                             <>
                                                 <ModalHeader p={0}>
-                                                    <Box bgGradient="linear(to-r, teal.700, purple.700)" p={6} color="white">
+                                                    <Box bg="gray.800" p={6} borderBottom="1px solid" borderColor="gray.900">
                                                         <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
                                                             <HStack spacing={4}>
-                                                                <Box p={3.5} bg="whiteAlpha.200" borderRadius="2xl">
+                                                                <Box p={3.5} bg="gray.700" color="white" borderRadius="2xl" border="1px solid" borderColor="gray.600">
                                                                     <Icon as={FaMapMarkerAlt} w={7} h={7} />
                                                                 </Box>
                                                                 <VStack align="start" spacing={0.5}>
                                                                     <HStack spacing={2} wrap="wrap">
-                                                                        <Text fontWeight="black" fontSize="2xl">
+                                                                        <Text fontWeight="black" fontSize="2xl" color="white">
                                                                             {uniqueSites.length > 1 ? `🏢 ${client.clientName || 'Client Details'} — ${uniqueSites.length} Sites Covered` : `📍 ${site.siteName || 'Site Details'}`}
                                                                         </Text>
                                                                         {site.siteId && uniqueSites.length === 1 && (
-                                                                            <Badge colorScheme="whiteAlpha" variant="solid" borderRadius="full" px={2.5}>
+                                                                            <Badge bg="gray.700" color="gray.200" variant="solid" borderRadius="full" px={2.5}>
                                                                                 ID: {site.siteId}
                                                                             </Badge>
                                                                         )}
@@ -2523,10 +2669,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                             {psLabel[ps] || ps}
                                                                         </Badge>
                                                                     </HStack>
-                                                                    <HStack spacing={3} wrap="wrap" fontSize="xs" opacity={0.9}>
-                                                                        <Text>🏢 Client: <b>{client.clientName || '—'}</b></Text>
+                                                                    <HStack spacing={3} wrap="wrap" fontSize="xs" color="gray.400" fontWeight="bold">
+                                                                        <Text>🏢 Client: <Text as="span" color="white">{client.clientName || '—'}</Text></Text>
                                                                         {site.siteAddress && <Text>• 📍 {site.siteAddress}</Text>}
-                                                                        {!isDirectClosed && inv?.invoiceId && inv.invoiceId !== '—' && <Text>• Invoice No: <b>{inv.invoiceId}</b></Text>}
+                                                                        {!isDirectClosed && inv?.invoiceId && inv.invoiceId !== '—' && <Text>• Invoice No: <Text as="span" color="white">{inv.invoiceId}</Text></Text>}
                                                                     </HStack>
                                                                 </VStack>
                                                             </HStack>
@@ -2535,9 +2681,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     {/* Tabs */}
                                                     <Tabs index={siteDrawerTab} onChange={setSiteDrawerTab} variant="enclosed" colorScheme="teal">
                                                         <TabList bg="gray.50" borderBottom="1px solid" borderColor="gray.200" px={5} pt={2}>
-                                                            <Tab fontWeight="bold" fontSize="sm">📍 Site & Work Overview</Tab>
-                                                            <Tab fontWeight="bold" fontSize="sm">{isDirectClosed ? '💰 Payment Details' : '🧾 Invoice Details'}</Tab>
-                                                            <Tab fontWeight="bold" fontSize="sm">📁 Documents {docCategories.length > 0 ? `(${docCategories.reduce((s, c) => s + c.files.length, 0)})` : ''}</Tab>
+                                                            <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }} fontSize="sm">📍 Site & Work Overview</Tab>
+                                                            <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }} fontSize="sm">{isDirectClosed ? '💰 Payment Details' : '🧾 Invoice Details'}</Tab>
+                                                            <Tab fontWeight="black" color="gray.500" _selected={{ color: 'gray.800', bg: 'white', borderColor: 'gray.200', borderBottomColor: 'white' }} fontSize="sm">📁 Documents {docCategories.length > 0 ? `(${docCategories.reduce((s, c) => s + c.files.length, 0)})` : ''}</Tab>
                                                         </TabList>
                                                     </Tabs>
                                                 </ModalHeader>
@@ -2748,17 +2894,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                         Open PDF
                                                                                     </Button>
                                                                                 )}
-                                                                                <Button
-                                                                                    leftIcon={<FaWhatsapp />}
-                                                                                    bg="#25D366"
-                                                                                    color="white"
-                                                                                    _hover={{ bg: '#128C7E' }}
-                                                                                    borderRadius="xl"
-                                                                                    size="sm"
-                                                                                    onClick={() => handleSendWhatsappReminder(e0)}
-                                                                                >
-                                                                                    WhatsApp Reminder
-                                                                                </Button>
+
                                                                             </HStack>
                                                                         </CardBody>
                                                                     </Card>
@@ -2844,8 +2980,6 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             <Button as="a" href={`${inv.pdfUrl}`} target="_blank" size="sm" leftIcon={<FaFilePdf />} colorScheme="red" variant="outline" borderRadius="xl">Open PDF</Button>
                                                         </>
                                                     )}
-                                                    <Button size="sm" leftIcon={<FaWhatsapp />} bg="#25D366" color="white" _hover={{ bg: '#128C7E' }} borderRadius="xl"
-                                                        onClick={() => handleSendWhatsappReminder(e0)}>WhatsApp</Button>
                                                     <Button size="sm" variant="ghost" borderRadius="xl" onClick={() => setSiteDrawer(p => ({ ...p, isOpen: false }))}>Close</Button>
                                                 </ModalFooter>
                                             </>
@@ -2858,14 +2992,16 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.600" />
                 <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxH="90vh">
                     <ModalHeader p={0}>
-                        <Box bgGradient="linear(to-r, blue.700, purple.600)" p={6} color="white">
+                        <Box bg="gray.800" p={6} borderBottom="1px solid" borderColor="gray.900">
                             <HStack spacing={4}>
-                                <Icon as={FaBuilding} w={7} h={7} />
+                                <Box p={3.5} bg="gray.700" color="white" borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.600">
+                                    <Icon as={FaBuilding} w={7} h={7} />
+                                </Box>
                                 <VStack align="start" spacing={0}>
-                                    <Text fontWeight="black" fontSize="xl">
+                                    <Text fontWeight="black" fontSize="xl" color="white">
                                         {selectedGroup?.client?.clientName || 'Client Details'}
                                     </Text>
-                                    <Text fontSize="xs" opacity={0.85}>
+                                    <Text fontSize="xs" color="gray.400" fontWeight="bold">
                                         {selectedGroup?.siteGroups?.length || 0} {selectedGroup?.siteGroups?.length === 1 ? 'Site' : 'Sites'} Available • {selectedGroup?.entries?.length || 0} Total Visit Entries
                                     </Text>
                                 </VStack>
@@ -3779,15 +3915,17 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
                 <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxH="92vh">
                     <ModalHeader p={0}>
-                        <Box bgGradient={previewModal.type === 'PROFORMA' ? 'linear(to-r, purple.700, blue.600)' : 'linear(to-r, green.700, teal.600)'} p={5} color="white">
-                            <HStack justify="space-between" align="center" pr={8}>
+                        <Box bg="gray.800" p={5} borderBottom="1px solid" borderColor="gray.900">
+                            <HStack justify="space-between" align="center">
                                 <HStack spacing={3}>
-                                    <Icon as={FaFileInvoiceDollar} w={6} h={6} />
+                                    <Box p={2.5} bg="gray.700" color="white" borderRadius="xl" border="1px solid" borderColor="gray.600">
+                                        <Icon as={FaFileInvoiceDollar} w={6} h={6} />
+                                    </Box>
                                     <VStack align="start" spacing={0}>
-                                        <Text fontWeight="black" fontSize="lg">
+                                        <Text fontWeight="black" fontSize="lg" color="white">
                                             {previewModal.title || 'Invoice Preview'}
                                         </Text>
-                                        <Text fontSize="xs" opacity={0.85}>
+                                        <Text fontSize="xs" opacity={0.85} color="white">
                                             Live Preview of Proforma / Tax Invoice Layout
                                         </Text>
                                     </VStack>
@@ -3891,11 +4029,15 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             <Modal isOpen={missingLedgerSitesModal.isOpen} onClose={() => setMissingLedgerSitesModal({ isOpen: false, sites: [] })} size="lg" isCentered motionPreset="slideInBottom">
                 <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
                 <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
-                    <ModalHeader bg="orange.500" color="white" p={5}>
-                        <HStack spacing={3}>
-                            <Icon as={FaExclamationTriangle} w={6} h={6} />
-                            <Text fontWeight="black" fontSize="lg">Action Required: Missing Site Ledgers</Text>
-                        </HStack>
+                    <ModalHeader p={0}>
+                        <Box bg="gray.800" p={5} borderBottom="1px solid" borderColor="gray.900">
+                            <HStack spacing={4}>
+                                <Box p={2.5} bg="gray.700" color="white" borderRadius="xl" border="1px solid" borderColor="gray.600">
+                                    <Icon as={FaExclamationTriangle} w={6} h={6} color="orange.400" />
+                                </Box>
+                                <Text fontWeight="black" fontSize="lg" color="white">Action Required: Missing Site Ledgers</Text>
+                            </HStack>
+                        </Box>
                     </ModalHeader>
                     <ModalCloseButton color="white" top={4} right={4} />
                     <ModalBody p={6}>
@@ -3977,18 +4119,22 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             >
                 <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
                 <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
-                    <ModalHeader bgGradient="linear(to-r, teal.600, blue.600)" color="white" p={5}>
-                        <HStack spacing={3}>
-                            <Icon as={FaMoneyBillWave} w={6} h={6} />
-                            <VStack align="start" spacing={0}>
-                                <Text fontSize="lg" fontWeight="black">
-                                    Cash / UPI Payment Entry
-                                </Text>
-                                <Text fontSize="xs" opacity={0.85}>
-                                    Record payment details and mark entries as Closed
-                                </Text>
-                            </VStack>
-                        </HStack>
+                    <ModalHeader p={0}>
+                        <Box bg="gray.800" p={5} borderBottom="1px solid" borderColor="gray.900">
+                            <HStack spacing={4}>
+                                <Box p={2.5} bg="gray.700" color="white" borderRadius="xl" border="1px solid" borderColor="gray.600">
+                                    <Icon as={FaMoneyBillWave} w={6} h={6} color="teal.400" />
+                                </Box>
+                                <VStack align="start" spacing={0}>
+                                    <Text fontSize="lg" fontWeight="black" color="white">
+                                        Cash / UPI Payment Entry
+                                    </Text>
+                                    <Text fontSize="xs" color="gray.400">
+                                        Record payment details and mark entries as Closed
+                                    </Text>
+                                </VStack>
+                            </HStack>
+                        </Box>
                     </ModalHeader>
                     <ModalCloseButton color="white" top={4} right={4} />
                     <ModalBody p={6}>
@@ -4151,19 +4297,19 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
                 <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxH="90vh">
                     <ModalHeader p={0}>
-                        <Box bgGradient="linear(to-r, orange.500, purple.600)" p={5} color="white">
-                            <HStack spacing={3}>
-                                <Box bg="whiteAlpha.300" p={2.5} borderRadius="xl">
-                                    <FaHistory size={20} />
+                        <Box bg="gray.800" p={5} borderBottom="1px solid" borderColor="gray.900">
+                            <HStack spacing={4}>
+                                <Box p={2.5} bg="gray.700" color="white" borderRadius="xl" border="1px solid" borderColor="gray.600">
+                                    <Icon as={FaHistory} w={6} h={6} color="purple.400" />
                                 </Box>
                                 <VStack align="start" spacing={0}>
-                                    <Text fontWeight="black" fontSize="lg">Payment Follow-up</Text>
-                                    <Text fontSize="xs" opacity={0.9}>
+                                    <Text fontWeight="black" fontSize="lg" color="white">Payment Follow-up</Text>
+                                    <Text fontSize="xs" color="gray.400">
                                         Invoice: <b>{followUpTarget?.inv?.invoiceId || 'N/A'}</b> • {followUpTarget?.group?.clientName || followUpTarget?.inv?.clientName || 'Valued Client'}
                                     </Text>
                                 </VStack>
                                 <Box ml="auto">
-                                    <Badge bg="whiteAlpha.300" color="white" borderRadius="full" px={3} py={1} fontSize="xs" fontWeight="bold">
+                                    <Badge bg="gray.700" color="white" borderRadius="full" px={3} py={1} fontSize="xs" fontWeight="bold" border="1px solid" borderColor="gray.600">
                                         ₹{Number(followUpTarget?.inv?.totalAmt || 0).toLocaleString('en-IN')}
                                     </Badge>
                                 </Box>
@@ -4321,6 +4467,69 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                     <ModalFooter bg="gray.100" p={3} borderTop="1px solid" borderColor="gray.200">
                         <Button size="sm" variant="ghost" borderRadius="xl" onClick={onFollowUpClose}>
                             Close
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── WhatsApp Invoice Direct Send Modal ── */}
+            <Modal isOpen={whatsappModal.isOpen} onClose={() => setWhatsappModal(prev => ({ ...prev, isOpen: false }))} isCentered size="md">
+                <ModalOverlay backdropFilter="blur(4px)" />
+                <ModalContent borderRadius="2xl" shadow="2xl">
+                    <ModalHeader bg="green.500" color="white" borderTopRadius="2xl" display="flex" alignItems="center" gap={2}>
+                        <Icon as={FaWhatsapp} w={6} h={6} />
+                        <VStack align="start" spacing={0}>
+                            <Text fontSize="lg" fontWeight="bold">Send Invoice via WhatsApp</Text>
+                            <Text fontSize="xs" fontWeight="normal" opacity={0.9}>
+                                {whatsappModal.invoiceType === 'proforma' ? '📄 Proforma Invoice' : '🧾 Tax Invoice'} — {whatsappModal.invoiceId}
+                            </Text>
+                        </VStack>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" />
+                    <ModalBody py={6}>
+                        <VStack spacing={4} align="stretch">
+                            <Alert status="info" borderRadius="xl" fontSize="xs">
+                                <AlertIcon />
+                                PDF will be sent using your logged-in Admin WhatsApp session.
+                            </Alert>
+                            
+                            <FormControl isRequired>
+                                <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">Phone Number</FormLabel>
+                                <InputGroup>
+                                    <InputLeftElement color="gray.400"><Icon as={FaWhatsapp} /></InputLeftElement>
+                                    <Input
+                                        type="tel"
+                                        placeholder="Enter 10-digit mobile number"
+                                        value={whatsappModal.phone}
+                                        onChange={(e) => setWhatsappModal(prev => ({ ...prev, phone: e.target.value }))}
+                                        borderRadius="xl"
+                                        focusBorderColor="green.500"
+                                        fontWeight="bold"
+                                    />
+                                </InputGroup>
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Recipient: {whatsappModal.clientName}
+                                </Text>
+                            </FormControl>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter borderTop="1px solid" borderColor="gray.100">
+                        <Button variant="ghost" mr={3} borderRadius="xl" onClick={() => setWhatsappModal(prev => ({ ...prev, isOpen: false }))}>
+                            Cancel
+                        </Button>
+                        <Button
+                            colorScheme="whatsapp"
+                            bg="#25D366"
+                            color="white"
+                            _hover={{ bg: '#128C7E' }}
+                            leftIcon={<FaWhatsapp />}
+                            isLoading={whatsappModal.isSending}
+                            loadingText="Sending PDF..."
+                            borderRadius="xl"
+                            px={6}
+                            onClick={handleSendWhatsappInvoice}
+                        >
+                            Apply
                         </Button>
                     </ModalFooter>
                 </ModalContent>
