@@ -558,11 +558,31 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         }
     };
 
-    // Fetch schedules
-    const fetchVisitSchedules = useCallback(async () => {
+    const tabStatusKeys = ['Pending', 'Proforma', 'Final', 'Reminder', 'Closed'];
+
+    // Helper to derive accurate tab category matching backend logic
+    const deriveScheduleTabStatus = (s) => {
+        if (s.closedDate || s.invoiceStatus === 'Closed' || s.invoiceStatus === 'Completed') {
+            return 'Closed';
+        }
+        if (s.finalInvoiceId || s.finalInvoicePdf || s.invoiceStatus === 'Final') {
+            return 'Final';
+        }
+        if (s.proformaInvoiceId || s.proformaInvoicePdf || s.invoiceStatus === 'Proforma') {
+            return 'Proforma';
+        }
+        return 'Pending';
+    };
+
+    // Fetch schedules tab-wise
+    const fetchVisitSchedules = useCallback(async (tabIndex = activeTab) => {
         setLoading(true);
         try {
+            const currentTabIdx = typeof tabIndex === 'number' ? tabIndex : activeTab;
+            const currentStatus = tabStatusKeys[currentTabIdx] || 'Pending';
+
             const params = new URLSearchParams();
+            params.append('invoiceStatus', currentStatus);
             if (filterDateFrom) params.append('startDate', filterDateFrom);
             if (filterDateTo) params.append('endDate', filterDateTo);
 
@@ -591,9 +611,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         } finally {
             setLoading(false);
         }
-    }, [filterDateFrom, filterDateTo]);
+    }, [activeTab, filterDateFrom, filterDateTo]);
 
-    useEffect(() => { fetchVisitSchedules(); }, [activeTab, fetchVisitSchedules]);
+    useEffect(() => { fetchVisitSchedules(activeTab); }, [activeTab, fetchVisitSchedules]);
 
     useEffect(() => {
         const fetchCompanies = async () => {
@@ -613,12 +633,12 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         const handleRealtimeUpdate = (e) => {
             const type = e.detail?.type;
             if (!type || ['schedule', 'expense'].includes(type)) {
-                fetchVisitSchedules();
+                fetchVisitSchedules(activeTab);
             }
         };
         window.addEventListener('app-realtime-update', handleRealtimeUpdate);
         return () => window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
-    }, [fetchVisitSchedules]);
+    }, [activeTab, fetchVisitSchedules]);
 
     // Mark invoice as completed / revert to pending for a single schedule
     const toggleInvoiceStatus = async (schedule) => {
@@ -702,12 +722,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             s.operative?.name?.toLowerCase().includes(q);
         const matchLedger = !filterLedger || s.ledger === filterLedger;
 
-        const stat = s.invoiceStatus || 'Pending';
-        const isDirectClosed = !!s.closedDate;
-        const effectiveStat = isDirectClosed ? 'Closed' : stat;
-        const normalizedStat = (effectiveStat === 'Completed' || effectiveStat === 'Closed') ? 'Closed' : effectiveStat;
-        const targetStatus = ['Pending', 'Proforma', 'Final', 'Reminder', 'Closed'][activeTab];
-        const matchTab = normalizedStat === targetStatus;
+        const targetStatus = tabStatusKeys[activeTab];
+        const entryStatus = deriveScheduleTabStatus(s);
+        const matchTab = activeTab === 3 || entryStatus === targetStatus;
 
         return matchSearch && matchLedger && matchTab;
     });
@@ -1381,7 +1398,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
                     {/* ── Tabs & Global Actions ── */}
                     <Flex justify="space-between" align="center">
-                        <Tabs variant="soft-rounded" colorScheme="blue" index={activeTab} onChange={(idx) => { setActiveTab(idx); setSelectedGroup(null); setSelectedEntries([]); fetchVisitSchedules(); }}>
+                        <Tabs variant="soft-rounded" colorScheme="blue" index={activeTab} onChange={(idx) => { setActiveTab(idx); setSelectedGroup(null); setSelectedEntries([]); fetchVisitSchedules(idx); }}>
                             <TabList bg="white" p={2} borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
                                 <Tab fontWeight="bold">⏳ Pending</Tab>
                                 <Tab fontWeight="bold">📄 Proforma</Tab>
