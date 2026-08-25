@@ -196,6 +196,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     }, [selectedEntries, schedules]);
     // Tabs & Invoice Form state
     const [activeTab, setActiveTab] = useState(0);
+    const [closedPage, setClosedPage] = useState(1); // pagination for Closed tab
     const [companies, setCompanies] = useState([]);
     const [invoiceForm, setInvoiceForm] = useState({
         isOpen: false, type: '', entries: [], entryConfigs: {},
@@ -613,7 +614,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         }
     }, [activeTab, filterDateFrom, filterDateTo]);
 
-    useEffect(() => { fetchVisitSchedules(activeTab); }, [activeTab, fetchVisitSchedules]);
+    useEffect(() => { fetchVisitSchedules(activeTab); setClosedPage(1); }, [activeTab, fetchVisitSchedules]);
 
     useEffect(() => {
         const fetchCompanies = async () => {
@@ -887,6 +888,21 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
             if (activeTab > 0 && invId) {
                 groupKey = `inv-${invId}`;
+            } else if (activeTab === 4) {
+                if (s.scheduleType === 'MONTH') {
+                    // MONTH entries group by: client + the date they were CLOSED
+                    // → All months closed together (same closedDate) = 1 row
+                    // → Some months closed today, some closed later = separate rows
+                    const dateRef = s.closedDate || s.scheduleDate;
+                    const closedDay = dateRef
+                        ? new Date(dateRef).toISOString().split('T')[0]
+                        : 'unknown';
+                    groupKey = `client-${clientId}-MONTH-closed-${closedDay}`;
+                } else {
+                    // Every other direct-closed entry gets its own row
+                    // (closedDate is date-only so time-based grouping is impossible)
+                    groupKey = `entry-${s._id}`;
+                }
             } else {
                 groupKey = `client-${clientId}`;
             }
@@ -2310,7 +2326,12 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         <Box w={3} h={3} bg="purple.400" borderRadius="sm" />
                                         <Text fontSize="xs" color="gray.600">Point Marking</Text>
                                     </HStack>
-                                    <Text fontSize="xs" color="gray.400" ml="auto">{groupedGroups.length} entries listed</Text>
+                                    <Text fontSize="xs" color="gray.400" ml="auto">
+                                        {activeTab === 4
+                                            ? `${groupedGroups.length} entries · Page ${closedPage} of ${Math.max(1, Math.ceil(groupedGroups.length / 30))}`
+                                            : `${groupedGroups.length} entries listed`
+                                        }
+                                    </Text>
                                 </HStack>
                             </Box>
                             <Divider />
@@ -2326,6 +2347,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                         </VStack>
                                     </Center>
                                 ) : (
+                                    <>
                                     <TableContainer overflow="hidden" w="full">
                                         <Table variant="simple" size="sm" sx={{ 'th, td': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
                                             <Thead bg="blue.50" borderBottom="2px solid" borderColor="blue.200">
@@ -2337,8 +2359,9 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                             <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">CLIENT NAME</Th>
                                                             <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">SITES COVERED</Th>
                                                             <Th py={4} color="blue.800" fontSize="10px" textAlign="center" fontWeight="black">PAYMENT DETAILS</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="center" fontWeight="black">CLOSED DATE</Th>
                                                             <Th py={4} color="blue.800" fontSize="10px" textAlign="right" fontWeight="black">CLOSED AMOUNT (₹)</Th>
-                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="right" minW="260px" fontWeight="black">ACTIONS</Th>
+                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="right" minW="200px" fontWeight="black">ACTIONS</Th>
                                                         </>
                                                     ) : (
                                                         <>
@@ -2352,7 +2375,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                 </Tr>
                                             </Thead>
                                             <Tbody>
-                                                {groupedGroups.map((group, idx) => {
+                                                {(activeTab === 4
+                                                    ? groupedGroups.slice((closedPage - 1) * 30, closedPage * 30)
+                                                    : groupedGroups
+                                                ).map((group, idx) => {
                                                     const totalCount = group.entries.length;
                                                     const completedCount = group.entries.filter(e => e.invoiceStatus === 'Completed').length;
                                                     const pendingCount = totalCount - completedCount;
@@ -2360,7 +2386,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     const siteCount = group.siteGroups ? group.siteGroups.length : 1;
 
                                                     const groupClientId = String(group.client?._id || group.client);
-                                                    const groupTotalAmt = group.entries.reduce((sum, e) => sum + calculateEntryAmount(e, e.invoiceDetails), 0);
+                                                    const groupTotalAmt = group.entries.reduce((sum, e) => sum + Number(e.paymentAmount || 0), 0);
                                                     const paymentMode = group.entries.find(e => e.paymentMode)?.paymentMode || (group.entries.find(e => e.transactionNo)?.transactionNo ? 'UPI' : (group.entries.find(e => e.receiverName)?.receiverName ? 'CASH' : null));
                                                     const receiverName = group.entries.find(e => e.receiverName)?.receiverName;
                                                     const transactionNo = group.entries.find(e => e.transactionNo)?.transactionNo;
@@ -2476,12 +2502,28 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                     🔢 {transactionNo}
                                                                                 </Text>
                                                                             )}
-                                                                            {closedDate && (
-                                                                                <Text fontSize="9px" color="gray.500" fontWeight="bold">
-                                                                                    📅 {formatDate(closedDate)}
-                                                                                </Text>
-                                                                            )}
                                                                         </VStack>
+                                                                    </Td>
+
+                                                                    {/* CLOSED DATE — dedicated column */}
+                                                                    <Td py={4} textAlign="center">
+                                                                        {closedDate ? (
+                                                                            <VStack spacing={0} align="center">
+                                                                                <Badge
+                                                                                    colorScheme="green"
+                                                                                    variant="solid"
+                                                                                    borderRadius="full"
+                                                                                    px={3}
+                                                                                    py={1}
+                                                                                    fontSize="10px"
+                                                                                    fontWeight="black"
+                                                                                >
+                                                                                    ✅ {formatDate(closedDate)}
+                                                                                </Badge>
+                                                                            </VStack>
+                                                                        ) : (
+                                                                            <Text fontSize="xs" color="gray.400">—</Text>
+                                                                        )}
                                                                     </Td>
 
                                                                     {/* CLOSED AMOUNT (₹) */}
@@ -2576,43 +2618,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                                                     aria-label="Open PDF"
                                                                                 />
                                                                             </Tooltip>
-                                                                            <Tooltip label="Send Invoice via WhatsApp" placement="top">
-                                                                                <IconButton
-                                                                                    icon={<FaWhatsapp />}
-                                                                                    size="xs"
-                                                                                    bg="#25D366"
-                                                                                    color="white"
-                                                                                    _hover={{ bg: '#128C7E' }}
-                                                                                    borderRadius="lg"
-                                                                                    aria-label="Send WhatsApp"
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        handleOpenWhatsappModal(group);
-                                                                                    }}
-                                                                                />
-                                                                            </Tooltip>
                                                                         </>
                                                                     )}
-                                                                    {/* Payment Reminder text message via WhatsApp */}
-                                                                    <Tooltip label="Send Payment Reminder via WhatsApp" placement="top">
-                                                                        <Button
-                                                                            size="xs"
-                                                                            bg="#25D366"
-                                                                            color="white"
-                                                                            _hover={{ bg: '#128C7E' }}
-                                                                            borderRadius="lg"
-                                                                            fontWeight="bold"
-                                                                            leftIcon={<FaWhatsapp />}
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                const entry = group.entries?.[0];
-                                                                                if (entry) handleSendWhatsappReminder(entry);
-                                                                                else toast({ title: 'No entry found', status: 'warning', duration: 2000 });
-                                                                            }}
-                                                                        >
-                                                                            WA Reminder
-                                                                        </Button>
-                                                                    </Tooltip>
                                                                     <Button
                                                                         size="xs"
                                                                         colorScheme="gray"
@@ -2643,6 +2650,65 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                             </Tbody>
                                         </Table>
                                     </TableContainer>
+
+                                    {/* ── Closed Tab Pagination ── */}
+                                    {activeTab === 4 && groupedGroups.length > 30 && (
+                                        <Flex
+                                            justify="center"
+                                            align="center"
+                                            py={4}
+                                            px={6}
+                                            borderTop="1px solid"
+                                            borderColor="gray.100"
+                                            bg="gray.50"
+                                            gap={2}
+                                            flexWrap="wrap"
+                                        >
+                                            {/* Prev */}
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                colorScheme="blue"
+                                                borderRadius="xl"
+                                                isDisabled={closedPage === 1}
+                                                onClick={() => setClosedPage(p => Math.max(1, p - 1))}
+                                            >
+                                                ← Prev
+                                            </Button>
+
+                                            {/* Page number buttons */}
+                                            {Array.from({ length: Math.ceil(groupedGroups.length / 30) }, (_, i) => i + 1).map(pg => (
+                                                <Button
+                                                    key={pg}
+                                                    size="sm"
+                                                    borderRadius="xl"
+                                                    fontWeight="black"
+                                                    colorScheme={pg === closedPage ? 'blue' : 'gray'}
+                                                    variant={pg === closedPage ? 'solid' : 'ghost'}
+                                                    onClick={() => setClosedPage(pg)}
+                                                >
+                                                    {pg}
+                                                </Button>
+                                            ))}
+
+                                            {/* Next */}
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                colorScheme="blue"
+                                                borderRadius="xl"
+                                                isDisabled={closedPage >= Math.ceil(groupedGroups.length / 30)}
+                                                onClick={() => setClosedPage(p => Math.min(Math.ceil(groupedGroups.length / 30), p + 1))}
+                                            >
+                                                Next →
+                                            </Button>
+
+                                            <Text fontSize="xs" color="gray.500" fontWeight="bold">
+                                                Showing {((closedPage - 1) * 30) + 1}–{Math.min(closedPage * 30, groupedGroups.length)} of {groupedGroups.length}
+                                            </Text>
+                                        </Flex>
+                                    )}
+                                    </>
                                 )}
                             </CardBody>
                         </Card>

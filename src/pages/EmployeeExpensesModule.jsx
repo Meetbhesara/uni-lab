@@ -14,7 +14,7 @@ import {
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
     FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight, FaUserCheck, FaUserSlash, FaClipboardList,
-    FaHome, FaWarehouse, FaChevronDown, FaChevronUp
+    FaHome, FaWarehouse, FaChevronDown, FaChevronUp, FaBed
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -302,112 +302,136 @@ const DailyReportSection = ({ employees = [] }) => {
                             </VStack>
                         </Center>
                     ) : (
-                        <VStack spacing={3} align="stretch">
-                            {data.map((emp) => {
-                                const groupedMap = {};
-                                (emp.entries || []).forEach(e => {
-                                    const dk = new Date(e.date).toISOString().split('T')[0];
-                                    if (!groupedMap[dk]) groupedMap[dk] = { ...e };
-                                    else {
-                                        groupedMap[dk].totalDebit = (groupedMap[dk].totalDebit||0) + (e.totalDebit||0);
-                                        groupedMap[dk].totalCredit = (groupedMap[dk].totalCredit||0) + (e.totalCredit||0);
-                                        if ((!groupedMap[dk].attendance || groupedMap[dk].attendance === '-') && e.attendance && e.attendance !== '-') groupedMap[dk].attendance = e.attendance;
-                                        if (e.siteNames && !groupedMap[dk].siteNames?.includes(e.siteNames)) groupedMap[dk].siteNames = groupedMap[dk].siteNames ? `${groupedMap[dk].siteNames} | ${e.siteNames}` : e.siteNames;
-                                        if (groupedMap[dk].category !== e.category) groupedMap[dk].category = 'Combined';
-                                    }
+                        <VStack spacing={4} align="stretch">
+                            {(() => {
+                                const datesMap = {};
+                                data.forEach((emp) => {
+                                    const groupedMap = {};
+                                    (emp.entries || []).forEach(e => {
+                                        const dk = new Date(e.date).toISOString().split('T')[0];
+                                        if (!groupedMap[dk]) groupedMap[dk] = { ...e };
+                                        else {
+                                            groupedMap[dk].totalDebit = (groupedMap[dk].totalDebit||0) + (e.totalDebit||0);
+                                            groupedMap[dk].totalCredit = (groupedMap[dk].totalCredit||0) + (e.totalCredit||0);
+                                            if ((!groupedMap[dk].attendance || groupedMap[dk].attendance === '-') && e.attendance && e.attendance !== '-') groupedMap[dk].attendance = e.attendance;
+                                            if (e.siteNames && !groupedMap[dk].siteNames?.includes(e.siteNames)) groupedMap[dk].siteNames = groupedMap[dk].siteNames ? `${groupedMap[dk].siteNames} | ${e.siteNames}` : e.siteNames;
+                                            if (groupedMap[dk].category !== e.category) groupedMap[dk].category = 'Combined';
+                                        }
+                                    });
+                                    Object.values(groupedMap).forEach(entry => {
+                                        const dk = new Date(entry.date).toISOString().split('T')[0];
+                                        if (!datesMap[dk]) datesMap[dk] = [];
+                                        datesMap[dk].push({
+                                            empId: emp.empId,
+                                            empName: emp.empName,
+                                            ...entry
+                                        });
+                                    });
                                 });
-                                const asc = Object.values(groupedMap).sort((a,b)=>new Date(a.date)-new Date(b.date));
-                                const totD = asc.reduce((s,e)=>s+(e.totalDebit||0),0);
-                                const totC = asc.reduce((s,e)=>s+(e.totalCredit||0),0);
-                                const initials = emp.empName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 
-                                return (
-                                    <Box key={emp.empId} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.100" shadow="sm" overflow="hidden">
-                                        {/* — Employee header — */}
-                                        <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
-                                            <HStack spacing={3}>
-                                                <Flex w={7} h={7} borderRadius="md" bg="blue.500" align="center" justify="center" color="white" fontWeight="800" fontSize="xs" flexShrink={0}>
-                                                    {initials}
-                                                </Flex>
-                                                <Text fontWeight="700" fontSize="sm" color="gray.800">{emp.empName}</Text>
-                                                <Badge colorScheme="gray" variant="subtle" borderRadius="full" fontSize="9px">{asc.length} entries</Badge>
-                                            </HStack>
-                                        </Flex>
+                                let sortedDateKeys = Object.keys(datesMap).sort((a, b) => new Date(b) - new Date(a)).slice(0, 5);
+                                sortedDateKeys.reverse(); // Dates ascending as per header text
 
-                                        {/* — Column headers — */}
-                                        <Flex px={4} py={1.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100">
-                                            <Text flex="0 0 100px" fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Date</Text>
-                                            <Text flex="0 0 90px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Attendance</Text>
-                                            <Text flex={1}         fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Site / Note</Text>
-                                            <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right">Credit</Text>
-                                            <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
-                                        </Flex>
+                                return sortedDateKeys.map((dateKey) => {
+                                    const dateEntries = datesMap[dateKey];
+                                    dateEntries.sort((a, b) => a.empName.localeCompare(b.empName));
 
-                                        {/* — Rows — */}
-                                        {asc.map((entry, idx) => {
-                                            const att = attStyle(entry.attendance);
-                                            const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
-                                            const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
-                                            return (
-                                                <Flex
-                                                    key={idx}
-                                                    px={4} py={2.5}
-                                                    align="center"
-                                                    bg={idx%2===0 ? 'white' : 'gray.50'}
-                                                    borderLeft="3px solid"
-                                                    borderLeftColor={hasDebitOnly ? 'red.300' : hasCreditOnly ? 'green.300' : 'transparent'}
-                                                    borderBottom={idx < asc.length-1 ? "1px solid" : "none"}
-                                                    borderColor="gray.50"
-                                                    _hover={{ bg:'blue.50' }}
-                                                    transition="background 0.15s"
-                                                    flexWrap={{ base:'wrap', md:'nowrap' }}
-                                                    gap={1}
-                                                    cursor="pointer"
-                                                    onClick={() => {
-                                                        setSelectedDetailEntry({
-                                                            ...entry,
-                                                            empName: emp.empName
-                                                        });
-                                                        onDetailOpen();
-                                                    }}
-                                                >
-                                                    <Text flex="0 0 100px" fontSize="xs" fontWeight="600" color="gray.700">{fmtDate(entry.date)}</Text>
-                                                    <Box flex="0 0 90px">
-                                                        {entry.attendance && entry.attendance !== '-' ? (
-                                                            <Box display="inline-flex" px={2} py={0.5} borderRadius="md" bg={att.bg} fontSize="10px" fontWeight="700" color={att.color} whiteSpace="nowrap">
-                                                                {att.label}
-                                                            </Box>
-                                                        ) : <Text fontSize="xs" color="gray.300">—</Text>}
-                                                    </Box>
-                                                    <Box flex={1} minW={0}>
-                                                        <Text fontSize="xs" color={entry.siteNames ? 'gray.600' : 'gray.300'} noOfLines={1}>
-                                                            {entry.siteNames || '—'}
-                                                        </Text>
-                                                        {entry.attendanceRemark && !entry.attendanceRemark.toLowerCase().includes('auto-marked') && !entry.attendanceRemark.toLowerCase().includes('auto marked') && (
-                                                            <Text fontSize="9px" color="orange.400">{entry.attendanceRemark}</Text>
-                                                        )}
-                                                    </Box>
-                                                    <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalCredit>0 ? 'green.500' : 'gray.200'} textAlign="right">
-                                                        {entry.totalCredit>0 ? fmtAmt(entry.totalCredit) : '—'}
-                                                    </Text>
-                                                    <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalDebit>0 ? 'red.500' : 'gray.200'} textAlign="right" ml={2}>
-                                                        {entry.totalDebit>0 ? fmtAmt(entry.totalDebit) : '—'}
-                                                    </Text>
-                                                </Flex>
-                                            );
-                                        })}
+                                    const totD = dateEntries.reduce((s,e)=>s+(e.totalDebit||0),0);
+                                    const totC = dateEntries.reduce((s,e)=>s+(e.totalCredit||0),0);
 
-                                        {/* — Totals footer — */}
-                                        {(totD > 0 || totC > 0) && (
-                                            <Flex px={4} py={2} bg="blue.50" borderTop="1px solid" borderColor="blue.100" align="center" justify="flex-end" gap={6}>
-                                                <Text fontSize="10px" color="gray.500" fontWeight="600" flex={1}>5-Day Total</Text>
-                                                {totC > 0 && <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)} Credit</Text>}
-                                                {totD > 0 && <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)} Debit</Text>}
+                                    return (
+                                        <Box key={dateKey} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.100" shadow="sm" overflow="hidden">
+                                            {/* — Date header — */}
+                                            <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
+                                                <HStack spacing={3}>
+                                                    <Flex w={8} h={8} borderRadius="md" bg="blue.500" align="center" justify="center" color="white" flexShrink={0}>
+                                                        <Icon as={FaCalendarAlt} />
+                                                    </Flex>
+                                                    <Text fontWeight="800" fontSize="md" color="gray.800">{fmtDate(dateKey)}</Text>
+                                                    <Badge colorScheme="blue" variant="subtle" borderRadius="full" fontSize="10px">{dateEntries.length} Employees</Badge>
+                                                </HStack>
                                             </Flex>
-                                        )}
-                                    </Box>
-                                );
-                            })}
+
+                                            {/* — Column headers — */}
+                                            <Flex px={4} py={1.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100">
+                                                <Text flex="0 0 150px" fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Employee</Text>
+                                                <Text flex="0 0 90px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Attendance</Text>
+                                                <Text flex={1}         fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Site / Note</Text>
+                                                <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right">Credit</Text>
+                                                <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
+                                            </Flex>
+
+                                            {/* — Rows — */}
+                                            {dateEntries.map((entry, idx) => {
+                                                const att = attStyle(entry.attendance);
+                                                const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
+                                                const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
+                                                const initials = entry.empName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+                                                return (
+                                                    <Flex
+                                                        key={entry.empId}
+                                                        px={4} py={2.5}
+                                                        align="center"
+                                                        bg={idx%2===0 ? 'white' : 'gray.50'}
+                                                        borderLeft="3px solid"
+                                                        borderLeftColor={hasDebitOnly ? 'red.300' : hasCreditOnly ? 'green.300' : 'transparent'}
+                                                        borderBottom={idx < dateEntries.length-1 ? "1px solid" : "none"}
+                                                        borderColor="gray.50"
+                                                        _hover={{ bg:'blue.50' }}
+                                                        transition="background 0.15s"
+                                                        flexWrap={{ base:'wrap', md:'nowrap' }}
+                                                        gap={1}
+                                                        cursor="pointer"
+                                                        onClick={() => {
+                                                            setSelectedDetailEntry(entry);
+                                                            onDetailOpen();
+                                                        }}
+                                                    >
+                                                        <HStack flex="0 0 150px" spacing={2} overflow="hidden">
+                                                            <Flex w={6} h={6} borderRadius="md" bg="blue.100" align="center" justify="center" color="blue.700" fontWeight="700" fontSize="10px" flexShrink={0}>
+                                                                {initials}
+                                                            </Flex>
+                                                            <Text fontSize="xs" fontWeight="600" color="gray.700" isTruncated>{entry.empName}</Text>
+                                                        </HStack>
+                                                        
+                                                        <Box flex="0 0 90px">
+                                                            {entry.attendance && entry.attendance !== '-' ? (
+                                                                <Box display="inline-flex" px={2} py={0.5} borderRadius="md" bg={att.bg} fontSize="10px" fontWeight="700" color={att.color} whiteSpace="nowrap">
+                                                                    {att.label}
+                                                                </Box>
+                                                            ) : <Text fontSize="xs" color="gray.300">—</Text>}
+                                                        </Box>
+                                                        <Box flex={1} minW={0}>
+                                                            <Text fontSize="xs" color={entry.siteNames ? 'gray.600' : 'gray.300'} noOfLines={1}>
+                                                                {entry.siteNames || '—'}
+                                                            </Text>
+                                                            {entry.attendanceRemark && !entry.attendanceRemark.toLowerCase().includes('auto-marked') && !entry.attendanceRemark.toLowerCase().includes('auto marked') && (
+                                                                <Text fontSize="9px" color="orange.400">{entry.attendanceRemark}</Text>
+                                                            )}
+                                                        </Box>
+                                                        <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalCredit>0 ? 'green.500' : 'gray.200'} textAlign="right">
+                                                            {entry.totalCredit>0 ? fmtAmt(entry.totalCredit) : '—'}
+                                                        </Text>
+                                                        <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalDebit>0 ? 'red.500' : 'gray.200'} textAlign="right" ml={2}>
+                                                            {entry.totalDebit>0 ? fmtAmt(entry.totalDebit) : '—'}
+                                                        </Text>
+                                                    </Flex>
+                                                );
+                                            })}
+
+                                            {/* — Totals footer — */}
+                                            {(totD > 0 || totC > 0) && (
+                                                <Flex px={4} py={2} bg="blue.50" borderTop="1px solid" borderColor="blue.100" align="center" justify="flex-end" gap={6}>
+                                                    <Text fontSize="10px" color="gray.500" fontWeight="600" flex={1}>Daily Total</Text>
+                                                    {totC > 0 && <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)} Credit</Text>}
+                                                    {totD > 0 && <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)} Debit</Text>}
+                                                </Flex>
+                                            )}
+                                        </Box>
+                                    );
+                                });
+                            })()}
                         </VStack>
                     )}
                 </Box>
@@ -1199,7 +1223,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 const fullClient = clients.find(c => c._id === site.clientId);
                 if (fullSite) {
                     const cShortId = (fullClient?.clientId || 'unknown').toLowerCase();
-                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/\s+/g, '_').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
                     const sId = fullSite?.siteId || '0000';
                     formData.append(`site_${idx}_clientShortId`, cShortId);
                     formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
@@ -1216,7 +1240,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 const client = clients.find(c => c._id === allocations[0].clientId);
                 const site = sites.find(s => s._id === allocations[0].siteId);
                 formData.append('clientShortId', (client?.clientId || 'unknown').toLowerCase());
-                formData.append('siteSubfolder', `${site?.siteId || '0000'}-${(site?.siteName || 'unknown').trim().replace(/\s+/g, '_').replace(/[^a-z0-9]/gi, '_').toLowerCase()}`);
+                formData.append('siteSubfolder', `${site?.siteId || '0000'}-${(site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_')}`);
             }
 
             const res = await api.post('/employee-expense/admin/add-expense', formData, {
@@ -2535,7 +2559,30 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     const setRemark   = (empId, val) => setRemarks(prev => ({ ...prev, [empId]: val }));
     const setLocation = (empId, loc) => {
         const current = locationMap[empId] || '';
-        if (current === loc) return; // already selected — do nothing, prevent blank
+        if (current === loc) {
+            // Check if expenses are empty before allowing unselect
+            const exps = expensesMap[empId] || {};
+            const otherExps = otherExpMap[empId] || [];
+            const files = filePreviewMap[empId] || {};
+            
+            const hasExp = ['breakfast', 'lunch', 'dinner', 'petrol'].some(k => Number(exps[k]) > 0);
+            const hasOther = otherExps.some(o => Number(o.amount) > 0 || (o.files && o.files.length > 0) || (o.expenseName && o.expenseName.trim() !== ''));
+            const hasFiles = Object.values(files).some(arr => arr && arr.length > 0);
+            
+            if (!hasExp && !hasOther && !hasFiles) {
+                setLocationMap(prev => ({ ...prev, [empId]: '' }));
+                setExpandedMap(prev => ({ ...prev, [empId]: false }));
+            } else {
+                toast({
+                    title: "Cannot unselect location",
+                    description: "Please clear all expenses and files before unselecting the location.",
+                    status: "warning",
+                    position: "top-right",
+                    duration: 3000
+                });
+            }
+            return;
+        }
         setLocationMap(prev => ({ ...prev, [empId]: loc }));
         // auto-expand expense panel when a location is chosen
         setExpandedMap(prev => ({ ...prev, [empId]: true }));
@@ -2754,6 +2801,16 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                                 isDisabled={!canWrite}
                                             >
                                                 Office
+                                            </Button>
+                                            <Button
+                                                size="xs" borderRadius="full" minW="70px"
+                                                leftIcon={<Icon as={FaBed} />}
+                                                colorScheme={location === 'Room' ? 'pink' : 'gray'}
+                                                variant={location === 'Room' ? 'solid' : 'outline'}
+                                                onClick={() => setLocation(emp._id, 'Room')}
+                                                isDisabled={!canWrite}
+                                            >
+                                                Room
                                             </Button>
                                         </HStack>
 

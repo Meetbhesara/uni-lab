@@ -44,6 +44,7 @@ const theme = extendTheme({
                 overflowX: 'hidden',
                 webkitTapHighlightColor: 'transparent',
                 WebkitOverflowScrolling: 'touch',
+                fontSize: { base: '14px', md: '16px' },
             },
             '::selection': {
                 bg: 'brand.500',
@@ -53,6 +54,7 @@ const theme = extendTheme({
                 scrollbarWidth: 'thin',
                 scrollbarColor: '#0066cc #f1f1f1',
                 boxSizing: 'border-box',
+                WebkitTapHighlightColor: 'transparent',
             },
             '*::-webkit-scrollbar': {
                 width: '6px',
@@ -76,6 +78,53 @@ const theme = extendTheme({
             'img, video': {
                 maxWidth: '100%',
                 height: 'auto',
+            },
+            /* ── Mobile Table Scroll ── */
+            '.mobile-scroll-table': {
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                width: '100%',
+            },
+            /* ── Touch-friendly min-height for clickable elements ── */
+            'button, [role="button"], a': {
+                minHeight: 'unset',
+            },
+            /* ── Responsive modal on mobile ── */
+            '@media (max-width: 480px)': {
+                '.chakra-modal__content': {
+                    margin: '0 !important',
+                    borderRadius: '24px 24px 0 0 !important',
+                    position: 'fixed !important',
+                    bottom: '0 !important',
+                    left: '0 !important',
+                    right: '0 !important',
+                    maxHeight: '92vh !important',
+                    overflowY: 'auto',
+                },
+                '.chakra-modal__content-container': {
+                    alignItems: 'flex-end !important',
+                    padding: '0 !important',
+                },
+                /* Prevent horizontal overflow on admin pages */
+                '.chakra-table': {
+                    fontSize: '12px',
+                },
+                '.chakra-table th, .chakra-table td': {
+                    paddingLeft: '8px !important',
+                    paddingRight: '8px !important',
+                    paddingTop: '6px !important',
+                    paddingBottom: '6px !important',
+                    whiteSpace: 'nowrap',
+                },
+                /* Responsive form stacking */
+                '.mobile-stack': {
+                    flexDirection: 'column !important',
+                    alignItems: 'stretch !important',
+                },
+                /* Admin sidebar overlay content full screen */
+                '.chakra-drawer__content': {
+                    maxWidth: '85vw !important',
+                },
             },
         },
     },

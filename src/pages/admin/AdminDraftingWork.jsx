@@ -114,6 +114,7 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
     const [selectedConvertedFileForLining, setSelectedConvertedFileForLining] = useState('');
     const [selectedLiningFileForEsurvey, setSelectedLiningFileForEsurvey] = useState('');
     const [draftingFiles, setDraftingFiles] = useState({});
+    const [groupMailFilesToUpload, setGroupMailFilesToUpload] = useState([]);
 
 
     const handleSurveyClick = async (group) => {
@@ -180,6 +181,52 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
         }
     };
 
+    
+    const handleGroupMailUpload = async (group) => {
+        if (!groupMailFilesToUpload || groupMailFilesToUpload.length === 0) {
+            toast({ title: 'Please select files first', status: 'warning' });
+            return;
+        }
+        if (groupMailFilesToUpload.length > 15) {
+            toast({ title: 'Maximum 15 files allowed', status: 'warning' });
+            return;
+        }
+
+        const survey = group.schedules[0]; // representative schedule
+        if (!survey) return;
+
+        setUploadingCategory('groupMailFiles');
+        const formData = new FormData();
+        formData.append('clientShortId', survey.client?.clientId || 'unknown');
+        const sanitizedSiteName = (survey.site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
+        formData.append('siteSubfolder', `${survey.site?.siteId || '0000'}-${sanitizedSiteName}`);
+        formData.append('applyToAll', 'true'); // NEW FIELD FOR BACKEND
+
+        groupMailFilesToUpload.forEach(f => formData.append('mailFiles', f));
+
+        try {
+            const res = await axios.post(`${API_URL}/schedule-master/drafting-work/${survey._id}`, formData);
+            if (res.data.success) {
+                toast({ title: 'Mail Files applied to all schedules!', status: 'success' });
+                
+                // Refresh local state instantly to show files
+                const updatedGroup = { ...group };
+                updatedGroup.schedules.forEach(s => {
+                    s.draftingWorkFiles = s.draftingWorkFiles || {};
+                    // We only get the mailFiles from response, or we just rely on fetchDrafts
+                    s.draftingWorkFiles.mailFiles = res.data.data.mailFiles || s.draftingWorkFiles.mailFiles;
+                });
+                setScheduleGroupToSelect(updatedGroup);
+                setGroupMailFilesToUpload([]);
+                fetchDrafts(); 
+            }
+        } catch (error) {
+            toast({ title: 'Upload failed', status: 'error' });
+        } finally {
+            setUploadingCategory(null);
+        }
+    };
+
     const handleDraftingFileUpload = async (e, category) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
@@ -212,7 +259,8 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
         const formData = new FormData();
         // MUST append text fields BEFORE files so backend Multer can read them for destination path!
         formData.append('clientShortId', selectedSurvey.client?.clientId || 'unknown');
-        formData.append('siteSubfolder', `${selectedSurvey.site?.siteId || '0000'}-${(selectedSurvey.site?.siteName || 'unknown').replace(/\s+/g, '_')}`);
+        const sanitizedSiteName = (selectedSurvey.site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
+        formData.append('siteSubfolder', `${selectedSurvey.site?.siteId || '0000'}-${sanitizedSiteName}`);
         
         if (category === 'convertedFiles' && selectedCollectedFileForConversion) {
             formData.append('originalFileId', selectedCollectedFileForConversion);
@@ -816,13 +864,12 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                                             <Tabs variant="enclosed" colorScheme="blue">
                                                 <TabList mb={4} overflowX="auto" whiteSpace="nowrap">
                                                     <Tab fontWeight="bold" color="blue.600">1. Collected Files</Tab>
-                                                    <Tab fontWeight="bold" color="red.600">2. Mail Files</Tab>
+                                                    
                                                 </TabList>
                                                 
                                                 <TabPanels>
                                                     {[
-                                                        { key: 'collectedFiles', color: 'blue' },
-                                                        { key: 'mailFiles', color: 'red' }
+                                                        { key: 'collectedFiles', color: 'blue' }
                                                     ].map((step, idx) => (
                                                         <TabPanel key={step.key} p={0}>
                                                             <Card border="1px solid" borderColor={`${step.color}.200`} shadow="none" borderRadius="xl" bg={`${step.color}.50`}>
@@ -1056,6 +1103,96 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                         <ModalCloseButton />
                         <ModalBody py={4}>
                             <VStack align="stretch" spacing={3}>
+                                {scheduleGroupToSelect?.schedules[0]?.scheduleType === 'TOPOGRAPHY SURVEY' && (
+                                    <Box p={4} border="1px solid" borderColor="red.200" borderRadius="xl" bg="red.50" mb={4}>
+                                        <VStack align="stretch" spacing={3}>
+                                            <Flex justify="space-between" align="center" flexWrap="wrap" gap={2}>
+                                                <HStack spacing={2}>
+                                                    <Icon as={FaEnvelope} color="red.500" w={5} h={5} />
+                                                    <Text fontSize="sm" fontWeight="bold" color="red.700">Apply Final Mail to ALL Dates</Text>
+                                                </HStack>
+                                            </Flex>
+                                            
+                                            <Box p={4} border="2px dashed" borderColor="red.300" borderRadius="md" bg="white" position="relative" textAlign="center">
+                                                <Input
+                                                    type="file"
+                                                    multiple
+                                                    position="absolute"
+                                                    top={0} left={0} w="100%" h="100%" opacity={0} cursor="pointer"
+                                                    onChange={(e) => setGroupMailFilesToUpload(prev => [...prev, ...Array.from(e.target.files)])}
+                                                    disabled={uploadingCategory === 'groupMailFiles'}
+                                                />
+                                                <Text fontSize="sm" color="gray.500">
+                                                    Click or drag to select Mail files (Max 15)
+                                                </Text>
+                                            </Box>
+                                            
+                                            {groupMailFilesToUpload.length > 0 && (
+                                                <VStack mt={2} align="stretch" spacing={2}>
+                                                    <Text fontSize="xs" fontWeight="bold" color="red.700">Files Selected for Upload:</Text>
+                                                    {groupMailFilesToUpload.map((file, i) => (
+                                                        <HStack key={i} justify="space-between" p={2} bg="white" borderRadius="md" border="1px solid" borderColor="red.200">
+                                                            <HStack spacing={2} overflow="hidden">
+                                                                <Icon as={FaFilePdf} color="red.500" />
+                                                                <Text fontSize="xs" isTruncated>{file.name}</Text>
+                                                            </HStack>
+                                                            <HStack spacing={1}>
+                                                                <IconButton 
+                                                                    size="xs" 
+                                                                    icon={<FaEye />} 
+                                                                    aria-label="View"
+                                                                    onClick={() => window.open(URL.createObjectURL(file), '_blank')}
+                                                                />
+                                                                <IconButton 
+                                                                    size="xs" 
+                                                                    colorScheme="red"
+                                                                    variant="ghost"
+                                                                    icon={<FaTrash />} 
+                                                                    aria-label="Remove"
+                                                                    onClick={() => setGroupMailFilesToUpload(prev => prev.filter((_, idx) => idx !== i))}
+                                                                />
+                                                            </HStack>
+                                                        </HStack>
+                                                    ))}
+                                                    <Button 
+                                                        mt={2}
+                                                        size="sm" 
+                                                        colorScheme="red" 
+                                                        onClick={() => handleGroupMailUpload(scheduleGroupToSelect)}
+                                                        isLoading={uploadingCategory === 'groupMailFiles'}
+                                                        loadingText="Uploading..."
+                                                    >
+                                                        Submit All Files
+                                                    </Button>
+                                                </VStack>
+                                            )}
+                                            
+                                            {scheduleGroupToSelect.schedules[0]?.draftingWorkFiles?.mailFiles?.length > 0 && (
+                                                <Box mt={2}>
+                                                    <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={2}>Uploaded Mail Files:</Text>
+                                                    <VStack align="stretch" spacing={2}>
+                                                        {scheduleGroupToSelect.schedules[0].draftingWorkFiles.mailFiles.map((file, i) => (
+                                                            <HStack key={i} p={2} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200" justify="space-between">
+                                                                <HStack spacing={2} overflow="hidden">
+                                                                    <Icon as={FaFilePdf} color="red.400" />
+                                                                    <Text fontSize="xs" isTruncated>{file.name}</Text>
+                                                                </HStack>
+                                                                <IconButton 
+                                                                    size="xs" 
+                                                                    icon={<FaEye />} 
+                                                                    aria-label="View"
+                                                                    as="a"
+                                                                    href={API_BASE_URL.replace('/api', '') + file.url}
+                                                                    target="_blank"
+                                                                />
+                                                            </HStack>
+                                                        ))}
+                                                    </VStack>
+                                                </Box>
+                                            )}
+                                        </VStack>
+                                    </Box>
+                                )}
                                 {scheduleGroupToSelect?.schedules.map((s, idx) => {
                                     const { status, color } = getSurveyDraftingStatus(s);
                                     return (

@@ -621,8 +621,13 @@ const AuthModal = ({ isOpen, onClose }) => {
 const getImageUrl = (path) => {
     if (!path) return 'https://via.placeholder.com/150';
     if (path.startsWith('http')) return path;
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
-    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+    // Use relative path so Vite proxy works on mobile (no hardcoded localhost)
+    if (import.meta.env.VITE_API_BASE_URL) {
+        const base = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '');
+        const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        return `${base}${cleanPath}`;
+    }
+    return path.startsWith('/') ? path : `/${path}`;
 };
 
 const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {

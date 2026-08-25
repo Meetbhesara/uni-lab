@@ -304,7 +304,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                 const fullClient = fullSite?.client;
                 if (fullSite) {
                     const cShortId = (fullClient?.clientId || 'unknown').toLowerCase();
-                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
                     const sId = fullSite?.siteId || '0000';
                     formData.append(`site_${idx}_clientShortId`, cShortId);
                     formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
@@ -321,7 +321,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                 const fullSite = sites.find(s => s._id === allocations[0].siteId);
                 const fullClient = fullSite?.client;
                 formData.append('clientShortId', (fullClient?.clientId || 'unknown').toLowerCase());
-                formData.append('siteSubfolder', `${fullSite?.siteId || '0000'}-${(fullSite?.siteName || 'unknown').trim().replace(/[^a-z0-9]/gi, '_').toLowerCase()}`);
+                formData.append('siteSubfolder', `${fullSite?.siteId || '0000'}-${(fullSite?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_')}`);
             }
 
             const res = await api.post('/employee-expense/admin/add-expense', formData, {

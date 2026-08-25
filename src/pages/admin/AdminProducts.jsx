@@ -295,13 +295,17 @@ const AdminProducts = () => {
         if (!imgPath) return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150"><rect width="150" height="150" fill="%23f7fafc"/><path d="M55,85 L75,60 L95,85" stroke="%23cbd5e0" stroke-width="4" fill="none"/><circle cx="95" cy="55" r="8" fill="%23cbd5e0"/><rect x="40" y="40" width="70" height="70" rx="8" stroke="%23cbd5e0" stroke-width="4" fill="none"/></svg>';
         // Already absolute (Cloudinary or external)
         if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) return imgPath;
-        const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001').replace(/\/$/, '');
-        // Avoid double /api: if base ends with /api AND path starts with /api/
         let cleanPath = imgPath.startsWith('/') ? imgPath : `/${imgPath}`;
-        if (base.endsWith('/api') && cleanPath.startsWith('/api/')) {
-            cleanPath = cleanPath.slice(4); // strip leading /api
+        // Production with real API URL
+        if (import.meta.env.VITE_API_BASE_URL) {
+            const base = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '');
+            if (base.endsWith('/api') && cleanPath.startsWith('/api/')) {
+                cleanPath = cleanPath.slice(4);
+            }
+            return `${base}${cleanPath}`;
         }
-        return `${base}${cleanPath}`;
+        // Development: relative path, Vite proxy handles it → works on mobile
+        return cleanPath;
     };
 
     // Form State

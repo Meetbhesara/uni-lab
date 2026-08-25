@@ -4,6 +4,20 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: true,        // expose on all network interfaces → accessible from mobile
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      }
+    }
+  },
   plugins: [
     react(),
     VitePWA({
@@ -13,11 +27,11 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/app/, /\.(pdf|jpg|jpeg|png|gif|svg|dta|doc|docx|xls|xlsx)$/i]
       },
       manifest: {
-        name: 'Uni Engineering',
-        short_name: 'UniEng',
-        description: 'Uni Engineering Mobile App',
+        name: 'UNI Engineering',
+        short_name: 'UNI Eng',
+        description: 'UNI Engineering — Civil Instruments & Survey Solutions',
         id: '/',
-        theme_color: '#ffffff',
+        theme_color: '#0066cc',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
@@ -40,8 +54,8 @@ export default defineConfig({
           }
         ]
       }
-
     })
   ],
 })
+
 
