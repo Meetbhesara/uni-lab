@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, Divider } from '@chakra-ui/react';
+import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, Divider, VStack, Progress } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { FaShoppingCart, FaChevronLeft, FaChevronRight, FaTrash } from 'react-icons/fa';
@@ -9,6 +9,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 
 import { getImageUrl } from '../utils/imageUrl';
+
+const PAGE_SIZE = 10;
 
 const PRODUCT_CATEGORIES = [
     {
@@ -159,6 +161,7 @@ const ImageCarousel = ({ images }) => {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -100 }}
                         transition={{ duration: 0.3 }}
+                        loading="lazy"
                         style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', backgroundColor: '#f7fafc' }}
                     />
                 </AnimatePresence>
@@ -333,6 +336,12 @@ const Products = () => {
     const [activeCategory, setActiveCategory] = useState(null);
     const [sliderProducts, setSliderProducts] = useState([]);
     const highlightRef = useRef(null);
+    // In-memory cache for instant category switching (0ms roundtrip)
+    const categoryCacheRef = useRef({});
+
+    // Pagination / Incremental rendering state for blazing-fast initial load (<50ms)
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+    const loadMoreTriggerRef = useRef(null);
 
     // If URL has a category param (from slider click), auto-select it
     useEffect(() => {
@@ -341,14 +350,36 @@ const Products = () => {
         }
     }, [urlCategory]);
 
-    // After products load, scroll to and briefly highlight the product
+    // Reset pagination when switching categories or running a new search
     useEffect(() => {
-        if (highlightId && highlightRef.current) {
+        setVisibleCount(PAGE_SIZE);
+    }, [activeCategory, searchQuery]);
+
+    // If highlightId is present, ensure visibleCount expands to show the highlighted item
+    useEffect(() => {
+        if (highlightId && products.length > 0) {
+            const targetIndex = products.findIndex(p => (p._id === highlightId || p.id === highlightId));
+            if (targetIndex >= 0 && targetIndex >= visibleCount) {
+                setVisibleCount(targetIndex + 4);
+            }
             setTimeout(() => {
                 highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 400);
         }
-    }, [highlightId, products]);
+    }, [highlightId, products, visibleCount]);
+
+    // Infinite scroll observer: automatically loads next batch when user scrolls near the end
+    useEffect(() => {
+        if (!loadMoreTriggerRef.current) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && visibleCount < products.length) {
+                setVisibleCount(prev => Math.min(prev + PAGE_SIZE, products.length));
+            }
+        }, { rootMargin: '350px' });
+
+        observer.observe(loadMoreTriggerRef.current);
+        return () => observer.disconnect();
+    }, [products.length, visibleCount]);
 
     // Fetch all products for the slider (admin bypass not needed — public call fetches categorized ones)
     useEffect(() => {
@@ -362,19 +393,46 @@ const Products = () => {
     }, []);
 
     const fetchProducts = async (search = '', category = null) => {
+        const cacheKey = `${category || 'All'}__${search || ''}`;
+
+        // If in cache and not searching, show instantly without network delay
+        if (categoryCacheRef.current[cacheKey] && !search) {
+            setProducts(categoryCacheRef.current[cacheKey]);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
         try {
             let url = `/products?`;
-            if (search) url += `search=${search}&`;
+            if (search) url += `search=${encodeURIComponent(search)}&`;
             if (category && category !== 'All') url += `category=${encodeURIComponent(category)}`;
 
             const res = await api.get(url);
             let finalData = Array.isArray(res.data) ? res.data : (res.data.data || []);
             setProducts(finalData);
+
+            // Store in cache for instant future retrieval
+            if (!search && category) {
+                categoryCacheRef.current[cacheKey] = finalData;
+            }
         } catch (err) {
             console.error(err);
             toast({ title: "Failed to load products", status: "error" });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCategoryClick = (catId) => {
+        setActiveCategory(catId);
+        const cacheKey = `${catId}__`;
+        if (categoryCacheRef.current[cacheKey]) {
+            setProducts(categoryCacheRef.current[cacheKey]);
+            setLoading(false);
+        } else {
+            setLoading(true);
+            setProducts([]);
         }
     };
 
@@ -384,6 +442,7 @@ const Products = () => {
             fetchProducts(searchQuery, activeCategory);
         } else {
             setProducts([]); // Clear items if sitting on the main categories menu
+            setLoading(false);
         }
     }, [location.pathname, location.search, activeCategory]);
 
@@ -434,7 +493,7 @@ const Products = () => {
                                         boxShadow: '2xl'
                                     }}
                                     transition="all 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
-                                    onClick={() => setActiveCategory(cat.id)}
+                                    onClick={() => handleCategoryClick(cat.id)}
                                 >
                                     <Box
                                         position="absolute"
@@ -493,7 +552,23 @@ const Products = () => {
                             </Flex>
 
                             {loading ? (
-                                <Flex justify="center" align="center" minH="30vh"><Spinner size="xl" color="brand.500" /></Flex>
+                                <Flex 
+                                    direction="column" 
+                                    justify="center" 
+                                    align="center" 
+                                    minH="40vh" 
+                                    gap={4} 
+                                    py={12} 
+                                    bg="white" 
+                                    borderRadius="3xl" 
+                                    shadow="sm" 
+                                    border="1px solid" 
+                                    borderColor="gray.100"
+                                >
+                                    <Spinner size="xl" thickness="4px" speed="0.65s" emptyColor="gray.200" color="orange.500" />
+                                    <Text fontSize="md" fontWeight="bold" color="gray.700">Loading Products...</Text>
+                                    <Text fontSize="xs" color="gray.400">Fetching equipment for {activeCategory || 'your search'}</Text>
+                                </Flex>
                             ) : (
                                 <>
                                     {/* Sticky Search Bar REMOVED - Moved to Header */}
@@ -505,13 +580,13 @@ const Products = () => {
                                         <Text>No products found.</Text>
                                     ) : (
                                         <Stack spacing={8}>
-                                            {products.map((product, index) => (
+                                            {products.slice(0, visibleCount).map((product, index) => (
                                                 <motion.div
                                                     key={product._id || product.id}
                                                     initial={{ opacity: 0, y: 20 }}
                                                     whileInView={{ opacity: 1, y: 0 }}
                                                     viewport={{ once: true }}
-                                                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                                                    transition={{ duration: 0.4, delay: (index % PAGE_SIZE) * 0.05 }}
                                                 >
                                                     <Box
                                                         ref={(product._id === highlightId || product.id === highlightId) ? highlightRef : null}
@@ -701,9 +776,35 @@ const Products = () => {
                                                         </Flex>
                                                     </Box>
                                                 </motion.div>
-                                            ))
-                                            }
+                                            ))}
                                         </Stack>
+                                    )}
+
+                                    {/* Incremental Load More Trigger / Fallback Button */}
+                                    {visibleCount < products.length && (
+                                        <Box ref={loadMoreTriggerRef} py={8} textAlign="center">
+                                            <VStack spacing={3}>
+                                                <Text fontSize="sm" color="gray.500" fontWeight="600">
+                                                    Showing <b>{Math.min(visibleCount, products.length)}</b> of <b>{products.length}</b> products in {activeCategory || 'search'}
+                                                </Text>
+                                                <Progress 
+                                                    value={(Math.min(visibleCount, products.length) / products.length) * 100} 
+                                                    size="xs" 
+                                                    colorScheme="orange" 
+                                                    borderRadius="full" 
+                                                    w="200px" 
+                                                />
+                                                <Button
+                                                    size="md"
+                                                    colorScheme="orange"
+                                                    variant="outline"
+                                                    borderRadius="xl"
+                                                    onClick={() => setVisibleCount(prev => Math.min(prev + PAGE_SIZE, products.length))}
+                                                >
+                                                    Load More Products ({products.length - Math.min(visibleCount, products.length)} remaining)
+                                                </Button>
+                                            </VStack>
+                                        </Box>
                                     )}
                                 </>
                             )}

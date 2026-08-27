@@ -5,7 +5,7 @@ import {
 } from '@chakra-ui/react';
 import {
     FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut,
-    FiGlobe, FiArrowLeft, FiFileText, FiLock, FiSettings
+    FiGlobe, FiArrowLeft, FiFileText, FiLock, FiSettings, FiLayers, FiBriefcase
 } from 'react-icons/fi';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -14,6 +14,7 @@ import { useRealtimeSync } from '../../utils/useRealtimeSync';
 
 const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: 'dashboard' },
+    { name: 'Masters', icon: FiLayers, path: '/services?view=masters', permissionKey: null },
     { name: 'Login Report', icon: FiFileText, path: '/admin/login-report', permissionKey: null },
     { name: 'Products', icon: FiBox, path: '/admin/products', permissionKey: 'products' },
     { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries', permissionKey: 'enquiries' },
@@ -23,6 +24,7 @@ const LinkItems = [
 /* ── Bottom tabs shown on mobile only ──────────────────────── */
 const MobileBottomTabs = [
     { name: 'Home', icon: FiHome, path: '/admin/dashboard' },
+    { name: 'Masters', icon: FiLayers, path: '/services?view=masters' },
     { name: 'Products', icon: FiBox, path: '/admin/products' },
     { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries' },
     { name: 'Public', icon: FiGlobe, path: '/' },
@@ -84,6 +86,7 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
             <Box px="3" mt={2} borderTop="1px" borderColor="gray.100" pt={3} pb={1}>
                 <Text fontSize="10px" fontWeight="800" color="gray.400" mb={1} px={3} letterSpacing="wider">QUICK LINKS</Text>
                 <NavItem icon={FiGlobe} path="/" onClose={onClose}>Home Page</NavItem>
+                <NavItem icon={FiBriefcase} path="/services?view=public" onClose={onClose}>Public Service</NavItem>
                 <NavItem icon={FiBox} path="/products" onClose={onClose}>Public Products</NavItem>
             </Box>
 
@@ -119,7 +122,11 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
 
 const NavItem = ({ icon, children, path, onClose, ...rest }) => {
     const location = useLocation();
-    const isActive = location.pathname.startsWith(path) && path !== '/';
+    const currentFull = location.pathname + location.search;
+    const isExactMatch = currentFull === path;
+    const isBasePathMatch = !path.includes('?') && path !== '/' && location.pathname.startsWith(path);
+    const isServicesDefault = path === '/services?view=masters' && location.pathname === '/services' && !location.search.includes('view=public');
+    const isActive = isExactMatch || isBasePathMatch || isServicesDefault;
 
     return (
         <Link as={RouterLink} to={path} style={{ textDecoration: 'none' }} _focus={{ boxShadow: 'none' }} onClick={onClose}>

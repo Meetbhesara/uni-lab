@@ -88,10 +88,10 @@ const Home = () => {
                                 _hover={{ bg: 'whiteAlpha.100', transform: 'translateY(-2px)' }}
                                 transition="all 0.2s"
                                 as={RouterLink}
-                                to="/services"
+                                to="/services?view=public"
                                 rightIcon={<Icon as={FiArrowRight} />}
                             >
-                                Unique Lab Survey & Services
+                                UNIQUE SURVEY & ENGINEERING
                             </Button>
                         </Stack>
                     </MotionBox>
@@ -178,7 +178,7 @@ const Home = () => {
                                         <Icon as={FiMap} boxSize={8} />
                                     </Flex>
                                     <Heading size="lg" mb={4} fontWeight="800" letterSpacing="tight">
-                                        UNIQUE LAB SURVEY & SERVICES
+                                        UNIQUE SURVEY & ENGINEERING
                                     </Heading>
                                     <Text color="gray.300" mb={8} fontSize="md" lineHeight="1.6">
                                         Access professional land surveying, topographical mapping, layouts drafting, and civil consultancy. We deliver precision-oriented, field-proven accuracy for all site operations.
@@ -194,7 +194,7 @@ const Home = () => {
                                     transition="all 0.2s"
                                     rightIcon={<Icon as={FiArrowRight} />}
                                     as={RouterLink}
-                                    to="/services"
+                                    to="/services?view=public"
                                     w="full"
                                     fontWeight="bold"
                                     shadow="md"

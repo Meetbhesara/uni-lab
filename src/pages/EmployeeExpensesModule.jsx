@@ -2583,9 +2583,19 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
             }
             return;
         }
+
         setLocationMap(prev => ({ ...prev, [empId]: loc }));
-        // auto-expand expense panel when a location is chosen
-        setExpandedMap(prev => ({ ...prev, [empId]: true }));
+
+        if (loc === 'Home') {
+            // When 'Home' is chosen: DO NOT allow expenses. Auto-collapse & reset expenses.
+            setExpandedMap(prev => ({ ...prev, [empId]: false }));
+            setExpensesMap(prev => ({ ...prev, [empId]: { breakfast: 0, lunch: 0, dinner: 0, petrol: 0 } }));
+            setOtherExpMap(prev => ({ ...prev, [empId]: [] }));
+            setFilePreviewMap(prev => ({ ...prev, [empId]: {} }));
+        } else {
+            // Auto-expand expense panel when Godown / Office / Room is chosen
+            setExpandedMap(prev => ({ ...prev, [empId]: true }));
+        }
     };
     const setExpenseItem = (empId, key, val) => {
         setExpensesMap(prev => ({ ...prev, [empId]: { ...(prev[empId] || {}), [key]: val } }));
@@ -2623,20 +2633,30 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     const removeExpFile = (empId, expName, i) => {
         setFilePreviewMap(prev => { const k = { ...(prev[empId] || {}) }; k[expName] = (k[expName] || []).filter((_, j) => j !== i); return { ...prev, [empId]: k }; });
     };
-    const toggleExpand = (empId) => setExpandedMap(prev => ({ ...prev, [empId]: !prev[empId] }));
+    const toggleExpand = (empId) => {
+        if (locationMap[empId] === 'Home') return;
+        setExpandedMap(prev => ({ ...prev, [empId]: !prev[empId] }));
+    };
 
     const handleSaveAttendance = async () => {
         const entries = unscheduledEmployees
             .filter(e => attendanceMap[e._id])
-            .map(e => ({
-                employeeId:       e._id,
-                date:             attendanceDate,
-                attendance:       attendanceMap[e._id],
-                attendanceRemark: remarks[e._id] || '',
-                workLocation:     locationMap[e._id] || '',
-                expenses:         { ...(expensesMap[e._id] || { breakfast: 0, lunch: 0, dinner: 0, petrol: 0 }), fuelType: fuelTypeMap[e._id] || 'Petrol' },
-                otherExpensesList: (otherExpMap[e._id] || []).map(r => ({ expenseName: r.expenseName, amount: Number(r.amount) || 0 }))
-            }));
+            .map(e => {
+                const isHome = locationMap[e._id] === 'Home';
+                return {
+                    employeeId:       e._id,
+                    date:             attendanceDate,
+                    attendance:       attendanceMap[e._id],
+                    attendanceRemark: remarks[e._id] || '',
+                    workLocation:     locationMap[e._id] || '',
+                    expenses:         isHome
+                        ? { breakfast: 0, lunch: 0, dinner: 0, petrol: 0, fuelType: 'Petrol' }
+                        : { ...(expensesMap[e._id] || { breakfast: 0, lunch: 0, dinner: 0, petrol: 0 }), fuelType: fuelTypeMap[e._id] || 'Petrol' },
+                    otherExpensesList: isHome
+                        ? []
+                        : (otherExpMap[e._id] || []).map(r => ({ expenseName: r.expenseName, amount: Number(r.amount) || 0 }))
+                };
+            });
 
         if (entries.length === 0) {
             toast({ title: 'No Attendance Marked', description: 'Please mark attendance for at least one employee.', status: 'warning', position: 'top-right' });
@@ -2722,6 +2742,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                             const saved    = savedAttendance.find(a => a.employeeId === emp._id);
                             const isPresent = status === 'Present';
                             const hasLocation = !!location;
+                            const allowsExpenses = hasLocation && location !== 'Home';
 
                             return (
                                 <Box
@@ -2770,7 +2791,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                             </Button>
                                         </HStack>
 
-                                        {/* HOME / GODOWN / OFFICE — always visible, independent of attendance */}
+                                        {/* HOME / GODOWN / OFFICE / ROOM — always visible, independent of attendance */}
                                         <HStack spacing={2}>
                                             <Button
                                                 size="xs" borderRadius="full" minW="70px"
@@ -2823,8 +2844,8 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                             isDisabled={!status || !canWrite}
                                         />
 
-                                        {/* Expand expenses toggle — only when location is set */}
-                                        {hasLocation && (
+                                        {/* Expand expenses toggle — only when location is set and NOT Home */}
+                                        {allowsExpenses && (
                                             <Tooltip label={expanded ? 'Hide expenses' : 'Add daily expenses'}>
                                                 <Button
                                                     size="xs" variant="ghost"
@@ -2839,8 +2860,8 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                         )}
                                     </HStack>
 
-                                    {/* ── Expense Panel (collapsible) ── */}
-                                    {hasLocation && expanded && (
+                                    {/* ── Expense Panel (collapsible) — only when allowsExpenses is true ── */}
+                                    {allowsExpenses && expanded && (
                                         <Box mx={3} mb={3}>
                                             {/* Standard Meals & Travel */}
                                             <Card borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100" mb={3}>

@@ -25,7 +25,7 @@ import AdminDraftingWork from './admin/AdminDraftingWork';
 import InvoiceReport from './admin/InvoiceReport';
 import CompanyMaster from './admin/CompanyMaster';
 import AdminLoginReportView from '../components/admin/AdminLoginReportView';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { hasPermission } from '../utils/permissions';
 import ModulePermissionBar from '../components/admin/ModulePermissionBar';
@@ -82,65 +82,6 @@ const CivilEngineeringServices = () => {
                         </Box>
                     </SimpleGrid>
                 </Box>
-
-                {/* Employee Portal Banner */}
-                <Box
-                    mt={16}
-                    borderRadius="2xl"
-                    overflow="hidden"
-                    bgGradient="linear(135deg, gray.900 0%, blue.900 60%, gray.800 100%)"
-                    position="relative"
-                >
-                    <Box
-                        position="absolute" top={0} right={0} bottom={0} w="40%"
-                        bgGradient="linear(to-l, orange.900, transparent)" opacity={0.4}
-                    />
-                    <HStack
-                        justify="space-between"
-                        align="center"
-                        px={{ base: 6, md: 12 }}
-                        py={8}
-                        flexWrap="wrap"
-                        gap={4}
-                        position="relative"
-                        zIndex={1}
-                    >
-                        <HStack spacing={4}>
-                            <Box
-                                w={12} h={12} borderRadius="xl"
-                                bgGradient="linear(to-br, orange.400, orange.600)"
-                                display="flex" alignItems="center" justifyContent="center"
-                                boxShadow="0 4px 16px rgba(251,146,60,0.4)" flexShrink={0}
-                            >
-                                <Icon as={FaHardHat} w={6} h={6} color="white" />
-                            </Box>
-                            <Box>
-                                <Text color="white" fontWeight="bold" fontSize={{ base: 'md', md: 'lg' }}>
-                                    Employee Portal
-                                </Text>
-                                <Text color="whiteAlpha.600" fontSize="sm">
-                                    Field staff? Access your profile &amp; documents here
-                                </Text>
-                            </Box>
-                        </HStack>
-                        <Button
-                            onClick={() => navigate('/employee/login')}
-                            bgGradient="linear(to-r, orange.500, orange.400)"
-                            color="white"
-                            fontWeight="bold"
-                            px={8}
-                            h="46px"
-                            borderRadius="xl"
-                            rightIcon={<Icon as={FaUserTie} />}
-                            _hover={{ bgGradient: 'linear(to-r, orange.600, orange.500)', transform: 'translateY(-2px)', boxShadow: '0 8px 24px rgba(251,146,60,0.4)' }}
-                            transition="all 0.2s"
-                            flexShrink={0}
-                        >
-                            Employee Login
-                        </Button>
-                    </HStack>
-                </Box>
-
             </Container>
         </Box>
     );
@@ -9102,7 +9043,31 @@ const SERVICES_TAB_KEY = 'services_active_tab_key';
 const Services = () => {
     const { user } = useAuth();
     const isAdmin = user && user.isAdmin;
+    const [searchParams, setSearchParams] = useSearchParams();
+    const urlView = searchParams.get('view'); // 'masters' | 'public'
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+    const [adminViewMode, setAdminViewMode] = useState(() => {
+        if (urlView === 'public') return 'public';
+        return 'masters';
+    });
+
+    useEffect(() => {
+        if (urlView === 'public') {
+            setAdminViewMode('public');
+        } else if (urlView === 'masters') {
+            setAdminViewMode('masters');
+        }
+    }, [urlView]);
+
+    const handleSwitchView = (mode) => {
+        setAdminViewMode(mode);
+        setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.set('view', mode);
+            return next;
+        });
+    };
 
     const adminServiceTabs = [
         { key: 'vehicleMaster', groupKey: 'vehicleMasterGroup', label: 'Vehicle Master', icon: FaTruck, colorScheme: 'purple', component: <VehicleMasterForm /> },
@@ -9145,21 +9110,74 @@ const Services = () => {
     return (
         <Box>
             {isAdmin ? (
-                <Box bg="gray.100" minH="100vh" pt={10}>
+                <Box bg="gray.100" minH="100vh" pt={6} pb={12}>
                     <Container maxW="full" px={{ base: 2, xl: 6 }}>
-                        <Flex mb={4} justify="flex-start">
-                            <Button 
-                                size="sm" 
-                                colorScheme="purple" 
-                                variant="outline" 
-                                leftIcon={<Icon as={isSidebarOpen ? FaChevronLeft : FaChevronRight} />}
-                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                                bg="white"
-                            >
-                                {isSidebarOpen ? 'Hide Menu' : 'Show Menu'}
-                            </Button>
+                        {/* Top View Mode Switcher: Masters vs Public Service */}
+                        <Flex 
+                            mb={5} 
+                            p={2} 
+                            bg="white" 
+                            borderRadius="2xl" 
+                            boxShadow="sm" 
+                            border="1px solid" 
+                            borderColor="gray.200" 
+                            align="center" 
+                            justify="space-between"
+                            flexWrap="wrap"
+                            gap={3}
+                        >
+                            <HStack spacing={2}>
+                                <Button
+                                    size="sm"
+                                    colorScheme="purple"
+                                    variant={adminViewMode === 'masters' ? 'solid' : 'ghost'}
+                                    leftIcon={<Icon as={FaSitemap} />}
+                                    onClick={() => handleSwitchView('masters')}
+                                    borderRadius="xl"
+                                    fontWeight="bold"
+                                    px={4}
+                                >
+                                    Masters
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    colorScheme="blue"
+                                    variant={adminViewMode === 'public' ? 'solid' : 'ghost'}
+                                    leftIcon={<Icon as={FaRoad} />}
+                                    onClick={() => handleSwitchView('public')}
+                                    borderRadius="xl"
+                                    fontWeight="bold"
+                                    px={4}
+                                >
+                                    Public Service
+                                </Button>
+                            </HStack>
+
+                            {adminViewMode === 'masters' && (
+                                <Button 
+                                    size="sm" 
+                                    colorScheme="gray" 
+                                    variant="outline" 
+                                    leftIcon={<Icon as={isSidebarOpen ? FaChevronLeft : FaChevronRight} />}
+                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                    borderRadius="lg"
+                                >
+                                    {isSidebarOpen ? 'Hide Menu' : 'Show Menu'}
+                                </Button>
+                            )}
+
+                            {adminViewMode === 'public' && (
+                                <Badge colorScheme="blue" px={3} py={1} borderRadius="full" fontSize="xs">
+                                    👁️ Public Customer Preview
+                                </Badge>
+                            )}
                         </Flex>
-                        {adminServiceTabs.length === 0 ? (
+
+                        {adminViewMode === 'public' ? (
+                            <Box bg="white" borderRadius="3xl" overflow="hidden" boxShadow="md">
+                                <CivilEngineeringServices />
+                            </Box>
+                        ) : adminServiceTabs.length === 0 ? (
                             <Box bg="white" p={10} borderRadius="2xl" textAlign="center" boxShadow="md">
                                 <Text fontSize="lg" fontWeight="bold" color="gray.600">No Authorized Modules Available</Text>
                                 <Text fontSize="sm" color="gray.400" mt={1}>Please contact your Super Admin if you require access to these administrative modules.</Text>
