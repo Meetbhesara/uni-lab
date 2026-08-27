@@ -7,14 +7,16 @@ import {
     Flex, Spinner, Center, Tooltip, CloseButton, Image, List, ListItem, ListIcon,
     Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverArrow, Portal,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-    useDisclosure, Switch, Alert, AlertIcon, AlertTitle, AlertDescription
+    useDisclosure, Switch, Alert, AlertIcon, AlertTitle, AlertDescription,
+    Tag, TagLabel, TagLeftIcon
 } from '@chakra-ui/react';
 import { 
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
     FaUserTie, FaCheckCircle, FaEdit, FaRupeeSign, FaArrowRight,
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
     FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight, FaUserCheck, FaUserSlash, FaClipboardList,
-    FaHome, FaWarehouse, FaChevronDown, FaChevronUp, FaBed
+    FaHome, FaWarehouse, FaChevronDown, FaChevronUp, FaBed,
+    FaTools, FaCar, FaReceipt, FaFilePdf, FaDownload, FaExternalLinkAlt, FaInfoCircle, FaMapMarkerAlt
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -127,7 +129,7 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
                 key: 'report',
                 label: 'Daily Report',
                 icon: FaChartBar,
-                component: <DailyReportSection employees={employees} />
+                component: <DailyReportSection employees={employees} clients={clients} sites={sites} />
             });
         }
         return list;
@@ -223,16 +225,122 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
 // ── Daily Report Section ──────────────────────────────────────────────
 const _getCurrFY = () => { const t = new Date(); return t.getMonth() < 3 ? t.getFullYear()-1 : t.getFullYear(); };
 
-const DailyReportSection = ({ employees = [] }) => {
+const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
     const { user } = useAuth();
     const canReadLast5Days = hasPermission(user, 'employeeExpense_report_last5days', 'read');
     const canReadAdvanced = hasPermission(user, 'employeeExpense_report_advanced', 'read');
 
     const [data, setData]               = useState([]);
+    const [allSchedules, setAllSchedules] = useState([]);
+    const [allExpenses, setAllExpenses]   = useState([]);
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [lastRefreshed, setLastRefreshed]   = useState(null);
     const [selectedDetailEntry, setSelectedDetailEntry] = useState(null);
     const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
+
+    // ── Monthly Stats & Live Data for Selected Employee Modal ──────────────────
+    const [monthStats, setMonthStats] = useState({ credit: 0, debit: 0, expense: 0, currentBalance: 0, loading: false });
+    const [selectedDetailExpenses, setSelectedDetailExpenses] = useState([]);
+    const [selectedDetailTransfers, setSelectedDetailTransfers] = useState([]);
+
+    const getFileHref = (file) => {
+        if (!file) return '#';
+        const raw = typeof file === 'string' ? file : (file.url || file.path || file.name || '');
+        if (!raw) return '#';
+        if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('blob:') || raw.startsWith('data:')) {
+            return raw;
+        }
+        const cleanPath = raw.startsWith('/') ? raw : '/' + raw;
+        const base = api.defaults.baseURL || '';
+        if (base.endsWith('/api') && cleanPath.startsWith('/api/')) {
+            return cleanPath;
+        }
+        return `${base}${cleanPath}`;
+    };
+
+    const getFileName = (file, defaultName = 'File') => {
+        if (!file) return defaultName;
+        if (typeof file === 'string') {
+            const parts = file.split(/[/\\]/);
+            return parts[parts.length - 1] || defaultName;
+        }
+        return file.name || file.filename || file.originalName || defaultName;
+    };
+
+    useEffect(() => {
+        if (!selectedDetailEntry) return;
+
+        let isMounted = true;
+        const fetchMonthTotals = async () => {
+            setMonthStats(prev => ({ ...prev, loading: true }));
+            try {
+                // Find matching employee object
+                const empObj = employees.find(e => 
+                    String(e._id) === String(selectedDetailEntry.empId) || 
+                    String(e.empId) === String(selectedDetailEntry.empId) || 
+                    (e.name && e.name.trim().toLowerCase() === (selectedDetailEntry.empName || '').trim().toLowerCase())
+                );
+                const empObjectId = empObj ? empObj._id : selectedDetailEntry.empId;
+
+                const [expRes, trRes, empRes] = await Promise.all([
+                    api.get(`/employee-expense/admin/${empObjectId}`).catch(() => ({ data: { success: false } })),
+                    api.get(`/employee-transfer`).catch(() => ({ data: { success: false } })),
+                    empObj ? Promise.resolve({ data: { success: true, data: empObj } }) : api.get(`/employee-master/${empObjectId}`).catch(() => ({ data: { success: false } }))
+                ]);
+
+                const entryDt = new Date(selectedDetailEntry.date || new Date());
+                const curM = entryDt.getMonth();
+                const curY = entryDt.getFullYear();
+
+                let mDebit = 0;
+                let mCredit = 0;
+                let mExpense = 0;
+
+                if (expRes.data?.success && Array.isArray(expRes.data.data)) {
+                    expRes.data.data.forEach(exp => {
+                        const ed = new Date(exp.date);
+                        if (ed.getMonth() === curM && ed.getFullYear() === curY) {
+                            const expAmt = Number(exp.totalExpense) || 0;
+                            mExpense += expAmt;
+                            mDebit += expAmt;
+                            (exp.creditDebit?.givenTo || []).forEach(g => { mDebit += (Number(g.amount) || 0); });
+                            (exp.creditDebit?.receivedFrom || []).forEach(r => { mCredit += (Number(r.amount) || 0); });
+                        }
+                    });
+                }
+
+                if (trRes.data?.success && Array.isArray(trRes.data.data)) {
+                    trRes.data.data.forEach(tr => {
+                        const td = new Date(tr.date);
+                        if (td.getMonth() === curM && td.getFullYear() === curY) {
+                            const gId = String(tr.giver?._id || tr.giver);
+                            const tId = String(tr.taker?._id || tr.taker);
+                            const eIdStr = String(empObjectId);
+                            if (gId === eIdStr) mDebit += (Number(tr.amount) || 0);
+                            if (tId === eIdStr) mCredit += (Number(tr.amount) || 0);
+                        }
+                    });
+                }
+
+                const curBal = empRes.data?.data?.totalAmount || empObj?.totalAmount || 0;
+
+                if (isMounted) {
+                    setMonthStats({ credit: mCredit, debit: mDebit, expense: mExpense, currentBalance: curBal, loading: false });
+                    if (expRes.data?.success && Array.isArray(expRes.data.data)) {
+                        setSelectedDetailExpenses(expRes.data.data);
+                    }
+                    if (trRes.data?.success && Array.isArray(trRes.data.data)) {
+                        setSelectedDetailTransfers(trRes.data.data);
+                    }
+                }
+            } catch (err) {
+                if (isMounted) setMonthStats(prev => ({ ...prev, loading: false }));
+            }
+        };
+
+        fetchMonthTotals();
+        return () => { isMounted = false; };
+    }, [selectedDetailEntry, employees]);
 
     // ── Custom report state ──────────────────────────────────────
     const _today = new Date();
@@ -248,10 +356,42 @@ const DailyReportSection = ({ employees = [] }) => {
         _today.toISOString().split('T')[0]
     );
     const _todayStr = _today.toISOString().split('T')[0];
-
     const isAllEmp = ['Food','Fuel','ClientSite'].includes(reportType);
 
-    const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', weekday:'short' });
+    const toLocalDateKey = (d) => {
+        if (!d) return '';
+        if (typeof d === 'string') {
+            if (d.includes('T') || d.includes('Z')) {
+                const dt = new Date(d);
+                if (!isNaN(dt.getTime())) {
+                    const y = dt.getFullYear();
+                    const m = String(dt.getMonth() + 1).padStart(2, '0');
+                    const day = String(dt.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                }
+            }
+            const clean = d.split('T')[0];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+        }
+        const dt = new Date(d);
+        if (isNaN(dt.getTime())) return String(d).split('T')[0];
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+
+    const fmtDate = (d) => {
+        if (!d) return '—';
+        if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+            const [y, m, day] = d.split('-').map(Number);
+            const dt = new Date(y, m - 1, day);
+            return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' });
+        }
+        const dt = new Date(d);
+        if (isNaN(dt.getTime())) return String(d);
+        return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' });
+    };
     const fmtAmt  = (n) => `₹${Number(n||0).toLocaleString('en-IN')}`;
 
     const attStyle = (s) => ({
@@ -264,14 +404,498 @@ const DailyReportSection = ({ employees = [] }) => {
         if (!canReadLast5Days) return;
         setSummaryLoading(true);
         try {
-            const res = await api.get('/employee-expense/report/daily-summary');
-            if (res.data.success) { setData(res.data.data); setLastRefreshed(new Date()); }
+            const [res, schRes, allExpRes] = await Promise.all([
+                api.get('/employee-expense/report/daily-summary'),
+                api.get('/schedule-master').catch(() => ({ data: { success: false } })),
+                api.get('/employee-expense/all').catch(() => ({ data: { success: false } }))
+            ]);
+            if (res.data?.success) { 
+                setData(res.data.data); 
+                setLastRefreshed(new Date()); 
+            }
+            if (schRes?.data?.success && Array.isArray(schRes.data.data)) {
+                setAllSchedules(schRes.data.data);
+            }
+            if (allExpRes?.data?.success && Array.isArray(allExpRes.data.data)) {
+                setAllExpenses(allExpRes.data.data);
+            }
         } catch (e) { console.error(e); }
         finally { setSummaryLoading(false); }
     };
     useEffect(() => { fetchSummary(); }, [canReadLast5Days]);
 
     const fmtMonthFn = (d) => { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
+
+    const resolveClientName = (val) => {
+        if (!val) return '';
+        if (typeof val === 'object') {
+            return val.clientName || val.name || resolveClientName(val._id || val.clientId);
+        }
+        const str = String(val).trim();
+        const found = clients.find(c => String(c._id) === str || c.clientName === str);
+        return found ? found.clientName : str;
+    };
+
+    const resolveSiteName = (val) => {
+        if (!val) return '';
+        if (typeof val === 'object') {
+            return val.siteName || val.name || resolveSiteName(val._id || val.siteId);
+        }
+        const str = String(val).trim();
+        const found = sites.find(s => String(s._id) === str || s.siteName === str);
+        return found ? found.siteName : str;
+    };
+
+    const resolveEmployeeName = (val) => {
+        if (!val) return '';
+        if (typeof val === 'object') {
+            return val.name || val.employeeName || resolveEmployeeName(val._id || val.employeeId);
+        }
+        const str = String(val).trim();
+        const found = employees.find(e => String(e._id) === str || e.name === str);
+        return found ? found.name : str;
+    };
+
+    const isSameEmployee = (valA, valB, empNameA, empNameB) => {
+        const strA = String(valA || '').trim();
+        const strB = String(valB || '').trim();
+        const nameA = (empNameA || '').trim().toLowerCase();
+        const nameB = (empNameB || '').trim().toLowerCase();
+
+        if (strA && strB && strA === strB) return true;
+        if (nameA && nameB && nameA === nameB) return true;
+
+        const foundA = employees.find(e => String(e._id) === strA || String(e.empId) === strA || (e.name && e.name.trim().toLowerCase() === nameA));
+        const foundB = employees.find(e => String(e._id) === strB || String(e.empId) === strB || (e.name && e.name.trim().toLowerCase() === nameB));
+
+        if (foundA && foundB && String(foundA._id) === String(foundB._id)) return true;
+        if (foundA && (String(foundA._id) === strB || String(foundA.empId) === strB || (foundA.name && foundA.name.trim().toLowerCase() === nameB))) return true;
+        if (foundB && (String(foundB._id) === strA || String(foundB.empId) === strA || (foundB.name && foundB.name.trim().toLowerCase() === nameA))) return true;
+
+        return false;
+    };
+
+    const getSchedulesWhereOperative = (entry) => {
+        if (!allSchedules || allSchedules.length === 0) return [];
+        const entryDateKey = toLocalDateKey(entry.date);
+
+        return allSchedules.filter(s => {
+            const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
+            if (sDateKey !== entryDateKey) return false;
+
+            const opId = s.operative?._id || s.operative;
+            const opName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
+            return isSameEmployee(entry.empId, opId, entry.empName, opName);
+        });
+    };
+
+    const getSchedulesWhereHelper = (entry) => {
+        if (!allSchedules || allSchedules.length === 0) return [];
+        const entryDateKey = toLocalDateKey(entry.date);
+
+        return allSchedules.filter(s => {
+            const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
+            if (sDateKey !== entryDateKey) return false;
+
+            if (Array.isArray(s.helpers)) {
+                return s.helpers.some(h => {
+                    const hId = h?._id || h;
+                    const hName = h?.name || (typeof h === 'string' ? h : '');
+                    return isSameEmployee(entry.empId, hId, entry.empName, hName);
+                });
+            } else if (s.helper) {
+                const hId = s.helper?._id || s.helper;
+                const hName = s.helper?.name || (typeof s.helper === 'string' ? s.helper : '');
+                return isSameEmployee(entry.empId, hId, entry.empName, hName);
+            }
+            return false;
+        });
+    };
+
+    const extractOperative = (entry) => {
+        const loc = (entry.workLocation || entry.details?.workLocation || '').trim();
+        if (['Room', 'Godown', 'Office', 'Home'].includes(loc)) {
+            return entry.empName || '—';
+        }
+
+        const opSchedules = getSchedulesWhereOperative(entry);
+        if (opSchedules.length > 0) {
+            return resolveEmployeeName(opSchedules[0].operative?._id || opSchedules[0].operative) || entry.empName || '—';
+        }
+
+        const hlpSchedules = getSchedulesWhereHelper(entry);
+        if (hlpSchedules.length > 0) {
+            return resolveEmployeeName(hlpSchedules[0].operative?._id || hlpSchedules[0].operative) || entry.empName || '—';
+        }
+
+        if (entry.operativeName && !/^[0-9a-fA-F]{24}$/.test(entry.operativeName.trim()) && entry.operativeName !== '—') {
+            return entry.operativeName;
+        }
+        if (entry.operative?.name) return entry.operative.name;
+        if (entry.operative && typeof entry.operative === 'string' && !/^[0-9a-fA-F]{24}$/.test(entry.operative) && entry.operative !== '—') {
+            return entry.operative;
+        }
+
+        return entry.empName || '—';
+    };
+
+    const extractHelpers = (entry) => {
+        const loc = (entry.workLocation || entry.details?.workLocation || '').trim();
+        if (['Room', 'Godown', 'Office', 'Home'].includes(loc)) {
+            return '';
+        }
+
+        let list = [];
+
+        const opSchedules = getSchedulesWhereOperative(entry);
+        opSchedules.forEach(s => {
+            if (Array.isArray(s.helpers)) {
+                s.helpers.forEach(h => list.push(resolveEmployeeName(h)));
+            } else if (s.helper) {
+                list.push(resolveEmployeeName(s.helper));
+            }
+        });
+
+        const hlpSchedules = getSchedulesWhereHelper(entry);
+        hlpSchedules.forEach(s => {
+            if (Array.isArray(s.helpers)) {
+                s.helpers.forEach(h => list.push(resolveEmployeeName(h)));
+            } else if (s.helper) {
+                list.push(resolveEmployeeName(s.helper));
+            }
+        });
+
+        if (Array.isArray(entry.helpers) && entry.helpers.length > 0) {
+            entry.helpers.forEach(h => list.push(resolveEmployeeName(h)));
+        } else if (typeof entry.helpers === 'string' && entry.helpers.trim()) {
+            list.push(resolveEmployeeName(entry.helpers));
+        } else if (Array.isArray(entry.helperNames) && entry.helperNames.length > 0) {
+            entry.helperNames.forEach(h => list.push(resolveEmployeeName(h)));
+        } else if (Array.isArray(entry.details?.helpers) && entry.details.helpers.length > 0) {
+            entry.details.helpers.forEach(h => list.push(resolveEmployeeName(h)));
+        }
+
+        if (Array.isArray(entry.clientSites)) {
+            entry.clientSites.forEach(cs => {
+                if (Array.isArray(cs.helpers)) {
+                    cs.helpers.forEach(h => list.push(resolveEmployeeName(h)));
+                } else if (cs.helper) {
+                    list.push(resolveEmployeeName(cs.helper));
+                }
+            });
+        }
+
+        const opName = extractOperative(entry);
+        const unique = [...new Set(list.filter(Boolean))].filter(h => 
+            h.trim().toLowerCase() !== (opName || '').trim().toLowerCase()
+        );
+        return unique.join(', ');
+    };
+
+    const extractClient = (entry) => {
+        const loc = (entry.workLocation || entry.details?.workLocation || '').trim();
+        if (['Room', 'Godown', 'Office', 'Home'].includes(loc)) {
+            return 'Office';
+        }
+
+        let clientsFound = [];
+
+        const opSchedules = getSchedulesWhereOperative(entry);
+        opSchedules.forEach(s => {
+            const cName = s.client?.clientName || resolveClientName(s.client?._id || s.client);
+            if (cName) clientsFound.push(cName);
+        });
+
+        const hlpSchedules = getSchedulesWhereHelper(entry);
+        hlpSchedules.forEach(s => {
+            const cName = s.client?.clientName || resolveClientName(s.client?._id || s.client);
+            if (cName) clientsFound.push(cName);
+        });
+
+        if (Array.isArray(entry.clientSites) && entry.clientSites.length > 0) {
+            entry.clientSites.forEach(cs => {
+                if (cs.clientName) clientsFound.push(cs.clientName);
+                else if (cs.clientId?.clientName) clientsFound.push(cs.clientId.clientName);
+                else {
+                    const cid = cs.clientId?._id || cs.clientId;
+                    if (cid) clientsFound.push(resolveClientName(cid));
+                }
+            });
+        }
+
+        if (entry.clientNames && !/^[0-9a-fA-F]{24}$/.test(entry.clientNames.trim())) {
+            clientsFound.push(entry.clientNames);
+        } else if (entry.clientName && !/^[0-9a-fA-F]{24}$/.test(entry.clientName.trim())) {
+            clientsFound.push(entry.clientName);
+        }
+
+        if (entry.clientId) clientsFound.push(resolveClientName(entry.clientId));
+        if (entry.client) clientsFound.push(resolveClientName(entry.client));
+        if (entry.details?.clientName) clientsFound.push(entry.details.clientName);
+
+        const unique = [...new Set(clientsFound.filter(c => c && !/^[0-9a-fA-F]{24}$/.test(c.trim())))];
+        if (unique.length > 0) return unique.join(', ');
+
+        if (['Room', 'Godown', 'Office', 'Home'].some(k => (entry.siteNames || '').includes(k))) {
+            return 'Office';
+        }
+
+        return '';
+    };
+
+    const extractSite = (entry) => {
+        const loc = (entry.workLocation || entry.details?.workLocation || '').trim();
+        if (['Room', 'Godown', 'Office', 'Home'].includes(loc)) {
+            return loc;
+        }
+
+        let sitesFound = [];
+
+        const opSchedules = getSchedulesWhereOperative(entry);
+        opSchedules.forEach(s => {
+            const sName = s.site?.siteName || resolveSiteName(s.site?._id || s.site);
+            if (sName) sitesFound.push(sName);
+        });
+
+        const hlpSchedules = getSchedulesWhereHelper(entry);
+        hlpSchedules.forEach(s => {
+            const sName = s.site?.siteName || resolveSiteName(s.site?._id || s.site);
+            if (sName) sitesFound.push(sName);
+        });
+
+        if (Array.isArray(entry.clientSites) && entry.clientSites.length > 0) {
+            entry.clientSites.forEach(cs => {
+                if (cs.siteName) sitesFound.push(cs.siteName);
+                else if (cs.siteId?.siteName) sitesFound.push(cs.siteId.siteName);
+                else {
+                    const sid = cs.siteId?._id || cs.siteId;
+                    if (sid) sitesFound.push(resolveSiteName(sid));
+                }
+            });
+        }
+
+        if (entry.siteNames && !/^[0-9a-fA-F]{24}$/.test(entry.siteNames.trim())) {
+            sitesFound.push(entry.siteNames);
+        } else if (entry.siteName && !/^[0-9a-fA-F]{24}$/.test(entry.siteName.trim())) {
+            sitesFound.push(entry.siteName);
+        }
+
+        if (entry.siteId) sitesFound.push(resolveSiteName(entry.siteId));
+        if (entry.site) sitesFound.push(resolveSiteName(entry.site));
+        if (entry.details?.siteName) sitesFound.push(entry.details.siteName);
+        if (entry.details?.siteNames) sitesFound.push(entry.details.siteNames);
+
+        if (sitesFound.filter(Boolean).length === 0 && entry.workLocation) {
+            return entry.workLocation;
+        }
+
+        const unique = [...new Set(sitesFound.filter(s => s && !/^[0-9a-fA-F]{24}$/.test(s.trim())))];
+        if (unique.length > 0) return unique.join(', ');
+
+        return loc || entry.siteNames || '';
+    };
+
+    const extractHasReport = (entry) => {
+        if (entry.hasReport === true || entry.hasDailyReport === true || entry.hasExpenseReport === true) return true;
+        if (entry.dailyReportsCount > 0 || entry.reportCount > 0 || entry.reportsCount > 0) return true;
+        if (Array.isArray(entry.dailyReports) && entry.dailyReports.length > 0) return true;
+        if (Array.isArray(entry.reports) && entry.reports.length > 0) return true;
+        if (Array.isArray(entry.files?.dailyReports) && entry.files.dailyReports.length > 0) return true;
+        if (Array.isArray(entry.files?.reports) && entry.files.reports.length > 0) return true;
+        if (Array.isArray(entry.details?.files?.dailyReports) && entry.details.files.dailyReports.length > 0) return true;
+        if (Array.isArray(entry.details?.dailyReports) && entry.details.dailyReports.length > 0) return true;
+        if (Array.isArray(entry.details?.reports) && entry.details.reports.length > 0) return true;
+
+        if (Array.isArray(entry.clientSites)) {
+            const hasCsReport = entry.clientSites.some(cs => 
+                (Array.isArray(cs.files?.dailyReports) && cs.files.dailyReports.length > 0) ||
+                (Array.isArray(cs.files?.reports) && cs.files.reports.length > 0) ||
+                (Array.isArray(cs.dailyReports) && cs.dailyReports.length > 0) ||
+                (Array.isArray(cs.reports) && cs.reports.length > 0) ||
+                cs.hasReport === true ||
+                cs.hasDailyReport === true
+            );
+            if (hasCsReport) return true;
+        }
+
+        if (entry.details?.otherExpensesList?.some(oe => Array.isArray(oe.files) && oe.files.length > 0)) return true;
+
+        const entryDateKey = toLocalDateKey(entry.date);
+        const empIdStr = String(entry.empId || entry.employeeId || entry.employee || '').trim();
+        const empNameStr = (entry.empName || '').trim().toLowerCase();
+
+        // Check allExpenses for this employee and date
+        if (Array.isArray(allExpenses) && allExpenses.length > 0) {
+            const matchedExps = allExpenses.filter(exp => {
+                const expDateKey = toLocalDateKey(exp.date);
+                if (expDateKey !== entryDateKey) return false;
+                const expEmpId = exp.employee?._id || exp.employee || exp.employeeId || '';
+                const expEmpName = exp.employee?.name || exp.employeeName || (typeof exp.employee === 'string' && !/^[0-9a-fA-F]{24}$/.test(exp.employee) ? exp.employee : '');
+                return isSameEmployee(entry.empId, expEmpId, entry.empName, expEmpName);
+            });
+
+            for (const exp of matchedExps) {
+                if (exp.hasReport || exp.hasDailyReport || exp.hasExpenseReport) return true;
+                if (Array.isArray(exp.dailyReports) && exp.dailyReports.length > 0) return true;
+                if (Array.isArray(exp.reports) && exp.reports.length > 0) return true;
+                if (Array.isArray(exp.files?.dailyReports) && exp.files.dailyReports.length > 0) return true;
+                if (Array.isArray(exp.files?.reports) && exp.files.reports.length > 0) return true;
+                if (Array.isArray(exp.clientSites)) {
+                    const csHasRep = exp.clientSites.some(cs => 
+                        (Array.isArray(cs.files?.dailyReports) && cs.files.dailyReports.length > 0) ||
+                        (Array.isArray(cs.files?.reports) && cs.files.reports.length > 0) ||
+                        (Array.isArray(cs.dailyReports) && cs.dailyReports.length > 0) ||
+                        (Array.isArray(cs.reports) && cs.reports.length > 0) ||
+                        (cs.files && Object.keys(cs.files).some(k => k.toLowerCase().includes('report') && cs.files[k]?.length > 0)) ||
+                        cs.hasReport === true ||
+                        cs.hasDailyReport === true
+                    );
+                    if (csHasRep) return true;
+                }
+            }
+        }
+
+        // Check schedule-master schedules for this operative and date
+        const opSchedules = getSchedulesWhereOperative(entry);
+        for (const s of opSchedules) {
+            if (s.hasReport || s.hasDailyReport) return true;
+            if (Array.isArray(s.files?.dailyReports) && s.files.dailyReports.length > 0) return true;
+            if (Array.isArray(s.files?.reports) && s.files.reports.length > 0) return true;
+            if (Array.isArray(s.dailyReports) && s.dailyReports.length > 0) return true;
+            if (Array.isArray(s.reports) && s.reports.length > 0) return true;
+            if (Array.isArray(s.documents)) {
+                const hasDoc = s.documents.some(d => 
+                    (typeof d === 'string' && (d.includes('Daily_report') || d.includes('dailyReport') || d.toLowerCase().includes('report'))) ||
+                    (d && (d.category === 'Daily Report' || d.category === 'dailyReports' || d.url?.includes('Daily_report') || d.url?.includes('dailyReport') || d.name?.toLowerCase().includes('report')))
+                );
+                if (hasDoc) return true;
+            }
+        }
+
+        return false;
+    };
+
+    const extractHasData = (entry) => {
+        if (entry.hasDataFile === true || entry.hasData === true) return true;
+        if (entry.dataFilesCount > 0 || entry.dataCount > 0 || entry.dataFileCount > 0) return true;
+        if (Array.isArray(entry.dataFiles) && entry.dataFiles.length > 0) return true;
+        if (Array.isArray(entry.data) && entry.data.length > 0) return true;
+        if (Array.isArray(entry.files?.data) && entry.files.data.length > 0) return true;
+        if (Array.isArray(entry.details?.files?.data) && entry.details.files.data.length > 0) return true;
+        if (Array.isArray(entry.details?.dataFiles) && entry.details.dataFiles.length > 0) return true;
+        if (Array.isArray(entry.details?.data) && entry.details.data.length > 0) return true;
+
+        if (Array.isArray(entry.clientSites)) {
+            const hasCsData = entry.clientSites.some(cs => 
+                (Array.isArray(cs.files?.data) && cs.files.data.length > 0) ||
+                (Array.isArray(cs.dataFiles) && cs.dataFiles.length > 0) ||
+                (Array.isArray(cs.data) && cs.data.length > 0) ||
+                cs.hasDataFile === true ||
+                cs.hasData === true
+            );
+            if (hasCsData) return true;
+        }
+
+        const entryDateKey = toLocalDateKey(entry.date);
+
+        // Check allExpenses for this employee and date
+        if (Array.isArray(allExpenses) && allExpenses.length > 0) {
+            const matchedExps = allExpenses.filter(exp => {
+                const expDateKey = toLocalDateKey(exp.date);
+                if (expDateKey !== entryDateKey) return false;
+                const expEmpId = exp.employee?._id || exp.employee || exp.employeeId || '';
+                const expEmpName = exp.employee?.name || exp.employeeName || (typeof exp.employee === 'string' && !/^[0-9a-fA-F]{24}$/.test(exp.employee) ? exp.employee : '');
+                return isSameEmployee(entry.empId, expEmpId, entry.empName, expEmpName);
+            });
+
+            for (const exp of matchedExps) {
+                if (exp.hasDataFile || exp.hasData) return true;
+                if (Array.isArray(exp.dataFiles) && exp.dataFiles.length > 0) return true;
+                if (Array.isArray(exp.data) && exp.data.length > 0) return true;
+                if (Array.isArray(exp.files?.data) && exp.files.data.length > 0) return true;
+                if (Array.isArray(exp.clientSites)) {
+                    const csHasDat = exp.clientSites.some(cs => 
+                        (Array.isArray(cs.files?.data) && cs.files.data.length > 0) ||
+                        (Array.isArray(cs.dataFiles) && cs.dataFiles.length > 0) ||
+                        (Array.isArray(cs.data) && cs.data.length > 0) ||
+                        cs.hasDataFile === true ||
+                        cs.hasData === true
+                    );
+                    if (csHasDat) return true;
+                }
+            }
+        }
+
+        // Check schedule-master schedules for this operative and date
+        const opSchedules = getSchedulesWhereOperative(entry);
+        for (const s of opSchedules) {
+            if (s.hasDataFile || s.hasData) return true;
+            if (Array.isArray(s.files?.data) && s.files.data.length > 0) return true;
+            if (Array.isArray(s.dataFiles) && s.dataFiles.length > 0) return true;
+            if (Array.isArray(s.data) && s.data.length > 0) return true;
+            if (Array.isArray(s.documents)) {
+                const hasDoc = s.documents.some(d => 
+                    (typeof d === 'string' && (d.includes('/Data/') || d.toLowerCase().includes('data'))) ||
+                    (d && (d.category === 'Data' || d.category === 'dataFiles' || d.url?.includes('/Data/') || d.name?.toLowerCase().includes('data')))
+                );
+                if (hasDoc) return true;
+            }
+        }
+
+        return false;
+    };
+
+    const hasExpensesApplied = (entry) => {
+        const d = entry.details || {};
+        const hasFixed = (Number(d.breakfast) || 0) > 0 || 
+                         (Number(d.lunch) || 0) > 0 || 
+                         (Number(d.dinner) || 0) > 0 || 
+                         (Number(d.petrol) || 0) > 0;
+        if (hasFixed) return true;
+
+        const hasOther = Array.isArray(d.otherExpensesList) && d.otherExpensesList.some(oe => (Number(oe.amount) || 0) > 0);
+        if (hasOther) return true;
+
+        if (extractHasReport(entry) || extractHasData(entry)) return true;
+
+        if ((Number(entry.totalDebit) || 0) > 0 || (Number(entry.totalCredit) || 0) > 0 || (Number(entry.totalExpense) || 0) > 0) {
+            return true;
+        }
+
+        const loc = (entry.workLocation || entry.details?.workLocation || '').trim();
+        const inHouseKeywords = ['Room', 'Godown', 'Office', 'Home'];
+
+        // If in-house location (Room, Godown, Office, Home)
+        if (inHouseKeywords.includes(loc) || inHouseKeywords.some(k => (entry.siteNames || '').includes(k))) {
+            return true;
+        }
+
+        // If employee is the operative on any schedule today, show their site row!
+        const opSchedules = getSchedulesWhereOperative(entry);
+        if (opSchedules.length > 0) {
+            return true;
+        }
+
+        // If employee is ONLY a helper on a schedule today (and has no debit, credit, expenses, or reports),
+        // they are already displayed inside the helper column of the Operative's schedule row.
+        // Do NOT create a duplicate standalone row for them.
+        const hlpSchedules = getSchedulesWhereHelper(entry);
+        if (hlpSchedules.length > 0) {
+            return false;
+        }
+
+        // If employee explicitly submitted clientSites
+        if (Array.isArray(entry.clientSites) && entry.clientSites.length > 0 && entry.clientSites.some(cs => cs.clientId && cs.siteId)) {
+            return true;
+        }
+
+        // If attendance is Present and employee has location / site / details
+        if (entry.attendance === 'Present' && (loc || entry.siteNames)) {
+            return true;
+        }
+
+        return false;
+    };
 
     return (
         <VStack spacing={8} align="stretch">
@@ -306,26 +930,165 @@ const DailyReportSection = ({ employees = [] }) => {
                             {(() => {
                                 const datesMap = {};
                                 data.forEach((emp) => {
-                                    const groupedMap = {};
+                                    // 1. Group emp.entries by date
+                                    const empEntriesByDate = {};
                                     (emp.entries || []).forEach(e => {
-                                        const dk = new Date(e.date).toISOString().split('T')[0];
-                                        if (!groupedMap[dk]) groupedMap[dk] = { ...e };
-                                        else {
-                                            groupedMap[dk].totalDebit = (groupedMap[dk].totalDebit||0) + (e.totalDebit||0);
-                                            groupedMap[dk].totalCredit = (groupedMap[dk].totalCredit||0) + (e.totalCredit||0);
-                                            if ((!groupedMap[dk].attendance || groupedMap[dk].attendance === '-') && e.attendance && e.attendance !== '-') groupedMap[dk].attendance = e.attendance;
-                                            if (e.siteNames && !groupedMap[dk].siteNames?.includes(e.siteNames)) groupedMap[dk].siteNames = groupedMap[dk].siteNames ? `${groupedMap[dk].siteNames} | ${e.siteNames}` : e.siteNames;
-                                            if (groupedMap[dk].category !== e.category) groupedMap[dk].category = 'Combined';
+                                        const dk = toLocalDateKey(e.date);
+                                        if (!empEntriesByDate[dk]) {
+                                            empEntriesByDate[dk] = { 
+                                                ...e,
+                                                empId: emp.empId,
+                                                empName: emp.empName,
+                                                totalDebit: Number(e.totalDebit) || 0,
+                                                totalCredit: Number(e.totalCredit) || 0,
+                                                clientSites: Array.isArray(e.clientSites) ? [...e.clientSites] : [],
+                                                files: e.files ? { ...e.files } : {},
+                                                details: e.details ? { ...e.details } : {},
+                                                hasReport: e.hasReport || false,
+                                                hasDataFile: e.hasDataFile || false
+                                            };
+                                        } else {
+                                            empEntriesByDate[dk].totalDebit += (Number(e.totalDebit) || 0);
+                                            empEntriesByDate[dk].totalCredit += (Number(e.totalCredit) || 0);
+                                            if ((!empEntriesByDate[dk].attendance || empEntriesByDate[dk].attendance === '-') && e.attendance && e.attendance !== '-') {
+                                                empEntriesByDate[dk].attendance = e.attendance;
+                                            }
+                                            if (!empEntriesByDate[dk].workLocation && (e.workLocation || e.details?.workLocation)) {
+                                                empEntriesByDate[dk].workLocation = e.workLocation || e.details?.workLocation;
+                                            }
+                                            if (Array.isArray(e.clientSites)) {
+                                                empEntriesByDate[dk].clientSites = [...empEntriesByDate[dk].clientSites, ...e.clientSites];
+                                            }
+                                            if (e.files) {
+                                                empEntriesByDate[dk].files = { ...empEntriesByDate[dk].files, ...e.files };
+                                            }
+                                            if (e.hasReport || e.hasDailyReport || e.hasExpenseReport) {
+                                                empEntriesByDate[dk].hasReport = true;
+                                            }
+                                            if (e.hasDataFile || e.hasData) {
+                                                empEntriesByDate[dk].hasDataFile = true;
+                                            }
                                         }
                                     });
-                                    Object.values(groupedMap).forEach(entry => {
-                                        const dk = new Date(entry.date).toISOString().split('T')[0];
-                                        if (!datesMap[dk]) datesMap[dk] = [];
-                                        datesMap[dk].push({
+
+                                    const activeDates = new Set(Object.keys(empEntriesByDate));
+                                    (allSchedules || []).forEach(s => {
+                                        const sDk = toLocalDateKey(s.scheduleDate || s.date);
+                                        if (!sDk) return;
+                                        const sOpId = s.operative?._id || s.operative;
+                                        const sOpName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
+                                        if (isSameEmployee(emp.empId, sOpId, emp.empName, sOpName)) {
+                                            activeDates.add(sDk);
+                                        }
+                                    });
+
+                                    activeDates.forEach(dk => {
+                                        const dayEntry = empEntriesByDate[dk] || {
                                             empId: emp.empId,
                                             empName: emp.empName,
-                                            ...entry
+                                            date: dk,
+                                            totalDebit: 0,
+                                            totalCredit: 0,
+                                            attendance: 'Present',
+                                            details: {},
+                                            files: {},
+                                            clientSites: []
+                                        };
+
+                                        const opSchedules = (allSchedules || []).filter(s => {
+                                            const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
+                                            if (sDateKey !== dk) return false;
+                                            const opId = s.operative?._id || s.operative;
+                                            const opName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
+                                            return isSameEmployee(emp.empId, opId, emp.empName, opName);
                                         });
+
+                                        const hlpSchedules = (allSchedules || []).filter(s => {
+                                            const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
+                                            if (sDateKey !== dk) return false;
+                                            if (Array.isArray(s.helpers)) {
+                                                return s.helpers.some(h => isSameEmployee(emp.empId, h?._id || h, emp.empName, h?.name || (typeof h === 'string' ? h : '')));
+                                            } else if (s.helper) {
+                                                return isSameEmployee(emp.empId, s.helper?._id || s.helper, emp.empName, s.helper?.name || (typeof s.helper === 'string' ? s.helper : ''));
+                                            }
+                                            return false;
+                                        });
+
+                                        const assignments = [];
+
+                                        if (opSchedules.length > 0) {
+                                            opSchedules.forEach((s) => {
+                                                const sClientName = s.client?.clientName || resolveClientName(s.client?._id || s.client) || '—';
+                                                const sSiteName = s.site?.siteName || resolveSiteName(s.site?._id || s.site) || '—';
+
+                                                let sHelperNames = [];
+                                                if (Array.isArray(s.helpers)) {
+                                                    s.helpers.forEach(h => sHelperNames.push(resolveEmployeeName(h)));
+                                                } else if (s.helper) {
+                                                    sHelperNames.push(resolveEmployeeName(s.helper));
+                                                }
+                                                const cleanHelpers = [...new Set(sHelperNames.filter(Boolean))].filter(h => h.toLowerCase() !== emp.empName.toLowerCase()).join(', ');
+
+                                                const sHasRep = s.hasReport || s.hasDailyReport || (Array.isArray(s.files?.dailyReports) && s.files.dailyReports.length > 0) || (Array.isArray(s.dailyReports) && s.dailyReports.length > 0) || (Array.isArray(s.documents) && s.documents.some(d => (typeof d === 'string' && d.toLowerCase().includes('report')) || d?.category === 'Daily Report')) || extractHasReport(dayEntry);
+                                                const sHasDat = s.hasDataFile || s.hasData || (Array.isArray(s.files?.data) && s.files.data.length > 0) || (Array.isArray(s.dataFiles) && s.dataFiles.length > 0) || (Array.isArray(s.documents) && s.documents.some(d => (typeof d === 'string' && d.toLowerCase().includes('data')) || d?.category === 'Data')) || extractHasData(dayEntry);
+
+                                                assignments.push({
+                                                    client: sClientName,
+                                                    site: sSiteName,
+                                                    helpers: cleanHelpers,
+                                                    hasReport: sHasRep,
+                                                    hasDataFile: sHasDat,
+                                                    schedule: s
+                                                });
+                                            });
+                                        } else if (hlpSchedules.length > 0) {
+                                            if (hasExpensesApplied(dayEntry)) {
+                                                hlpSchedules.forEach((s) => {
+                                                    const sClientName = s.client?.clientName || resolveClientName(s.client?._id || s.client) || '—';
+                                                    const sSiteName = s.site?.siteName || resolveSiteName(s.site?._id || s.site) || '—';
+                                                    const sOpName = s.operative?.name || resolveEmployeeName(s.operative?._id || s.operative) || '—';
+
+                                                    assignments.push({
+                                                        operative: sOpName,
+                                                        client: sClientName,
+                                                        site: sSiteName,
+                                                        helpers: emp.empName,
+                                                        hasReport: extractHasReport(dayEntry),
+                                                        hasDataFile: extractHasData(dayEntry),
+                                                        schedule: s
+                                                    });
+                                                });
+                                            }
+                                        } else {
+                                            if (hasExpensesApplied(dayEntry)) {
+                                                const loc = (dayEntry.workLocation || dayEntry.details?.workLocation || '').trim();
+                                                const inHouseKeywords = ['Room', 'Godown', 'Office', 'Home'];
+                                                const isInHouse = inHouseKeywords.includes(loc) || inHouseKeywords.some(k => (dayEntry.siteNames || '').includes(k));
+
+                                                assignments.push({
+                                                    client: isInHouse ? 'Office' : (dayEntry.clientNames || dayEntry.clientName || '—'),
+                                                    site: loc || dayEntry.siteNames || '—',
+                                                    helpers: '',
+                                                    hasReport: extractHasReport(dayEntry),
+                                                    hasDataFile: extractHasData(dayEntry)
+                                                });
+                                            }
+                                        }
+
+                                        if (assignments.length > 0) {
+                                            const rowItem = {
+                                                ...dayEntry,
+                                                empId: emp.empId,
+                                                empName: emp.empName,
+                                                rowKey: `${emp.empId}-${dk}`,
+                                                assignments: assignments,
+                                                totalDebit: dayEntry.totalDebit,
+                                                totalCredit: dayEntry.totalCredit
+                                            };
+
+                                            if (!datesMap[dk]) datesMap[dk] = [];
+                                            datesMap[dk].push(rowItem);
+                                        }
                                     });
                                 });
 
@@ -340,7 +1103,7 @@ const DailyReportSection = ({ employees = [] }) => {
                                     const totC = dateEntries.reduce((s,e)=>s+(e.totalCredit||0),0);
 
                                     return (
-                                        <Box key={dateKey} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.100" shadow="sm" overflow="hidden">
+                                        <Box key={dateKey} bg="white" borderRadius="2xl" border="1px solid" borderColor="gray.100" shadow="sm" overflow="hidden">
                                             {/* — Date header — */}
                                             <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
                                                 <HStack spacing={3}>
@@ -348,86 +1111,173 @@ const DailyReportSection = ({ employees = [] }) => {
                                                         <Icon as={FaCalendarAlt} />
                                                     </Flex>
                                                     <Text fontWeight="800" fontSize="md" color="gray.800">{fmtDate(dateKey)}</Text>
-                                                    <Badge colorScheme="blue" variant="subtle" borderRadius="full" fontSize="10px">{dateEntries.length} Employees</Badge>
+                                                    <Badge colorScheme="blue" variant="subtle" borderRadius="full" fontSize="10px">{dateEntries.length} {dateEntries.length === 1 ? 'Employee' : 'Employees'}</Badge>
                                                 </HStack>
                                             </Flex>
 
-                                            {/* — Column headers — */}
-                                            <Flex px={4} py={1.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100">
-                                                <Text flex="0 0 150px" fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Employee</Text>
-                                                <Text flex="0 0 90px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Attendance</Text>
-                                                <Text flex={1}         fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase">Site / Note</Text>
-                                                <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right">Credit</Text>
-                                                <Text flex="0 0 80px"  fontSize="9px" fontWeight="700" color="gray.400" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
-                                            </Flex>
-
-                                            {/* — Rows — */}
-                                            {dateEntries.map((entry, idx) => {
-                                                const att = attStyle(entry.attendance);
-                                                const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
-                                                const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
-                                                const initials = entry.empName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-
-                                                return (
-                                                    <Flex
-                                                        key={entry.empId}
-                                                        px={4} py={2.5}
-                                                        align="center"
-                                                        bg={idx%2===0 ? 'white' : 'gray.50'}
-                                                        borderLeft="3px solid"
-                                                        borderLeftColor={hasDebitOnly ? 'red.300' : hasCreditOnly ? 'green.300' : 'transparent'}
-                                                        borderBottom={idx < dateEntries.length-1 ? "1px solid" : "none"}
-                                                        borderColor="gray.50"
-                                                        _hover={{ bg:'blue.50' }}
-                                                        transition="background 0.15s"
-                                                        flexWrap={{ base:'wrap', md:'nowrap' }}
-                                                        gap={1}
-                                                        cursor="pointer"
-                                                        onClick={() => {
-                                                            setSelectedDetailEntry(entry);
-                                                            onDetailOpen();
-                                                        }}
-                                                    >
-                                                        <HStack flex="0 0 150px" spacing={2} overflow="hidden">
-                                                            <Flex w={6} h={6} borderRadius="md" bg="blue.100" align="center" justify="center" color="blue.700" fontWeight="700" fontSize="10px" flexShrink={0}>
-                                                                {initials}
-                                                            </Flex>
-                                                            <Text fontSize="xs" fontWeight="600" color="gray.700" isTruncated>{entry.empName}</Text>
-                                                        </HStack>
-                                                        
-                                                        <Box flex="0 0 90px">
-                                                            {entry.attendance && entry.attendance !== '-' ? (
-                                                                <Box display="inline-flex" px={2} py={0.5} borderRadius="md" bg={att.bg} fontSize="10px" fontWeight="700" color={att.color} whiteSpace="nowrap">
-                                                                    {att.label}
-                                                                </Box>
-                                                            ) : <Text fontSize="xs" color="gray.300">—</Text>}
-                                                        </Box>
-                                                        <Box flex={1} minW={0}>
-                                                            <Text fontSize="xs" color={entry.siteNames ? 'gray.600' : 'gray.300'} noOfLines={1}>
-                                                                {entry.siteNames || '—'}
-                                                            </Text>
-                                                            {entry.attendanceRemark && !entry.attendanceRemark.toLowerCase().includes('auto-marked') && !entry.attendanceRemark.toLowerCase().includes('auto marked') && (
-                                                                <Text fontSize="9px" color="orange.400">{entry.attendanceRemark}</Text>
-                                                            )}
-                                                        </Box>
-                                                        <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalCredit>0 ? 'green.500' : 'gray.200'} textAlign="right">
-                                                            {entry.totalCredit>0 ? fmtAmt(entry.totalCredit) : '—'}
-                                                        </Text>
-                                                        <Text flex="0 0 80px" fontSize="xs" fontWeight="700" color={entry.totalDebit>0 ? 'red.500' : 'gray.200'} textAlign="right" ml={2}>
-                                                            {entry.totalDebit>0 ? fmtAmt(entry.totalDebit) : '—'}
-                                                        </Text>
-                                                    </Flex>
-                                                );
-                                            })}
-
-                                            {/* — Totals footer — */}
-                                            {(totD > 0 || totC > 0) && (
-                                                <Flex px={4} py={2} bg="blue.50" borderTop="1px solid" borderColor="blue.100" align="center" justify="flex-end" gap={6}>
-                                                    <Text fontSize="10px" color="gray.500" fontWeight="600" flex={1}>Daily Total</Text>
-                                                    {totC > 0 && <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)} Credit</Text>}
-                                                    {totD > 0 && <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)} Debit</Text>}
+                                            {/* — Scrollable Table for Perfect Alignment — */}
+                                            <Box overflowX="auto">
+                                                {/* — Column headers — */}
+                                                <Flex minW="900px" px={4} py={2} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center">
+                                                    <Text flex="1.2" minW="140px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Operative</Text>
+                                                    <Text flex="1"   minW="130px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Helper</Text>
+                                                    <Text flex="1.2" minW="140px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Client</Text>
+                                                    <Text flex="1.2" minW="140px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Site</Text>
+                                                    <Text flex="0 0 75px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="center">Report</Text>
+                                                    <Text flex="0 0 75px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="center">Data</Text>
+                                                    <Text flex="0 0 85px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="right">Credit</Text>
+                                                    <Text flex="0 0 85px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
                                                 </Flex>
-                                            )}
+
+                                                {/* — Rows — */}
+                                                {dateEntries.map((entry, idx) => {
+                                                    const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
+                                                    const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
+                                                    const opName = entry.empName;
+                                                    const displayName = opName || '';
+                                                    const initials = displayName.split(' ').filter(Boolean).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                                                    const assignments = entry.assignments || [];
+
+                                                    return (
+                                                        <Flex
+                                                            key={entry.rowKey || `${entry.empId}-${idx}`}
+                                                            minW="900px"
+                                                            px={4} py={assignments.length > 1 ? 3 : 2.5}
+                                                            align="center"
+                                                            bg={idx%2===0 ? 'white' : 'gray.50/50'}
+                                                            borderLeft="3px solid"
+                                                            borderLeftColor={hasDebitOnly ? 'red.400' : hasCreditOnly ? 'green.400' : 'transparent'}
+                                                            borderBottom={idx < dateEntries.length-1 ? "1px solid" : "none"}
+                                                            borderColor="gray.100"
+                                                            _hover={{ bg:'blue.50/60' }}
+                                                            transition="background 0.15s"
+                                                            cursor="pointer"
+                                                            onClick={() => {
+                                                                setSelectedDetailEntry(entry);
+                                                                onDetailOpen();
+                                                            }}
+                                                        >
+                                                            {/* 1. Operative */}
+                                                            <HStack flex="1.2" minW="140px" spacing={2} pr={2} overflow="hidden">
+                                                                <Flex w={7} h={7} borderRadius="md" bg="blue.100" align="center" justify="center" color="blue.700" fontWeight="800" fontSize="11px" flexShrink={0}>
+                                                                    {initials}
+                                                                </Flex>
+                                                                <VStack align="start" spacing={0} overflow="hidden">
+                                                                    <Text fontSize="xs" fontWeight="800" color="gray.800" isTruncated>
+                                                                        {opName}
+                                                                    </Text>
+                                                                    {assignments.length > 1 && (
+                                                                        <Badge colorScheme="blue" variant="subtle" fontSize="9px" px={1.5} borderRadius="full">
+                                                                            {assignments.length} Sites
+                                                                        </Badge>
+                                                                    )}
+                                                                </VStack>
+                                                            </HStack>
+
+                                                            {/* 2. Helper (Partitioned per assignment) */}
+                                                            <Box flex="1" minW="130px" pr={2}>
+                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
+                                                                    {assignments.map((asg, aIdx) => (
+                                                                        <Text key={aIdx} fontSize="xs" color={asg.helpers ? "gray.800" : "gray.300"} fontWeight={asg.helpers ? "700" : "normal"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
+                                                                            {asg.helpers ? `🤝 ${asg.helpers}` : '—'}
+                                                                        </Text>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Box>
+
+                                                            {/* 3. Client (Partitioned per assignment) */}
+                                                            <Box flex="1.2" minW="140px" pr={2}>
+                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
+                                                                    {assignments.map((asg, aIdx) => (
+                                                                        <Text key={aIdx} fontSize="xs" fontWeight="700" color={asg.client && asg.client !== '—' ? "gray.800" : "gray.300"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
+                                                                            {asg.client && asg.client !== '—' ? `🏢 ${asg.client}` : '—'}
+                                                                        </Text>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Box>
+
+                                                            {/* 4. Site (Partitioned per assignment) */}
+                                                            <Box flex="1.2" minW="140px" pr={2}>
+                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
+                                                                    {assignments.map((asg, aIdx) => (
+                                                                        <Text key={aIdx} fontSize="xs" fontWeight="700" color={asg.site && asg.site !== '—' ? "blue.600" : "gray.400"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
+                                                                            {asg.site && asg.site !== '—' ? `📍 ${asg.site}` : '—'}
+                                                                        </Text>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Box>
+
+                                                            {/* 5. Report Checkmark (Aligned per assignment) */}
+                                                            <Flex flex="0 0 75px" justify="center" align="center">
+                                                                <VStack spacing={assignments.length > 1 ? 2 : 0} align="center" divider={assignments.length > 1 ? <Divider borderColor="transparent" /> : null}>
+                                                                    {assignments.map((asg, aIdx) => (
+                                                                        <Flex key={aIdx} minH={assignments.length > 1 ? "22px" : "auto"} align="center" justify="center">
+                                                                            {asg.hasReport ? (
+                                                                                <Badge colorScheme="green" variant="solid" borderRadius="full" px={2} py={0.5} fontSize="9px" fontWeight="800" display="inline-flex" alignItems="center" gap={1}>
+                                                                                    <Icon as={FaCheckCircle} /> Yes
+                                                                                </Badge>
+                                                                            ) : (
+                                                                                <Text fontSize="xs" color="gray.300">—</Text>
+                                                                            )}
+                                                                        </Flex>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Flex>
+
+                                                            {/* 6. Data Checkmark (Aligned per assignment) */}
+                                                            <Flex flex="0 0 75px" justify="center" align="center">
+                                                                <VStack spacing={assignments.length > 1 ? 2 : 0} align="center" divider={assignments.length > 1 ? <Divider borderColor="transparent" /> : null}>
+                                                                    {assignments.map((asg, aIdx) => (
+                                                                        <Flex key={aIdx} minH={assignments.length > 1 ? "22px" : "auto"} align="center" justify="center">
+                                                                            {asg.hasDataFile ? (
+                                                                                <Badge colorScheme="blue" variant="solid" borderRadius="full" px={2} py={0.5} fontSize="9px" fontWeight="800" display="inline-flex" alignItems="center" gap={1}>
+                                                                                    <Icon as={FaCheckCircle} /> Yes
+                                                                                </Badge>
+                                                                            ) : (
+                                                                                <Text fontSize="xs" color="gray.300">—</Text>
+                                                                            )}
+                                                                        </Flex>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Flex>
+
+                                                            {/* 7. Credit (Single employee day total) */}
+                                                            <Text flex="0 0 85px" fontSize="xs" fontWeight="700" color={entry.totalCredit > 0 ? "green.600" : "gray.300"} textAlign="right">
+                                                                {entry.totalCredit > 0 ? fmtAmt(entry.totalCredit) : '—'}
+                                                            </Text>
+
+                                                            {/* 8. Debit (Single employee day total) */}
+                                                            <Text flex="0 0 85px" fontSize="xs" fontWeight="700" color={entry.totalDebit > 0 ? "red.500" : "gray.300"} textAlign="right" ml={2}>
+                                                                {entry.totalDebit > 0 ? fmtAmt(entry.totalDebit) : '—'}
+                                                            </Text>
+                                                        </Flex>
+                                                    );
+                                                })}
+
+                                                {/* — Daily Totals bar — */}
+                                                {(totD > 0 || totC > 0) && (
+                                                    <Flex px={4} py={2} bg="blue.50/40" borderTop="1px dashed" borderColor="blue.200" align="center" justify="space-between">
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaMoneyBillWave} color="blue.500" fontSize="xs"/>
+                                                            <Text fontSize="xs" fontWeight="700" color="blue.700">Daily Total ({dateEntries.length} employees)</Text>
+                                                        </HStack>
+                                                        <HStack spacing={6}>
+                                                            {totC > 0 && (
+                                                                <HStack spacing={1}>
+                                                                    <Text fontSize="xs" color="gray.500" fontWeight="600">Total Credit:</Text>
+                                                                    <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)}</Text>
+                                                                </HStack>
+                                                            )}
+                                                            {totD > 0 && (
+                                                                <HStack spacing={1}>
+                                                                    <Text fontSize="xs" color="gray.500" fontWeight="600">Total Debit:</Text>
+                                                                    <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)}</Text>
+                                                                </HStack>
+                                                            )}
+                                                        </HStack>
+                                                    </Flex>
+                                                )}
+                                            </Box>
                                         </Box>
                                     );
                                 });
@@ -569,120 +1419,948 @@ const DailyReportSection = ({ employees = [] }) => {
             )}
 
             {/* Expense Detail Modal */}
-            <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="md" isCentered>
-                <ModalOverlay bg="blackAlpha.300" backdropFilter="blur(3px)" />
-                <ModalContent borderRadius="xl" overflow="hidden">
-                    <ModalHeader borderBottom="1px solid" borderColor="gray.100" py={4} bg="gray.50">
-                        <VStack align="stretch" spacing={0}>
-                            <Text fontSize="md" fontWeight="800" color="gray.800">Day Expense Details</Text>
-                            {selectedDetailEntry && (
-                                <Text fontSize="xs" color="gray.500" fontWeight="500">
-                                    {selectedDetailEntry.empName} — {fmtDate(selectedDetailEntry.date)}
-                                </Text>
-                            )}
-                        </VStack>
-                    </ModalHeader>
-                    <ModalCloseButton />
-                    <ModalBody py={5}>
-                        {selectedDetailEntry && selectedDetailEntry.details ? (
-                            <VStack spacing={4} align="stretch">
-                                {/* Fixed Expenses Section */}
-                                <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.100">
-                                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2}>Fixed Expenses</Text>
-                                    <SimpleGrid columns={2} spacing={2.5}>
-                                        <HStack justify="space-between">
-                                            <Text fontSize="xs" color="gray.600">Breakfast:</Text>
-                                            <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.breakfast || 0}</Text>
+            <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="3xl" isCentered scrollBehavior="inside">
+                <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+                <ModalContent borderRadius="2xl" overflow="hidden" shadow="2xl" maxW={{ base: '95vw', md: '880px', lg: '960px' }}>
+                    {(() => {
+                        if (!selectedDetailEntry) return null;
+
+                        const entryDateKey = toLocalDateKey(selectedDetailEntry.date);
+
+                        // Find ALL schedules where this employee is Operative or Helper on this date
+                        const allDaySchedules = (allSchedules || []).filter(s => {
+                            const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
+                            if (sDateKey !== entryDateKey) return false;
+
+                            const sOpId = s.operative?._id || s.operative;
+                            const sOpName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
+                            if (isSameEmployee(selectedDetailEntry.empId, sOpId, selectedDetailEntry.empName, sOpName)) return true;
+
+                            if (Array.isArray(s.helpers)) {
+                                return s.helpers.some(h => {
+                                    const hId = h?._id || h;
+                                    const hName = h?.name || (typeof h === 'string' ? h : '');
+                                    return isSameEmployee(selectedDetailEntry.empId, hId, selectedDetailEntry.empName, hName);
+                                });
+                            } else if (s.helper) {
+                                const hId = s.helper?._id || s.helper;
+                                const hName = s.helper?.name || (typeof s.helper === 'string' ? s.helper : '');
+                                return isSameEmployee(selectedDetailEntry.empId, hId, selectedDetailEntry.empName, hName);
+                            }
+                            return false;
+                        });
+
+                        const empObj = employees.find(e => 
+                            String(e._id) === String(selectedDetailEntry.empId) || 
+                            String(e.empId) === String(selectedDetailEntry.empId) || 
+                            (e.name && e.name.trim().toLowerCase() === (selectedDetailEntry.empName || '').trim().toLowerCase())
+                        );
+                        const empObjectId = empObj ? empObj._id : selectedDetailEntry.empId;
+
+                        const details = selectedDetailEntry.details || {};
+
+                        // ── 1. PEER TRANSFERS (Peer to Peer) ──────────────────────────────────
+                        const givenToList = [];
+                        const receivedFromList = [];
+
+                        // From selectedDetailEntry.details
+                        if (Array.isArray(details.givenTo)) {
+                            details.givenTo.forEach(g => {
+                                if (Number(g.amount) > 0 || g.employeeName) {
+                                    givenToList.push({
+                                        employeeName: g.employeeName || resolveEmployeeName(g.employee || g.employeeId),
+                                        amount: Number(g.amount) || 0,
+                                        remark: g.remark || g.note || '',
+                                        mode: g.mode || g.paymentMode || ''
+                                    });
+                                }
+                            });
+                        }
+                        if (Array.isArray(details.receivedFrom)) {
+                            details.receivedFrom.forEach(r => {
+                                if (Number(r.amount) > 0 || r.employeeName) {
+                                    receivedFromList.push({
+                                        employeeName: r.employeeName || resolveEmployeeName(r.employee || r.employeeId),
+                                        amount: Number(r.amount) || 0,
+                                        remark: r.remark || r.note || '',
+                                        mode: r.mode || r.paymentMode || ''
+                                    });
+                                }
+                            });
+                        }
+                        if (Array.isArray(selectedDetailEntry.creditDebit?.givenTo)) {
+                            selectedDetailEntry.creditDebit.givenTo.forEach(g => {
+                                if (Number(g.amount) > 0) {
+                                    givenToList.push({
+                                        employeeName: g.employeeName || resolveEmployeeName(g.employee || g.employeeId),
+                                        amount: Number(g.amount) || 0,
+                                        remark: g.remark || '',
+                                        mode: g.paymentMode || ''
+                                    });
+                                }
+                            });
+                        }
+                        if (Array.isArray(selectedDetailEntry.creditDebit?.receivedFrom)) {
+                            selectedDetailEntry.creditDebit.receivedFrom.forEach(r => {
+                                if (Number(r.amount) > 0) {
+                                    receivedFromList.push({
+                                        employeeName: r.employeeName || resolveEmployeeName(r.employee || r.employeeId),
+                                        amount: Number(r.amount) || 0,
+                                        remark: r.remark || '',
+                                        mode: r.paymentMode || ''
+                                    });
+                                }
+                            });
+                        }
+
+                        // From selectedDetailTransfers
+                        (selectedDetailTransfers || []).forEach(tr => {
+                            const trDateKey = toLocalDateKey(tr.date);
+                            if (trDateKey === entryDateKey) {
+                                const gId = String(tr.giver?._id || tr.giver);
+                                const tId = String(tr.taker?._id || tr.taker);
+                                const eIdStr = String(empObjectId);
+                                if (gId === eIdStr) {
+                                    givenToList.push({
+                                        employeeName: tr.taker?.name || resolveEmployeeName(tr.taker),
+                                        amount: Number(tr.amount) || 0,
+                                        remark: tr.remark || tr.note || '',
+                                        mode: tr.paymentMode || ''
+                                    });
+                                }
+                                if (tId === eIdStr) {
+                                    receivedFromList.push({
+                                        employeeName: tr.giver?.name || resolveEmployeeName(tr.giver),
+                                        amount: Number(tr.amount) || 0,
+                                        remark: tr.remark || tr.note || '',
+                                        mode: tr.paymentMode || ''
+                                    });
+                                }
+                            }
+                        });
+
+                        // Deduplicate
+                        const uniqueGivenTo = [];
+                        const seenGiven = new Set();
+                        givenToList.forEach(item => {
+                            const k = `${item.employeeName}-${item.amount}-${item.remark}`;
+                            if (!seenGiven.has(k) && item.amount > 0) {
+                                seenGiven.add(k);
+                                uniqueGivenTo.push(item);
+                            }
+                        });
+
+                        const uniqueReceivedFrom = [];
+                        const seenReceived = new Set();
+                        receivedFromList.forEach(item => {
+                            const k = `${item.employeeName}-${item.amount}-${item.remark}`;
+                            if (!seenReceived.has(k) && item.amount > 0) {
+                                seenReceived.add(k);
+                                uniqueReceivedFrom.push(item);
+                            }
+                        });
+
+                        // ── 2. DAILY EXPENSES BREAKDOWN (Breakfast, Lunch, Dinner, Fuel, Other) ──
+                        const matchedExp = (selectedDetailExpenses || []).find(exp => toLocalDateKey(exp.date) === entryDateKey) || {};
+
+                        const bfAmt = Number(details.breakfast || matchedExp.breakfast || 0);
+                        const lunchAmt = Number(details.lunch || matchedExp.lunch || 0);
+                        const dinnerAmt = Number(details.dinner || matchedExp.dinner || 0);
+                        const petrolAmt = Number(details.petrol || matchedExp.petrol || 0);
+                        const fuelTypeStr = details.fuelType || matchedExp.fuelType || 'Petrol';
+
+                        const expensesKVList = [];
+                        if (bfAmt > 0) {
+                            expensesKVList.push({ key: 'Breakfast', icon: '🍳', value: bfAmt, badgeColor: 'orange' });
+                        }
+                        if (lunchAmt > 0) {
+                            expensesKVList.push({ key: 'Lunch', icon: '🍱', value: lunchAmt, badgeColor: 'green' });
+                        }
+                        if (dinnerAmt > 0) {
+                            expensesKVList.push({ key: 'Dinner', icon: '🍽️', value: dinnerAmt, badgeColor: 'purple' });
+                        }
+                        if (petrolAmt > 0) {
+                            expensesKVList.push({ key: `Fuel / Petrol (${fuelTypeStr})`, icon: '⛽', value: petrolAmt, badgeColor: 'blue' });
+                        }
+
+                        const otherList = Array.isArray(details.otherExpensesList) && details.otherExpensesList.length > 0 
+                            ? details.otherExpensesList 
+                            : (Array.isArray(matchedExp.otherExpensesList) ? matchedExp.otherExpensesList : []);
+
+                        otherList.forEach(oe => {
+                            const amt = Number(oe.amount) || 0;
+                            const name = oe.expenseName || oe.particulars || oe.name || 'Misc Expense';
+                            if (amt > 0 || name.trim()) {
+                                expensesKVList.push({ key: name, icon: '🏷️', value: amt, badgeColor: 'teal' });
+                            }
+                        });
+
+                        const totalDailyExp = expensesKVList.reduce((s, e) => s + (e.value || 0), 0);
+
+                        // ── 3. DATA FILES & REPORT FILES (Client & Site Wise) ──────────────────
+                        const siteDocsMap = {}; // Key: `${clientName}___${siteName}` => { clientName, siteName, reports: [], dataFiles: [], seenUrls: Set }
+
+                        const registerDoc = (type, f, clientTag = '', siteTag = '') => {
+                            if (!f) return;
+                            const url = typeof f === 'string' ? f : (f.url || f.path || '');
+                            if (!url) return;
+                            const cName = (clientTag || 'General / Unassigned Client').trim();
+                            const sName = (siteTag || 'General / Unassigned Site').trim();
+                            const groupKey = `${cName}___${sName}`;
+
+                            if (!siteDocsMap[groupKey]) {
+                                siteDocsMap[groupKey] = {
+                                    clientName: cName,
+                                    siteName: sName,
+                                    reports: [],
+                                    dataFiles: [],
+                                    seenUrls: new Set()
+                                };
+                            }
+
+                            if (siteDocsMap[groupKey].seenUrls.has(url)) return;
+                            siteDocsMap[groupKey].seenUrls.add(url);
+
+                            const docItem = {
+                                file: f,
+                                url: url,
+                                name: getFileName(f, type === 'report' ? 'Daily Report' : 'Data File'),
+                                clientName: cName,
+                                siteName: sName
+                            };
+
+                            if (type === 'report') {
+                                siteDocsMap[groupKey].reports.push(docItem);
+                            } else {
+                                siteDocsMap[groupKey].dataFiles.push(docItem);
+                            }
+                        };
+
+                        allDaySchedules.forEach(s => {
+                            const cTag = s.client?.clientName || resolveClientName(s.client?._id || s.client) || '';
+                            const sTag = s.site?.siteName || resolveSiteName(s.site?._id || s.site) || '';
+
+                            (s.files?.dailyReports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+                            (s.dailyReports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+                            (s.documents || []).forEach(d => {
+                                const dUrl = typeof d === 'string' ? d : (d.url || '');
+                                const dCat = typeof d === 'object' ? d.category : '';
+                                if (dCat === 'Daily Report' || dCat === 'dailyReports' || dUrl.includes('Daily_report') || dUrl.includes('dailyReport') || dUrl.toLowerCase().includes('report')) {
+                                    registerDoc('report', d, cTag, sTag);
+                                } else if (dCat === 'Data' || dCat === 'dataFiles' || dUrl.includes('/Data/') || dUrl.toLowerCase().includes('data')) {
+                                    registerDoc('data', d, cTag, sTag);
+                                }
+                            });
+                            (s.files?.data || []).forEach(f => registerDoc('data', f, cTag, sTag));
+                            (s.dataFiles || []).forEach(f => registerDoc('data', f, cTag, sTag));
+                        });
+
+                        (selectedDetailEntry.clientSites || []).forEach(cs => {
+                            const cTag = cs.clientName || resolveClientName(cs.clientId?._id || cs.clientId) || '';
+                            const sTag = cs.siteName || resolveSiteName(cs.siteId?._id || cs.siteId) || '';
+
+                            (cs.files?.dailyReports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+                            (cs.files?.reports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+                            (cs.dailyReports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+                            (cs.reports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+
+                            (cs.files?.data || []).forEach(f => registerDoc('data', f, cTag, sTag));
+                            (cs.dataFiles || []).forEach(f => registerDoc('data', f, cTag, sTag));
+                            (cs.data || []).forEach(f => registerDoc('data', f, cTag, sTag));
+                        });
+
+                        (matchedExp.clientSites || []).forEach(cs => {
+                            const cTag = cs.clientName || resolveClientName(cs.clientId?._id || cs.clientId) || '';
+                            const sTag = cs.siteName || resolveSiteName(cs.siteId?._id || cs.siteId) || '';
+
+                            (cs.files?.dailyReports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+                            (cs.dailyReports || []).forEach(f => registerDoc('report', f, cTag, sTag));
+                            (cs.files?.data || []).forEach(f => registerDoc('data', f, cTag, sTag));
+                            (cs.dataFiles || []).forEach(f => registerDoc('data', f, cTag, sTag));
+                        });
+
+                        const fallbackClient = selectedDetailEntry.clientNames || (allDaySchedules[0]?.client?.clientName) || resolveClientName(allDaySchedules[0]?.client?._id || allDaySchedules[0]?.client) || 'General';
+                        const fallbackSite = selectedDetailEntry.siteNames || (allDaySchedules[0]?.site?.siteName) || resolveSiteName(allDaySchedules[0]?.site?._id || allDaySchedules[0]?.site) || 'General Site';
+
+                        (selectedDetailEntry.dailyReports || []).forEach(f => registerDoc('report', f, fallbackClient, fallbackSite));
+                        (selectedDetailEntry.files?.dailyReports || []).forEach(f => registerDoc('report', f, fallbackClient, fallbackSite));
+                        (selectedDetailEntry.files?.reports || []).forEach(f => registerDoc('report', f, fallbackClient, fallbackSite));
+                        (details.files?.dailyReports || []).forEach(f => registerDoc('report', f, fallbackClient, fallbackSite));
+                        (details.dailyReports || []).forEach(f => registerDoc('report', f, fallbackClient, fallbackSite));
+
+                        (selectedDetailEntry.data || []).forEach(f => registerDoc('data', f, fallbackClient, fallbackSite));
+                        (selectedDetailEntry.dataFiles || []).forEach(f => registerDoc('data', f, fallbackClient, fallbackSite));
+                        (selectedDetailEntry.files?.data || []).forEach(f => registerDoc('data', f, fallbackClient, fallbackSite));
+                        (details.files?.data || []).forEach(f => registerDoc('data', f, fallbackClient, fallbackSite));
+                        (details.dataFiles || []).forEach(f => registerDoc('data', f, fallbackClient, fallbackSite));
+                        (details.data || []).forEach(f => registerDoc('data', f, fallbackClient, fallbackSite));
+
+                        const docGroups = Object.values(siteDocsMap).filter(g => g.reports.length > 0 || g.dataFiles.length > 0);
+                        const totalDocsCount = docGroups.reduce((s, g) => s + g.reports.length + g.dataFiles.length, 0);
+
+                        // ── 4. RIGHT SIDE: TODAY FINANCIALS & DIFFERENCE ──────────────────────
+                        const dayCredit = Number(selectedDetailEntry.totalCredit) || 0;
+                        const dayDebit = Number(selectedDetailEntry.totalDebit) || 0;
+                        const dayDiff = dayCredit - dayDebit;
+
+                        // ── 5. RIGHT SIDE: MONTH TOTAL CREDIT, DEBIT & DIFFERENCE ─────────────
+                        const monthCredit = Number(monthStats.credit) || 0;
+                        const monthDebit = Number(monthStats.debit) || 0;
+                        const monthDiff = monthCredit - monthDebit;
+                        const currentBalance = Number(monthStats.currentBalance) || 0;
+
+                        // Date string
+                        const dtObj = new Date(selectedDetailEntry.date);
+                        const fullDateStr = isNaN(dtObj.getTime())
+                            ? fmtDate(selectedDetailEntry.date)
+                            : dtObj.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+
+                        const monthName = isNaN(dtObj.getTime())
+                            ? 'Current Month'
+                            : dtObj.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+                        return (
+                            <>
+                                {/* ── Modal Header with Gradient & Meta Tags ── */}
+                                <ModalHeader bgGradient="linear(to-r, blue.700, blue.900)" color="white" py={4} px={6}>
+                                    <VStack align="stretch" spacing={2.5}>
+                                        <HStack justify="space-between" align="center" flexWrap="wrap" gap={2}>
+                                            <HStack spacing={3}>
+                                                <Flex w={10} h={10} borderRadius="xl" bg="whiteAlpha.200" align="center" justify="center" backdropFilter="blur(4px)">
+                                                    <Icon as={FaCalendarAlt} color="white" w={5} h={5} />
+                                                </Flex>
+                                                <Box>
+                                                    <Text fontSize="lg" fontWeight="900" lineHeight="short" letterSpacing="tight">
+                                                        {fullDateStr}
+                                                    </Text>
+                                                    <Text fontSize="xs" color="whiteAlpha.900" fontWeight="600">
+                                                        Employee: <Text as="span" color="yellow.300" fontWeight="800">{selectedDetailEntry.empName}</Text>
+                                                    </Text>
+                                                </Box>
+                                            </HStack>
                                         </HStack>
-                                        <HStack justify="space-between">
-                                            <Text fontSize="xs" color="gray.600">Lunch:</Text>
-                                            <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.lunch || 0}</Text>
-                                        </HStack>
-                                        <HStack justify="space-between">
-                                            <Text fontSize="xs" color="gray.600">Dinner:</Text>
-                                            <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.dinner || 0}</Text>
-                                        </HStack>
-                                        <HStack justify="space-between">
-                                            <Text fontSize="xs" color="gray.600">Fuel / Petrol:</Text>
-                                            <VStack align="end" spacing={0}>
-                                                <Text fontSize="xs" fontWeight="700" color="gray.800">₹{selectedDetailEntry.details.petrol || 0}</Text>
-                                                {selectedDetailEntry.details.fuelType && (
-                                                    <Badge size="xs" colorScheme="orange" fontSize="9px" py={0} px={1}>
-                                                        {selectedDetailEntry.details.fuelType}
-                                                    </Badge>
+
+                                        {/* Quick Summary Badges */}
+                                        <Flex flexWrap="wrap" gap={2} pt={1}>
+                                            {allDaySchedules.length > 0 ? (
+                                                allDaySchedules.map((sch, schIdx) => {
+                                                    const sSite = sch.site?.siteName || resolveSiteName(sch.site?._id || sch.site) || 'Site';
+                                                    const sClient = sch.client?.clientName || resolveClientName(sch.client?._id || sch.client) || '—';
+                                                    let sHelpers = [];
+                                                    if (Array.isArray(sch.helpers)) {
+                                                        sch.helpers.forEach(h => sHelpers.push(resolveEmployeeName(h)));
+                                                    } else if (sch.helper) {
+                                                        sHelpers.push(resolveEmployeeName(sch.helper));
+                                                    }
+                                                    const hlpStr = sHelpers.filter(Boolean).join(', ');
+
+                                                    return (
+                                                        <Badge key={schIdx} bg="whiteAlpha.200" color="white" px={3} py={1} borderRadius="lg" fontSize="11px" textTransform="none" display="flex" alignItems="center" gap={1.5}>
+                                                            <Text as="span" color="yellow.200" fontWeight="800">📍 Site {schIdx + 1}:</Text>
+                                                            <Text as="span" fontWeight="700">{sSite}</Text>
+                                                            <Text as="span" color="whiteAlpha.600">|</Text>
+                                                            <Text as="span" color="purple.200">🏢 {sClient}</Text>
+                                                            {hlpStr && (
+                                                                <>
+                                                                    <Text as="span" color="whiteAlpha.600">|</Text>
+                                                                    <Text as="span" color="green.200">🤝 Helper: {hlpStr}</Text>
+                                                                </>
+                                                            )}
+                                                        </Badge>
+                                                    );
+                                                })
+                                            ) : (
+                                                <Badge bg="whiteAlpha.200" color="white" px={3} py={1} borderRadius="lg" fontSize="11px" textTransform="none" display="flex" alignItems="center" gap={1.5}>
+                                                    <Text as="span" color="yellow.200" fontWeight="800">🏠 In-House / Office:</Text>
+                                                    <Text as="span" fontWeight="700">{selectedDetailEntry.workLocation || 'Office'}</Text>
+                                                </Badge>
+                                            )}
+                                        </Flex>
+                                    </VStack>
+                                </ModalHeader>
+                                <ModalCloseButton color="white" mt={2} />
+
+                                <ModalBody p={5} bg="gray.50" maxH="75vh" overflowY="auto">
+                                    <VStack spacing={4} align="stretch">
+
+                                        {/* ════════════════════ SITE ALLOCATIONS & SCHEDULES ════════════════════ */}
+                                        <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                            <HStack justify="space-between" mb={3} borderBottom="1px solid" borderColor="gray.100" pb={2}>
+                                                <HStack spacing={2}>
+                                                    <Icon as={FaMapMarkerAlt} color="blue.600" />
+                                                    <Text fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                                        Site Allocations &amp; Schedule Details ({allDaySchedules.length})
+                                                    </Text>
+                                                </HStack>
+                                                <Badge colorScheme="blue" variant="subtle" borderRadius="full" fontSize="10px">
+                                                    {allDaySchedules.length} Assigned {allDaySchedules.length === 1 ? 'Site' : 'Sites'}
+                                                </Badge>
+                                            </HStack>
+
+                                            {allDaySchedules.length > 0 ? (
+                                                <SimpleGrid columns={{ base: 1, md: allDaySchedules.length > 1 ? 2 : 1 }} spacing={3}>
+                                                    {allDaySchedules.map((sch, sIdx) => {
+                                                        const sSiteName = sch.site?.siteName || resolveSiteName(sch.site?._id || sch.site) || 'Site';
+                                                        const sSiteAddr = sch.site?.siteAddress || '';
+                                                        const sClientName = sch.client?.clientName || resolveClientName(sch.client?._id || sch.client) || '—';
+                                                        const sOpName = sch.operative?.name || resolveEmployeeName(sch.operative?._id || sch.operative) || '—';
+                                                        
+                                                        let sHelpers = [];
+                                                        if (Array.isArray(sch.helpers)) {
+                                                            sch.helpers.forEach(h => sHelpers.push(resolveEmployeeName(h)));
+                                                        } else if (sch.helper) {
+                                                            sHelpers.push(resolveEmployeeName(sch.helper));
+                                                        }
+                                                        const cleanHelpers = [...new Set(sHelpers.filter(Boolean))].join(', ');
+
+                                                        const sVehObj = sch.vehicle;
+                                                        const sVehNum = sVehObj?.vehicleNumber || (typeof sVehObj === 'string' ? sVehObj : '');
+                                                        const sVehName = sVehObj?.vehicleName || sVehObj?.model || '';
+                                                        const sVehDisp = sVehNum ? `${sVehNum}${sVehName ? ` (${sVehName})` : ''}` : 'No Vehicle Allocated';
+                                                        const sVehPhoto = sVehObj && typeof sVehObj === 'object' ? (sVehObj.primaryPhotoUrl || (Array.isArray(sVehObj.vehiclePhotos) && sVehObj.vehiclePhotos[0]) || (Array.isArray(sVehObj.photos) && sVehObj.photos[0]) || sVehObj.photoUrl || sVehObj.photo || sVehObj.image) : null;
+                                                        const sVehPhotoUrl = typeof sVehPhoto === 'string' ? sVehPhoto : (sVehPhoto?.url || sVehPhoto?.path || null);
+
+                                                        const sInstList = Array.isArray(sch.instruments) ? sch.instruments : [];
+                                                        const schGroupText = sch.monthGroupId ? `Group #${sch.monthGroupId}` : (sch.scheduleType || 'Standard Schedule');
+
+                                                        return (
+                                                            <Box key={sIdx} p={3.5} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                                <VStack align="stretch" spacing={2.5}>
+                                                                    <Flex justify="space-between" align="start" gap={2}>
+                                                                        <HStack spacing={2} overflow="hidden">
+                                                                            <Icon as={FaMapMarkerAlt} color="red.500" flexShrink={0} />
+                                                                            <VStack align="start" spacing={0} overflow="hidden">
+                                                                                <Text fontSize="sm" fontWeight="800" color="gray.800" isTruncated>
+                                                                                    {sSiteName}
+                                                                                </Text>
+                                                                                {sSiteAddr && (
+                                                                                    <Text fontSize="10px" color="gray.500" isTruncated>{sSiteAddr}</Text>
+                                                                                )}
+                                                                            </VStack>
+                                                                        </HStack>
+                                                                        <Badge colorScheme="purple" variant="subtle" borderRadius="md" px={2} flexShrink={0}>
+                                                                            🏢 {sClientName}
+                                                                        </Badge>
+                                                                    </Flex>
+
+                                                                    <Divider borderColor="gray.200" />
+
+                                                                    <SimpleGrid columns={2} spacing={2} fontSize="xs">
+                                                                        <Box>
+                                                                            <Text color="gray.500" fontSize="10px" fontWeight="700" textTransform="uppercase">Operative</Text>
+                                                                            <Text fontWeight="700" color="blue.700" isTruncated>👤 {sOpName}</Text>
+                                                                        </Box>
+                                                                        <Box>
+                                                                            <Text color="gray.500" fontSize="10px" fontWeight="700" textTransform="uppercase">Helper</Text>
+                                                                            <Text fontWeight="700" color={cleanHelpers ? 'green.700' : 'gray.400'} isTruncated>
+                                                                                🤝 {cleanHelpers || 'None'}
+                                                                            </Text>
+                                                                        </Box>
+                                                                    </SimpleGrid>
+
+                                                                    <SimpleGrid columns={2} spacing={2} fontSize="xs">
+                                                                        <Box>
+                                                                            <Text color="gray.500" fontSize="10px" fontWeight="700" textTransform="uppercase">Vehicle</Text>
+                                                                            <HStack spacing={1.5} mt={0.5} align="center">
+                                                                                {sVehPhotoUrl ? (
+                                                                                    <Tooltip label="Click to view full vehicle photo" hasArrow>
+                                                                                        <Box
+                                                                                            as="button"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                window.open(getFileHref(sVehPhotoUrl), '_blank');
+                                                                                            }}
+                                                                                            cursor="pointer"
+                                                                                            borderRadius="md"
+                                                                                            overflow="hidden"
+                                                                                            border="1.5px solid"
+                                                                                            borderColor="indigo.300"
+                                                                                            _hover={{ transform: 'scale(1.1)', shadow: 'sm' }}
+                                                                                            transition="all 0.15s"
+                                                                                            flexShrink={0}
+                                                                                        >
+                                                                                            <Image
+                                                                                                src={getFileHref(sVehPhotoUrl)}
+                                                                                                alt={sVehNum || 'Vehicle'}
+                                                                                                w={6}
+                                                                                                h={6}
+                                                                                                objectFit="cover"
+                                                                                                fallback={<Flex w={6} h={6} bg="indigo.100" align="center" justify="center"><Icon as={FaCar} color="indigo.600" fontSize="xs"/></Flex>}
+                                                                                            />
+                                                                                        </Box>
+                                                                                    </Tooltip>
+                                                                                ) : (
+                                                                                    <Flex w={5} h={5} borderRadius="sm" bg="indigo.50" align="center" justify="center" flexShrink={0}>
+                                                                                        <Icon as={FaCar} color={sVehNum ? "indigo.600" : "gray.400"} fontSize="10px" />
+                                                                                    </Flex>
+                                                                                )}
+                                                                                <VStack align="start" spacing={0} overflow="hidden">
+                                                                                    <Text fontWeight="700" color={sVehNum ? 'indigo.700' : 'gray.400'} isTruncated fontSize="xs">
+                                                                                        {sVehDisp}
+                                                                                    </Text>
+                                                                                    {sVehPhotoUrl && (
+                                                                                        <Text
+                                                                                            as="button"
+                                                                                            fontSize="9px"
+                                                                                            color="indigo.600"
+                                                                                            fontWeight="700"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                window.open(getFileHref(sVehPhotoUrl), '_blank');
+                                                                                            }}
+                                                                                            _hover={{ textDecoration: 'underline' }}
+                                                                                            display="inline-flex"
+                                                                                            alignItems="center"
+                                                                                            gap={0.5}
+                                                                                        >
+                                                                                            <Icon as={FaCamera} fontSize="8px"/> View Photo
+                                                                                        </Text>
+                                                                                    )}
+                                                                                </VStack>
+                                                                            </HStack>
+                                                                        </Box>
+                                                                        <Box>
+                                                                            <Text color="gray.500" fontSize="10px" fontWeight="700" textTransform="uppercase">Schedule Type</Text>
+                                                                            <Badge colorScheme="purple" fontSize="9px" borderRadius="md" mt={0.5}>
+                                                                                👥 {schGroupText}
+                                                                            </Badge>
+                                                                        </Box>
+                                                                    </SimpleGrid>
+
+                                                                    {/* Instruments */}
+                                                                    <Box bg="white" p={2} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <HStack justify="space-between" mb={sInstList.length > 0 ? 1 : 0}>
+                                                                            <HStack spacing={1}>
+                                                                                <Icon as={FaTools} color="orange.500" fontSize="xs" />
+                                                                                <Text color="gray.700" fontSize="10px" fontWeight="700" textTransform="uppercase">Instruments</Text>
+                                                                            </HStack>
+                                                                            <Badge colorScheme={sInstList.length > 0 ? 'orange' : 'gray'} fontSize="9px" borderRadius="full">
+                                                                                {sInstList.length} Assigned
+                                                                            </Badge>
+                                                                        </HStack>
+                                                                        {sInstList.length > 0 ? (
+                                                                            <VStack align="stretch" spacing={1.5} pl={1}>
+                                                                                {sInstList.map((inst, iIdx) => {
+                                                                                    const iPhoto = inst && typeof inst === 'object' ? (inst.primaryPhotoUrl || (Array.isArray(inst.photos) && inst.photos[0]) || (Array.isArray(inst.existingPhotos) && inst.existingPhotos[0]) || inst.photoUrl || inst.photo || inst.image) : null;
+                                                                                    const iPhotoUrl = typeof iPhoto === 'string' ? iPhoto : (iPhoto?.url || iPhoto?.path || null);
+                                                                                    const iName = inst.instrumentName || inst.name || 'Instrument';
+                                                                                    const iSerial = inst.serialNo ? `[S/N: ${inst.serialNo}]` : '';
+
+                                                                                    return (
+                                                                                        <Flex key={iIdx} justify="space-between" align="center" p={1.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.100">
+                                                                                            <HStack spacing={2} overflow="hidden">
+                                                                                                {iPhotoUrl ? (
+                                                                                                    <Tooltip label="Click to view instrument photo" hasArrow>
+                                                                                                        <Box
+                                                                                                            as="button"
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation();
+                                                                                                                window.open(getFileHref(iPhotoUrl), '_blank');
+                                                                                                            }}
+                                                                                                            cursor="pointer"
+                                                                                                            borderRadius="md"
+                                                                                                            overflow="hidden"
+                                                                                                            border="1px solid"
+                                                                                                            borderColor="orange.300"
+                                                                                                            _hover={{ transform: 'scale(1.1)', shadow: 'sm' }}
+                                                                                                            transition="all 0.15s"
+                                                                                                            flexShrink={0}
+                                                                                                        >
+                                                                                                            <Image
+                                                                                                                src={getFileHref(iPhotoUrl)}
+                                                                                                                alt={iName}
+                                                                                                                w={6}
+                                                                                                                h={6}
+                                                                                                                objectFit="cover"
+                                                                                                                fallback={<Flex w={6} h={6} bg="orange.100" align="center" justify="center"><Icon as={FaTools} color="orange.600" fontSize="9px"/></Flex>}
+                                                                                                            />
+                                                                                                        </Box>
+                                                                                                    </Tooltip>
+                                                                                                ) : (
+                                                                                                    <Flex w={5} h={5} borderRadius="sm" bg="orange.100" align="center" justify="center" flexShrink={0}>
+                                                                                                        <Icon as={FaTools} color="orange.600" fontSize="9px" />
+                                                                                                    </Flex>
+                                                                                                )}
+                                                                                                <VStack align="start" spacing={0} overflow="hidden">
+                                                                                                    <Text fontSize="10px" fontWeight="700" color="gray.800" isTruncated>
+                                                                                                        {iName}
+                                                                                                    </Text>
+                                                                                                    {iSerial && (
+                                                                                                        <Text fontSize="9px" color="gray.500" fontWeight="600">{iSerial}</Text>
+                                                                                                    )}
+                                                                                                </VStack>
+                                                                                            </HStack>
+                                                                                            {iPhotoUrl && (
+                                                                                                <Button
+                                                                                                    size="xs"
+                                                                                                    h="18px"
+                                                                                                    px={1.5}
+                                                                                                    colorScheme="orange"
+                                                                                                    variant="ghost"
+                                                                                                    fontSize="9px"
+                                                                                                    leftIcon={<Icon as={FaExternalLinkAlt} fontSize="7px" />}
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        window.open(getFileHref(iPhotoUrl), '_blank');
+                                                                                                    }}
+                                                                                                    flexShrink={0}
+                                                                                                >
+                                                                                                    Photo
+                                                                                                </Button>
+                                                                                            )}
+                                                                                        </Flex>
+                                                                                    );
+                                                                                })}
+                                                                            </VStack>
+                                                                        ) : (
+                                                                            <Text fontSize="10px" color="gray.400" fontStyle="italic">No instruments assigned.</Text>
+                                                                        )}
+                                                                    </Box>
+                                                                </VStack>
+                                                            </Box>
+                                                        );
+                                                    })}
+                                                </SimpleGrid>
+                                            ) : (
+                                                <Box p={3} bg="gray.50" borderRadius="lg" border="1px dashed" borderColor="gray.300">
+                                                    <HStack justify="space-between">
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaHome} color="gray.500" />
+                                                            <Text fontSize="xs" fontWeight="700" color="gray.700">
+                                                                In-House Activity ({selectedDetailEntry.workLocation || 'Office'})
+                                                            </Text>
+                                                        </HStack>
+                                                        <Badge colorScheme="gray">In-House Staff</Badge>
+                                                    </HStack>
+                                                </Box>
+                                            )}
+                                        </Box>
+
+                                        {/* ════════════════════ 2-COLUMN MAIN BODY ════════════════════ */}
+                                        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} align="start">
+                                            {/* ════════════════════ LEFT COLUMN ════════════════════ */}
+                                            <VStack spacing={4} align="stretch">
+                                                {/* 1. PEER TRANSFERS (Shown before Daily Expenses) */}
+                                                <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                                    <HStack justify="space-between" mb={3} borderBottom="1px solid" borderColor="gray.100" pb={2}>
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaExchangeAlt} color="blue.500" />
+                                                            <Text fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                                                Peer Transfers
+                                                            </Text>
+                                                        </HStack>
+                                                        <Badge colorScheme="blue" variant="subtle" borderRadius="full" fontSize="10px">
+                                                            {uniqueGivenTo.length + uniqueReceivedFrom.length} Transactions
+                                                        </Badge>
+                                                    </HStack>
+
+                                                    <VStack align="stretch" spacing={3}>
+                                                        {uniqueGivenTo.length > 0 && (
+                                                            <Box>
+                                                                <Text fontSize="10px" fontWeight="800" color="red.500" textTransform="uppercase" mb={1.5}>
+                                                                    🔴 Money Given (Debit)
+                                                                </Text>
+                                                                <VStack align="stretch" spacing={1.5}>
+                                                                    {uniqueGivenTo.map((g, idx) => (
+                                                                        <HStack key={idx} justify="space-between" p={2.5} bg="red.50" borderRadius="lg" fontSize="xs" border="1px solid" borderColor="red.100">
+                                                                            <VStack align="start" spacing={0} maxW="65%">
+                                                                                <Text color="red.900" fontWeight="700" isTruncated>To: {g.employeeName}</Text>
+                                                                                {g.remark && <Text fontSize="10px" color="red.700" isTruncated>{g.remark}</Text>}
+                                                                            </VStack>
+                                                                            <Text fontWeight="800" color="red.700" fontSize="sm">₹{Number(g.amount || 0).toLocaleString('en-IN')}</Text>
+                                                                        </HStack>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Box>
+                                                        )}
+
+                                                        {uniqueReceivedFrom.length > 0 && (
+                                                            <Box>
+                                                                <Text fontSize="10px" fontWeight="800" color="green.600" textTransform="uppercase" mb={1.5}>
+                                                                    🟢 Money Received (Credit)
+                                                                </Text>
+                                                                <VStack align="stretch" spacing={1.5}>
+                                                                    {uniqueReceivedFrom.map((r, idx) => (
+                                                                        <HStack key={idx} justify="space-between" p={2.5} bg="green.50" borderRadius="lg" fontSize="xs" border="1px solid" borderColor="green.100">
+                                                                            <VStack align="start" spacing={0} maxW="65%">
+                                                                                <Text color="green.900" fontWeight="700" isTruncated>From: {r.employeeName}</Text>
+                                                                                {r.remark && <Text fontSize="10px" color="green.700" isTruncated>{r.remark}</Text>}
+                                                                            </VStack>
+                                                                            <Text fontWeight="800" color="green.700" fontSize="sm">₹{Number(r.amount || 0).toLocaleString('en-IN')}</Text>
+                                                                        </HStack>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Box>
+                                                        )}
+
+                                                        {uniqueGivenTo.length === 0 && uniqueReceivedFrom.length === 0 && (
+                                                            <Center py={3} bg="gray.50" borderRadius="lg" border="1px dashed" borderColor="gray.200">
+                                                                <Text fontSize="xs" color="gray.400" fontStyle="italic">
+                                                                    No peer transfers recorded for this day.
+                                                                </Text>
+                                                            </Center>
+                                                        )}
+                                                    </VStack>
+                                                </Box>
+
+                                                {/* 2. DAILY EXPENSES BREAKDOWN (Key-Value) */}
+                                                <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                                    <HStack justify="space-between" mb={3} borderBottom="1px solid" borderColor="gray.100" pb={2}>
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaUtensils} color="orange.500" />
+                                                            <Text fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                                                Daily Expenses (Key-Value)
+                                                            </Text>
+                                                        </HStack>
+                                                        <Badge colorScheme="orange" variant="solid" borderRadius="full" px={2} py={0.5} fontSize="11px" fontWeight="800">
+                                                            Total: ₹{totalDailyExp.toLocaleString('en-IN')}
+                                                        </Badge>
+                                                    </HStack>
+
+                                                    {expensesKVList.length > 0 ? (
+                                                        <VStack align="stretch" spacing={2}>
+                                                            {expensesKVList.map((item, idx) => (
+                                                                <Flex key={idx} justify="space-between" align="center" p={2.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                                                    <HStack spacing={2.5} overflow="hidden">
+                                                                        <Text fontSize="md">{item.icon}</Text>
+                                                                        <Text color="gray.800" fontWeight="700" fontSize="xs" isTruncated>
+                                                                            {item.key}
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    <Tag size="md" colorScheme={item.badgeColor || 'gray'} variant="subtle" borderRadius="md" fontWeight="800">
+                                                                        ₹{item.value.toLocaleString('en-IN')}
+                                                                    </Tag>
+                                                                </Flex>
+                                                            ))}
+                                                        </VStack>
+                                                    ) : (
+                                                        <Center py={3} bg="gray.50" borderRadius="lg" border="1px dashed" borderColor="gray.200">
+                                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">
+                                                                No food, fuel or other expenses logged for this date.
+                                                            </Text>
+                                                        </Center>
+                                                    )}
+                                                </Box>
+
+                                                {/* 3. REPORT FILES & DATA FILES (Grouped Client & Site Wise) */}
+                                                <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                                    <HStack justify="space-between" mb={3} borderBottom="1px solid" borderColor="gray.100" pb={2}>
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaFolderOpen} color="teal.500" />
+                                                            <Text fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                                                Client &amp; Site Wise Documents ({totalDocsCount})
+                                                            </Text>
+                                                        </HStack>
+                                                        <Badge colorScheme="teal" variant="subtle" borderRadius="full" fontSize="10px">
+                                                            {docGroups.length} {docGroups.length === 1 ? 'Site Group' : 'Site Groups'}
+                                                        </Badge>
+                                                    </HStack>
+
+                                                    {docGroups.length > 0 ? (
+                                                        <VStack align="stretch" spacing={3}>
+                                                            {docGroups.map((grp, gIdx) => (
+                                                                <Box key={gIdx} p={3} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                                    {/* Client & Site Group Header */}
+                                                                    <Flex justify="space-between" align="center" mb={2.5} flexWrap="wrap" gap={2}>
+                                                                        <HStack spacing={2}>
+                                                                            <Badge colorScheme="purple" px={2.5} py={0.5} borderRadius="md" fontSize="11px" fontWeight="800">
+                                                                                🏢 {grp.clientName}
+                                                                            </Badge>
+                                                                            <Badge colorScheme="blue" px={2.5} py={0.5} borderRadius="md" fontSize="11px" fontWeight="800">
+                                                                                📍 {grp.siteName}
+                                                                            </Badge>
+                                                                        </HStack>
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">
+                                                                            {grp.reports.length} Reports · {grp.dataFiles.length} Data Files
+                                                                        </Text>
+                                                                    </Flex>
+
+                                                                    <VStack align="stretch" spacing={2}>
+                                                                        {/* Reports */}
+                                                                        {grp.reports.map((rf, rIdx) => (
+                                                                            <HStack key={`rep-${rIdx}`} justify="space-between" p={2} bg="teal.50/70" borderRadius="lg" border="1px solid" borderColor="teal.100">
+                                                                                <HStack spacing={2} overflow="hidden" flex={1} mr={2}>
+                                                                                    <Icon as={FaFilePdf} color="teal.600" flexShrink={0} />
+                                                                                    <VStack align="start" spacing={0} overflow="hidden">
+                                                                                        <Text fontSize="xs" fontWeight="700" color="teal.950" isTruncated>
+                                                                                            {rf.name}
+                                                                                        </Text>
+                                                                                        <Text fontSize="9px" color="teal.700" fontWeight="600">Daily Report File</Text>
+                                                                                    </VStack>
+                                                                                </HStack>
+                                                                                <Button
+                                                                                    size="xs"
+                                                                                    colorScheme="teal"
+                                                                                    variant="solid"
+                                                                                    leftIcon={<Icon as={FaExternalLinkAlt} fontSize="9px" />}
+                                                                                    onClick={() => window.open(getFileHref(rf.url), '_blank')}
+                                                                                    borderRadius="md"
+                                                                                    flexShrink={0}
+                                                                                >
+                                                                                    View
+                                                                                </Button>
+                                                                            </HStack>
+                                                                        ))}
+
+                                                                        {/* Data Files */}
+                                                                        {grp.dataFiles.map((df, dIdx) => (
+                                                                            <HStack key={`dat-${dIdx}`} justify="space-between" p={2} bg="blue.50/70" borderRadius="lg" border="1px solid" borderColor="blue.100">
+                                                                                <HStack spacing={2} overflow="hidden" flex={1} mr={2}>
+                                                                                    <Icon as={FaFolderOpen} color="blue.600" flexShrink={0} />
+                                                                                    <VStack align="start" spacing={0} overflow="hidden">
+                                                                                        <Text fontSize="xs" fontWeight="700" color="blue.950" isTruncated>
+                                                                                            {df.name}
+                                                                                        </Text>
+                                                                                        <Text fontSize="9px" color="blue.700" fontWeight="600">Data File</Text>
+                                                                                    </VStack>
+                                                                                </HStack>
+                                                                                <Button
+                                                                                    size="xs"
+                                                                                    colorScheme="blue"
+                                                                                    variant="solid"
+                                                                                    leftIcon={<Icon as={FaExternalLinkAlt} fontSize="9px" />}
+                                                                                    onClick={() => window.open(getFileHref(df.url), '_blank')}
+                                                                                    borderRadius="md"
+                                                                                    flexShrink={0}
+                                                                                >
+                                                                                    View
+                                                                                </Button>
+                                                                            </HStack>
+                                                                        ))}
+                                                                    </VStack>
+                                                                </Box>
+                                                            ))}
+                                                        </VStack>
+                                                    ) : (
+                                                        <Center py={4} bg="gray.50" borderRadius="lg" border="1px dashed" borderColor="gray.200">
+                                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">
+                                                                No daily reports or data files uploaded for this date.
+                                                            </Text>
+                                                        </Center>
+                                                    )}
+                                                </Box>
+                                            </VStack>
+
+                                            {/* ════════════════════ RIGHT COLUMN ════════════════════ */}
+                                            <VStack spacing={4} align="stretch">
+                                                {/* 4. TODAY'S FINANCIAL SUMMARY (Credit, Debit & Difference) */}
+                                                <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                                    <HStack spacing={2} mb={3} borderBottom="1px solid" borderColor="gray.100" pb={2}>
+                                                        <Icon as={FaMoneyBillWave} color="purple.500" />
+                                                        <Text fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                                            Today's Financial Summary
+                                                        </Text>
+                                                    </HStack>
+
+                                                    <SimpleGrid columns={3} spacing={2.5} textAlign="center" mb={2}>
+                                                        <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                                            <Text fontSize="9px" fontWeight="800" color="green.600" textTransform="uppercase" letterSpacing="wider">Credit</Text>
+                                                            <Text fontSize="md" fontWeight="900" color="green.700" mt={0.5}>₹{dayCredit.toLocaleString('en-IN')}</Text>
+                                                        </Box>
+
+                                                        <Box p={3} bg="red.50" borderRadius="xl" border="1px solid" borderColor="red.200">
+                                                            <Text fontSize="9px" fontWeight="800" color="red.500" textTransform="uppercase" letterSpacing="wider">Debit</Text>
+                                                            <Text fontSize="md" fontWeight="900" color="red.700" mt={0.5}>₹{dayDebit.toLocaleString('en-IN')}</Text>
+                                                        </Box>
+
+                                                        <Box p={3} bg={dayDiff >= 0 ? 'blue.50' : 'orange.50'} borderRadius="xl" border="1px solid" borderColor={dayDiff >= 0 ? 'blue.200' : 'orange.200'}>
+                                                            <Text fontSize="9px" fontWeight="800" color={dayDiff >= 0 ? 'blue.600' : 'orange.600'} textTransform="uppercase" letterSpacing="wider">Difference</Text>
+                                                            <Text fontSize="md" fontWeight="900" color={dayDiff >= 0 ? 'blue.700' : 'orange.700'} mt={0.5}>
+                                                                {dayDiff >= 0 ? '+₹' + dayDiff.toLocaleString('en-IN') : '-₹' + Math.abs(dayDiff).toLocaleString('en-IN')}
+                                                            </Text>
+                                                        </Box>
+                                                    </SimpleGrid>
+
+                                                    <Flex justify="center" pt={1}>
+                                                        <Badge colorScheme={dayDiff > 0 ? 'green' : dayDiff < 0 ? 'orange' : 'gray'} variant="subtle" px={2.5} py={0.5} borderRadius="full" fontSize="10px" fontWeight="700">
+                                                            {dayDiff > 0 ? `Net Surplus: +₹${dayDiff.toLocaleString('en-IN')}` : dayDiff < 0 ? `Net Spent: -₹${Math.abs(dayDiff).toLocaleString('en-IN')}` : 'Balanced (₹0)'}
+                                                        </Badge>
+                                                    </Flex>
+                                                </Box>
+
+                                                {/* 5. MONTH TOTAL CREDIT, DEBIT & DIFFERENCE */}
+                                                <Box bg="gradient" bgGradient="linear(to-br, blue.50, indigo.50)" p={4} borderRadius="xl" border="1px solid" borderColor="blue.200" shadow="sm">
+                                                    <HStack justify="space-between" mb={3} borderBottom="1px solid" borderColor="blue.200" pb={2}>
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaCalendarAlt} color="blue.600" />
+                                                            <Text fontSize="xs" fontWeight="800" color="blue.900" textTransform="uppercase">
+                                                                {monthName} Financial Overview
+                                                            </Text>
+                                                        </HStack>
+                                                        {monthStats.loading && <Spinner size="xs" color="blue.600" />}
+                                                    </HStack>
+
+                                                    <SimpleGrid columns={3} spacing={2} textAlign="center" mb={3}>
+                                                        <Box p={2.5} bg="white" borderRadius="lg" shadow="xs" border="1px solid" borderColor="green.100">
+                                                            <Text fontSize="9px" fontWeight="800" color="green.600" textTransform="uppercase">Month Credit</Text>
+                                                            <Text fontSize="xs" fontWeight="900" color="green.700" mt={0.5}>₹{monthCredit.toLocaleString('en-IN')}</Text>
+                                                        </Box>
+
+                                                        <Box p={2.5} bg="white" borderRadius="lg" shadow="xs" border="1px solid" borderColor="red.100">
+                                                            <Text fontSize="9px" fontWeight="800" color="red.500" textTransform="uppercase">Month Debit</Text>
+                                                            <Text fontSize="xs" fontWeight="900" color="red.700" mt={0.5}>₹{monthDebit.toLocaleString('en-IN')}</Text>
+                                                        </Box>
+
+                                                        <Box p={2.5} bg="white" borderRadius="lg" shadow="xs" border="1px solid" borderColor={monthDiff >= 0 ? 'blue.100' : 'orange.100'}>
+                                                            <Text fontSize="9px" fontWeight="800" color={monthDiff >= 0 ? 'blue.600' : 'orange.600'} textTransform="uppercase">Difference</Text>
+                                                            <Text fontSize="xs" fontWeight="900" color={monthDiff >= 0 ? 'blue.700' : 'orange.700'} mt={0.5}>
+                                                                {monthDiff >= 0 ? '+₹' + monthDiff.toLocaleString('en-IN') : '-₹' + Math.abs(monthDiff).toLocaleString('en-IN')}
+                                                            </Text>
+                                                        </Box>
+                                                    </SimpleGrid>
+
+                                                    <HStack justify="space-between" bg="white" p={2.5} borderRadius="lg" border="1px solid" borderColor="blue.200" shadow="xs">
+                                                        <HStack spacing={1.5}>
+                                                            <Icon as={FaMoneyBillWave} color="blue.600" fontSize="xs" />
+                                                            <Text fontSize="11px" fontWeight="700" color="gray.700">Current Ledger Balance:</Text>
+                                                        </HStack>
+                                                        <Text fontSize="sm" fontWeight="900" color={currentBalance >= 0 ? 'blue.700' : 'red.600'}>
+                                                            ₹{currentBalance.toLocaleString('en-IN')}
+                                                        </Text>
+                                                    </HStack>
+                                                </Box>
+
+                                                {/* 6. Remarks & Additional Notes */}
+                                                {(details.notes || selectedDetailEntry.workLocation) && (
+                                                    <Box bg="white" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                                                        <HStack spacing={2} mb={2}>
+                                                            <Icon as={FaInfoCircle} color="teal.500" />
+                                                            <Text fontSize="11px" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                                                Remarks &amp; Additional Notes
+                                                            </Text>
+                                                        </HStack>
+                                                        <VStack align="stretch" spacing={2} fontSize="xs">
+                                                            {details.notes && (
+                                                                <Box bg="yellow.50" p={2} borderRadius="md" border="1px solid" borderColor="yellow.100">
+                                                                    <Text fontSize="10px" fontWeight="700" color="orange.700">Submission Notes:</Text>
+                                                                    <Text color="gray.800">{details.notes}</Text>
+                                                                </Box>
+                                                            )}
+                                                            {selectedDetailEntry.workLocation && (
+                                                                <Box bg="purple.50" p={2} borderRadius="md" border="1px solid" borderColor="purple.100">
+                                                                    <Text fontSize="10px" fontWeight="700" color="purple.700">Work Location:</Text>
+                                                                    <Text color="gray.800">{selectedDetailEntry.workLocation}</Text>
+                                                                </Box>
+                                                            )}
+                                                        </VStack>
+                                                    </Box>
                                                 )}
                                             </VStack>
-                                        </HStack>
-                                    </SimpleGrid>
-                                </Box>
-
-                                {/* Other Expenses Section */}
-                                <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.100">
-                                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2}>Other Expenses</Text>
-                                    {selectedDetailEntry.details.otherExpensesList && selectedDetailEntry.details.otherExpensesList.length > 0 ? (
-                                        <VStack align="stretch" spacing={1.5}>
-                                            {selectedDetailEntry.details.otherExpensesList.map((oe, idx) => (
-                                                <HStack key={idx} justify="space-between" fontSize="xs">
-                                                    <Text color="gray.600">{oe.name || 'Other Expense'}:</Text>
-                                                    <Text fontWeight="700" color="gray.800">₹{oe.amount || 0}</Text>
-                                                </HStack>
-                                            ))}
-                                        </VStack>
-                                    ) : (
-                                        <Text fontSize="xs" color="gray.400" fontStyle="italic">No other expenses</Text>
-                                    )}
-                                </Box>
-
-                                {/* Peer Transfers Section */}
-                                <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.100">
-                                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2}>Peer Transfers</Text>
-                                    <VStack align="stretch" spacing={2}>
-                                        {selectedDetailEntry.details.givenTo && selectedDetailEntry.details.givenTo.length > 0 && (
-                                            <Box>
-                                                <Text fontSize="11px" fontWeight="600" color="blue.600" mb={1}>Given To:</Text>
-                                                {selectedDetailEntry.details.givenTo.map((g, idx) => (
-                                                    <HStack key={idx} justify="space-between" fontSize="xs" pl={2}>
-                                                        <Text color="gray.600">{g.employeeName}</Text>
-                                                        <Text fontWeight="700" color="blue.700">₹{g.amount}</Text>
-                                                    </HStack>
-                                                ))}
-                                            </Box>
-                                        )}
-                                        {selectedDetailEntry.details.receivedFrom && selectedDetailEntry.details.receivedFrom.length > 0 && (
-                                            <Box>
-                                                <Text fontSize="11px" fontWeight="600" color="green.600" mb={1}>Received From:</Text>
-                                                {selectedDetailEntry.details.receivedFrom.map((r, idx) => (
-                                                    <HStack key={idx} justify="space-between" fontSize="xs" pl={2}>
-                                                        <Text color="gray.600">{r.employeeName}</Text>
-                                                        <Text fontWeight="700" color="green.700">₹{r.amount}</Text>
-                                                    </HStack>
-                                                ))}
-                                            </Box>
-                                        )}
-                                        {(!selectedDetailEntry.details.givenTo || selectedDetailEntry.details.givenTo.length === 0) &&
-                                         (!selectedDetailEntry.details.receivedFrom || selectedDetailEntry.details.receivedFrom.length === 0) && (
-                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">No peer transfers</Text>
-                                        )}
+                                        </SimpleGrid>
                                     </VStack>
-                                </Box>
+                                </ModalBody>
 
-                                {/* Notes Section */}
-                                {selectedDetailEntry.details.notes && (
-                                    <Box bg="orange.50" p={3} borderRadius="lg" border="1px solid" borderColor="orange.100">
-                                        <Text fontSize="xs" fontWeight="700" color="orange.700" textTransform="uppercase" mb={1}>Notes</Text>
-                                        <Text fontSize="xs" color="gray.700">{selectedDetailEntry.details.notes}</Text>
-                                    </Box>
-                                )}
-                            </VStack>
-                        ) : (
-                            <Center py={6}>
-                                <Text fontSize="xs" color="gray.400">No details available for this day.</Text>
-                            </Center>
-                        )}
-                    </ModalBody>
-                    <ModalFooter bg="gray.50" py={3} borderTop="1px solid" borderColor="gray.100">
-                        <Button size="sm" colorScheme="blue" onClick={onDetailClose}>Close</Button>
-                    </ModalFooter>
+                                <ModalFooter bg="gray.100" py={3} px={6} borderTop="1px solid" borderColor="gray.200" justify="space-between">
+                                    <Text fontSize="xs" color="gray.500">
+                                        Click outside or press Esc to close
+                                    </Text>
+                                    <Button size="sm" colorScheme="blue" onClick={onDetailClose} px={6} borderRadius="lg">
+                                        Close
+                                    </Button>
+                                </ModalFooter>
+                            </>
+                        );
+                    })()}
                 </ModalContent>
             </Modal>
 
