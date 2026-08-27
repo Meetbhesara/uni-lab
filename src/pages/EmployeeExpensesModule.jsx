@@ -233,6 +233,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
     const [data, setData]               = useState([]);
     const [allSchedules, setAllSchedules] = useState([]);
     const [allExpenses, setAllExpenses]   = useState([]);
+    const [allAttendance, setAllAttendance] = useState([]);
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [lastRefreshed, setLastRefreshed]   = useState(null);
     const [selectedDetailEntry, setSelectedDetailEntry] = useState(null);
@@ -408,10 +409,11 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
         if (!canReadLast5Days) return;
         setSummaryLoading(true);
         try {
-            const [res, schRes, allExpRes] = await Promise.all([
+            const [res, schRes, allExpRes, attRes] = await Promise.all([
                 api.get('/employee-expense/report/daily-summary'),
                 api.get('/schedule-master').catch(() => ({ data: { success: false } })),
-                api.get('/employee-expense/all').catch(() => ({ data: { success: false } }))
+                api.get('/employee-expense/all').catch(() => ({ data: { success: false } })),
+                api.get('/employee-expense/attendance').catch(() => ({ data: { success: false } }))
             ]);
             if (res.data?.success) { 
                 setData(res.data.data); 
@@ -422,6 +424,9 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
             }
             if (allExpRes?.data?.success && Array.isArray(allExpRes.data.data)) {
                 setAllExpenses(allExpRes.data.data);
+            }
+            if (attRes?.data?.success && Array.isArray(attRes.data.data)) {
+                setAllAttendance(attRes.data.data);
             }
         } catch (e) { console.error(e); }
         finally { setSummaryLoading(false); }
@@ -998,6 +1003,40 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                             files: {},
                                             clientSites: []
                                         };
+
+                                        // ── Check if Employee is Absent on this date ──
+                                        const dayAtt = (dayEntry.attendance || dayEntry.details?.attendance || '').trim().toLowerCase();
+                                        if (dayAtt === 'absent' || dayAtt === 'leave') {
+                                            return; // Skip absent employee
+                                        }
+
+                                        const expMatch = (allExpenses || []).find(exp => {
+                                            const expDk = toLocalDateKey(exp.date);
+                                            if (expDk !== dk) return false;
+                                            const expEmpId = exp.employeeId?._id || exp.employeeId || exp.employee?._id || exp.employee;
+                                            const expEmpName = exp.employeeId?.name || exp.employee?.name || '';
+                                            return isSameEmployee(emp.empId, expEmpId, emp.empName, expEmpName);
+                                        });
+                                        if (expMatch) {
+                                            const expAtt = (expMatch.attendance || expMatch.details?.attendance || '').trim().toLowerCase();
+                                            if (expAtt === 'absent' || expAtt === 'leave') {
+                                                return; // Skip absent employee
+                                            }
+                                        }
+
+                                        const attMatch = (allAttendance || []).find(att => {
+                                            const attDk = toLocalDateKey(att.date);
+                                            if (attDk !== dk) return false;
+                                            const attEmpId = att.employeeId?._id || att.employeeId || att.employee?._id || att.employee;
+                                            const attEmpName = att.employeeId?.name || att.employee?.name || '';
+                                            return isSameEmployee(emp.empId, attEmpId, emp.empName, attEmpName);
+                                        });
+                                        if (attMatch) {
+                                            const attStatus = (attMatch.attendance || '').trim().toLowerCase();
+                                            if (attStatus === 'absent' || attStatus === 'leave') {
+                                                return; // Skip absent employee
+                                            }
+                                        }
 
                                         const opSchedules = (allSchedules || []).filter(s => {
                                             const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
