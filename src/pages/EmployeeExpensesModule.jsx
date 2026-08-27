@@ -386,11 +386,15 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
         if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
             const [y, m, day] = d.split('-').map(Number);
             const dt = new Date(y, m - 1, day);
-            return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' });
+            const wk = dt.toLocaleDateString('en-IN', { weekday: 'short' });
+            const dm = dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            return `${wk}, ${dm}`;
         }
         const dt = new Date(d);
         if (isNaN(dt.getTime())) return String(d);
-        return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' });
+        const wk = dt.toLocaleDateString('en-IN', { weekday: 'short' });
+        const dm = dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        return `${wk}, ${dm}`;
     };
     const fmtAmt  = (n) => `₹${Number(n||0).toLocaleString('en-IN')}`;
 
@@ -1107,26 +1111,28 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                             {/* — Date header — */}
                                             <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
                                                 <HStack spacing={3}>
-                                                    <Flex w={8} h={8} borderRadius="md" bg="blue.500" align="center" justify="center" color="white" flexShrink={0}>
+                                                    <Flex w={8} h={8} borderRadius="lg" bg="blue.500" align="center" justify="center" color="white" flexShrink={0}>
                                                         <Icon as={FaCalendarAlt} />
                                                     </Flex>
-                                                    <Text fontWeight="800" fontSize="md" color="gray.800">{fmtDate(dateKey)}</Text>
-                                                    <Badge colorScheme="blue" variant="subtle" borderRadius="full" fontSize="10px">{dateEntries.length} {dateEntries.length === 1 ? 'Employee' : 'Employees'}</Badge>
+                                                    <Text fontWeight="900" fontSize="md" color="gray.800">{fmtDate(dateKey)}</Text>
+                                                    <Badge bg="blue.100" color="blue.700" variant="subtle" borderRadius="md" px={2.5} py={0.5} fontSize="10px" fontWeight="800" textTransform="uppercase">
+                                                        {dateEntries.length} {dateEntries.length === 1 ? 'EMPLOYEE' : 'EMPLOYEES'}
+                                                    </Badge>
                                                 </HStack>
                                             </Flex>
 
                                             {/* — Scrollable Table for Perfect Alignment — */}
                                             <Box overflowX="auto">
                                                 {/* — Column headers — */}
-                                                <Flex minW="900px" px={4} py={2} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center">
-                                                    <Text flex="1.2" minW="140px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Operative</Text>
-                                                    <Text flex="1"   minW="130px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Helper</Text>
-                                                    <Text flex="1.2" minW="140px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Client</Text>
-                                                    <Text flex="1.2" minW="140px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase">Site</Text>
-                                                    <Text flex="0 0 75px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="center">Report</Text>
-                                                    <Text flex="0 0 75px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="center">Data</Text>
-                                                    <Text flex="0 0 85px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="right">Credit</Text>
-                                                    <Text flex="0 0 85px" fontSize="9px" fontWeight="800" color="gray.500" textTransform="uppercase" textAlign="right" ml={2}>Debit</Text>
+                                                <Flex minW="1100px" px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center">
+                                                    <Text flex="1.3" minW="160px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Operative</Text>
+                                                    <Text flex="1.1" minW="130px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Helper</Text>
+                                                    <Text flex="1.8" minW="210px" pr={3} fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Client</Text>
+                                                    <Text flex="1.8" minW="210px" pr={3} fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Site</Text>
+                                                    <Text flex="0 0 75px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider" textAlign="center">Report</Text>
+                                                    <Text flex="0 0 75px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider" textAlign="center">Data</Text>
+                                                    <Text flex="0 0 85px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider" textAlign="right">Credit</Text>
+                                                    <Text flex="0 0 85px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider" textAlign="right" ml={2}>Debit</Text>
                                                 </Flex>
 
                                                 {/* — Rows — */}
@@ -1141,7 +1147,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                     return (
                                                         <Flex
                                                             key={entry.rowKey || `${entry.empId}-${idx}`}
-                                                            minW="900px"
+                                                            minW="1100px"
                                                             px={4} py={assignments.length > 1 ? 3 : 2.5}
                                                             align="center"
                                                             bg={idx%2===0 ? 'white' : 'gray.50/50'}
@@ -1158,12 +1164,12 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                             }}
                                                         >
                                                             {/* 1. Operative */}
-                                                            <HStack flex="1.2" minW="140px" spacing={2} pr={2} overflow="hidden">
-                                                                <Flex w={7} h={7} borderRadius="md" bg="blue.100" align="center" justify="center" color="blue.700" fontWeight="800" fontSize="11px" flexShrink={0}>
+                                                            <HStack flex="1.3" minW="160px" spacing={2.5} pr={2} overflow="hidden">
+                                                                <Flex w={7} h={7} borderRadius="md" bg="blue.100" align="center" justify="center" color="blue.600" fontWeight="800" fontSize="11px" flexShrink={0}>
                                                                     {initials}
                                                                 </Flex>
                                                                 <VStack align="start" spacing={0} overflow="hidden">
-                                                                    <Text fontSize="xs" fontWeight="800" color="gray.800" isTruncated>
+                                                                    <Text fontSize="xs" fontWeight="800" color="gray.800" textTransform="uppercase" isTruncated>
                                                                         {opName}
                                                                     </Text>
                                                                     {assignments.length > 1 && (
@@ -1175,10 +1181,10 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                             </HStack>
 
                                                             {/* 2. Helper (Partitioned per assignment) */}
-                                                            <Box flex="1" minW="130px" pr={2}>
+                                                            <Box flex="1.1" minW="130px" pr={2}>
                                                                 <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
                                                                     {assignments.map((asg, aIdx) => (
-                                                                        <Text key={aIdx} fontSize="xs" color={asg.helpers ? "gray.800" : "gray.300"} fontWeight={asg.helpers ? "700" : "normal"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
+                                                                        <Text key={aIdx} fontSize="xs" color={asg.helpers ? "gray.800" : "gray.300"} fontWeight={asg.helpers ? "800" : "normal"} textTransform={asg.helpers ? "uppercase" : "none"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
                                                                             {asg.helpers ? `🤝 ${asg.helpers}` : '—'}
                                                                         </Text>
                                                                     ))}
@@ -1186,10 +1192,10 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                             </Box>
 
                                                             {/* 3. Client (Partitioned per assignment) */}
-                                                            <Box flex="1.2" minW="140px" pr={2}>
+                                                            <Box flex="1.8" minW="210px" pr={3} overflow="hidden">
                                                                 <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
                                                                     {assignments.map((asg, aIdx) => (
-                                                                        <Text key={aIdx} fontSize="xs" fontWeight="700" color={asg.client && asg.client !== '—' ? "gray.800" : "gray.300"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
+                                                                        <Text key={aIdx} fontSize="xs" fontWeight="800" color={asg.client && asg.client !== '—' ? "gray.800" : "gray.300"} textTransform={asg.client && asg.client !== '—' ? "uppercase" : "none"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
                                                                             {asg.client && asg.client !== '—' ? `🏢 ${asg.client}` : '—'}
                                                                         </Text>
                                                                     ))}
@@ -1197,10 +1203,10 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                             </Box>
 
                                                             {/* 4. Site (Partitioned per assignment) */}
-                                                            <Box flex="1.2" minW="140px" pr={2}>
+                                                            <Box flex="1.8" minW="210px" pr={3} overflow="hidden">
                                                                 <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
                                                                     {assignments.map((asg, aIdx) => (
-                                                                        <Text key={aIdx} fontSize="xs" fontWeight="700" color={asg.site && asg.site !== '—' ? "blue.600" : "gray.400"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
+                                                                        <Text key={aIdx} fontSize="xs" fontWeight="800" color={asg.site && asg.site !== '—' ? "blue.600" : "gray.300"} textTransform={asg.site && asg.site !== '—' ? "uppercase" : "none"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
                                                                             {asg.site && asg.site !== '—' ? `📍 ${asg.site}` : '—'}
                                                                         </Text>
                                                                     ))}
@@ -1213,8 +1219,8 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                                     {assignments.map((asg, aIdx) => (
                                                                         <Flex key={aIdx} minH={assignments.length > 1 ? "22px" : "auto"} align="center" justify="center">
                                                                             {asg.hasReport ? (
-                                                                                <Badge colorScheme="green" variant="solid" borderRadius="full" px={2} py={0.5} fontSize="9px" fontWeight="800" display="inline-flex" alignItems="center" gap={1}>
-                                                                                    <Icon as={FaCheckCircle} /> Yes
+                                                                                <Badge bg="#2e7d32" color="white" borderRadius="full" px={2.5} py={0.5} fontSize="9px" fontWeight="800" display="inline-flex" alignItems="center" gap={1}>
+                                                                                    <Icon as={FaCheckCircle} /> YES
                                                                                 </Badge>
                                                                             ) : (
                                                                                 <Text fontSize="xs" color="gray.300">—</Text>
@@ -1230,8 +1236,8 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                                     {assignments.map((asg, aIdx) => (
                                                                         <Flex key={aIdx} minH={assignments.length > 1 ? "22px" : "auto"} align="center" justify="center">
                                                                             {asg.hasDataFile ? (
-                                                                                <Badge colorScheme="blue" variant="solid" borderRadius="full" px={2} py={0.5} fontSize="9px" fontWeight="800" display="inline-flex" alignItems="center" gap={1}>
-                                                                                    <Icon as={FaCheckCircle} /> Yes
+                                                                                <Badge bg="#1976d2" color="white" borderRadius="full" px={2.5} py={0.5} fontSize="9px" fontWeight="800" display="inline-flex" alignItems="center" gap={1}>
+                                                                                    <Icon as={FaCheckCircle} /> YES
                                                                                 </Badge>
                                                                             ) : (
                                                                                 <Text fontSize="xs" color="gray.300">—</Text>
@@ -1242,12 +1248,12 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                             </Flex>
 
                                                             {/* 7. Credit (Single employee day total) */}
-                                                            <Text flex="0 0 85px" fontSize="xs" fontWeight="700" color={entry.totalCredit > 0 ? "green.600" : "gray.300"} textAlign="right">
+                                                            <Text flex="0 0 85px" fontSize="xs" fontWeight="800" color={entry.totalCredit > 0 ? "green.600" : "gray.300"} textAlign="right">
                                                                 {entry.totalCredit > 0 ? fmtAmt(entry.totalCredit) : '—'}
                                                             </Text>
 
                                                             {/* 8. Debit (Single employee day total) */}
-                                                            <Text flex="0 0 85px" fontSize="xs" fontWeight="700" color={entry.totalDebit > 0 ? "red.500" : "gray.300"} textAlign="right" ml={2}>
+                                                            <Text flex="0 0 85px" fontSize="xs" fontWeight="800" color={entry.totalDebit > 0 ? "red.500" : "gray.300"} textAlign="right" ml={2}>
                                                                 {entry.totalDebit > 0 ? fmtAmt(entry.totalDebit) : '—'}
                                                             </Text>
                                                         </Flex>
