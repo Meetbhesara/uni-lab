@@ -16,7 +16,8 @@ import {
     FaCalendarAlt, FaUtensils, FaGasPump, FaBuilding, FaCamera, FaFileAlt, FaFolderOpen, FaChartBar, FaCloudUploadAlt,
     FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight, FaUserCheck, FaUserSlash, FaClipboardList,
     FaHome, FaWarehouse, FaChevronDown, FaChevronUp, FaBed,
-    FaTools, FaCar, FaReceipt, FaFilePdf, FaDownload, FaExternalLinkAlt, FaInfoCircle, FaMapMarkerAlt
+    FaTools, FaCar, FaReceipt, FaFilePdf, FaDownload, FaExternalLinkAlt, FaInfoCircle, FaMapMarkerAlt,
+    FaThLarge, FaList
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -158,26 +159,37 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
     }
 
     return (
-        <Box py={{ base: 4, md: 10 }} bg="gray.50" minH="100vh">
-            <Container maxW="container.xl" px={{ base: 2, md: 4 }}>
+        <Box py={{ base: 2, md: 8 }} bg="gray.50" minH="100vh" pb={{ base: "90px", md: 10 }}>
+            <Container maxW="container.xl" px={{ base: 2, sm: 3, md: 4 }}>
                 {!isInsideServices && <ModulePermissionBar moduleGroupKey="employeeExpenseGroup" />}
-                <VStack spacing={{ base: 4, md: 8 }} align="stretch">
+                <VStack spacing={{ base: 3, md: 6 }} align="stretch">
                     {/* Module Header */}
-                    <Flex justify="space-between" align="center" bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" flexWrap="wrap" gap={3}>
-                        <HStack spacing={{ base: 3, md: 4 }}>
-                            <Box bg="blue.500" p={{ base: 2, md: 3 }} borderRadius="xl" color="white" flexShrink={0}>
-                                <Icon as={FaMoneyBillWave} w={{ base: 5, md: 6 }} h={{ base: 5, md: 6 }} />
+                    <Flex 
+                        justify="space-between" 
+                        align="center" 
+                        bg="white" 
+                        p={{ base: 3, md: 6 }} 
+                        borderRadius="2xl" 
+                        shadow="sm" 
+                        border="1px solid" 
+                        borderColor="gray.100" 
+                        flexWrap="wrap" 
+                        gap={2}
+                    >
+                        <HStack spacing={{ base: 2.5, md: 4 }}>
+                            <Box bg="blue.500" p={{ base: 2, md: 3 }} borderRadius="xl" color="white" flexShrink={0} shadow="sm">
+                                <Icon as={FaMoneyBillWave} w={{ base: 4, md: 6 }} h={{ base: 4, md: 6 }} />
                             </Box>
                             <VStack align="start" spacing={0}>
-                                <Heading size={{ base: 'md', md: 'lg' }}>Expenses Management</Heading>
-                                <Text color="gray.500" fontSize={{ base: 'xs', md: 'sm' }}>Manage internal transfers and daily operational expenses.</Text>
+                                <Heading size={{ base: 'sm', md: 'lg' }}>Expenses Management</Heading>
+                                <Text color="gray.500" fontSize={{ base: '2xs', sm: 'xs', md: 'sm' }}>Manage internal transfers and daily operational expenses.</Text>
                             </VStack>
                         </HStack>
                     </Flex>
 
                     {/* Navigation Tabs */}
                     {tabs.length === 0 ? (
-                        <Box bg="white" p={10} borderRadius="2xl" textAlign="center" shadow="sm" border="1px solid" borderColor="gray.100">
+                        <Box bg="white" p={{ base: 6, md: 10 }} borderRadius="2xl" textAlign="center" shadow="sm" border="1px solid" borderColor="gray.100">
                             <VStack spacing={3}>
                                 <Icon as={FaUserSlash} w={10} h={10} color="orange.400" />
                                 <Text fontSize="md" fontWeight="bold" color="gray.600">No Authorized Tabs Available</Text>
@@ -186,20 +198,41 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
                         </Box>
                     ) : (
                         <Tabs variant="unstyled" defaultIndex={0} isLazy>
-                            <Box overflowX="auto" pb={1}>
-                                <TabList bg="white" p={1.5} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" display="inline-flex" minW="max-content">
-                                    {tabs.map((t, idx) => (
+                            <Box 
+                                overflowX="auto" 
+                                pb={1}
+                                css={{
+                                    '&::-webkit-scrollbar': { display: 'none' },
+                                    scrollbarWidth: 'none',
+                                    WebkitOverflowScrolling: 'touch'
+                                }}
+                            >
+                                <TabList 
+                                    bg="white" 
+                                    p={1.5} 
+                                    borderRadius="2xl" 
+                                    shadow="sm" 
+                                    border="1px solid" 
+                                    borderColor="gray.100" 
+                                    display="inline-flex" 
+                                    minW={{ base: 'full', sm: 'max-content' }}
+                                    gap={{ base: 1, md: 2 }}
+                                >
+                                    {tabs.map((t) => (
                                         <Tab 
                                             key={t.key}
                                             _selected={{ bg: "blue.600", color: "white", shadow: "md" }} 
                                             borderRadius="xl" 
-                                            px={{ base: 4, md: 8 }}
+                                            px={{ base: 3, sm: 5, md: 8 }}
                                             py={{ base: 2, md: 3 }}
                                             fontWeight="bold" 
                                             color="gray.500"
-                                            fontSize={{ base: 'sm', md: 'md' }}
-                                            transition="all 0.3s"
+                                            fontSize={{ base: 'xs', sm: 'sm', md: 'md' }}
+                                            transition="all 0.25s"
                                             whiteSpace="nowrap"
+                                            flex={{ base: 1, sm: 'none' }}
+                                            textAlign="center"
+                                            justifyContent="center"
                                         >
                                             <Icon as={t.icon} mr={{ base: 1, md: 2 }} /> {t.label}
                                         </Tab>
@@ -207,8 +240,8 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
                                 </TabList>
                             </Box>
 
-                            <TabPanels mt={8}>
-                                {tabs.map((t, idx) => (
+                            <TabPanels mt={{ base: 4, md: 6 }}>
+                                {tabs.map((t) => (
                                     <TabPanel key={t.key} p={0}>
                                         {t.component}
                                     </TabPanel>
@@ -238,6 +271,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
     const [lastRefreshed, setLastRefreshed]   = useState(null);
     const [selectedDetailEntry, setSelectedDetailEntry] = useState(null);
     const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
+    const [reportViewMode, setReportViewMode] = useState('card'); // 'card' | 'table'
 
     // ── Monthly Stats & Live Data for Selected Employee Modal ──────────────────
     const [monthStats, setMonthStats] = useState({ credit: 0, debit: 0, expense: 0, currentBalance: 0, loading: false });
@@ -920,9 +954,38 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                 {lastRefreshed && ` · ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`}
                             </Text>
                         </VStack>
-                        <Button size="sm" leftIcon={<Icon as={FaClipboardList}/>} colorScheme="blue" variant="outline" borderRadius="lg" onClick={fetchSummary} isLoading={summaryLoading}>
-                            Refresh
-                        </Button>
+                        <HStack spacing={2}>
+                            {/* Mobile View Toggle (Card vs Table) */}
+                            <HStack bg="gray.100" p={0.5} borderRadius="lg" spacing={1} display={{ base: 'flex', md: 'none' }}>
+                                <Button
+                                    size="xs"
+                                    leftIcon={<Icon as={FaThLarge} fontSize="10px"/>}
+                                    colorScheme={reportViewMode === 'card' ? 'blue' : 'gray'}
+                                    variant={reportViewMode === 'card' ? 'solid' : 'ghost'}
+                                    onClick={() => setReportViewMode('card')}
+                                    borderRadius="md"
+                                    px={2}
+                                    fontSize="11px"
+                                >
+                                    Cards
+                                </Button>
+                                <Button
+                                    size="xs"
+                                    leftIcon={<Icon as={FaList} fontSize="10px"/>}
+                                    colorScheme={reportViewMode === 'table' ? 'blue' : 'gray'}
+                                    variant={reportViewMode === 'table' ? 'solid' : 'ghost'}
+                                    onClick={() => setReportViewMode('table')}
+                                    borderRadius="md"
+                                    px={2}
+                                    fontSize="11px"
+                                >
+                                    Table
+                                </Button>
+                            </HStack>
+                            <Button size="sm" leftIcon={<Icon as={FaClipboardList}/>} colorScheme="blue" variant="outline" borderRadius="lg" onClick={fetchSummary} isLoading={summaryLoading}>
+                                Refresh
+                            </Button>
+                        </HStack>
                     </Flex>
 
                     {summaryLoading ? (
@@ -1150,7 +1213,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                             {/* — Date header — */}
                                             <Flex px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center" justify="space-between" flexWrap="wrap" gap={2}>
                                                 <HStack spacing={3}>
-                                                    <Flex w={8} h={8} borderRadius="lg" bg="blue.500" align="center" justify="center" color="white" flexShrink={0}>
+                                                    <Flex w={8} h={8} borderRadius="lg" bg="blue.500" align="center" justify="center" color="white" flexShrink={0} shadow="xs">
                                                         <Icon as={FaCalendarAlt} />
                                                     </Flex>
                                                     <Text fontWeight="900" fontSize="md" color="gray.800">{fmtDate(dateKey)}</Text>
@@ -1160,8 +1223,140 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                 </HStack>
                                             </Flex>
 
-                                            {/* — Scrollable Table for Perfect Alignment — */}
-                                            <Box overflowX="auto">
+                                            {/* ── MOBILE CARD VIEW (Active on phones or when Cards mode is selected) ── */}
+                                            <Box display={{ base: reportViewMode === 'table' ? 'none' : 'block', md: 'none' }}>
+                                                <VStack spacing={2.5} p={3} align="stretch" bg="gray.50">
+                                                    {dateEntries.map((entry, idx) => {
+                                                        const hasDebitOnly  = entry.totalDebit > 0 && entry.totalCredit === 0;
+                                                        const hasCreditOnly = entry.totalCredit > 0 && entry.totalDebit === 0;
+                                                        const opName = entry.empName || '';
+                                                        const initials = opName.split(' ').filter(Boolean).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                                                        const assignments = entry.assignments || [];
+
+                                                        return (
+                                                            <Box
+                                                                key={entry.rowKey || `${entry.empId}-${idx}`}
+                                                                bg="white"
+                                                                p={3.5}
+                                                                borderRadius="xl"
+                                                                border="1px solid"
+                                                                borderColor={hasDebitOnly ? 'red.200' : hasCreditOnly ? 'green.200' : 'gray.200'}
+                                                                borderLeft="4px solid"
+                                                                borderLeftColor={hasDebitOnly ? 'red.500' : hasCreditOnly ? 'green.500' : 'blue.500'}
+                                                                shadow="xs"
+                                                                cursor="pointer"
+                                                                _hover={{ shadow: 'sm', transform: 'translateY(-1px)' }}
+                                                                _active={{ bg: 'gray.50' }}
+                                                                transition="all 0.15s"
+                                                                onClick={() => {
+                                                                    setSelectedDetailEntry(entry);
+                                                                    onDetailOpen();
+                                                                }}
+                                                            >
+                                                                <VStack align="stretch" spacing={2.5}>
+                                                                    {/* Header: Operative + Amounts */}
+                                                                    <Flex justify="space-between" align="center" gap={2}>
+                                                                        <HStack spacing={2.5} overflow="hidden">
+                                                                            <Flex w={8} h={8} borderRadius="lg" bg="blue.100" color="blue.700" align="center" justify="center" fontWeight="800" fontSize="xs" flexShrink={0}>
+                                                                                {initials}
+                                                                            </Flex>
+                                                                            <VStack align="start" spacing={0} overflow="hidden">
+                                                                                <Text fontSize="sm" fontWeight="800" color="gray.800" textTransform="uppercase" isTruncated>
+                                                                                    {opName}
+                                                                                </Text>
+                                                                                {assignments.length > 0 && (
+                                                                                    <Badge colorScheme="blue" variant="subtle" fontSize="9px" px={1.5} borderRadius="full">
+                                                                                        {assignments.length} {assignments.length === 1 ? 'Site' : 'Sites'}
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </VStack>
+                                                                        </HStack>
+
+                                                                        {/* Credit & Debit tags */}
+                                                                        <HStack spacing={1.5} flexShrink={0}>
+                                                                            {entry.totalCredit > 0 && (
+                                                                                <Badge bg="green.50" color="green.700" border="1px solid" borderColor="green.200" px={2} py={0.5} borderRadius="md" fontSize="10px" fontWeight="800">
+                                                                                    +₹{entry.totalCredit.toLocaleString('en-IN')}
+                                                                                </Badge>
+                                                                            )}
+                                                                            {entry.totalDebit > 0 && (
+                                                                                <Badge bg="red.50" color="red.700" border="1px solid" borderColor="red.200" px={2} py={0.5} borderRadius="md" fontSize="10px" fontWeight="800">
+                                                                                    -₹{entry.totalDebit.toLocaleString('en-IN')}
+                                                                                </Badge>
+                                                                            )}
+                                                                            {(!entry.totalCredit && !entry.totalDebit) && (
+                                                                                <Badge bg="gray.100" color="gray.500" px={2} py={0.5} borderRadius="md" fontSize="10px">
+                                                                                    ₹0
+                                                                                </Badge>
+                                                                            )}
+                                                                        </HStack>
+                                                                    </Flex>
+
+                                                                    {/* Assignments list */}
+                                                                    {assignments.length > 0 && (
+                                                                        <VStack align="stretch" spacing={1.5} bg="gray.50" p={2.5} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                                                            {assignments.map((asg, aIdx) => (
+                                                                                <VStack key={aIdx} align="stretch" spacing={1} pt={aIdx > 0 ? 1.5 : 0} borderTop={aIdx > 0 ? '1px dashed' : 'none'} borderColor="gray.200">
+                                                                                    <Flex justify="space-between" align="center" gap={2} flexWrap="wrap">
+                                                                                        <HStack spacing={1.5} overflow="hidden" flex="1">
+                                                                                            <Icon as={FaBuilding} color="purple.500" fontSize="xs" flexShrink={0}/>
+                                                                                            <Text fontSize="xs" fontWeight="700" color="gray.700" isTruncated>
+                                                                                                {asg.client && asg.client !== '—' ? asg.client : 'General'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <HStack spacing={1.5} overflow="hidden" flex="1" justify="flex-end">
+                                                                                            <Icon as={FaMapMarkerAlt} color="blue.500" fontSize="xs" flexShrink={0}/>
+                                                                                            <Text fontSize="xs" fontWeight="700" color="blue.700" isTruncated>
+                                                                                                {asg.site && asg.site !== '—' ? asg.site : 'General Site'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                    </Flex>
+
+                                                                                    <Flex justify="space-between" align="center" gap={2}>
+                                                                                        {asg.helpers ? (
+                                                                                            <Text fontSize="10px" color="green.700" fontWeight="700" isTruncated>
+                                                                                                🤝 {asg.helpers}
+                                                                                            </Text>
+                                                                                        ) : <Box />}
+
+                                                                                        <HStack spacing={1.5}>
+                                                                                            {asg.hasReport && (
+                                                                                                <Badge bg="#2e7d32" color="white" borderRadius="full" px={2} py={0.2} fontSize="9px" fontWeight="800">
+                                                                                                    ✓ Report
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                            {asg.hasDataFile && (
+                                                                                                <Badge bg="#1976d2" color="white" borderRadius="full" px={2} py={0.2} fontSize="9px" fontWeight="800">
+                                                                                                    ✓ Data
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                        </HStack>
+                                                                                    </Flex>
+                                                                                </VStack>
+                                                                            ))}
+                                                                        </VStack>
+                                                                    )}
+
+                                                                    {/* Tap hint */}
+                                                                    <Flex justify="space-between" align="center" pt={0.5}>
+                                                                        <Text fontSize="10px" color="blue.600" fontWeight="700">
+                                                                            Tap for breakdown &amp; receipts ➔
+                                                                        </Text>
+                                                                        <Icon as={FaChevronRight} color="gray.400" fontSize="10px"/>
+                                                                    </Flex>
+                                                                </VStack>
+                                                            </Box>
+                                                        );
+                                                    })}
+                                                </VStack>
+                                            </Box>
+
+                                            {/* ── DESKTOP SCROLLABLE TABLE (Active on screens >= md or when Table mode is selected) ── */}
+                                            <Box 
+                                                display={{ base: reportViewMode === 'card' ? 'none' : 'block', md: 'block' }}
+                                                overflowX="auto"
+                                                css={{ WebkitOverflowScrolling: 'touch' }}
+                                            >
                                                 {/* — Column headers — */}
                                                 <Flex minW="1100px" px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center">
                                                     <Text flex="1.3" minW="160px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Operative</Text>
@@ -1298,31 +1493,31 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                         </Flex>
                                                     );
                                                 })}
-
-                                                {/* — Daily Totals bar — */}
-                                                {(totD > 0 || totC > 0) && (
-                                                    <Flex px={4} py={2} bg="blue.50/40" borderTop="1px dashed" borderColor="blue.200" align="center" justify="space-between">
-                                                        <HStack spacing={2}>
-                                                            <Icon as={FaMoneyBillWave} color="blue.500" fontSize="xs"/>
-                                                            <Text fontSize="xs" fontWeight="700" color="blue.700">Daily Total ({dateEntries.length} employees)</Text>
-                                                        </HStack>
-                                                        <HStack spacing={6}>
-                                                            {totC > 0 && (
-                                                                <HStack spacing={1}>
-                                                                    <Text fontSize="xs" color="gray.500" fontWeight="600">Total Credit:</Text>
-                                                                    <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)}</Text>
-                                                                </HStack>
-                                                            )}
-                                                            {totD > 0 && (
-                                                                <HStack spacing={1}>
-                                                                    <Text fontSize="xs" color="gray.500" fontWeight="600">Total Debit:</Text>
-                                                                    <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)}</Text>
-                                                                </HStack>
-                                                            )}
-                                                        </HStack>
-                                                    </Flex>
-                                                )}
                                             </Box>
+
+                                            {/* — Daily Totals bar — */}
+                                            {(totD > 0 || totC > 0) && (
+                                                <Flex px={4} py={2} bg="blue.50/40" borderTop="1px dashed" borderColor="blue.200" align="center" justify="space-between" flexWrap="wrap" gap={2}>
+                                                    <HStack spacing={2}>
+                                                        <Icon as={FaMoneyBillWave} color="blue.500" fontSize="xs"/>
+                                                        <Text fontSize="xs" fontWeight="700" color="blue.700">Daily Total ({dateEntries.length} employees)</Text>
+                                                    </HStack>
+                                                    <HStack spacing={{ base: 3, md: 6 }}>
+                                                        {totC > 0 && (
+                                                            <HStack spacing={1}>
+                                                                <Text fontSize="xs" color="gray.500" fontWeight="600">Credit:</Text>
+                                                                <Text fontSize="xs" fontWeight="800" color="green.600">{fmtAmt(totC)}</Text>
+                                                            </HStack>
+                                                        )}
+                                                        {totD > 0 && (
+                                                            <HStack spacing={1}>
+                                                                <Text fontSize="xs" color="gray.500" fontWeight="600">Debit:</Text>
+                                                                <Text fontSize="xs" fontWeight="800" color="red.500">{fmtAmt(totD)}</Text>
+                                                            </HStack>
+                                                        )}
+                                                    </HStack>
+                                                </Flex>
+                                            )}
                                         </Box>
                                     );
                                 });
@@ -1345,15 +1540,15 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
             {canReadAdvanced && (
                 <Box bg="white" p={{ base:4, md:6 }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
                     <Heading size="sm" mb={5} color="gray.700">Custom Date Range &amp; Report Selection</Heading>
-                    <Flex direction={{ base:'column', md:'row' }} gap={4} align={{ base:'stretch', md:'flex-end' }} mb={6} flexWrap="wrap">
+                    <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 6 }} spacing={3} mb={6} align="end">
 
                         {/* Financial Year */}
-                        <FormControl w="auto">
-                            <FormLabel fontWeight="bold" fontSize="sm">Financial Year</FormLabel>
+                        <FormControl w="100%">
+                            <FormLabel fontWeight="bold" fontSize="xs" mb={1}>Financial Year</FormLabel>
                             <Popover placement="bottom-start">
                                 <PopoverTrigger>
-                                    <Button w="auto" minW="150px" bg="white" color="gray.800" _hover={{bg:'gray.50'}} borderRadius="md" shadow="sm" size="md" fontWeight="bold" border="1px solid" borderColor="gray.200" justifyContent="space-between" rightIcon={<Icon as={FaCalendarAlt} color="blue.500"/>}>
-                                        <Box flex="1" textAlign="left">{selectedFY ? `${selectedFY}-${parseInt(selectedFY)+1} (FY)` : 'Custom Date'}</Box>
+                                    <Button w="100%" bg="white" color="gray.800" _hover={{bg:'gray.50'}} borderRadius="md" shadow="xs" size="md" fontWeight="bold" border="1px solid" borderColor="gray.200" justifyContent="space-between" rightIcon={<Icon as={FaCalendarAlt} color="blue.500"/>}>
+                                        <Box flex="1" textAlign="left" isTruncated>{selectedFY ? `${selectedFY}-${parseInt(selectedFY)+1} (FY)` : 'Custom Date'}</Box>
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent w="280px" borderRadius="2xl" shadow="2xl" border="1px solid" borderColor="gray.100" zIndex={100}>
@@ -1376,8 +1571,8 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                         </FormControl>
 
                         {/* Month */}
-                        <FormControl w="auto">
-                            <FormLabel fontWeight="bold" fontSize="sm">Month</FormLabel>
+                        <FormControl w="100%">
+                            <FormLabel fontWeight="bold" fontSize="xs" mb={1}>Month</FormLabel>
                             <Select bg="white" size="md" value={selectedMonth} onChange={e=>{
                                 setSelectedMonth(e.target.value);
                                 if(e.target.value){
@@ -1396,20 +1591,20 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                         </FormControl>
 
                         {/* From */}
-                        <FormControl w="auto">
-                            <FormLabel fontWeight="bold" fontSize="sm">From Date</FormLabel>
+                        <FormControl w="100%">
+                            <FormLabel fontWeight="bold" fontSize="xs" mb={1}>From Date</FormLabel>
                             <Input type="date" size="md" bg="white" value={globalStartDate} onChange={e=>{setGlobalStartDate(e.target.value);setSelectedFY('');setSelectedMonth('');}}/>
                         </FormControl>
 
                         {/* To */}
-                        <FormControl w="auto">
-                            <FormLabel fontWeight="bold" fontSize="sm">To Date</FormLabel>
+                        <FormControl w="100%">
+                            <FormLabel fontWeight="bold" fontSize="xs" mb={1}>To Date</FormLabel>
                             <Input type="date" size="md" bg="white" value={globalEndDate} onChange={e=>{setGlobalEndDate(e.target.value||_todayStr);setSelectedFY('');setSelectedMonth('');}}/>
                         </FormControl>
 
                         {/* Report Type */}
-                        <FormControl w="auto" flex={1}>
-                            <FormLabel fontWeight="bold" fontSize="sm">Report Type</FormLabel>
+                        <FormControl w="100%">
+                            <FormLabel fontWeight="bold" fontSize="xs" mb={1}>Report Type</FormLabel>
                             <Select value={reportType} bg="white" size="md" onChange={e=>{
                                 setReportType(e.target.value);
                                 if(['Food','Fuel','ClientSite'].includes(e.target.value)) setSelectedExpEmp({id:'ALL',name:'All Employees'});
@@ -1424,14 +1619,14 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                         </FormControl>
 
                         {/* Employee */}
-                        <FormControl w="auto" flex={1} isDisabled={isAllEmp}>
-                            <FormLabel fontWeight="bold" fontSize="sm">Select Employee</FormLabel>
+                        <FormControl w="100%" isDisabled={isAllEmp}>
+                            <FormLabel fontWeight="bold" fontSize="xs" mb={1}>Select Employee</FormLabel>
                             <Select placeholder={isAllEmp ? "All Employees Included" : "-- Select Employee --"} value={isAllEmp ? 'ALL' : selectedExpEmp.id} bg={isAllEmp ? 'gray.100' : 'white'} size="md" onChange={e=>{const emp=employees.find(x=>x._id===e.target.value);setSelectedExpEmp({id:emp?._id||'',name:emp?.name||''});}}>
                                 {isAllEmp && <option value="ALL" hidden>All Employees</option>}
                                 {employees.map(emp=>(<option key={emp._id} value={emp._id}>{emp.name}</option>))}
                             </Select>
                         </FormControl>
-                    </Flex>
+                    </SimpleGrid>
 
                     {/* Report Output */}
                     {((selectedExpEmp.id && selectedExpEmp.id !== 'ALL') || isAllEmp) ? (
@@ -1466,7 +1661,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
             {/* Expense Detail Modal */}
             <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="3xl" isCentered scrollBehavior="inside">
                 <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
-                <ModalContent borderRadius="2xl" overflow="hidden" shadow="2xl" maxW={{ base: '95vw', md: '880px', lg: '960px' }}>
+                <ModalContent borderRadius={{ base: "24px 24px 0 0", md: "2xl" }} overflow="hidden" shadow="2xl" maxW={{ base: '100%', md: '880px', lg: '960px' }} m={{ base: 0, md: 'auto' }} mt={{ base: 'auto', md: 'auto' }}>
                     {(() => {
                         if (!selectedDetailEntry) return null;
 
@@ -1767,18 +1962,18 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                         return (
                             <>
                                 {/* ── Modal Header with Gradient & Meta Tags ── */}
-                                <ModalHeader bgGradient="linear(to-r, blue.700, blue.900)" color="white" py={4} px={6}>
-                                    <VStack align="stretch" spacing={2.5}>
+                                <ModalHeader bgGradient="linear(to-r, blue.700, blue.900)" color="white" py={{ base: 3, md: 4 }} px={{ base: 3.5, md: 6 }}>
+                                    <VStack align="stretch" spacing={2}>
                                         <HStack justify="space-between" align="center" flexWrap="wrap" gap={2}>
                                             <HStack spacing={3}>
-                                                <Flex w={10} h={10} borderRadius="xl" bg="whiteAlpha.200" align="center" justify="center" backdropFilter="blur(4px)">
-                                                    <Icon as={FaCalendarAlt} color="white" w={5} h={5} />
+                                                <Flex w={{ base: 8, md: 10 }} h={{ base: 8, md: 10 }} borderRadius="xl" bg="whiteAlpha.200" align="center" justify="center" backdropFilter="blur(4px)">
+                                                    <Icon as={FaCalendarAlt} color="white" w={{ base: 4, md: 5 }} h={{ base: 4, md: 5 }} />
                                                 </Flex>
                                                 <Box>
-                                                    <Text fontSize="lg" fontWeight="900" lineHeight="short" letterSpacing="tight">
+                                                    <Text fontSize={{ base: "md", md: "lg" }} fontWeight="900" lineHeight="short" letterSpacing="tight">
                                                         {fullDateStr}
                                                     </Text>
-                                                    <Text fontSize="xs" color="whiteAlpha.900" fontWeight="600">
+                                                    <Text fontSize={{ base: "2xs", md: "xs" }} color="whiteAlpha.900" fontWeight="600">
                                                         Employee: <Text as="span" color="yellow.300" fontWeight="800">{selectedDetailEntry.empName}</Text>
                                                     </Text>
                                                 </Box>
@@ -1786,7 +1981,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                         </HStack>
 
                                         {/* Quick Summary Badges */}
-                                        <Flex flexWrap="wrap" gap={2} pt={1}>
+                                        <Flex flexWrap="wrap" gap={1.5} pt={0.5}>
                                             {allDaySchedules.length > 0 ? (
                                                 allDaySchedules.map((sch, schIdx) => {
                                                     const sSite = sch.site?.siteName || resolveSiteName(sch.site?._id || sch.site) || 'Site';
@@ -1800,7 +1995,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                     const hlpStr = sHelpers.filter(Boolean).join(', ');
 
                                                     return (
-                                                        <Badge key={schIdx} bg="whiteAlpha.200" color="white" px={3} py={1} borderRadius="lg" fontSize="11px" textTransform="none" display="flex" alignItems="center" gap={1.5}>
+                                                        <Badge key={schIdx} bg="whiteAlpha.200" color="white" px={2.5} py={0.5} borderRadius="lg" fontSize="10px" textTransform="none" display="flex" alignItems="center" gap={1}>
                                                             <Text as="span" color="yellow.200" fontWeight="800">📍 Site {schIdx + 1}:</Text>
                                                             <Text as="span" fontWeight="700">{sSite}</Text>
                                                             <Text as="span" color="whiteAlpha.600">|</Text>
@@ -1815,7 +2010,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                     );
                                                 })
                                             ) : (
-                                                <Badge bg="whiteAlpha.200" color="white" px={3} py={1} borderRadius="lg" fontSize="11px" textTransform="none" display="flex" alignItems="center" gap={1.5}>
+                                                <Badge bg="whiteAlpha.200" color="white" px={2.5} py={0.5} borderRadius="lg" fontSize="10px" textTransform="none" display="flex" alignItems="center" gap={1}>
                                                     <Text as="span" color="yellow.200" fontWeight="800">🏠 In-House / Office:</Text>
                                                     <Text as="span" fontWeight="700">{selectedDetailEntry.workLocation || 'Office'}</Text>
                                                 </Badge>
@@ -1823,9 +2018,9 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                         </Flex>
                                     </VStack>
                                 </ModalHeader>
-                                <ModalCloseButton color="white" mt={2} />
+                                <ModalCloseButton color="white" mt={{ base: 1, md: 2 }} />
 
-                                <ModalBody p={5} bg="gray.50" maxH="75vh" overflowY="auto">
+                                <ModalBody p={{ base: 3, md: 5 }} bg="gray.50" maxH={{ base: "80vh", md: "75vh" }} overflowY="auto">
                                     <VStack spacing={4} align="stretch">
 
                                         {/* ════════════════════ SITE ALLOCATIONS & SCHEDULES ════════════════════ */}
@@ -3021,21 +3216,21 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 </Alert>
             )}
             {/* Top Filter & Employee Balance Info */}
-            <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="gray.100">
-                <CardBody p={6}>
-                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6} align="flex-end">
+            <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
+                <CardBody p={{ base: 3.5, md: 6 }}>
+                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={{ base: 3.5, md: 6 }} align="flex-end">
                         <FormControl>
-                            <FormLabel fontSize="sm" fontWeight="bold" color="gray.600">Select Date</FormLabel>
-                            <InputGroup size="lg">
+                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>Select Date</FormLabel>
+                            <InputGroup size={{ base: "md", md: "lg" }}>
                                 <InputLeftElement><Icon as={FaCalendarAlt} color="blue.400" /></InputLeftElement>
                                 <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} borderRadius="xl" />
                             </InputGroup>
                         </FormControl>
 
                         <FormControl>
-                            <FormLabel fontSize="sm" fontWeight="bold" color="gray.600">Select Employee</FormLabel>
+                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>Select Employee</FormLabel>
                             <Select 
-                                size="lg" 
+                                size={{ base: "md", md: "lg" }} 
                                 placeholder={isFetchingSchedules ? "Loading Employees..." : (scheduledEmployees.length > 0 ? "Choose Employee" : "No Employees Scheduled")} 
                                 value={selectedEmployeeId} 
                                 onChange={(e) => setSelectedEmployeeId(e.target.value)}
@@ -3049,35 +3244,39 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                         </FormControl>
 
                         {selectedEmployee && (
-                            <Box bg="white" p={6} borderRadius="2xl" border="1px solid" borderColor="blue.100" pos="relative" shadow="sm">
+                            <Box bg="white" p={{ base: 3, md: 5 }} borderRadius="2xl" border="1px solid" borderColor="blue.100" pos="relative" shadow="xs">
                                 {loading && (
                                     <Center pos="absolute" inset={0} bg="whiteAlpha.800" borderRadius="2xl" zIndex={1}>
                                         <Spinner size="md" color="blue.500" />
                                     </Center>
                                 )}
-                                <SimpleGrid columns={3} spacing={4} textAlign="center">
-                                    <VStack align="center" spacing={1}>
-                                        <Text fontSize="10px" fontWeight="black" color="gray.400" textTransform="uppercase">Current Balance</Text>
-                                        <Heading size="md" color="blue.700">₹{selectedEmployee.totalAmount?.toLocaleString()}</Heading>
+                                <SimpleGrid columns={3} spacing={2} textAlign="center">
+                                    <VStack align="center" spacing={0.5}>
+                                        <Text fontSize="9px" fontWeight="black" color="gray.400" textTransform="uppercase">Balance</Text>
+                                        <Heading size={{ base: "xs", sm: "sm", md: "md" }} fontSize={{ base: "xs", sm: "sm", md: "md" }} color="blue.700" isTruncated>
+                                            ₹{selectedEmployee.totalAmount?.toLocaleString()}
+                                        </Heading>
                                     </VStack>
                                     
-                                    <VStack align="center" spacing={1} borderLeft="1px solid" borderRight="1px solid" borderColor="gray.100">
-                                        <Text fontSize="10px" fontWeight="black" color="red.400" textTransform="uppercase">Today's Total</Text>
-                                        <Heading size="md" color="red.600">- ₹{totals.total.toLocaleString()}</Heading>
+                                    <VStack align="center" spacing={0.5} borderLeft="1px solid" borderRight="1px solid" borderColor="gray.100">
+                                        <Text fontSize="9px" fontWeight="black" color="red.400" textTransform="uppercase">Today</Text>
+                                        <Heading size={{ base: "xs", sm: "sm", md: "md" }} fontSize={{ base: "xs", sm: "sm", md: "md" }} color="red.600" isTruncated>
+                                            -₹{totals.total.toLocaleString()}
+                                        </Heading>
                                     </VStack>
 
-                                    <VStack align="center" spacing={1}>
-                                        <Text fontSize="10px" fontWeight="black" color="green.400" textTransform="uppercase">New Balance</Text>
-                                        <Heading size="md" color={totals.remaining >= 0 ? "green.600" : "red.600"}>
+                                    <VStack align="center" spacing={0.5}>
+                                        <Text fontSize="9px" fontWeight="black" color="green.400" textTransform="uppercase">Final</Text>
+                                        <Heading size={{ base: "xs", sm: "sm", md: "md" }} fontSize={{ base: "xs", sm: "sm", md: "md" }} color={totals.remaining >= 0 ? "green.600" : "red.600"} isTruncated>
                                             ₹{totals.remaining.toLocaleString()}
                                         </Heading>
                                     </VStack>
                                 </SimpleGrid>
                                 
-                                <Divider my={3} />
+                                <Divider my={2} />
                                 <Center>
-                                    <Text fontSize="xs" color="gray.500" fontStyle="italic">
-                                        Calculation: ₹{selectedEmployee.totalAmount?.toLocaleString()} (Current) - ₹{totals.total.toLocaleString()} (Expense) = ₹{totals.remaining.toLocaleString()} (Final)
+                                    <Text fontSize="10px" color="gray.500" fontStyle="italic" textAlign="center">
+                                        ₹{selectedEmployee.totalAmount?.toLocaleString()} - ₹{totals.total.toLocaleString()} = ₹{totals.remaining.toLocaleString()}
                                     </Text>
                                 </Center>
                             </Box>
@@ -3086,34 +3285,36 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 </CardBody>
             </Card>
 
-            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={8}>
+            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={{ base: 4, md: 8 }}>
                 {/* Left Side: Expense Inputs */}
-                <VStack spacing={8} align="stretch">
+                <VStack spacing={{ base: 4, md: 8 }} align="stretch">
                     {/* Standard Expenses */}
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                        <CardBody p={6}>
-                            <Heading size="sm" mb={6} color="gray.700" display="flex" alignItems="center">
-                                <Icon as={FaUtensils} mr={2} color="blue.500" /> Standard Meals & Travel
+                        <CardBody p={{ base: 3.5, md: 6 }}>
+                            <Heading size="sm" mb={{ base: 3, md: 6 }} color="gray.700" display="flex" alignItems="center">
+                                <Icon as={FaUtensils} mr={2} color="blue.500" /> Standard Meals &amp; Travel
                             </Heading>
-                            <VStack spacing={4}>
-                                <VStack spacing={4} w="full" align="stretch">
+                            <VStack spacing={3}>
+                                <VStack spacing={3} w="full" align="stretch">
                                     {['breakfast', 'lunch', 'dinner', 'petrol'].map((expName) => (
-                                        <VStack key={expName} align="stretch" spacing={2} bg="gray.50" p={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                            <HStack align="center" w="full" justify="space-between">
-                                                <FormLabel fontSize="sm" fontWeight="bold" textTransform="capitalize" m={0} minW="80px">
-                                                    {expName === 'petrol' ? 'Fuel' : expName}
+                                        <VStack key={expName} align="stretch" spacing={2} bg="gray.50" p={2.5} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                            <Flex direction="row" align="center" w="full" justify="space-between" flexWrap="wrap" gap={2}>
+                                                <HStack spacing={1.5} minW={{ base: "75px", sm: "90px" }}>
+                                                    <FormLabel fontSize="xs" fontWeight="bold" textTransform="capitalize" m={0}>
+                                                        {expName === 'petrol' ? 'Fuel' : expName}
+                                                    </FormLabel>
                                                     {selectedEmployee?.foodAllowance === 'Without Food' && expName !== 'petrol' && (
-                                                        <Badge ml={2} colorScheme="red" variant="subtle" borderRadius="full">Disabled</Badge>
+                                                        <Badge colorScheme="red" variant="subtle" borderRadius="full" fontSize="8px" px={1}>Off</Badge>
                                                     )}
-                                                </FormLabel>
+                                                </HStack>
                                                 
                                                 {expName === 'petrol' && (
                                                     <Select 
-                                                        size="sm" 
-                                                        w="100px" 
+                                                        size="xs" 
+                                                        w="80px" 
                                                         value={fuelType} 
                                                         onChange={(e) => setFuelType(e.target.value)} 
-                                                        borderRadius="lg" 
+                                                        borderRadius="md" 
                                                         bg="white"
                                                     >
                                                         <option value="Petrol">Petrol</option>
@@ -3122,7 +3323,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     </Select>
                                                 )}
                                                 
-                                                <HStack flex={1} maxW="200px">
+                                                <HStack flex={1} maxW={{ base: "140px", sm: "180px" }}>
                                                     <InputGroup size="sm">
                                                         <InputLeftElement><Icon as={expName === 'petrol' ? FaGasPump : FaRupeeSign} color="gray.400" fontSize="xs" /></InputLeftElement>
                                                         <Input 
@@ -3146,6 +3347,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                         borderRadius="lg"
                                                         onClick={() => document.getElementById(`upload-${expName}`).click()}
                                                         isDisabled={selectedEmployee?.foodAllowance === 'Without Food' && expName !== 'petrol'}
+                                                        aria-label={`Upload ${expName} files`}
                                                     />
                                                 </Tooltip>
                                                 <input
@@ -3156,7 +3358,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     onChange={(e) => handleExpenseFileChange(e, expName)}
                                                     accept="image/*,.pdf,.doc,.docx"
                                                 />
-                                            </HStack>
+                                            </Flex>
                                             {!(selectedEmployee?.foodAllowance === 'Without Food' && expName !== 'petrol') && committedExpenses && committedExpenses[0]?.expenseFiles?.[expName] && committedExpenses[0].expenseFiles[expName].length > 0 && (
                                                 <HStack overflowX="auto" py={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
                                                     {committedExpenses[0].expenseFiles[expName].map((fileUrl, i) => {
@@ -3218,42 +3420,46 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 
                     {/* Other Expenses */}
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                        <CardBody p={6}>
-                            <HStack justify="space-between" mb={6}>
+                        <CardBody p={{ base: 3.5, md: 6 }}>
+                            <HStack justify="space-between" mb={{ base: 3, md: 6 }}>
                                 <Heading size="sm" color="gray.700" display="flex" alignItems="center">
                                     <Icon as={FaPlus} mr={2} color="green.500" /> Other Custom Expenses
                                 </Heading>
-                                <Button size="sm" colorScheme="green" variant="ghost" leftIcon={<FaPlus />} onClick={addOtherExpense}>Add Row</Button>
+                                <Button size="xs" colorScheme="green" variant="ghost" leftIcon={<FaPlus />} onClick={addOtherExpense}>Add Row</Button>
                             </HStack>
                             <VStack spacing={3}>
                                 {otherExpenses.map((row, idx) => (
-                                    <VStack key={idx} w="full" bg="gray.50" p={3} borderRadius="xl" align="stretch" border="1px solid" borderColor="gray.100">
-                                        <HStack>
-                                            <Input placeholder="Expense Name" value={row.expenseName} onChange={(e) => updateOtherExpense(idx, 'expenseName', e.target.value)} bg="white" size="sm" borderRadius="lg" />
-                                            <InputGroup size="sm" maxW="150px">
-                                                <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
-                                                <Input type="number" placeholder="Amount" value={row.amount} onChange={(e) => updateOtherExpense(idx, 'amount', e.target.value)} bg="white" borderRadius="lg" />
-                                            </InputGroup>
-                                            <Tooltip label="Upload bills">
-                                                <IconButton
-                                                    size="sm"
-                                                    aria-label="Upload file"
-                                                    icon={<Icon as={FaCloudUploadAlt} />}
-                                                    colorScheme="blue"
-                                                    variant="outline"
-                                                    onClick={() => document.getElementById(`upload-other-${idx}`).click()}
-                                                />
-                                            </Tooltip>
-                                            <input
-                                                type="file"
-                                                id={`upload-other-${idx}`}
-                                                hidden
-                                                multiple
-                                                onChange={(e) => handleOtherExpenseFileChange(idx, e)}
-                                                accept="image/*,.pdf,.doc,.docx"
-                                            />
-                                            <IconButton size="sm" aria-label="remove row" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => removeOtherExpense(idx)} />
-                                        </HStack>
+                                    <VStack key={idx} w="full" bg="gray.50" p={2.5} borderRadius="xl" align="stretch" border="1px solid" borderColor="gray.100">
+                                        <Flex direction={{ base: 'column', sm: 'row' }} align={{ base: 'stretch', sm: 'center' }} gap={2}>
+                                            <Input placeholder="Expense Name" value={row.expenseName} onChange={(e) => updateOtherExpense(idx, 'expenseName', e.target.value)} bg="white" size="sm" borderRadius="lg" flex={1} />
+                                            <HStack spacing={2} justify="space-between">
+                                                <InputGroup size="sm" maxW={{ base: 'full', sm: '150px' }} flex={1}>
+                                                    <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
+                                                    <Input type="number" placeholder="Amount" value={row.amount} onChange={(e) => updateOtherExpense(idx, 'amount', e.target.value)} bg="white" borderRadius="lg" />
+                                                </InputGroup>
+                                                <HStack spacing={1}>
+                                                    <Tooltip label="Upload bills">
+                                                        <IconButton
+                                                            size="sm"
+                                                            aria-label="Upload file"
+                                                            icon={<Icon as={FaCloudUploadAlt} />}
+                                                            colorScheme="blue"
+                                                            variant="outline"
+                                                            onClick={() => document.getElementById(`upload-other-${idx}`).click()}
+                                                        />
+                                                    </Tooltip>
+                                                    <input
+                                                        type="file"
+                                                        id={`upload-other-${idx}`}
+                                                        hidden
+                                                        multiple
+                                                        onChange={(e) => handleOtherExpenseFileChange(idx, e)}
+                                                        accept="image/*,.pdf,.doc,.docx"
+                                                    />
+                                                    <IconButton size="sm" aria-label="remove row" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => removeOtherExpense(idx)} />
+                                                </HStack>
+                                            </HStack>
+                                        </Flex>
                                         {/* Existing custom expense files */}
                                         {row.existingFiles && row.existingFiles.length > 0 && (
                                             <HStack overflowX="auto" pt={1} spacing={2} css={{ '&::-webkit-scrollbar': { height: '4px' } }}>
@@ -3315,23 +3521,23 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     </Card>
 
                     <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                        <CardBody p={6}>
-                            <HStack justify="space-between" mb={6}>
+                        <CardBody p={{ base: 3.5, md: 6 }}>
+                            <HStack justify="space-between" mb={{ base: 3, md: 6 }}>
                                 <Heading size="sm" color="gray.700" display="flex" alignItems="center">
                                     <Icon as={FaBuilding} mr={2} color="purple.500" /> Client & Site Allocation
                                 </Heading>
-                                <Button size="sm" colorScheme="purple" variant="ghost" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
+                                <Button size="xs" colorScheme="purple" variant="ghost" leftIcon={<FaPlus />} onClick={addClientSite}>Add Site</Button>
                             </HStack>
-                            <VStack spacing={6}>
+                            <VStack spacing={{ base: 3, md: 6 }}>
                                 {activeSchedule && activeSchedule.scheduleType && (
-                                    <Box w="full" px={4} py={2} bg="purple.50" borderRadius="xl" border="1px solid" borderColor="purple.200">
+                                    <Box w="full" px={3} py={2} bg="purple.50" borderRadius="xl" border="1px solid" borderColor="purple.200">
                                         <Text fontSize="xs" color="purple.800" fontWeight="bold">
-                                            🗓️ Schedule Type for selected date: <span style={{ textDecoration: 'underline' }}>{activeSchedule.scheduleType}</span>
+                                            🗓️ Schedule Type: <span style={{ textDecoration: 'underline' }}>{activeSchedule.scheduleType}</span>
                                         </Text>
                                     </Box>
                                 )}
                                 {clientSites.map((row, idx) => (
-                                    <VStack key={idx} w="full" bg="gray.50" p={4} borderRadius="xl" align="stretch" borderLeft="4px solid"
+                                    <VStack key={idx} w="full" bg="gray.50" p={{ base: 3, md: 4 }} borderRadius="xl" align="stretch" borderLeft="4px solid"
                                         borderColor={
                                             (() => {
                                                 const ms = row.scheduleId
@@ -3346,9 +3552,9 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                             })()
                                         }
                                     >
-                                        <HStack align="flex-end">
-                                            <FormControl flex={1}>
-                                                <FormLabel fontSize="10px" fontWeight="bold">Client</FormLabel>
+                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={2.5} align="end">
+                                            <FormControl>
+                                                <FormLabel fontSize="10px" fontWeight="bold" mb={1}>Client</FormLabel>
                                                 <Select size="sm" placeholder="Select Client" value={row.clientId} onChange={(e) => updateClientSite(idx, 'clientId', e.target.value)} bg="white" borderRadius="lg">
                                                     {(() => {
                                                         const scheduledClients = new Set();
@@ -3364,8 +3570,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     })()}
                                                 </Select>
                                             </FormControl>
-                                            <FormControl flex={1}>
-                                                <FormLabel fontSize="10px" fontWeight="bold">Site</FormLabel>
+                                            <FormControl>
+                                                <FormLabel fontSize="10px" fontWeight="bold" mb={1}>Site</FormLabel>
                                                 <Select size="sm" placeholder="Select Site" value={row.siteId} onChange={(e) => updateClientSite(idx, 'siteId', e.target.value)} bg="white" borderRadius="lg">
                                                     {(() => {
                                                         const scheduledSites = new Set();
@@ -3388,8 +3594,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     })()}
                                                 </Select>
                                             </FormControl>
-                                            <FormControl flex={1}>
-                                                <FormLabel fontSize="10px" fontWeight="bold">Expenses Ledger</FormLabel>
+                                            <FormControl>
+                                                <FormLabel fontSize="10px" fontWeight="bold" mb={1}>Expenses Ledger</FormLabel>
                                                 {(() => {
                                                     const matchingSchedule = row.scheduleId
                                                         ? employeeSchedules.find(s => s._id === row.scheduleId)
@@ -3427,8 +3633,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     ? employeeSchedules.find(s => s._id === row.scheduleId)
                                                     : employeeSchedules.find(s => (s.site?._id || s.site) === row.siteId);
                                                 return ms?.scheduleType === 'POINT MARKING' ? (
-                                                    <FormControl flex={0.5} maxW="100px">
-                                                        <FormLabel fontSize="10px" fontWeight="bold">Quantity</FormLabel>
+                                                    <FormControl>
+                                                        <FormLabel fontSize="10px" fontWeight="bold" mb={1}>Quantity</FormLabel>
                                                         <Input
                                                             size="sm"
                                                             type="number"
@@ -3442,10 +3648,14 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                     </FormControl>
                                                 ) : null;
                                             })()}
-                                            {clientSites.length > 1 && (
-                                                <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => removeClientSite(idx)} />
-                                            )}
-                                        </HStack>
+                                        </SimpleGrid>
+                                        {clientSites.length > 1 && (
+                                            <Flex justify="flex-end" pt={1}>
+                                                <Button size="xs" colorScheme="red" variant="ghost" leftIcon={<FaTrash />} onClick={() => removeClientSite(idx)}>
+                                                    Remove Site
+                                                </Button>
+                                            </Flex>
+                                        )}
 
                                         {/* Schedule Type Badge */}
                                         {(() => {
@@ -3498,14 +3708,45 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                             const existingDrawing = matchingClientSites.flatMap(cs => cs.files?.drawing || []).filter(filterDeleted);
                                             
                                             return (
-                                                <SimpleGrid columns={4} spacing={3} pt={2}>
-                                                    <VStack align="start" spacing={1} width="full">
-                                                        <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({row.files.photos.length + existingPhotos.length})</Text>
-                                                        <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
-                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={{ base: 2.5, md: 3 }} pt={2}>
+                                                    {/* 1. PHOTOS */}
+                                                    <Box bg="blue.50" border="1.5px dashed" borderColor="blue.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaCamera} color="blue.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="blue.800">PHOTOS</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="blue" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {row.files.photos.length + existingPhotos.length}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="blue"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`site-photos-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Photos
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`site-photos-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept="image/*"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'photos')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
                                                             {row.files.photos.map((file, fIdx) => (
-                                                                <HStack key={fIdx} justify="space-between" bg="blue.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="blue.100" spacing={1}>
-                                                                    <Icon as={FaCamera} color="blue.500" w={2.5} h={2.5} />
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="blue.200" spacing={1}>
+                                                                    <Icon as={FaCamera} color="blue.500" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text fontSize="9px" fontWeight="medium" color="blue.800" isTruncated flex={1}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3520,8 +3761,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                             {existingPhotos.map((file, fIdx) => (
-                                                                <HStack key={`ex-ph-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
-                                                                    <Icon as={FaCamera} color="gray.400" w={2.5} h={2.5} />
+                                                                <HStack key={`ex-ph-${fIdx}`} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.300" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaCamera} color="gray.400" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3536,14 +3777,46 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                         </VStack>
-                                                    </VStack>
-                                                    <VStack align="start" spacing={1} width="full">
-                                                        <Text fontSize="9px" fontWeight="black" color="orange.600">REPORTS ({row.files.dailyReports.length + existingReports.length})</Text>
-                                                        <Input type="file" multiple accept=".pdf,.doc,.docx" onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')} size="xs" p={0} variant="unstyled" />
-                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                    </Box>
+
+                                                    {/* 2. REPORTS */}
+                                                    <Box bg="orange.50" border="1.5px dashed" borderColor="orange.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaFileAlt} color="orange.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="orange.800">REPORTS</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="orange" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {row.files.dailyReports.length + existingReports.length}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="orange"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`site-reports-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Reports
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`site-reports-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept=".pdf,.doc,.docx"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
                                                             {row.files.dailyReports.map((file, fIdx) => (
-                                                                <HStack key={fIdx} justify="space-between" bg="orange.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="orange.100" spacing={1}>
-                                                                    <Icon as={FaFileAlt} color="orange.500" w={2.5} h={2.5} />
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="orange.200" spacing={1}>
+                                                                    <Icon as={FaFileAlt} color="orange.500" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text fontSize="9px" fontWeight="medium" color="orange.800" isTruncated flex={1}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3558,8 +3831,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                             {existingReports.map((file, fIdx) => (
-                                                                <HStack key={`ex-rp-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
-                                                                    <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} />
+                                                                <HStack key={`ex-rp-${fIdx}`} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.300" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3574,14 +3847,46 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                         </VStack>
-                                                    </VStack>
-                                                    <VStack align="start" spacing={1} width="full">
-                                                        <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({row.files.data.length + existingData.length})</Text>
-                                                        <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
-                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                    </Box>
+
+                                                    {/* 3. DATA */}
+                                                    <Box bg="purple.50" border="1.5px dashed" borderColor="purple.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaFileAlt} color="purple.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="purple.800">DATA</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="purple" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {row.files.data.length + existingData.length}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="purple"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`site-data-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Data
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`site-data-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept=".xls,.xlsx,.pdf"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'data')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
                                                             {row.files.data.map((file, fIdx) => (
-                                                                <HStack key={fIdx} justify="space-between" bg="purple.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="purple.100" spacing={1}>
-                                                                    <Icon as={FaFileAlt} color="purple.500" w={2.5} h={2.5} />
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="purple.200" spacing={1}>
+                                                                    <Icon as={FaFileAlt} color="purple.500" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text fontSize="9px" fontWeight="medium" color="purple.800" isTruncated flex={1}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3596,8 +3901,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                             {existingData.map((file, fIdx) => (
-                                                                <HStack key={`ex-da-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
-                                                                    <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} />
+                                                                <HStack key={`ex-da-${fIdx}`} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.300" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaFileAlt} color="gray.400" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3612,14 +3917,46 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                         </VStack>
-                                                    </VStack>
-                                                    <VStack align="start" spacing={1} width="full">
-                                                        <Text fontSize="9px" fontWeight="black" color="teal.600">DRAWING ({(row.files.drawing?.length || 0) + existingDrawing.length})</Text>
-                                                        <Input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" onChange={(e) => handleSiteFileChange(idx, e, 'drawing')} size="xs" p={0} variant="unstyled" />
-                                                        <VStack align="stretch" spacing={1} width="full" mt={1}>
+                                                    </Box>
+
+                                                    {/* 4. DRAWING */}
+                                                    <Box bg="teal.50" border="1.5px dashed" borderColor="teal.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaPaperclip} color="teal.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="teal.800">DRAWING</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="teal" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {(row.files.drawing?.length || 0) + existingDrawing.length}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="teal"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`site-drawing-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Drawing
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`site-drawing-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept=".pdf,.dwg,.dxf,image/*"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'drawing')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
                                                             {(row.files.drawing || []).map((file, fIdx) => (
-                                                                <HStack key={fIdx} justify="space-between" bg="teal.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="teal.100" spacing={1}>
-                                                                    <Icon as={FaPaperclip} color="teal.500" w={2.5} h={2.5} />
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="teal.200" spacing={1}>
+                                                                    <Icon as={FaPaperclip} color="teal.500" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text fontSize="9px" fontWeight="medium" color="teal.800" isTruncated flex={1}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3634,8 +3971,8 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                             {existingDrawing.map((file, fIdx) => (
-                                                                <HStack key={`ex-dw-${fIdx}`} justify="space-between" bg="gray.50" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.200" spacing={1} title="Already uploaded">
-                                                                    <Icon as={FaPaperclip} color="gray.400" w={2.5} h={2.5} />
+                                                                <HStack key={`ex-dw-${fIdx}`} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="gray.300" spacing={1} title="Already uploaded">
+                                                                    <Icon as={FaPaperclip} color="gray.400" w={2.5} h={2.5} flexShrink={0} />
                                                                     <Text cursor="pointer" onClick={() => window.open(`${api.defaults.baseURL}${file.url}`, '_blank')} fontSize="9px" fontWeight="medium" color="gray.600" isTruncated flex={1} _hover={{ textDecoration: 'underline' }}>{file.name}</Text>
                                                                     <IconButton 
                                                                         size="2xs" 
@@ -3650,7 +3987,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                                                                 </HStack>
                                                             ))}
                                                         </VStack>
-                                                    </VStack>
+                                                    </Box>
                                                 </SimpleGrid>
                                             );
                                         })()}
@@ -3739,97 +4076,179 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                             </VStack>
                         </Center>
                     ) : (
-                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                            <TableContainer overflowX="auto">
-                                <Table variant="simple">
-                                    <Thead bg="blue.50">
-                                        <Tr>
-                                            <Th color="blue.700">Client / Site Allocations</Th>
-                                            <Th color="blue.700">Attendance</Th>
-                                            <Th color="blue.700">Expenses Breakdown</Th>
-                                            <Th isNumeric color="blue.700">Total Expense</Th>
-                                            <Th textAlign="center" color="blue.700">View Details</Th>
-                                        </Tr>
-                                    </Thead>
-                                    <Tbody bg="white">
-                                        {committedExpenses.map((exp) => (
-                                            <Tr key={exp._id} _hover={{ bg: "blue.50" }} transition="background 0.2s">
-                                                <Td>
-                                                    <VStack align="start" spacing={1}>
-                                                        {exp.clientSites && exp.clientSites.map((cs, cIdx) => (
-                                                            <HStack key={cIdx}>
-                                                                <Badge colorScheme="teal" size="sm">Site {cIdx + 1}</Badge>
-                                                                <Text fontSize="xs" fontWeight="bold">
-                                                                    {cs.siteId?.siteName || cs.siteName || 'Unknown Site'} 
-                                                                </Text>
-                                                                {cs.ledger && (
-                                                                    <Badge colorScheme={cs.ledger === 'Full Day' ? 'green' : 'orange'} size="xs" variant="outline" ml={1}>
-                                                                        {cs.ledger}
-                                                                    </Badge>
-                                                                )}
-                                                            </HStack>
-                                                        ))}
-                                                        {(!exp.clientSites || exp.clientSites.length === 0) && (
-                                                            <Text fontSize="xs" color="gray.400">No site assigned</Text>
-                                                        )}
-                                                    </VStack>
-                                                </Td>
-                                                <Td>
-                                                    <Badge colorScheme={exp.attendance === 'Present' ? 'green' : exp.attendance === 'Half Day' ? 'orange' : 'red'}>
-                                                        {exp.attendance || 'Present'}
-                                                    </Badge>
-                                                    {exp.attendanceRemark && (
-                                                        <Text fontSize="10px" color="gray.500" mt={1}>Reason: {exp.attendanceRemark}</Text>
+                        <Box>
+                            {/* ── Mobile Card View ── */}
+                            <Box display={{ base: 'block', md: 'none' }}>
+                                <VStack spacing={3} align="stretch">
+                                    {committedExpenses.map((exp) => (
+                                        <Card key={exp._id} borderRadius="xl" shadow="xs" border="1px solid" borderColor="gray.200" bg="white" overflow="hidden">
+                                            <CardBody p={3.5}>
+                                                <VStack align="stretch" spacing={2.5}>
+                                                    <Flex justify="space-between" align="center">
+                                                        <Badge colorScheme={exp.attendance === 'Present' ? 'green' : exp.attendance === 'Half Day' ? 'orange' : 'red'} fontSize="11px" px={2} py={0.5} borderRadius="md">
+                                                            {exp.attendance || 'Present'}
+                                                        </Badge>
+                                                        <Text fontWeight="900" fontSize="md" color="blue.600">
+                                                            ₹{exp.totalExpense?.toLocaleString()}
+                                                        </Text>
+                                                    </Flex>
+
+                                                    {/* Sites */}
+                                                    {exp.clientSites && exp.clientSites.length > 0 && (
+                                                        <VStack align="stretch" spacing={1} bg="gray.50" p={2} borderRadius="lg">
+                                                            {exp.clientSites.map((cs, cIdx) => (
+                                                                <Flex key={cIdx} justify="space-between" align="center">
+                                                                    <HStack spacing={1.5} overflow="hidden">
+                                                                        <Icon as={FaMapMarkerAlt} color="blue.500" fontSize="xs" flexShrink={0}/>
+                                                                        <Text fontSize="xs" fontWeight="bold" color="gray.800" isTruncated>
+                                                                            {cs.siteId?.siteName || cs.siteName || 'Unknown Site'}
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    {cs.ledger && (
+                                                                        <Badge colorScheme={cs.ledger === 'Full Day' ? 'green' : 'orange'} size="xs" variant="outline">
+                                                                            {cs.ledger}
+                                                                        </Badge>
+                                                                    )}
+                                                                </Flex>
+                                                            ))}
+                                                        </VStack>
                                                     )}
-                                                </Td>
-                                                <Td fontSize="xs">
-                                                    <VStack align="start" spacing={0}>
-                                                        {exp.expenses && (
-                                                            <>
-                                                                {Number(exp.expenses.breakfast) > 0 && <Text>Breakfast: ₹{Number(exp.expenses.breakfast).toLocaleString()}</Text>}
-                                                                {Number(exp.expenses.lunch) > 0 && <Text>Lunch: ₹{Number(exp.expenses.lunch).toLocaleString()}</Text>}
-                                                                {Number(exp.expenses.dinner) > 0 && <Text>Dinner: ₹{Number(exp.expenses.dinner).toLocaleString()}</Text>}
-                                                                {Number(exp.expenses.petrol) > 0 && <Text>Fuel ({exp.expenses.fuelType || 'Petrol'}): ₹{Number(exp.expenses.petrol).toLocaleString()}</Text>}
-                                                            </>
-                                                        )}
-                                                        {exp.otherExpensesList && exp.otherExpensesList.map((oe, oeIdx) => (
-                                                            <Text key={oeIdx} color="purple.600">Other ({oe.particulars || 'Misc'}): ₹{Number(oe.amount).toLocaleString()}</Text>
-                                                        ))}
-                                                    </VStack>
-                                                </Td>
-                                                <Td isNumeric fontWeight="black" fontSize="lg" color="blue.600">₹{exp.totalExpense?.toLocaleString()}</Td>
-                                                <Td>
-                                                    <HStack justify="center" spacing={1}>
-                                                        <IconButton 
-                                                            size="sm" 
-                                                            colorScheme="blue" 
-                                                            variant="ghost" 
-                                                            icon={<FaEye />} 
-                                                            borderRadius="lg"
+
+                                                    {/* Expenses Snippet */}
+                                                    <SimpleGrid columns={2} spacing={1} fontSize="2xs" color="gray.600">
+                                                        {Number(exp.expenses?.breakfast) > 0 && <Text>🍳 Breakfast: ₹{Number(exp.expenses.breakfast).toLocaleString()}</Text>}
+                                                        {Number(exp.expenses?.lunch) > 0 && <Text>🍱 Lunch: ₹{Number(exp.expenses.lunch).toLocaleString()}</Text>}
+                                                        {Number(exp.expenses?.dinner) > 0 && <Text>🍽️ Dinner: ₹{Number(exp.expenses.dinner).toLocaleString()}</Text>}
+                                                        {Number(exp.expenses?.petrol) > 0 && <Text>⛽ Fuel: ₹{Number(exp.expenses.petrol).toLocaleString()}</Text>}
+                                                    </SimpleGrid>
+
+                                                    <Divider />
+
+                                                    {/* Actions */}
+                                                    <HStack justify="space-between">
+                                                        <Button
+                                                            size="xs"
+                                                            colorScheme="blue"
+                                                            variant="outline"
+                                                            leftIcon={<FaEye />}
                                                             onClick={() => {
                                                                 setSelectedExpenseForView(exp);
                                                                 setIsViewModalOpen(true);
                                                             }}
-                                                            aria-label="View Details"
-                                                        />
-                                                        <IconButton 
-                                                            size="sm" 
-                                                            colorScheme="red" 
-                                                            variant="ghost" 
-                                                            icon={<FaTrash />} 
                                                             borderRadius="lg"
+                                                        >
+                                                            View Details
+                                                        </Button>
+                                                        <IconButton
+                                                            size="xs"
+                                                            colorScheme="red"
+                                                            variant="ghost"
+                                                            icon={<FaTrash />}
                                                             onClick={() => handleDeleteExpense(exp._id)}
                                                             aria-label="Delete Expense"
                                                             isDisabled={!canWrite}
                                                         />
                                                     </HStack>
-                                                </Td>
+                                                </VStack>
+                                            </CardBody>
+                                        </Card>
+                                    ))}
+                                </VStack>
+                            </Box>
+
+                            {/* ── Desktop Table View ── */}
+                            <Card display={{ base: 'none', md: 'block' }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                                <TableContainer overflowX="auto">
+                                    <Table variant="simple">
+                                        <Thead bg="blue.50">
+                                            <Tr>
+                                                <Th color="blue.700">Client / Site Allocations</Th>
+                                                <Th color="blue.700">Attendance</Th>
+                                                <Th color="blue.700">Expenses Breakdown</Th>
+                                                <Th isNumeric color="blue.700">Total Expense</Th>
+                                                <Th textAlign="center" color="blue.700">View Details</Th>
                                             </Tr>
-                                        ))}
-                                    </Tbody>
-                                </Table>
-                            </TableContainer>
-                        </Card>
+                                        </Thead>
+                                        <Tbody bg="white">
+                                            {committedExpenses.map((exp) => (
+                                                <Tr key={exp._id} _hover={{ bg: "blue.50" }} transition="background 0.2s">
+                                                    <Td>
+                                                        <VStack align="start" spacing={1}>
+                                                            {exp.clientSites && exp.clientSites.map((cs, cIdx) => (
+                                                                <HStack key={cIdx}>
+                                                                    <Badge colorScheme="teal" size="sm">Site {cIdx + 1}</Badge>
+                                                                    <Text fontSize="xs" fontWeight="bold">
+                                                                        {cs.siteId?.siteName || cs.siteName || 'Unknown Site'} 
+                                                                    </Text>
+                                                                    {cs.ledger && (
+                                                                        <Badge colorScheme={cs.ledger === 'Full Day' ? 'green' : 'orange'} size="xs" variant="outline" ml={1}>
+                                                                            {cs.ledger}
+                                                                        </Badge>
+                                                                    )}
+                                                                </HStack>
+                                                            ))}
+                                                            {(!exp.clientSites || exp.clientSites.length === 0) && (
+                                                                <Text fontSize="xs" color="gray.400">No site assigned</Text>
+                                                            )}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td>
+                                                        <Badge colorScheme={exp.attendance === 'Present' ? 'green' : exp.attendance === 'Half Day' ? 'orange' : 'red'}>
+                                                            {exp.attendance || 'Present'}
+                                                        </Badge>
+                                                        {exp.attendanceRemark && (
+                                                            <Text fontSize="10px" color="gray.500" mt={1}>Reason: {exp.attendanceRemark}</Text>
+                                                        )}
+                                                    </Td>
+                                                    <Td fontSize="xs">
+                                                        <VStack align="start" spacing={0}>
+                                                            {exp.expenses && (
+                                                                <>
+                                                                    {Number(exp.expenses.breakfast) > 0 && <Text>Breakfast: ₹{Number(exp.expenses.breakfast).toLocaleString()}</Text>}
+                                                                    {Number(exp.expenses.lunch) > 0 && <Text>Lunch: ₹{Number(exp.expenses.lunch).toLocaleString()}</Text>}
+                                                                    {Number(exp.expenses.dinner) > 0 && <Text>Dinner: ₹{Number(exp.expenses.dinner).toLocaleString()}</Text>}
+                                                                    {Number(exp.expenses.petrol) > 0 && <Text>Fuel ({exp.expenses.fuelType || 'Petrol'}): ₹{Number(exp.expenses.petrol).toLocaleString()}</Text>}
+                                                                </>
+                                                            )}
+                                                            {exp.otherExpensesList && exp.otherExpensesList.map((oe, oeIdx) => (
+                                                                <Text key={oeIdx} color="purple.600">Other ({oe.particulars || 'Misc'}): ₹{Number(oe.amount).toLocaleString()}</Text>
+                                                            ))}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td isNumeric fontWeight="black" fontSize="lg" color="blue.600">₹{exp.totalExpense?.toLocaleString()}</Td>
+                                                    <Td>
+                                                        <HStack justify="center" spacing={1}>
+                                                            <IconButton 
+                                                                size="sm" 
+                                                                colorScheme="blue" 
+                                                                variant="ghost" 
+                                                                icon={<FaEye />} 
+                                                                borderRadius="lg"
+                                                                onClick={() => {
+                                                                    setSelectedExpenseForView(exp);
+                                                                    setIsViewModalOpen(true);
+                                                                }}
+                                                                aria-label="View Details"
+                                                            />
+                                                            <IconButton 
+                                                                size="sm" 
+                                                                colorScheme="red" 
+                                                                variant="ghost" 
+                                                                icon={<FaTrash />} 
+                                                                borderRadius="lg"
+                                                                onClick={() => handleDeleteExpense(exp._id)}
+                                                                aria-label="Delete Expense"
+                                                                isDisabled={!canWrite}
+                                                            />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </TableContainer>
+                            </Card>
+                        </Box>
                     )}
                 </Box>
             )}
@@ -4425,37 +4844,41 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
     }
 
     return (
-        <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="orange.100" overflow="hidden">
+        <Card borderRadius={{ base: "xl", md: "2xl" }} shadow="md" border="1px solid" borderColor="orange.100" overflow="hidden">
             <CardBody p={0}>
                 {!canWrite && (
                     <Alert status="warning" borderRadius="0">
                         <AlertIcon />
                         <Box>
-                            <AlertTitle>Read-Only Mode</AlertTitle>
-                            <AlertDescription fontSize="xs">
+                            <AlertTitle fontSize="xs">Read-Only Mode</AlertTitle>
+                            <AlertDescription fontSize="2xs">
                                 You do not have write/modify permissions for unscheduled attendance. Saving is disabled.
                             </AlertDescription>
                         </Box>
                     </Alert>
                 )}
-                <Box bg="linear-gradient(135deg, #f6ad55 0%, #ed8936 100%)" px={6} py={4}>
-                    <HStack justify="space-between">
-                        <HStack spacing={3}>
-                            <Box bg="white" p={2} borderRadius="lg" shadow="sm">
-                                <Icon as={FaClipboardList} color="orange.500" w={5} h={5} />
+                <Box bg="linear-gradient(135deg, #f6ad55 0%, #ed8936 100%)" px={{ base: 4, md: 6 }} py={{ base: 3, md: 4 }}>
+                    <Flex justify="space-between" align="center" gap={2}>
+                        <HStack spacing={{ base: 2.5, md: 3 }}>
+                            <Box bg="white" p={{ base: 1.5, md: 2 }} borderRadius="lg" shadow="sm" flexShrink={0}>
+                                <Icon as={FaClipboardList} color="orange.500" w={{ base: 4, md: 5 }} h={{ base: 4, md: 5 }} />
                             </Box>
                             <VStack align="start" spacing={0}>
-                                <Heading size="sm" color="white">Unscheduled Employee Attendance</Heading>
-                                <Text fontSize="xs" color="orange.100">Employees not assigned to any site today</Text>
+                                <Heading size="sm" fontSize={{ base: "xs", sm: "sm", md: "md" }} color="white">
+                                    Unscheduled Employee Attendance
+                                </Heading>
+                                <Text fontSize={{ base: "2xs", sm: "xs" }} color="orange.100">
+                                    Employees not assigned to any site today
+                                </Text>
                             </VStack>
                         </HStack>
-                        <Badge bg="white" color="orange.600" fontSize="sm" px={3} py={1} borderRadius="full" fontWeight="black">
-                            {unscheduledEmployees.length} Employees
+                        <Badge bg="white" color="orange.600" fontSize={{ base: "2xs", sm: "xs", md: "sm" }} px={{ base: 2.5, md: 3 }} py={1} borderRadius="full" fontWeight="black" flexShrink={0}>
+                            {unscheduledEmployees.length} Staff
                         </Badge>
-                    </HStack>
+                    </Flex>
                 </Box>
 
-                <Box p={4}>
+                <Box p={{ base: 2.5, md: 4 }}>
                     <VStack spacing={3} align="stretch">
                         {unscheduledEmployees.map((emp, idx) => {
                             const status   = attendanceMap[emp._id] || '';
@@ -4471,21 +4894,21 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                 <Box
                                     key={emp._id}
                                     bg={idx % 2 === 0 ? 'white' : 'orange.50'}
-                                    border="1px solid"
-                                    borderColor={hasLocation ? 'orange.200' : 'gray.100'}
+                                    border="1.5px solid"
+                                    borderColor={hasLocation ? 'orange.300' : 'gray.200'}
                                     borderRadius="xl"
                                     overflow="hidden"
                                     transition="all 0.2s"
                                     boxShadow={hasLocation ? 'sm' : 'none'}
                                 >
-                                    {/* ── Main Row ── */}
-                                    <HStack px={4} py={3} spacing={3} wrap="wrap">
+                                    {/* ── Desktop View (lg and up) ── */}
+                                    <HStack display={{ base: 'none', lg: 'flex' }} px={4} py={3} spacing={3} wrap="wrap">
                                         {/* Dot + Name */}
-                                        <HStack spacing={2} flex="1" minW="120px">
-                                            <Box w={2} h={2} borderRadius="full" flexShrink={0}
-                                                bg={status === 'Present' ? 'green.400' : status === 'Absent' ? 'red.400' : 'gray.200'}
+                                        <HStack spacing={2} flex="1" minW="140px">
+                                            <Box w={2.5} h={2.5} borderRadius="full" flexShrink={0}
+                                                bg={status === 'Present' ? 'green.400' : status === 'Absent' ? 'red.400' : 'gray.300'}
                                             />
-                                            <Text fontWeight="bold" fontSize="sm" color="gray.700">{emp.name}</Text>
+                                            <Text fontWeight="bold" fontSize="sm" color="gray.800">{emp.name}</Text>
                                             {saved && (
                                                 <Badge colorScheme={saved.attendance === 'Present' ? 'green' : saved.attendance === 'Half Day' ? 'orange' : 'red'}
                                                     fontSize="9px" borderRadius="full" px={2}>Saved</Badge>
@@ -4493,66 +4916,74 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                         </HStack>
 
                                         {/* Present / Absent Buttons */}
-                                        <HStack spacing={2}>
+                                        <HStack spacing={1.5} bg="gray.100" p={0.5} borderRadius="full">
                                             <Button
-                                                size="xs" borderRadius="full" minW="52px"
+                                                size="xs" borderRadius="full" minW="56px"
                                                 colorScheme={status === 'Present' ? 'green' : 'gray'}
-                                                variant={status === 'Present' ? 'solid' : 'outline'}
+                                                variant={status === 'Present' ? 'solid' : 'ghost'}
                                                 onClick={() => setStatus(emp._id, status === 'Present' ? '' : 'Present')}
                                                 isDisabled={!canWrite}
+                                                fontSize="11px"
+                                                fontWeight="bold"
                                             >
                                                 {status === 'Present' ? '✓ P' : 'P'}
                                             </Button>
                                             <Button
-                                                size="xs" borderRadius="full" minW="52px"
+                                                size="xs" borderRadius="full" minW="56px"
                                                 colorScheme={status === 'Absent' ? 'red' : 'gray'}
-                                                variant={status === 'Absent' ? 'solid' : 'outline'}
+                                                variant={status === 'Absent' ? 'solid' : 'ghost'}
                                                 onClick={() => setStatus(emp._id, status === 'Absent' ? '' : 'Absent')}
                                                 isDisabled={!canWrite}
+                                                fontSize="11px"
+                                                fontWeight="bold"
                                             >
                                                 {status === 'Absent' ? '✓ A' : 'A'}
                                             </Button>
                                         </HStack>
 
-                                        {/* HOME / GODOWN / OFFICE / ROOM — always visible, independent of attendance */}
-                                        <HStack spacing={2}>
+                                        {/* HOME / GODOWN / OFFICE / ROOM */}
+                                        <HStack spacing={1.5}>
                                             <Button
-                                                size="xs" borderRadius="full" minW="70px"
+                                                size="xs" borderRadius="lg" minW="68px"
                                                 leftIcon={<Icon as={FaHome} />}
                                                 colorScheme={location === 'Home' ? 'blue' : 'gray'}
                                                 variant={location === 'Home' ? 'solid' : 'outline'}
                                                 onClick={() => setLocation(emp._id, 'Home')}
                                                 isDisabled={!canWrite}
+                                                fontSize="11px"
                                             >
                                                 Home
                                             </Button>
                                             <Button
-                                                size="xs" borderRadius="full" minW="76px"
+                                                size="xs" borderRadius="lg" minW="74px"
                                                 leftIcon={<Icon as={FaWarehouse} />}
                                                 colorScheme={location === 'Godown' ? 'teal' : 'gray'}
                                                 variant={location === 'Godown' ? 'solid' : 'outline'}
                                                 onClick={() => setLocation(emp._id, 'Godown')}
                                                 isDisabled={!canWrite}
+                                                fontSize="11px"
                                             >
                                                 Godown
                                             </Button>
                                             <Button
-                                                size="xs" borderRadius="full" minW="70px"
+                                                size="xs" borderRadius="lg" minW="68px"
                                                 leftIcon={<Icon as={FaBuilding} />}
                                                 colorScheme={location === 'Office' ? 'purple' : 'gray'}
                                                 variant={location === 'Office' ? 'solid' : 'outline'}
                                                 onClick={() => setLocation(emp._id, 'Office')}
                                                 isDisabled={!canWrite}
+                                                fontSize="11px"
                                             >
                                                 Office
                                             </Button>
                                             <Button
-                                                size="xs" borderRadius="full" minW="70px"
+                                                size="xs" borderRadius="lg" minW="68px"
                                                 leftIcon={<Icon as={FaBed} />}
                                                 colorScheme={location === 'Room' ? 'pink' : 'gray'}
                                                 variant={location === 'Room' ? 'solid' : 'outline'}
                                                 onClick={() => setLocation(emp._id, 'Room')}
                                                 isDisabled={!canWrite}
+                                                fontSize="11px"
                                             >
                                                 Room
                                             </Button>
@@ -4560,22 +4991,24 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
 
                                         {/* Remark */}
                                         <Input
-                                            size="xs" borderRadius="lg" maxW="160px"
+                                            size="xs" borderRadius="lg" maxW="150px"
                                             placeholder="Remark..."
                                             value={remarks[emp._id] || ''}
                                             onChange={e => setRemark(emp._id, e.target.value)}
                                             isDisabled={!status || !canWrite}
+                                            bg="white"
                                         />
 
-                                        {/* Expand expenses toggle — only when location is set and NOT Home */}
+                                        {/* Expand expenses toggle */}
                                         {allowsExpenses && (
                                             <Tooltip label={expanded ? 'Hide expenses' : 'Add daily expenses'}>
                                                 <Button
-                                                    size="xs" variant="ghost"
+                                                    size="xs" variant={expanded ? "solid" : "ghost"}
                                                     colorScheme="orange"
                                                     rightIcon={<Icon as={expanded ? FaChevronUp : FaChevronDown} />}
                                                     onClick={() => toggleExpand(emp._id)}
                                                     isDisabled={!canWrite}
+                                                    borderRadius="lg"
                                                 >
                                                     Expenses
                                                 </Button>
@@ -4583,37 +5016,197 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                         )}
                                     </HStack>
 
+                                    {/* ── Mobile & Tablet Dedicated Card View (base to lg) ── */}
+                                    <VStack display={{ base: 'flex', lg: 'none' }} align="stretch" spacing={2.5} p={{ base: 3, sm: 3.5 }}>
+                                        {/* Row 1: Employee Header & Attendance Status */}
+                                        <Flex justify="space-between" align="center" gap={2}>
+                                            <HStack spacing={2} overflow="hidden" flex={1}>
+                                                <Box
+                                                    w={2.5}
+                                                    h={2.5}
+                                                    borderRadius="full"
+                                                    flexShrink={0}
+                                                    bg={status === 'Present' ? 'green.400' : status === 'Absent' ? 'red.400' : 'gray.300'}
+                                                />
+                                                <Text fontWeight="800" fontSize="sm" color="gray.800" isTruncated>
+                                                    {emp.name}
+                                                </Text>
+                                                {saved && (
+                                                    <Badge colorScheme={saved.attendance === 'Present' ? 'green' : saved.attendance === 'Half Day' ? 'orange' : 'red'} fontSize="9px" borderRadius="md" px={1.5} flexShrink={0}>
+                                                        Saved
+                                                    </Badge>
+                                                )}
+                                            </HStack>
+
+                                            {/* Present / Absent Segmented Pills */}
+                                            <HStack spacing={1} bg="gray.100" p={0.5} borderRadius="full" flexShrink={0}>
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="full"
+                                                    px={3}
+                                                    h="26px"
+                                                    colorScheme={status === 'Present' ? 'green' : 'gray'}
+                                                    variant={status === 'Present' ? 'solid' : 'ghost'}
+                                                    onClick={() => setStatus(emp._id, status === 'Present' ? '' : 'Present')}
+                                                    isDisabled={!canWrite}
+                                                    fontSize="11px"
+                                                    fontWeight="black"
+                                                >
+                                                    {status === 'Present' ? '✓ P' : 'P'}
+                                                </Button>
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="full"
+                                                    px={3}
+                                                    h="26px"
+                                                    colorScheme={status === 'Absent' ? 'red' : 'gray'}
+                                                    variant={status === 'Absent' ? 'solid' : 'ghost'}
+                                                    onClick={() => setStatus(emp._id, status === 'Absent' ? '' : 'Absent')}
+                                                    isDisabled={!canWrite}
+                                                    fontSize="11px"
+                                                    fontWeight="black"
+                                                >
+                                                    {status === 'Absent' ? '✓ A' : 'A'}
+                                                </Button>
+                                            </HStack>
+                                        </Flex>
+
+                                        {/* Row 2: Location Grid (4 evenly balanced pills) */}
+                                        <Box>
+                                            <SimpleGrid columns={4} spacing={1.5}>
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="lg"
+                                                    py={1}
+                                                    h="28px"
+                                                    leftIcon={<Icon as={FaHome} fontSize="10px" />}
+                                                    colorScheme={location === 'Home' ? 'blue' : 'gray'}
+                                                    variant={location === 'Home' ? 'solid' : 'outline'}
+                                                    onClick={() => setLocation(emp._id, 'Home')}
+                                                    isDisabled={!canWrite}
+                                                    fontSize="10px"
+                                                    fontWeight="bold"
+                                                    px={1}
+                                                >
+                                                    Home
+                                                </Button>
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="lg"
+                                                    py={1}
+                                                    h="28px"
+                                                    leftIcon={<Icon as={FaWarehouse} fontSize="10px" />}
+                                                    colorScheme={location === 'Godown' ? 'teal' : 'gray'}
+                                                    variant={location === 'Godown' ? 'solid' : 'outline'}
+                                                    onClick={() => setLocation(emp._id, 'Godown')}
+                                                    isDisabled={!canWrite}
+                                                    fontSize="10px"
+                                                    fontWeight="bold"
+                                                    px={1}
+                                                >
+                                                    Godown
+                                                </Button>
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="lg"
+                                                    py={1}
+                                                    h="28px"
+                                                    leftIcon={<Icon as={FaBuilding} fontSize="10px" />}
+                                                    colorScheme={location === 'Office' ? 'purple' : 'gray'}
+                                                    variant={location === 'Office' ? 'solid' : 'outline'}
+                                                    onClick={() => setLocation(emp._id, 'Office')}
+                                                    isDisabled={!canWrite}
+                                                    fontSize="10px"
+                                                    fontWeight="bold"
+                                                    px={1}
+                                                >
+                                                    Office
+                                                </Button>
+                                                <Button
+                                                    size="xs"
+                                                    borderRadius="lg"
+                                                    py={1}
+                                                    h="28px"
+                                                    leftIcon={<Icon as={FaBed} fontSize="10px" />}
+                                                    colorScheme={location === 'Room' ? 'pink' : 'gray'}
+                                                    variant={location === 'Room' ? 'solid' : 'outline'}
+                                                    onClick={() => setLocation(emp._id, 'Room')}
+                                                    isDisabled={!canWrite}
+                                                    fontSize="10px"
+                                                    fontWeight="bold"
+                                                    px={1}
+                                                >
+                                                    Room
+                                                </Button>
+                                            </SimpleGrid>
+                                        </Box>
+
+                                        {/* Row 3: Remarks Input & Expenses Action */}
+                                        <Flex justify="space-between" align="center" gap={2}>
+                                            <Input
+                                                size="sm"
+                                                borderRadius="lg"
+                                                placeholder="Remark (optional)..."
+                                                value={remarks[emp._id] || ''}
+                                                onChange={e => setRemark(emp._id, e.target.value)}
+                                                isDisabled={!status || !canWrite}
+                                                bg="white"
+                                                flex={1}
+                                                fontSize="xs"
+                                                h="32px"
+                                            />
+                                            {allowsExpenses && (
+                                                <Button
+                                                    size="sm"
+                                                    variant={expanded ? 'solid' : 'outline'}
+                                                    colorScheme="orange"
+                                                    rightIcon={<Icon as={expanded ? FaChevronUp : FaChevronDown} />}
+                                                    onClick={() => toggleExpand(emp._id)}
+                                                    isDisabled={!canWrite}
+                                                    borderRadius="lg"
+                                                    fontSize="xs"
+                                                    px={3}
+                                                    h="32px"
+                                                    flexShrink={0}
+                                                >
+                                                    Expenses
+                                                </Button>
+                                            )}
+                                        </Flex>
+                                    </VStack>
+
                                     {/* ── Expense Panel (collapsible) — only when allowsExpenses is true ── */}
                                     {allowsExpenses && expanded && (
-                                        <Box mx={3} mb={3}>
+                                        <Box mx={{ base: 2, md: 3 }} mb={{ base: 2.5, md: 3 }}>
                                             {/* Standard Meals & Travel */}
-                                            <Card borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100" mb={3}>
-                                                <CardBody p={4}>
-                                                    <Heading size="xs" mb={4} color="gray.700" display="flex" alignItems="center">
+                                            <Card borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.200" mb={3}>
+                                                <CardBody p={{ base: 3, md: 4 }}>
+                                                    <Heading size="xs" mb={3} color="gray.700" display="flex" alignItems="center">
                                                         <Icon as={FaUtensils} mr={2} color="blue.500" /> Standard Meals &amp; Travel
                                                     </Heading>
-                                                    <VStack spacing={3} align="stretch">
+                                                    <VStack spacing={2.5} align="stretch">
                                                         {['breakfast', 'lunch', 'dinner', 'petrol'].map(expName => (
-                                                            <VStack key={expName} align="stretch" spacing={1} bg="gray.50" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100">
-                                                                <HStack align="center" w="full" justify="space-between">
-                                                                    <FormLabel fontSize="sm" fontWeight="bold" textTransform="capitalize" m={0} minW="70px">
+                                                            <VStack key={expName} align="stretch" spacing={1} bg="gray.50" p={2.5} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                                                <Flex direction="row" align="center" justify="space-between" flexWrap="wrap" gap={2}>
+                                                                    <FormLabel fontSize="xs" fontWeight="bold" textTransform="capitalize" m={0} minW={{ base: '60px', sm: '70px' }}>
                                                                         {expName === 'petrol' ? 'Fuel' : expName}
                                                                     </FormLabel>
                                                                     {expName === 'petrol' && (
                                                                         <Select
-                                                                            size="sm" w="90px"
+                                                                            size="sm" w={{ base: "80px", sm: "90px" }}
                                                                             value={fuelTypeMap[emp._id] || 'Petrol'}
                                                                             onChange={e => setFuelType(emp._id, e.target.value)}
                                                                             borderRadius="lg" bg="white"
+                                                                            fontSize="xs"
                                                                         >
                                                                             <option value="Petrol">Petrol</option>
                                                                             <option value="CNG">CNG</option>
                                                                             <option value="Diesel">Diesel</option>
                                                                         </Select>
                                                                     )}
-                                                                    <HStack flex={1} maxW="160px">
+                                                                    <HStack flex={1} minW="100px" maxW={{ base: '140px', sm: '160px' }}>
                                                                         <InputGroup size="sm">
-                                                                            <InputLeftElement>
+                                                                            <InputLeftElement pointerEvents="none">
                                                                                 <Icon as={expName === 'petrol' ? FaGasPump : FaRupeeSign} color="gray.400" fontSize="xs" />
                                                                             </InputLeftElement>
                                                                             <Input
@@ -4621,6 +5214,7 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                                                                 value={expenses[expName] === 0 || expenses[expName] === undefined ? '' : expenses[expName]}
                                                                                 onChange={e => setExpenseItem(emp._id, expName, e.target.value === '' ? 0 : Number(e.target.value))}
                                                                                 isDisabled={!canWrite}
+                                                                                fontSize="xs"
                                                                             />
                                                                         </InputGroup>
                                                                     </HStack>
@@ -4630,13 +5224,14 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                                                             colorScheme="blue" variant="outline" size="sm" borderRadius="lg"
                                                                             onClick={() => document.getElementById(`uexp-${emp._id}-${expName}`).click()}
                                                                             isDisabled={!canWrite}
+                                                                            aria-label={`Upload ${expName}`}
                                                                         />
                                                                     </Tooltip>
                                                                     <input type="file" id={`uexp-${emp._id}-${expName}`} hidden multiple
                                                                         onChange={e => handleExpFile(emp._id, expName, e)}
                                                                         accept="image/*,.pdf,.doc,.docx"
                                                                     />
-                                                                </HStack>
+                                                                </Flex>
                                                                 {/* File previews */}
                                                                 {((filePreviewMap[emp._id] || {})[expName] || []).length > 0 && (
                                                                     <HStack overflowX="auto" py={1} spacing={2}>
@@ -4665,9 +5260,9 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                             </Card>
 
                                             {/* Other Custom Expenses */}
-                                            <Card borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.100">
-                                                <CardBody p={4}>
-                                                    <HStack justify="space-between" mb={3}>
+                                            <Card borderRadius="xl" shadow="sm" border="1px solid" borderColor="gray.200">
+                                                <CardBody p={{ base: 3, md: 4 }}>
+                                                    <Flex justify="space-between" align="center" mb={3}>
                                                         <Heading size="xs" color="gray.700" display="flex" alignItems="center">
                                                             <Icon as={FaPlus} mr={2} color="green.500" /> Other Custom Expenses
                                                         </Heading>
@@ -4675,45 +5270,50 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                                                             onClick={() => addOtherExp(emp._id)} isDisabled={!canWrite}>
                                                             Add Row
                                                         </Button>
-                                                    </HStack>
+                                                    </Flex>
                                                     <VStack spacing={2}>
                                                         {getOtherExp(emp._id).length === 0 && (
                                                             <Text fontSize="xs" color="gray.400" textAlign="center" py={2}>No custom expenses added.</Text>
                                                         )}
                                                         {getOtherExp(emp._id).map((row, idx) => (
-                                                            <VStack key={idx} w="full" bg="gray.50" p={2} borderRadius="lg" align="stretch" border="1px solid" borderColor="gray.100" spacing={1}>
-                                                                <HStack>
+                                                            <VStack key={idx} w="full" bg="gray.50" p={2.5} borderRadius="lg" align="stretch" border="1px solid" borderColor="gray.100" spacing={1.5}>
+                                                                <Flex direction={{ base: 'column', sm: 'row' }} gap={2} align={{ base: 'stretch', sm: 'center' }}>
                                                                     <Input placeholder="Expense Name" size="sm" bg="white" borderRadius="lg"
                                                                         value={row.expenseName}
                                                                         onChange={e => updateOtherExp(emp._id, idx, 'expenseName', e.target.value)}
                                                                         isDisabled={!canWrite}
+                                                                        flex={1}
+                                                                        fontSize="xs"
                                                                     />
-                                                                    <InputGroup size="sm" maxW="120px">
-                                                                        <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
-                                                                        <Input type="number" placeholder="Amount" bg="white" borderRadius="lg"
-                                                                            value={row.amount}
-                                                                            onChange={e => updateOtherExp(emp._id, idx, 'amount', e.target.value)}
+                                                                    <HStack spacing={2}>
+                                                                        <InputGroup size="sm" maxW={{ base: 'full', sm: '120px' }}>
+                                                                            <InputLeftElement pointerEvents="none"><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
+                                                                            <Input type="number" placeholder="Amount" bg="white" borderRadius="lg"
+                                                                                value={row.amount}
+                                                                                onChange={e => updateOtherExp(emp._id, idx, 'amount', e.target.value)}
+                                                                                isDisabled={!canWrite}
+                                                                                fontSize="xs"
+                                                                            />
+                                                                        </InputGroup>
+                                                                        <Tooltip label="Upload bills">
+                                                                            <IconButton size="sm" aria-label="upload"
+                                                                                icon={<Icon as={FaCloudUploadAlt} />}
+                                                                                colorScheme="blue" variant="outline" borderRadius="lg"
+                                                                                onClick={() => document.getElementById(`uother-${emp._id}-${idx}`).click()}
+                                                                                isDisabled={!canWrite}
+                                                                            />
+                                                                        </Tooltip>
+                                                                        <input type="file" id={`uother-${emp._id}-${idx}`} hidden multiple
+                                                                            onChange={e => handleOtherFile(emp._id, idx, e)}
+                                                                            accept="image/*,.pdf,.doc,.docx"
+                                                                        />
+                                                                        <IconButton size="sm" aria-label="remove" colorScheme="red" variant="ghost"
+                                                                            icon={<Icon as={FaTrash} />}
+                                                                            onClick={() => removeOtherExp(emp._id, idx)}
                                                                             isDisabled={!canWrite}
                                                                         />
-                                                                    </InputGroup>
-                                                                    <Tooltip label="Upload bills">
-                                                                        <IconButton size="sm" aria-label="upload"
-                                                                            icon={<Icon as={FaCloudUploadAlt} />}
-                                                                            colorScheme="blue" variant="outline" borderRadius="lg"
-                                                                            onClick={() => document.getElementById(`uother-${emp._id}-${idx}`).click()}
-                                                                            isDisabled={!canWrite}
-                                                                        />
-                                                                    </Tooltip>
-                                                                    <input type="file" id={`uother-${emp._id}-${idx}`} hidden multiple
-                                                                        onChange={e => handleOtherFile(emp._id, idx, e)}
-                                                                        accept="image/*,.pdf,.doc,.docx"
-                                                                    />
-                                                                    <IconButton size="sm" aria-label="remove" colorScheme="red" variant="ghost"
-                                                                        icon={<Icon as={FaTrash} />}
-                                                                        onClick={() => removeOtherExp(emp._id, idx)}
-                                                                        isDisabled={!canWrite}
-                                                                    />
-                                                                </HStack>
+                                                                    </HStack>
+                                                                </Flex>
                                                                 {/* File previews for other */}
                                                                 {(row.files || []).length > 0 && (
                                                                     <HStack overflowX="auto" py={1} spacing={2}>
@@ -4761,6 +5361,8 @@ const UnscheduledAttendancePanel = ({ employees, daySchedules, attendanceDate, c
                             loadingText="Saving..."
                             onClick={handleSaveAttendance}
                             isDisabled={!canWrite}
+                            w={{ base: "full", sm: "auto" }}
+                            h={{ base: "44px", sm: "40px" }}
                         >
                             Save Attendance
                         </Button>
@@ -5056,20 +5658,22 @@ const MoneyTransferSection = ({
 
             {/* Custom Accounts Management for Money Transfer */}
             {canReadCustomAccount && (
-            <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="blue.100" bg="blue.50" overflow="hidden">
-                <CardBody p={5}>
-                    <VStack align="stretch" spacing={4}>
-                        <Flex justify="space-between" align={{ base: 'start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap={4}>
+            <Card borderRadius={{ base: "xl", md: "2xl" }} shadow="sm" border="1.5px solid" borderColor="blue.200" bg="blue.50" overflow="hidden">
+                <CardBody p={{ base: 3.5, md: 5 }}>
+                    <VStack align="stretch" spacing={{ base: 3.5, md: 4 }}>
+                        <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap={{ base: 3, md: 4 }}>
                             <VStack align="start" spacing={1}>
-                                <HStack>
+                                <HStack spacing={2}>
                                     <Icon as={FaBuilding} color="blue.600" />
-                                    <Text fontSize="md" fontWeight="black" color="blue.800">Custom Names / Bank Accounts (Starts with ₹0)</Text>
+                                    <Text fontSize={{ base: "sm", md: "md" }} fontWeight="black" color="blue.800">
+                                        Custom Names / Bank Accounts (Starts with ₹0)
+                                    </Text>
                                 </HStack>
-                                <Text fontSize="xs" color="blue.600">
-                                    Add banks, petty cash, or custom names to use right inside Sender & Receiver without adding to Employee Master.
+                                <Text fontSize={{ base: "2xs", sm: "xs" }} color="blue.600">
+                                    Add banks, petty cash, or custom names to use right inside Sender &amp; Receiver without adding to Employee Master.
                                 </Text>
                             </VStack>
-                            <HStack spacing={2} w={{ base: 'full', md: 'auto' }}>
+                            <Flex direction={{ base: 'column', sm: 'row' }} gap={2} w={{ base: 'full', md: 'auto' }}>
                                 <Input
                                     placeholder="Enter Bank or Account Name..."
                                     value={newAccountName}
@@ -5077,8 +5681,11 @@ const MoneyTransferSection = ({
                                     bg="white"
                                     size="md"
                                     borderRadius="xl"
+                                    border="1px solid"
+                                    borderColor="blue.200"
                                     w={{ base: 'full', md: '260px' }}
                                     isDisabled={!canWriteCustomAccount}
+                                    fontSize="sm"
                                 />
                                 <Button
                                     colorScheme="blue"
@@ -5089,51 +5696,59 @@ const MoneyTransferSection = ({
                                     isDisabled={!canWriteCustomAccount}
                                     leftIcon={<FaPlus />}
                                     px={6}
+                                    w={{ base: 'full', sm: 'auto' }}
                                 >
                                     Add Account
                                 </Button>
-                            </HStack>
+                            </Flex>
                         </Flex>
 
                         {transferAccounts.length > 0 && (
-                            <Box pt={2} borderTop="1px dashed" borderColor="blue.200">
-                                <Text fontSize="2xs" fontWeight="black" color="blue.700" textTransform="uppercase" mb={2}>Configured Custom Accounts / Banks:</Text>
-                                <HStack spacing={2} flexWrap="wrap" gap={2}>
+                            <Box pt={3} borderTop="1px dashed" borderColor="blue.200">
+                                <Text fontSize="2xs" fontWeight="black" color="blue.700" textTransform="uppercase" mb={2}>
+                                    Configured Custom Accounts / Banks:
+                                </Text>
+                                <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={2}>
                                     {transferAccounts.map(acc => (
-                                        <Badge
+                                        <Flex
                                             key={acc._id}
-                                            colorScheme="blue"
-                                            variant="subtle"
-                                            px={3}
-                                            py={1.5}
-                                            borderRadius="xl"
-                                            fontSize="xs"
-                                            display="flex"
-                                            alignItems="center"
-                                            gap={2}
                                             bg="white"
+                                            px={3}
+                                            py={2}
+                                            borderRadius="xl"
                                             border="1px solid"
                                             borderColor="blue.200"
                                             shadow="xs"
+                                            justify="space-between"
+                                            align="center"
+                                            gap={2}
                                         >
-                                            <Icon as={FaBuilding} color="blue.500" />
-                                            <Text fontWeight="bold">{acc.name}</Text>
-                                            <Text color={tempBalances[acc._id] >= 0 ? 'green.600' : 'red.500'} fontWeight="black">
-                                                (₹{tempBalances[acc._id]?.toLocaleString()})
-                                            </Text>
+                                            <HStack spacing={2} overflow="hidden" flex={1}>
+                                                <Flex w={6} h={6} borderRadius="lg" bg="blue.50" align="center" justify="center" flexShrink={0}>
+                                                    <Icon as={FaBuilding} color="blue.500" fontSize="xs" />
+                                                </Flex>
+                                                <VStack align="start" spacing={0} overflow="hidden">
+                                                    <Text fontWeight="bold" fontSize="xs" color="gray.800" isTruncated>
+                                                        {acc.name}
+                                                    </Text>
+                                                    <Text color={tempBalances[acc._id] >= 0 ? 'green.600' : 'red.500'} fontWeight="extrabold" fontSize="2xs">
+                                                        ₹{tempBalances[acc._id]?.toLocaleString() || 0}
+                                                    </Text>
+                                                </VStack>
+                                            </HStack>
                                             {canWriteCustomAccount && (
-                                                <Icon
-                                                    as={FaTrash}
-                                                    color="red.400"
-                                                    cursor="pointer"
-                                                    _hover={{ color: 'red.600' }}
+                                                <IconButton
+                                                    size="xs"
+                                                    colorScheme="red"
+                                                    variant="ghost"
+                                                    icon={<Icon as={FaTrash} />}
                                                     onClick={() => handleDeleteTransferAccount(acc._id, acc.name)}
-                                                    title="Remove account"
+                                                    aria-label="Remove account"
                                                 />
                                             )}
-                                        </Badge>
+                                        </Flex>
                                     ))}
-                                </HStack>
+                                </SimpleGrid>
                             </Box>
                         )}
                     </VStack>
@@ -5144,11 +5759,11 @@ const MoneyTransferSection = ({
 
             {/* Entry Form - One Row Layout */}
             <Card borderRadius="2xl" shadow="md" border="1px solid" borderColor="gray.100" overflow="hidden">
-                <CardBody p={6} bg="white">
-                    <VStack spacing={6} align="stretch">
-                        <FormControl isRequired maxW="300px">
-                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">Transaction Date (Applies to all entries below)</FormLabel>
-                            <InputGroup size="lg">
+                <CardBody p={{ base: 3.5, md: 6 }} bg="white">
+                    <VStack spacing={4} align="stretch">
+                        <FormControl isRequired maxW={{ base: "100%", md: "300px" }}>
+                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" mb={1}>Transaction Date</FormLabel>
+                            <InputGroup size={{ base: "md", md: "lg" }}>
                                 <InputLeftElement><Icon as={FaCalendarAlt} color="blue.400" /></InputLeftElement>
                                 <Input type="date" value={transferDate} onChange={(e) => setTransferDate(e.target.value)} borderRadius="xl" bg="gray.50" border="1px solid" borderColor="gray.200" />
                             </InputGroup>
@@ -5156,18 +5771,18 @@ const MoneyTransferSection = ({
 
                         <Divider />
 
-                        <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4} alignItems="flex-end" w="full">
+                        <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3.5} alignItems="flex-end" w="full">
 
                         <FormControl isRequired>
-                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">
-                                Sender {formData.employee1 && <Badge ml={2} colorScheme="red">Avail: ₹{tempBalances[formData.employee1]?.toLocaleString()}</Badge>}
+                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" mb={1}>
+                                Sender {formData.employee1 && <Badge ml={1} colorScheme="red" fontSize="9px">Avail: ₹{tempBalances[formData.employee1]?.toLocaleString()}</Badge>}
                             </FormLabel>
                             <Select 
                                 placeholder="Choose Sender" 
                                 value={formData.employee1} 
                                 onChange={(e) => setFormData({...formData, employee1: e.target.value})} 
                                 borderRadius="xl"
-                                size="lg"
+                                size={{ base: "md", md: "lg" }}
                                 bg="gray.50"
                                 border="1px solid"
                                 borderColor="gray.200"
@@ -5186,15 +5801,15 @@ const MoneyTransferSection = ({
                         </FormControl>
 
                         <FormControl isRequired>
-                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">
-                                Receiver {formData.employee2 && <Badge ml={2} colorScheme="green">New Bal: ₹{tempBalances[formData.employee2]?.toLocaleString()}</Badge>}
+                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" mb={1}>
+                                Receiver {formData.employee2 && <Badge ml={1} colorScheme="green" fontSize="9px">Bal: ₹{tempBalances[formData.employee2]?.toLocaleString()}</Badge>}
                             </FormLabel>
                             <Select 
                                 placeholder="Choose Receiver" 
                                 value={formData.employee2} 
                                 onChange={(e) => setFormData({...formData, employee2: e.target.value})} 
                                 borderRadius="xl"
-                                size="lg"
+                                size={{ base: "md", md: "lg" }}
                                 bg="gray.50"
                                 border="1px solid"
                                 borderColor="gray.200"
@@ -5213,14 +5828,14 @@ const MoneyTransferSection = ({
                         </FormControl>
 
                         <FormControl isRequired>
-                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase">Amount (₹)</FormLabel>
-                            <InputGroup size="lg">
+                            <FormLabel fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" mb={1}>Amount (₹)</FormLabel>
+                            <InputGroup size={{ base: "md", md: "lg" }}>
                                 <InputLeftElement><Icon as={FaRupeeSign} color="gray.400" /></InputLeftElement>
                                 <Input type="number" placeholder="0" value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} borderRadius="xl" bg="gray.50" border="1px solid" borderColor="gray.200" />
                             </InputGroup>
                         </FormControl>
 
-                        <Button colorScheme="blue" size="lg" borderRadius="xl" onClick={handleAddEntry} leftIcon={editIndex > -1 ? <FaCheckCircle /> : <FaPlus />} isDisabled={!canWriteCreate} shadow="lg">
+                        <Button colorScheme="blue" size={{ base: "md", md: "lg" }} borderRadius="xl" onClick={handleAddEntry} leftIcon={editIndex > -1 ? <FaCheckCircle /> : <FaPlus />} isDisabled={!canWriteCreate} shadow="md">
                             {editIndex > -1 ? 'Update' : 'Add'}
                         </Button>
                     </SimpleGrid>
@@ -5228,18 +5843,60 @@ const MoneyTransferSection = ({
             </CardBody>
         </Card>
 
-            {/* Entry Table */}
+            {/* Entry Table / Mobile Cards */}
             {stagedEntries.length > 0 && (
                 <Box>
                     <HStack justify="space-between" mb={4} px={2}>
                         <VStack align="start" spacing={0}>
-                            <Heading size="md" color="gray.700">Transfer Summary</Heading>
+                            <Heading size="sm" color="gray.700">Transfer Summary</Heading>
                             <Text fontSize="xs" color="gray.400">Balances shown below are temporary previews.</Text>
                         </VStack>
-                        <Badge colorScheme="blue" fontSize="md" px={4} py={1} borderRadius="full">Total Items: {stagedEntries.length}</Badge>
+                        <Badge colorScheme="blue" fontSize="sm" px={3} py={1} borderRadius="full">Total Items: {stagedEntries.length}</Badge>
                     </HStack>
 
-                    <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                    {/* Mobile Cards for Staged Transfers */}
+                    <Box display={{ base: 'block', md: 'none' }}>
+                        <VStack spacing={3} align="stretch">
+                            {stagedEntries.map((entry, idx) => (
+                                <Card key={idx} borderRadius="xl" shadow="xs" border="1px solid" borderColor="gray.200" bg="white" opacity={editIndex === idx ? 0.5 : 1}>
+                                    <CardBody p={3.5}>
+                                        <VStack align="stretch" spacing={2}>
+                                            <Flex justify="space-between" align="center">
+                                                <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                                                    {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </Text>
+                                                <Text fontWeight="900" fontSize="md" color="blue.600">
+                                                    ₹{entry.amount.toLocaleString()}
+                                                </Text>
+                                            </Flex>
+                                            <HStack justify="space-between" bg="gray.50" p={2} borderRadius="lg" fontSize="xs">
+                                                <VStack align="start" spacing={0.5}>
+                                                    <Text fontSize="2xs" color="red.500" fontWeight="black">SENDER (FROM)</Text>
+                                                    <Text fontWeight="bold" color="red.600">{entry.employee1Name}</Text>
+                                                </VStack>
+                                                <Icon as={FaArrowRight} color="gray.400" />
+                                                <VStack align="end" spacing={0.5}>
+                                                    <Text fontSize="2xs" color="green.500" fontWeight="black">RECEIVER (TO)</Text>
+                                                    <Text fontWeight="bold" color="green.600">{entry.employee2Name}</Text>
+                                                </VStack>
+                                            </HStack>
+                                            <HStack justify="flex-end" spacing={2} pt={1}>
+                                                <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<FaEdit />} onClick={() => handleEdit(idx)} isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)}>
+                                                    Edit
+                                                </Button>
+                                                <Button size="xs" colorScheme="red" variant="ghost" leftIcon={<FaTrash />} onClick={() => handleRemove(idx)} isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)}>
+                                                    Remove
+                                                </Button>
+                                            </HStack>
+                                        </VStack>
+                                    </CardBody>
+                                </Card>
+                            ))}
+                        </VStack>
+                    </Box>
+
+                    {/* Desktop Table */}
+                    <Card display={{ base: 'none', md: 'block' }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
                         <TableContainer overflowX="auto">
                             <Table variant="simple">
                                 <Thead bg="gray.50">
@@ -5260,8 +5917,8 @@ const MoneyTransferSection = ({
                                             <Td isNumeric fontWeight="black" fontSize="lg">₹{entry.amount.toLocaleString()}</Td>
                                             <Td>
                                                 <HStack justify="center" spacing={4}>
-                                                    <IconButton size="sm" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(idx)} borderRadius="lg" isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)} />
-                                                    <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => handleRemove(idx)} borderRadius="lg" isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)} />
+                                                    <IconButton size="sm" colorScheme="blue" variant="ghost" icon={<FaEdit />} onClick={() => handleEdit(idx)} borderRadius="lg" isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)} aria-label="Edit Staged Entry" />
+                                                    <IconButton size="sm" colorScheme="red" variant="ghost" icon={<FaTrash />} onClick={() => handleRemove(idx)} borderRadius="lg" isDisabled={!canWriteCreate || (editIndex > -1 && editIndex !== idx)} aria-label="Remove Staged Entry" />
                                                 </HStack>
                                             </Td>
                                         </Tr>
@@ -5271,8 +5928,8 @@ const MoneyTransferSection = ({
                         </TableContainer>
                     </Card>
 
-                    <Button mt={8} colorScheme="green" size="xl" w="full" h="70px" borderRadius="2xl" onClick={handleSubmitAll} isLoading={isSaving} isDisabled={!canWriteCreate} leftIcon={<FaCheckCircle />} fontSize="xl" shadow="2xl">
-                        Save & Commit All {stagedEntries.length} Transfers
+                    <Button mt={6} colorScheme="green" size={{ base: "lg", md: "xl" }} w="full" h={{ base: "54px", md: "70px" }} borderRadius="2xl" onClick={handleSubmitAll} isLoading={isSaving} isDisabled={!canWriteCreate} leftIcon={<FaCheckCircle />} fontSize={{ base: "md", md: "xl" }} shadow="xl">
+                        Save &amp; Commit All {stagedEntries.length} Transfers
                     </Button>
                 </Box>
             )}
@@ -5290,13 +5947,13 @@ const MoneyTransferSection = ({
 
             {/* Committed Transfers List */}
             {canReadView && (
-                <Box mt={8} w="full">
+                <Box mt={6} w="full">
                     <HStack justify="space-between" mb={4} px={2}>
                         <VStack align="start" spacing={0}>
-                            <Heading size="md" color="teal.700">Committed Money Transfers</Heading>
-                            <Text fontSize="xs" color="gray.400">Transfers already saved & recorded in the database for this date.</Text>
+                            <Heading size="sm" color="teal.700">Committed Money Transfers</Heading>
+                            <Text fontSize="xs" color="gray.400">Transfers already saved &amp; recorded for this date.</Text>
                         </VStack>
-                        <Badge colorScheme="teal" fontSize="md" px={4} py={1} borderRadius="full">Saved Items: {committedTransfers.length}</Badge>
+                        <Badge colorScheme="teal" fontSize="sm" px={3} py={1} borderRadius="full">Saved Items: {committedTransfers.length}</Badge>
                     </HStack>
 
                     {committedTransfers.length === 0 ? (
@@ -5307,53 +5964,104 @@ const MoneyTransferSection = ({
                             </VStack>
                         </Center>
                     ) : (
-                        <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
-                            <TableContainer overflowX="auto">
-                                <Table variant="simple">
-                                    <Thead bg="teal.50">
-                                        <Tr>
-                                            <Th color="teal.700">Sender (From)</Th>
-                                            <Th color="teal.700">Receiver (To)</Th>
-                                            <Th isNumeric color="teal.700">Amount</Th>
-                                            <Th textAlign="center" color="teal.700">Actions</Th>
-                                        </Tr>
-                                    </Thead>
-                                    <Tbody bg="white">
-                                        {committedTransfers.map((t) => (
-                                            <Tr key={t._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
-                                                <Td fontWeight="bold" color="red.500">
-                                                    <HStack>
-                                                        <Icon as={transferAccounts?.some(a => String(a._id) === String(t.giver?._id || t.giver)) ? FaBuilding : FaUserTie} />
-                                                        <Text>{t.giver?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.giver?._id || t.giver)) ? ' (BANK)' : ''}</Text>
+                        <Box>
+                            {/* Mobile Cards for Committed Transfers */}
+                            <Box display={{ base: 'block', md: 'none' }}>
+                                <VStack spacing={3} align="stretch">
+                                    {committedTransfers.map((t) => (
+                                        <Card key={t._id} borderRadius="xl" shadow="xs" border="1px solid" borderColor="teal.200" bg="white">
+                                            <CardBody p={3.5}>
+                                                <VStack align="stretch" spacing={2}>
+                                                    <Flex justify="space-between" align="center">
+                                                        <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                                                            {new Date(t.date || transferDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        </Text>
+                                                        <Text fontWeight="900" fontSize="md" color="teal.600">
+                                                            ₹{t.amount?.toLocaleString()}
+                                                        </Text>
+                                                    </Flex>
+                                                    <HStack justify="space-between" bg="teal.50" p={2} borderRadius="lg" fontSize="xs">
+                                                        <VStack align="start" spacing={0.5}>
+                                                            <Text fontSize="2xs" color="red.500" fontWeight="black">FROM</Text>
+                                                            <Text fontWeight="bold" color="red.600" isTruncated maxW="120px">
+                                                                {t.giver?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.giver?._id || t.giver)) ? ' (BANK)' : ''}
+                                                            </Text>
+                                                        </VStack>
+                                                        <Icon as={FaArrowRight} color="teal.400" />
+                                                        <VStack align="end" spacing={0.5}>
+                                                            <Text fontSize="2xs" color="green.500" fontWeight="black">TO</Text>
+                                                            <Text fontWeight="bold" color="green.600" isTruncated maxW="120px">
+                                                                {t.taker?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.taker?._id || t.taker)) ? ' (BANK)' : ''}
+                                                            </Text>
+                                                        </VStack>
                                                     </HStack>
-                                                </Td>
-                                                <Td fontWeight="bold" color="green.500">
-                                                    <HStack>
-                                                        <Icon as={transferAccounts?.some(a => String(a._id) === String(t.taker?._id || t.taker)) ? FaBuilding : FaUserTie} />
-                                                        <Text>{t.taker?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.taker?._id || t.taker)) ? ' (BANK)' : ''}</Text>
-                                                    </HStack>
-                                                </Td>
-                                                <Td isNumeric fontWeight="black" fontSize="lg" color="teal.600">₹{t.amount?.toLocaleString()}</Td>
-                                                <Td>
-                                                    <HStack justify="center">
+                                                    <Flex justify="flex-end" pt={1}>
                                                         <IconButton
-                                                            size="sm"
+                                                            size="xs"
                                                             colorScheme="red"
                                                             variant="ghost"
                                                             icon={<Icon as={FaTrash} />}
                                                             aria-label="Delete Transfer"
                                                             onClick={() => handleDeleteCommittedTransfer(t._id)}
                                                             isDisabled={!canWriteView}
-                                                            borderRadius="lg"
                                                         />
-                                                    </HStack>
-                                                </Td>
+                                                    </Flex>
+                                                </VStack>
+                                            </CardBody>
+                                        </Card>
+                                    ))}
+                                </VStack>
+                            </Box>
+
+                            {/* Desktop Table for Committed Transfers */}
+                            <Card display={{ base: 'none', md: 'block' }} borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100" overflow="hidden">
+                                <TableContainer overflowX="auto">
+                                    <Table variant="simple">
+                                        <Thead bg="teal.50">
+                                            <Tr>
+                                                <Th color="teal.700">Sender (From)</Th>
+                                                <Th color="teal.700">Receiver (To)</Th>
+                                                <Th isNumeric color="teal.700">Amount</Th>
+                                                <Th textAlign="center" color="teal.700">Actions</Th>
                                             </Tr>
-                                        ))}
-                                    </Tbody>
-                                </Table>
-                            </TableContainer>
-                        </Card>
+                                        </Thead>
+                                        <Tbody bg="white">
+                                            {committedTransfers.map((t) => (
+                                                <Tr key={t._id} _hover={{ bg: "teal.50" }} transition="background 0.2s">
+                                                    <Td fontWeight="bold" color="red.500">
+                                                        <HStack>
+                                                            <Icon as={transferAccounts?.some(a => String(a._id) === String(t.giver?._id || t.giver)) ? FaBuilding : FaUserTie} />
+                                                            <Text>{t.giver?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.giver?._id || t.giver)) ? ' (BANK)' : ''}</Text>
+                                                        </HStack>
+                                                    </Td>
+                                                    <Td fontWeight="bold" color="green.500">
+                                                        <HStack>
+                                                            <Icon as={transferAccounts?.some(a => String(a._id) === String(t.taker?._id || t.taker)) ? FaBuilding : FaUserTie} />
+                                                            <Text>{t.taker?.name || 'Unknown'}{transferAccounts?.some(a => String(a._id) === String(t.taker?._id || t.taker)) ? ' (BANK)' : ''}</Text>
+                                                        </HStack>
+                                                    </Td>
+                                                    <Td isNumeric fontWeight="black" fontSize="lg" color="teal.600">₹{t.amount?.toLocaleString()}</Td>
+                                                    <Td>
+                                                        <HStack justify="center">
+                                                            <IconButton
+                                                                size="sm"
+                                                                colorScheme="red"
+                                                                variant="ghost"
+                                                                icon={<Icon as={FaTrash} />}
+                                                                aria-label="Delete Transfer"
+                                                                onClick={() => handleDeleteCommittedTransfer(t._id)}
+                                                                isDisabled={!canWriteView}
+                                                                borderRadius="lg"
+                                                            />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                        </Tbody>
+                                    </Table>
+                                </TableContainer>
+                            </Card>
+                        </Box>
                     )}
                 </Box>
             )}
@@ -5362,3 +6070,4 @@ const MoneyTransferSection = ({
 };
 
 export default EmployeeExpensesModule;
+

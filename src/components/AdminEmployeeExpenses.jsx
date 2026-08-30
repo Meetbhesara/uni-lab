@@ -7,7 +7,7 @@ import {
     InputGroup, InputLeftElement, Divider, InputLeftAddon, Badge,
     Popover, PopoverTrigger, PopoverContent, PopoverBody
 } from '@chakra-ui/react';
-import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign, FaPaperclip, FaChevronLeft, FaChevronRight, FaUsers } from 'react-icons/fa';
+import { FaDownload, FaFileExcel, FaPlus, FaTrash, FaCalendarAlt, FaClipboardCheck, FaMapMarkerAlt, FaCoffee, FaHamburger, FaUtensils, FaGasPump, FaStickyNote, FaMoneyBillWave, FaRupeeSign, FaPaperclip, FaChevronLeft, FaChevronRight, FaUsers, FaCamera, FaCloudUploadAlt, FaFileAlt } from 'react-icons/fa';
 import api from '../api/axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
@@ -957,23 +957,222 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                                                 })()}
 
                                                 {/* File Uploads per Site */}
-                                                <SimpleGrid columns={4} spacing={2} pt={2}>
-                                                    <VStack align="start" spacing={1}>
-                                                        <Text fontSize="9px" fontWeight="black" color="blue.600">PHOTOS ({cs.files.photos.length})</Text>
-                                                        <Input type="file" multiple accept="image/*" onChange={(e) => handleSiteFileChange(idx, e, 'photos')} size="xs" p={0} variant="unstyled" />
-                                                    </VStack>
-                                                    <VStack align="start" spacing={1}>
-                                                        <Text fontSize="9px" fontWeight="black" color="orange.600">REPORTS ({cs.files.dailyReports.length})</Text>
-                                                        <Input type="file" multiple accept=".pdf,.doc,.docx" onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')} size="xs" p={0} variant="unstyled" />
-                                                    </VStack>
-                                                    <VStack align="start" spacing={1}>
-                                                        <Text fontSize="9px" fontWeight="black" color="purple.600">DATA ({cs.files.data.length})</Text>
-                                                        <Input type="file" multiple accept=".xls,.xlsx,.pdf" onChange={(e) => handleSiteFileChange(idx, e, 'data')} size="xs" p={0} variant="unstyled" />
-                                                    </VStack>
-                                                    <VStack align="start" spacing={1}>
-                                                        <Text fontSize="9px" fontWeight="black" color="teal.600">DRAWING ({cs.files.drawing?.length || 0})</Text>
-                                                        <Input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" onChange={(e) => handleSiteFileChange(idx, e, 'drawing')} size="xs" p={0} variant="unstyled" />
-                                                    </VStack>
+                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={{ base: 2.5, md: 3 }} pt={2}>
+                                                    {/* 1. PHOTOS */}
+                                                    <Box bg="blue.50" border="1.5px dashed" borderColor="blue.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaCamera} color="blue.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="blue.800">PHOTOS</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="blue" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {cs.files.photos.length}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="blue"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`admin-site-photos-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Photos
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`admin-site-photos-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept="image/*"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'photos')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
+                                                            {cs.files.photos.map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="blue.200" spacing={1}>
+                                                                    <Icon as={FaCamera} color="blue.500" w={2.5} h={2.5} flexShrink={0} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="blue.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'photos', fIdx)}
+                                                                        aria-label="Remove photo"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </Box>
+
+                                                    {/* 2. REPORTS */}
+                                                    <Box bg="orange.50" border="1.5px dashed" borderColor="orange.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaFileAlt} color="orange.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="orange.800">REPORTS</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="orange" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {cs.files.dailyReports.length}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="orange"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`admin-site-reports-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Reports
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`admin-site-reports-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept=".pdf,.doc,.docx"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'dailyReports')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
+                                                            {cs.files.dailyReports.map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="orange.200" spacing={1}>
+                                                                    <Icon as={FaFileAlt} color="orange.500" w={2.5} h={2.5} flexShrink={0} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="orange.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'dailyReports', fIdx)}
+                                                                        aria-label="Remove report"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </Box>
+
+                                                    {/* 3. DATA */}
+                                                    <Box bg="purple.50" border="1.5px dashed" borderColor="purple.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaFileAlt} color="purple.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="purple.800">DATA</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="purple" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {cs.files.data.length}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="purple"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`admin-site-data-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Data
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`admin-site-data-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept=".xls,.xlsx,.pdf"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'data')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
+                                                            {cs.files.data.map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="purple.200" spacing={1}>
+                                                                    <Icon as={FaFileAlt} color="purple.500" w={2.5} h={2.5} flexShrink={0} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="purple.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'data', fIdx)}
+                                                                        aria-label="Remove data file"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </Box>
+
+                                                    {/* 4. DRAWING */}
+                                                    <Box bg="teal.50" border="1.5px dashed" borderColor="teal.300" borderRadius="xl" p={2.5} width="full">
+                                                        <Flex justify="space-between" align="center" mb={2}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaPaperclip} color="teal.600" fontSize="xs" />
+                                                                <Text fontSize="10px" fontWeight="black" color="teal.800">DRAWING</Text>
+                                                            </HStack>
+                                                            <Badge colorScheme="teal" fontSize="9px" borderRadius="full" px={1.5}>
+                                                                {cs.files.drawing?.length || 0}
+                                                            </Badge>
+                                                        </Flex>
+                                                        <Button
+                                                            size="xs"
+                                                            w="full"
+                                                            colorScheme="teal"
+                                                            variant="outline"
+                                                            bg="white"
+                                                            borderRadius="lg"
+                                                            leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                            onClick={() => document.getElementById(`admin-site-drawing-${idx}`).click()}
+                                                            fontSize="10px"
+                                                            h="28px"
+                                                            fontWeight="bold"
+                                                        >
+                                                            Add Drawing
+                                                        </Button>
+                                                        <input
+                                                            type="file"
+                                                            id={`admin-site-drawing-${idx}`}
+                                                            hidden
+                                                            multiple
+                                                            accept=".pdf,.dwg,.dxf,image/*"
+                                                            onChange={(e) => handleSiteFileChange(idx, e, 'drawing')}
+                                                        />
+                                                        <VStack align="stretch" spacing={1} width="full" mt={2}>
+                                                            {(cs.files.drawing || []).map((file, fIdx) => (
+                                                                <HStack key={fIdx} justify="space-between" bg="white" px={2} py={1} borderRadius="md" border="1px solid" borderColor="teal.200" spacing={1}>
+                                                                    <Icon as={FaPaperclip} color="teal.500" w={2.5} h={2.5} flexShrink={0} />
+                                                                    <Text fontSize="9px" fontWeight="medium" color="teal.800" isTruncated flex={1}>{file.name}</Text>
+                                                                    <IconButton 
+                                                                        size="2xs" 
+                                                                        icon={<Icon as={FaTrash} w={2} h={2} />} 
+                                                                        colorScheme="red" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => removeSiteFile(idx, 'drawing', fIdx)}
+                                                                        aria-label="Remove drawing"
+                                                                        minW="16px"
+                                                                        h="16px"
+                                                                    />
+                                                                </HStack>
+                                                            ))}
+                                                        </VStack>
+                                                    </Box>
                                                 </SimpleGrid>
                                             </VStack>
                                         ))}
