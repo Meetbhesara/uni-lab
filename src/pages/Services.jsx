@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Box, Container, Heading, Text, SimpleGrid, Icon, Stack, Flex, Button, Card, CardBody,
     Divider, FormControl, FormLabel, Input, VStack, useToast, Image, Badge, HStack, IconButton, Select,
@@ -114,6 +114,7 @@ const VehicleMasterForm = () => {
     const [pucFile, setPucFile] = useState(null);
     const [existingVehiclePhotos, setExistingVehiclePhotos] = useState([]);
     const [newVehiclePhotos, setNewVehiclePhotos] = useState([]);
+    const [primaryType, setPrimaryType] = useState('existing');
     const [vehicles, setVehicles] = useState([]);
     const [editId, setEditId] = useState(null);
     const [viewVehicle, setViewVehicle] = useState(null);
@@ -122,6 +123,23 @@ const VehicleMasterForm = () => {
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
     const [activeTab, setActiveTab] = useState(0);
+
+    const getVehiclePrimaryPhoto = (v) => {
+        if (!v) return null;
+        if (v.primaryPhotoUrl) return getFileUrl(v.primaryPhotoUrl);
+        if (v.primaryPhoto) return getFileUrl(v.primaryPhoto);
+        if (Array.isArray(v.vehiclePhotos) && v.vehiclePhotos.length > 0) {
+            const primaryItem = v.vehiclePhotos.find(p => p && (p.isPrimary === true || p.primary === true));
+            if (primaryItem) {
+                const u = typeof primaryItem === 'string' ? primaryItem : (primaryItem.url || primaryItem.path || primaryItem);
+                if (u) return getFileUrl(u);
+            }
+            const first = v.vehiclePhotos[0];
+            const u = typeof first === 'string' ? first : (first?.url || first?.path || first);
+            if (u) return getFileUrl(u);
+        }
+        return null;
+    };
 
     const filteredVehicles = vehicles.filter(v =>
         v.vehicleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -191,6 +209,41 @@ const VehicleMasterForm = () => {
         const files = Array.from(e.target.files);
         if (!files.length) return;
         setNewVehiclePhotos(prev => [...prev, ...files]);
+        if (existingVehiclePhotos.length === 0 && newVehiclePhotos.length === 0) {
+            setPrimaryType('new');
+        }
+    };
+
+    const setPrimaryExistingPhoto = (index) => {
+        setExistingVehiclePhotos(prev => {
+            const item = prev[index];
+            const rest = prev.filter((_, i) => i !== index);
+            return [item, ...rest];
+        });
+        setPrimaryType('existing');
+        toast({
+            title: 'Primary Photo Set',
+            description: 'Selected photo set as the main vehicle display image.',
+            status: 'info',
+            duration: 2000,
+            isClosable: true
+        });
+    };
+
+    const setPrimaryNewPhoto = (index) => {
+        setNewVehiclePhotos(prev => {
+            const item = prev[index];
+            const rest = prev.filter((_, i) => i !== index);
+            return [item, ...rest];
+        });
+        setPrimaryType('new');
+        toast({
+            title: 'Primary Photo Set',
+            description: 'Uploaded photo set as the main vehicle display image.',
+            status: 'info',
+            duration: 2000,
+            isClosable: true
+        });
     };
 
     const removeExistingVehiclePhoto = (index) => {
@@ -220,7 +273,7 @@ const VehicleMasterForm = () => {
         onConfirmOpen();
     };
 
-    const executeSave = async () => {
+    const confirmSubmit = async () => {
         onConfirmClose();
         setIsLoading(true);
         try {
@@ -236,9 +289,28 @@ const VehicleMasterForm = () => {
             if (insuranceFile) data.append('insurancePhoto', insuranceFile);
             if (pucFile) data.append('pucPhoto', pucFile);
 
+            if (primaryType === 'new' && newVehiclePhotos.length > 0) {
+                data.append('primaryType', 'new');
+                data.append('primaryPhotoName', newVehiclePhotos[0].name);
+                data.append('primaryPhotoIndex', '0');
+            } else {
+                data.append('primaryType', 'existing');
+                if (existingVehiclePhotos.length > 0) {
+                    data.append('primaryPhotoUrl', existingVehiclePhotos[0]);
+                    data.append('primaryPhoto', existingVehiclePhotos[0]);
+                    data.append('primaryPhotoIndex', '0');
+                }
+            }
+
             data.append('existingVehiclePhotos', JSON.stringify(existingVehiclePhotos));
+            existingVehiclePhotos.forEach(url => {
+                data.append('existingPhotos', url);
+                data.append('existingVehiclePhotos[]', url);
+            });
+
             newVehiclePhotos.forEach(file => {
                 data.append('vehiclePhotos', file);
+                data.append('photos', file);
             });
 
             let res;
@@ -251,7 +323,7 @@ const VehicleMasterForm = () => {
             if (res.data.success) {
                 toast({
                     title: editId ? 'Vehicle Updated' : 'Vehicle Registered',
-                    description: `Vehicle ${formData.vehicleNumber} successfully saved.`,
+                    description: `Vehicle ${formData.vehicleNumber} successfully saved with primary photo.`,
                     status: 'success',
                     duration: 3000
                 });
@@ -268,7 +340,9 @@ const VehicleMasterForm = () => {
                 setPucFile(null);
                 setExistingVehiclePhotos([]);
                 setNewVehiclePhotos([]);
+                setPrimaryType('existing');
                 setEditId(null);
+                setActiveTab(1);
                 fetchVehicles();
             }
         } catch (err) {
@@ -282,6 +356,7 @@ const VehicleMasterForm = () => {
             setIsLoading(false);
         }
     };
+    const executeSave = confirmSubmit;
 
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this vehicle record?')) return;
@@ -306,8 +381,22 @@ const VehicleMasterForm = () => {
             serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
             logInName: v.logInName || user?.name || ''
         });
-        setExistingVehiclePhotos(v.vehiclePhotos?.map(p => p.url) || []);
+
+        let rawPhotos = [];
+        if (Array.isArray(v.vehiclePhotos)) {
+            rawPhotos = v.vehiclePhotos.map(p => typeof p === 'string' ? p : (p?.url || p?.path || '')).filter(Boolean);
+            const pIndex = v.vehiclePhotos.findIndex(p => p && (p.isPrimary === true || p.primary === true));
+            if (pIndex > 0 && rawPhotos[pIndex]) {
+                const pItem = rawPhotos[pIndex];
+                rawPhotos = [pItem, ...rawPhotos.filter((_, idx) => idx !== pIndex)];
+            } else if (v.primaryPhotoUrl && rawPhotos.includes(v.primaryPhotoUrl)) {
+                const pItem = v.primaryPhotoUrl;
+                rawPhotos = [pItem, ...rawPhotos.filter(u => u !== pItem)];
+            }
+        }
+        setExistingVehiclePhotos(rawPhotos);
         setNewVehiclePhotos([]);
+        setPrimaryType('existing');
         setActiveTab(0);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -345,6 +434,7 @@ const VehicleMasterForm = () => {
                                     onClick={() => {
                                         setEditId(null);
                                         setFormData({ vehicleNumber: '', vehicleName: '', insuranceDate: '', pucDate: '', serviceDate: '', logInName: user?.name || '' });
+                                        setRcFile(null); setInsuranceFile(null); setPucFile(null); setExistingVehiclePhotos([]); setNewVehiclePhotos([]); setPrimaryType('existing');
                                         setActiveTab(0);
                                     }}
                                     borderRadius="xl"
@@ -356,7 +446,7 @@ const VehicleMasterForm = () => {
                     </Box>
 
                     <CardBody p={{ base: 3, md: 8 }}>
-                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="purple" variant="soft-rounded">
+                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="purple" variant="soft-rounded" isLazy lazyBehavior="keepMounted">
                             <TabList
                                 mb={6}
                                 overflowX="auto"
@@ -470,65 +560,168 @@ const VehicleMasterForm = () => {
 
                                             <FormControl w="full">
                                                 <FormLabel fontWeight="bold" fontSize="sm">Vehicle Photos (Multi-Upload)</FormLabel>
-                                                <Box
-                                                    p={4}
-                                                    border="2px dashed"
-                                                    borderColor="purple.200"
-                                                    borderRadius="xl"
-                                                    bg="purple.50"
-                                                    textAlign="center"
-                                                    cursor="pointer"
-                                                    onClick={() => document.getElementById('vehicle-photos-upload').click()}
-                                                    _hover={{ bg: "purple.100", borderColor: "purple.400" }}
-                                                >
-                                                    <input
-                                                        type="file"
-                                                        id="vehicle-photos-upload"
-                                                        hidden
-                                                        multiple
-                                                        onChange={handleVehiclePhotoChange}
-                                                        accept="image/*"
-                                                    />
-                                                    <Icon as={FaCamera} w={6} h={6} color="purple.500" mb={1} />
-                                                    <Text fontSize="xs" fontWeight="bold" color="purple.700">Tap / Click to Add Vehicle Photos</Text>
-                                                </Box>
+                                                    <Box
+                                                        p={4}
+                                                        border="2px dashed"
+                                                        borderColor="purple.200"
+                                                        borderRadius="xl"
+                                                        bg="purple.50"
+                                                        textAlign="center"
+                                                        cursor="pointer"
+                                                        onClick={() => document.getElementById('vehicle-photos-upload').click()}
+                                                        _hover={{ bg: "purple.100", borderColor: "purple.400" }}
+                                                    >
+                                                        <input
+                                                            type="file"
+                                                            id="vehicle-photos-upload"
+                                                            hidden
+                                                            multiple
+                                                            onChange={handleVehiclePhotoChange}
+                                                            accept="image/*"
+                                                        />
+                                                        <Icon as={FaCamera} w={6} h={6} color="purple.500" mb={1} />
+                                                        <Text fontSize="xs" fontWeight="bold" color="purple.700">Tap / Click to Add Vehicle Photos</Text>
+                                                    </Box>
 
-                                                {(existingVehiclePhotos.length > 0 || newVehiclePhotos.length > 0) && (
-                                                    <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={3} mt={3}>
-                                                        {existingVehiclePhotos.map((url, i) => (
-                                                            <Box key={`existing-${i}`} position="relative" borderRadius="lg" overflow="hidden" border="1px solid" borderColor="purple.200">
-                                                                <Image src={getFileUrl(url)} alt="Vehicle" w="full" h="80px" objectFit="cover" />
-                                                                {i === 0 && (
-                                                                    <Badge position="absolute" bottom={1} left={1} colorScheme="purple" fontSize="9px">Primary</Badge>
-                                                                )}
-                                                                <IconButton
-                                                                    icon={<Icon as={FaTrash} />}
-                                                                    size="xs"
-                                                                    colorScheme="red"
-                                                                    position="absolute"
-                                                                    top={1} right={1}
-                                                                    onClick={(e) => { e.stopPropagation(); removeExistingVehiclePhoto(i); }}
-                                                                />
-                                                            </Box>
-                                                        ))}
-                                                        {newVehiclePhotos.map((file, i) => {
-                                                            const objUrl = URL.createObjectURL(file);
-                                                            return (
-                                                                <Box key={`new-${i}`} position="relative" borderRadius="lg" overflow="hidden" border="1px solid" borderColor="purple.200">
-                                                                    <Image src={objUrl} alt="New Preview" w="full" h="80px" objectFit="cover" />
-                                                                    <IconButton
-                                                                        icon={<Icon as={FaTrash} />}
-                                                                        size="xs"
-                                                                        colorScheme="red"
-                                                                        position="absolute"
-                                                                        top={1} right={1}
-                                                                        onClick={(e) => { e.stopPropagation(); removeNewVehiclePhoto(i); }}
-                                                                    />
-                                                                </Box>
-                                                            );
-                                                        })}
-                                                    </SimpleGrid>
-                                                )}
+                                                    {(existingVehiclePhotos.length > 0 || newVehiclePhotos.length > 0) && (
+                                                        <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={3} mt={3}>
+                                                            {existingVehiclePhotos.map((url, i) => {
+                                                                const isPrimary = (primaryType === 'existing' && i === 0) || (primaryType === 'new' && newVehiclePhotos.length === 0 && i === 0);
+                                                                return (
+                                                                    <Box 
+                                                                        key={`existing-${i}`} 
+                                                                        position="relative" 
+                                                                        borderRadius="xl" 
+                                                                        overflow="hidden" 
+                                                                        border="2px solid" 
+                                                                        borderColor={isPrimary ? "purple.500" : "purple.200"}
+                                                                        boxShadow={isPrimary ? "md" : "none"}
+                                                                    >
+                                                                        <Image src={getFileUrl(url)} alt="Vehicle" w="full" h="95px" objectFit="cover" />
+                                                                        {isPrimary ? (
+                                                                            <Badge 
+                                                                                position="absolute" 
+                                                                                top={1.5} 
+                                                                                left={1.5} 
+                                                                                colorScheme="yellow" 
+                                                                                bg="yellow.400" 
+                                                                                color="black" 
+                                                                                fontSize="9px" 
+                                                                                fontWeight="black" 
+                                                                                px={2} 
+                                                                                py={0.5} 
+                                                                                borderRadius="md" 
+                                                                                boxShadow="sm"
+                                                                            >
+                                                                                ⭐ Primary
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <Button
+                                                                                size="2xs"
+                                                                                position="absolute"
+                                                                                bottom={1.5}
+                                                                                left={1.5}
+                                                                                colorScheme="purple"
+                                                                                variant="solid"
+                                                                                bg="purple.600"
+                                                                                color="white"
+                                                                                _hover={{ bg: "purple.700" }}
+                                                                                fontSize="9px"
+                                                                                h="22px"
+                                                                                px={2}
+                                                                                borderRadius="md"
+                                                                                boxShadow="md"
+                                                                                onClick={(e) => { e.stopPropagation(); setPrimaryExistingPhoto(i); }}
+                                                                            >
+                                                                                Set Primary
+                                                                            </Button>
+                                                                        )}
+                                                                        <IconButton
+                                                                            icon={<Icon as={FaTrash} />}
+                                                                            size="xs"
+                                                                            colorScheme="red"
+                                                                            variant="solid"
+                                                                            position="absolute"
+                                                                            top={1.5} 
+                                                                            right={1.5}
+                                                                            borderRadius="md"
+                                                                            boxShadow="md"
+                                                                            onClick={(e) => { e.stopPropagation(); removeExistingVehiclePhoto(i); }}
+                                                                            aria-label="Delete photo"
+                                                                        />
+                                                                    </Box>
+                                                                );
+                                                            })}
+                                                            {newVehiclePhotos.map((file, i) => {
+                                                                const objUrl = URL.createObjectURL(file);
+                                                                const isPrimary = primaryType === 'new' && i === 0;
+                                                                return (
+                                                                    <Box 
+                                                                        key={`new-${i}`} 
+                                                                        position="relative" 
+                                                                        borderRadius="xl" 
+                                                                        overflow="hidden" 
+                                                                        border="2px solid" 
+                                                                        borderColor={isPrimary ? "purple.500" : "purple.200"}
+                                                                        boxShadow={isPrimary ? "md" : "none"}
+                                                                    >
+                                                                        <Image src={objUrl} alt="New Preview" w="full" h="95px" objectFit="cover" />
+                                                                        {isPrimary ? (
+                                                                            <Badge 
+                                                                                position="absolute" 
+                                                                                top={1.5} 
+                                                                                left={1.5} 
+                                                                                colorScheme="yellow" 
+                                                                                bg="yellow.400" 
+                                                                                color="black" 
+                                                                                fontSize="9px" 
+                                                                                fontWeight="black" 
+                                                                                px={2} 
+                                                                                py={0.5} 
+                                                                                borderRadius="md" 
+                                                                                boxShadow="sm"
+                                                                            >
+                                                                                ⭐ Primary
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <Button
+                                                                                size="2xs"
+                                                                                position="absolute"
+                                                                                bottom={1.5}
+                                                                                left={1.5}
+                                                                                colorScheme="purple"
+                                                                                variant="solid"
+                                                                                bg="purple.600"
+                                                                                color="white"
+                                                                                _hover={{ bg: "purple.700" }}
+                                                                                fontSize="9px"
+                                                                                h="22px"
+                                                                                px={2}
+                                                                                borderRadius="md"
+                                                                                boxShadow="md"
+                                                                                onClick={(e) => { e.stopPropagation(); setPrimaryNewPhoto(i); }}
+                                                                            >
+                                                                                Set Primary
+                                                                            </Button>
+                                                                        )}
+                                                                        <IconButton
+                                                                            icon={<Icon as={FaTrash} />}
+                                                                            size="xs"
+                                                                            colorScheme="red"
+                                                                            variant="solid"
+                                                                            position="absolute"
+                                                                            top={1.5} 
+                                                                            right={1.5}
+                                                                            borderRadius="md"
+                                                                            boxShadow="md"
+                                                                            onClick={(e) => { e.stopPropagation(); removeNewVehiclePhoto(i); }}
+                                                                            aria-label="Delete photo"
+                                                                        />
+                                                                    </Box>
+                                                                );
+                                                            })}
+                                                        </SimpleGrid>
+                                                    )}
                                             </FormControl>
 
                                             <Divider />
@@ -577,7 +770,7 @@ const VehicleMasterForm = () => {
                                                 <Button variant="outline" colorScheme="gray" borderRadius="xl" h="44px" w="full" onClick={() => {
                                                     setEditId(null);
                                                     setFormData({ vehicleNumber: '', vehicleName: '', insuranceDate: '', pucDate: '', serviceDate: '', logInName: user?.name || '' });
-                                                    setRcFile(null); setInsuranceFile(null); setPucFile(null); setExistingVehiclePhotos([]); setNewVehiclePhotos([]);
+                                                    setRcFile(null); setInsuranceFile(null); setPucFile(null); setExistingVehiclePhotos([]); setNewVehiclePhotos([]); setPrimaryType('existing');
                                                 }}>
                                                     Cancel Edit
                                                 </Button>
@@ -595,23 +788,33 @@ const VehicleMasterForm = () => {
 
                                             <HStack spacing={1} bg="gray.100" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
                                                 <Button
-                                                    size="xs"
+                                                    size={{ base: "xs", sm: "sm" }}
                                                     variant={viewMode === 'card' ? 'solid' : 'ghost'}
                                                     colorScheme={viewMode === 'card' ? 'purple' : 'gray'}
+                                                    bg={viewMode === 'card' ? 'purple.600' : 'transparent'}
+                                                    color={viewMode === 'card' ? 'white' : 'gray.600'}
+                                                    _hover={{ bg: viewMode === 'card' ? 'purple.700' : 'gray.200' }}
                                                     leftIcon={<Icon as={FaThLarge} />}
                                                     borderRadius="lg"
                                                     fontWeight="bold"
+                                                    px={{ base: 3, sm: 3.5 }}
+                                                    shadow={viewMode === 'card' ? 'sm' : 'none'}
                                                     onClick={() => setViewMode('card')}
                                                 >
                                                     Cards
                                                 </Button>
                                                 <Button
-                                                    size="xs"
+                                                    size={{ base: "xs", sm: "sm" }}
                                                     variant={viewMode === 'table' ? 'solid' : 'ghost'}
                                                     colorScheme={viewMode === 'table' ? 'purple' : 'gray'}
+                                                    bg={viewMode === 'table' ? 'purple.600' : 'transparent'}
+                                                    color={viewMode === 'table' ? 'white' : 'gray.600'}
+                                                    _hover={{ bg: viewMode === 'table' ? 'purple.700' : 'gray.200' }}
                                                     leftIcon={<Icon as={FaTable} />}
                                                     borderRadius="lg"
                                                     fontWeight="bold"
+                                                    px={{ base: 3, sm: 3.5 }}
+                                                    shadow={viewMode === 'table' ? 'sm' : 'none'}
                                                     onClick={() => setViewMode('table')}
                                                 >
                                                     Table
@@ -633,45 +836,48 @@ const VehicleMasterForm = () => {
                                                             </Tr>
                                                         </Thead>
                                                         <Tbody>
-                                                            {filteredVehicles.map((v, idx) => (
-                                                                <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: "purple.50" }} transition="background 0.2s">
-                                                                    <Td textAlign="center" py={2}>
-                                                                        {v.vehiclePhotos && v.vehiclePhotos[0]?.url ? (
-                                                                            <Image
-                                                                                src={getFileUrl(v.vehiclePhotos[0].url)}
-                                                                                alt={v.vehicleNumber}
-                                                                                w="42px"
-                                                                                h="42px"
-                                                                                borderRadius="lg"
-                                                                                objectFit="cover"
-                                                                                border="1px solid"
-                                                                                borderColor="gray.200"
-                                                                                mx="auto"
-                                                                            />
-                                                                        ) : (
-                                                                            <Box w="42px" h="42px" bg="purple.50" borderRadius="lg" display="flex" alignItems="center" justifyContent="center" border="1px solid" borderColor="purple.100" mx="auto">
-                                                                                <Icon as={FaTruck} color="purple.400" />
-                                                                            </Box>
-                                                                        )}
-                                                                    </Td>
-                                                                    <Td fontWeight="bold" color="purple.700" fontSize="xs">{v.vehicleNumber}</Td>
-                                                                    <Td fontSize="xs" color="gray.700">{v.vehicleName || '—'}</Td>
-                                                                    <Td>
-                                                                        {v.serviceDate ? (
-                                                                            <Badge colorScheme="red" variant="subtle" borderRadius="full" px={2} fontSize="10px">
-                                                                                {v.serviceDate.substring(0, 10)}
-                                                                            </Badge>
-                                                                        ) : <Text fontSize="10px" color="gray.400">—</Text>}
-                                                                    </Td>
-                                                                    <Td textAlign="center">
-                                                                        <HStack justify="center" spacing={1.5}>
-                                                                            <IconButton aria-label="View" size="xs" colorScheme="teal" variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => setViewVehicle(v)} />
-                                                                            <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
-                                                                            <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
-                                                                        </HStack>
-                                                                    </Td>
-                                                                </Tr>
-                                                            ))}
+                                                            {filteredVehicles.map((v, idx) => {
+                                                                const pPhoto = getVehiclePrimaryPhoto(v);
+                                                                return (
+                                                                    <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: "purple.50" }} transition="background 0.2s">
+                                                                        <Td textAlign="center" py={2}>
+                                                                            {pPhoto ? (
+                                                                                <Image
+                                                                                    src={pPhoto}
+                                                                                    alt={v.vehicleNumber}
+                                                                                    w="42px"
+                                                                                    h="42px"
+                                                                                    borderRadius="lg"
+                                                                                    objectFit="cover"
+                                                                                    border="1px solid"
+                                                                                    borderColor="gray.200"
+                                                                                    mx="auto"
+                                                                                />
+                                                                            ) : (
+                                                                                <Box w="42px" h="42px" bg="purple.50" borderRadius="lg" display="flex" alignItems="center" justifyContent="center" border="1px solid" borderColor="purple.100" mx="auto">
+                                                                                    <Icon as={FaTruck} color="purple.400" />
+                                                                                </Box>
+                                                                            )}
+                                                                        </Td>
+                                                                        <Td fontWeight="bold" color="purple.700" fontSize="xs">{v.vehicleNumber}</Td>
+                                                                        <Td fontSize="xs" color="gray.700">{v.vehicleName || '—'}</Td>
+                                                                        <Td>
+                                                                            {v.serviceDate ? (
+                                                                                <Badge colorScheme="red" variant="subtle" borderRadius="full" px={2} fontSize="10px">
+                                                                                    {v.serviceDate.substring(0, 10)}
+                                                                                </Badge>
+                                                                            ) : <Text fontSize="10px" color="gray.400">—</Text>}
+                                                                        </Td>
+                                                                        <Td textAlign="center">
+                                                                            <HStack justify="center" spacing={1.5}>
+                                                                                <IconButton aria-label="View" size="xs" colorScheme="teal" variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => setViewVehicle(v)} />
+                                                                                <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
+                                                                                <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
+                                                                            </HStack>
+                                                                        </Td>
+                                                                    </Tr>
+                                                                );
+                                                            })}
                                                         </Tbody>
                                                     </Table>
                                                 </TableContainer>
@@ -679,7 +885,7 @@ const VehicleMasterForm = () => {
                                         ) : (
                                             <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
                                                 {filteredVehicles.map(v => {
-                                                    const primaryPhoto = v.vehiclePhotos && v.vehiclePhotos[0]?.url ? getFileUrl(v.vehiclePhotos[0].url) : null;
+                                                    const primaryPhoto = getVehiclePrimaryPhoto(v);
                                                     return (
                                                         <Card key={v._id} borderRadius="2xl" border="1.5px solid" borderColor="gray.200" bg="white" _hover={{ shadow: 'lg', borderColor: 'purple.400', transform: 'translateY(-2px)' }} transition="all 0.2s" overflow="hidden">
                                                             <CardBody p={4}>
@@ -735,6 +941,111 @@ const VehicleMasterForm = () => {
                     </CardBody>
                 </Card>
             </Container>
+
+            {/* Vehicle Details Modal */}
+            <Modal isOpen={!!viewVehicle} onClose={() => setViewVehicle(null)} size="xl" isCentered isLazy unmountOnClose>
+                <ModalOverlay bg="blackAlpha.700" />
+                <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl" maxW={{ base: "96vw", md: "xl" }} maxH="90vh">
+                    {viewVehicle && (
+                        <>
+                            <ModalHeader bg="purple.700" color="white" p={{ base: 4, md: 5 }}>
+                                <Flex justify="space-between" align="center">
+                                    <HStack spacing={3}>
+                                        <Icon as={FaTruck} w={6} h={6} color="purple.200" />
+                                        <Box>
+                                            <Text fontSize="md" fontWeight="black">{viewVehicle.vehicleNumber}</Text>
+                                            <Text fontSize="xs" color="purple.200">{viewVehicle.vehicleName || 'Fleet Vehicle'}</Text>
+                                        </Box>
+                                    </HStack>
+                                    <ModalCloseButton color="white" position="relative" top={0} right={0} />
+                                </Flex>
+                            </ModalHeader>
+                            <ModalBody p={{ base: 4, md: 6 }} overflowY="auto">
+                                <VStack spacing={4} align="stretch">
+                                    {/* Vehicle Photos Gallery */}
+                                    {viewVehicle.vehiclePhotos && viewVehicle.vehiclePhotos.length > 0 && (
+                                        <Box>
+                                            <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" mb={2}>Vehicle Photos</Text>
+                                            <SimpleGrid columns={{ base: 2, sm: 3 }} spacing={3}>
+                                                {viewVehicle.vehiclePhotos.map((p, idx) => (
+                                                    <Box key={idx} borderRadius="xl" overflow="hidden" border="1px solid" borderColor="purple.200">
+                                                        <Image src={getFileUrl(p.url)} alt={`Vehicle ${idx + 1}`} w="full" h="100px" objectFit="cover" />
+                                                    </Box>
+                                                ))}
+                                            </SimpleGrid>
+                                        </Box>
+                                    )}
+
+                                    {/* Vehicle Dates & Status */}
+                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
+                                        <Box bg="red.50" p={3} borderRadius="xl" border="1px solid" borderColor="red.200">
+                                            <Text fontSize="10px" color="red.600" fontWeight="bold">NEXT SERVICE</Text>
+                                            <Text fontSize="sm" fontWeight="black" color="red.800">
+                                                {viewVehicle.serviceDate ? viewVehicle.serviceDate.substring(0, 10) : 'Not Set'}
+                                            </Text>
+                                        </Box>
+                                        <Box bg="purple.50" p={3} borderRadius="xl" border="1px solid" borderColor="purple.200">
+                                            <Text fontSize="10px" color="purple.600" fontWeight="bold">INSURANCE EXPIRY</Text>
+                                            <Text fontSize="sm" fontWeight="black" color="purple.800">
+                                                {viewVehicle.insuranceDate ? viewVehicle.insuranceDate.substring(0, 10) : 'Not Set'}
+                                            </Text>
+                                        </Box>
+                                        <Box bg="green.50" p={3} borderRadius="xl" border="1px solid" borderColor="green.200">
+                                            <Text fontSize="10px" color="green.600" fontWeight="bold">PUC EXPIRY</Text>
+                                            <Text fontSize="sm" fontWeight="black" color="green.800">
+                                                {viewVehicle.pucDate ? viewVehicle.pucDate.substring(0, 10) : 'Not Set'}
+                                            </Text>
+                                        </Box>
+                                    </SimpleGrid>
+
+                                    {/* Logged in by */}
+                                    {viewVehicle.logInName && (
+                                        <Text fontSize="xs" color="gray.500">
+                                            <strong>Registered By:</strong> {viewVehicle.logInName}
+                                        </Text>
+                                    )}
+
+                                    {/* Uploaded Documents Links */}
+                                    <Box pt={2} borderTop="1px solid" borderColor="gray.200">
+                                        <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" mb={2}>Vehicle Documents</Text>
+                                        <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={2}>
+                                            {viewVehicle.rcBook ? (
+                                                <Button as="a" href={getFileUrl(viewVehicle.rcBook)} target="_blank" size="xs" colorScheme="pink" variant="outline" leftIcon={<Icon as={FaFilePdf} />}>
+                                                    RC Book
+                                                </Button>
+                                            ) : (
+                                                <Badge colorScheme="gray" p={1.5} borderRadius="md" textAlign="center" fontSize="2xs">No RC Book</Badge>
+                                            )}
+                                            {viewVehicle.insurancePhoto ? (
+                                                <Button as="a" href={getFileUrl(viewVehicle.insurancePhoto)} target="_blank" size="xs" colorScheme="blue" variant="outline" leftIcon={<Icon as={FaFilePdf} />}>
+                                                    Insurance Doc
+                                                </Button>
+                                            ) : (
+                                                <Badge colorScheme="gray" p={1.5} borderRadius="md" textAlign="center" fontSize="2xs">No Insurance</Badge>
+                                            )}
+                                            {viewVehicle.pucPhoto ? (
+                                                <Button as="a" href={getFileUrl(viewVehicle.pucPhoto)} target="_blank" size="xs" colorScheme="green" variant="outline" leftIcon={<Icon as={FaFilePdf} />}>
+                                                    PUC Doc
+                                                </Button>
+                                            ) : (
+                                                <Badge colorScheme="gray" p={1.5} borderRadius="md" textAlign="center" fontSize="2xs">No PUC</Badge>
+                                            )}
+                                        </SimpleGrid>
+                                    </Box>
+                                </VStack>
+                            </ModalBody>
+                            <ModalFooter bg="gray.50" borderTop="1px solid" borderColor="gray.200" p={3}>
+                                <Button size="sm" colorScheme="blue" leftIcon={<Icon as={FaEdit} />} onClick={() => { const v = viewVehicle; setViewVehicle(null); handleEdit(v); }}>
+                                    Edit Vehicle
+                                </Button>
+                                <Button size="sm" variant="ghost" ml={2} onClick={() => setViewVehicle(null)}>
+                                    Close
+                                </Button>
+                            </ModalFooter>
+                        </>
+                    )}
+                </ModalContent>
+            </Modal>
 
             <AlertDialog isOpen={isConfirmOpen} leastDestructiveRef={cancelRef} onClose={onConfirmClose} isCentered>
                 <AlertDialogOverlay>
@@ -1840,7 +2151,7 @@ const EmployeeMasterForm = () => {
                                 </VStack>
                             </Center>
                         ) : (
-                            <Tabs index={employeeActiveTab} onChange={(idx) => setEmployeeActiveTab(idx)} colorScheme="blue" variant="soft-rounded">
+                            <Tabs index={employeeActiveTab} onChange={(idx) => setEmployeeActiveTab(idx)} colorScheme="blue" variant="soft-rounded" isLazy lazyBehavior="unmount">
                                 <TabList
                                     mb={6}
                                     overflowX="auto"
@@ -3354,7 +3665,7 @@ const ClientMasterForm = () => {
                     </Box>
 
                     <CardBody p={{ base: 3, md: 8 }}>
-                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="orange" variant="soft-rounded">
+                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="orange" variant="soft-rounded" isLazy lazyBehavior="unmount">
                             <TabList
                                 mb={6}
                                 overflowX="auto"
@@ -4119,7 +4430,7 @@ const SiteMasterForm = () => {
                     </Box>
 
                     <CardBody p={{ base: 3, md: 8 }}>
-                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="teal" variant="soft-rounded">
+                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="teal" variant="soft-rounded" isLazy lazyBehavior="unmount">
                             <TabList
                                 mb={6}
                                 overflowX="auto"
@@ -5266,17 +5577,30 @@ const ScheduleMasterForm = () => {
                 {/* ── TAB 2: Schedule Viewer ── */}
                 {scheduleInnerTabs.some(t => t.key === 'scheduleMaster_view') && (<TabPanel p={0}>
                     <Card borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden">
-                        <Box bg="gray.800" px={7} py={5} color="white">
-                            <HStack justify="space-between">
-                                <HStack>
-                                    <Icon as={FaListUl} w={5} h={5} />
-                                    <Heading size="md">Scheduler Dashboard</Heading>
+                        <Box bg="gray.800" px={{ base: 4, sm: 6, md: 7 }} py={{ base: 4, md: 5 }} color="white">
+                            <Flex justify="space-between" align={{ base: "stretch", sm: "center" }} direction={{ base: "column", sm: "row" }} gap={3}>
+                                <HStack spacing={3}>
+                                    <Icon as={FaListUl} w={5} h={5} color="teal.400" />
+                                    <Heading size={{ base: "sm", md: "md" }}>Scheduler Dashboard</Heading>
                                 </HStack>
-                                <Input type="date" value={viewDate} onChange={e => setViewDate(e.target.value)} borderRadius="full" bg="whiteAlpha.200" border="none" size="sm" w="150px" color="white" />
-                            </HStack>
+                                <HStack justify={{ base: "space-between", sm: "flex-end" }} spacing={2}>
+                                    <Text fontSize="xs" color="gray.400" fontWeight="bold">Date:</Text>
+                                    <Input
+                                        type="date"
+                                        value={viewDate}
+                                        onChange={e => setViewDate(e.target.value)}
+                                        borderRadius="full"
+                                        bg="whiteAlpha.200"
+                                        border="none"
+                                        size="sm"
+                                        w={{ base: "160px", sm: "150px" }}
+                                        color="white"
+                                    />
+                                </HStack>
+                            </Flex>
                         </Box>
 
-                        <CardBody p={6}>
+                        <CardBody p={{ base: 3, sm: 4, md: 6 }}>
                             {isFetchingSchedules ? (
                                 <Box textAlign="center" py={10}>
                                     <Spinner size="xl" color="teal.500" thickness="4px" />
@@ -5287,146 +5611,289 @@ const ScheduleMasterForm = () => {
                                     <Text color="gray.400">No schedules found for {viewDate}</Text>
                                 </Box>
                             ) : (
-                                <TableContainer whiteSpace="normal" overflow="hidden" w="full">
-                                    <Table variant="simple" size="sm" sx={{ 'td, th': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
-                                        <Thead bg="gray.50">
-                                            <Tr>
-                                                <Th py={4} color="gray.500" fontSize="10px" whiteSpace="nowrap">DATE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">CLIENT & SITE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">OPERATIVE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">HELPER</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">VEHICLE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">INSTRUMENT</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">TYPE</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">STATUS</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px" maxW="200px">REJECT REASON</Th>
-                                                <Th py={4} color="gray.500" fontSize="10px">ACTIONS</Th>
-                                            </Tr>
-                                        </Thead>
-                                        <Tbody>
-                                            {schedules.map((s) => (
-                                                <Tr 
-                                                    key={s._id} 
-                                                    _hover={{ bg: 'blue.50', transition: 'background 0.2s' }} 
-                                                    cursor="pointer" 
+                                <>
+                                    {/* ── Mobile Scheduler Cards (Phones & Tablets) ── */}
+                                    <VStack spacing={3} align="stretch" display={{ base: "flex", lg: "none" }}>
+                                        {schedules.map((s) => {
+                                            let remainingInstIds = s.instruments?.map(i => i._id || i) || [];
+                                            let groupsToRender = [];
+                                            if (instrumentGroups && instrumentGroups.length > 0) {
+                                                instrumentGroups.forEach(grp => {
+                                                    const groupInstIds = grp.instruments?.map(i => i._id || i) || [];
+                                                    if (groupInstIds.length > 0 && groupInstIds.every(id => remainingInstIds.includes(id))) {
+                                                        groupsToRender.push(grp);
+                                                        remainingInstIds = remainingInstIds.filter(id => !groupInstIds.includes(id));
+                                                    }
+                                                });
+                                            }
+                                            const individualInstrumentsToRender = (s.instruments || []).filter(inst => remainingInstIds.includes(inst._id || inst));
+
+                                            return (
+                                                <Card
+                                                    key={s._id}
+                                                    borderRadius="xl"
+                                                    border="1px solid"
+                                                    borderColor="gray.200"
+                                                    bg="white"
+                                                    shadow="xs"
+                                                    cursor="pointer"
+                                                    overflow="hidden"
+                                                    _active={{ transform: 'scale(0.98)', transition: 'transform 0.1s' }}
                                                     onClick={() => { setAssignTarget(s); onAssignOpen(); }}
                                                 >
-                                                    <Td py={3} whiteSpace="nowrap">
-                                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">
-                                                            {new Date(s.scheduleDate).toLocaleDateString('en-GB')}
-                                                        </Text>
-                                                    </Td>
-                                                    <Td py={3}>
-                                                        <VStack align="start" spacing={0}>
-                                                            <Text fontWeight="bold" fontSize="sm" color="gray.800">{s.site?.siteName}</Text>
-                                                            <Text fontSize="xs" color="gray.500">{s.client?.clientName}</Text>
-                                                            {s.workForAppley && <Text fontSize="xs" color="purple.600" mt={1}>Work For Apply: {s.workForAppley}</Text>}
-                                                        </VStack>
-                                                    </Td>
-                                                    <Td py={3}>
-                                                        <Text fontSize="sm" fontWeight="bold">
-                                                            {s.operative?.name || <Text as="span" color="red.400">Unassigned</Text>}
-                                                        </Text>
-                                                    </Td>
-                                                    <Td py={3} maxW="150px">
-                                                        {s.helpers?.length > 0 ? (
-                                                            <VStack align="start" spacing={1}>
-                                                                {s.helpers.map((h, idx) => (
-                                                                    <Text key={idx} fontSize="xs" color="teal.600" fontWeight="bold">
-                                                                        {h.name}
+                                                    <Box h="3px" bg={statusColors[s.dayStatus] ? `${statusColors[s.dayStatus]}.400` : 'blue.400'} />
+                                                    <CardBody p={3.5}>
+                                                        <VStack align="stretch" spacing={2.5}>
+                                                            {/* Row 1: Date, Status, Type */}
+                                                            <Flex justify="space-between" align="center" gap={2}>
+                                                                <HStack spacing={1.5}>
+                                                                    <Icon as={FaCalendarAlt} color="gray.400" w={3} h={3} />
+                                                                    <Text fontSize="xs" fontWeight="black" color="gray.700">
+                                                                        {new Date(s.scheduleDate).toLocaleDateString('en-GB')}
                                                                     </Text>
-                                                                ))}
-                                                            </VStack>
-                                                        ) : (
-                                                            <Text fontSize="xs" color="gray.400">--</Text>
-                                                        )}
-                                                    </Td>
-                                                    <Td py={3} maxW="150px">
-                                                        {s.vehicle ? (
-                                                            <Text fontSize="xs" color="orange.600" fontWeight="bold">
-                                                                {s.vehicle.vehicleName} ({s.vehicle.vehicleNumber})
-                                                            </Text>
-                                                        ) : (
-                                                            <Text fontSize="xs" color="gray.400">--</Text>
-                                                        )}
-                                                    </Td>
-                                                    <Td py={3} maxW="150px">
-                                                        {s.instruments?.length > 0 ? (
-                                                            <VStack align="start" spacing={1}>
-                                                                {(() => {
-                                                                    let remainingInstIds = s.instruments.map(i => i._id || i);
-                                                                    let groupsToRender = [];
-                                                                    
-                                                                    if (instrumentGroups && instrumentGroups.length > 0) {
-                                                                        instrumentGroups.forEach(grp => {
-                                                                            const groupInstIds = grp.instruments?.map(i => i._id || i) || [];
-                                                                            if (groupInstIds.length > 0 && groupInstIds.every(id => remainingInstIds.includes(id))) {
-                                                                                groupsToRender.push(grp);
-                                                                                remainingInstIds = remainingInstIds.filter(id => !groupInstIds.includes(id));
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                    
-                                                                    const individualInstrumentsToRender = s.instruments.filter(inst => remainingInstIds.includes(inst._id || inst));
-                                                                    
-                                                                    return (
-                                                                        <>
-                                                                            {groupsToRender.map((grp, idx) => (
-                                                                                <Text key={`grp-${idx}`} fontSize="xs" color="teal.600" fontWeight="bold">
-                                                                                    {grp.groupId} {grp.name ? `- ${grp.name}` : ''} (Group)
-                                                                                </Text>
-                                                                            ))}
-                                                                            {individualInstrumentsToRender.map((i, idx) => (
-                                                                                <Text key={`inst-${idx}`} fontSize="xs" color="purple.600" fontWeight="bold">
-                                                                                    {i.instrumentName} ({i.serialNo})
-                                                                                </Text>
-                                                                            ))}
-                                                                        </>
-                                                                    );
-                                                                })()}
-                                                            </VStack>
-                                                        ) : (
-                                                            <Text fontSize="xs" color="gray.400">--</Text>
-                                                        )}
-                                                    </Td>
-                                                    <Td py={3}>
-                                                        <VStack align="start" spacing={1}>
-                                                            {s.scheduleType && <Badge colorScheme="purple" fontSize="9px">{s.scheduleType}</Badge>}
-                                                            {s.scheduleType === 'MONTH' && s.monthGroupId && (
-                                                                <Badge colorScheme="blue" fontSize="8px">Grp ID: {s.monthGroupId}</Badge>
-                                                            )}
-                                                        </VStack>
-                                                    </Td>
-                                                    <Td py={3}>
-                                                        <Badge colorScheme={statusColors[s.dayStatus]} variant="solid">{s.dayStatus}</Badge>
-                                                    </Td>
-                                                    <Td py={3} maxW="200px">
-                                                        {s.dayStatus === 'Rejected' && s.rejectReason ? (
-                                                            <VStack align="start" spacing={0}>
-                                                                <HStack spacing={1}>
-                                                                    <Icon as={FaTimes} color="red.400" w={2.5} h={2.5} />
-                                                                    <Text fontSize="10px" fontWeight="bold" color="red.500" textTransform="uppercase">Reason</Text>
                                                                 </HStack>
-                                                                <Text fontSize="xs" color="red.600" fontStyle="italic" noOfLines={2} title={s.rejectReason}>
-                                                                    {s.rejectReason}
-                                                                </Text>
+                                                                <HStack spacing={1.5}>
+                                                                    {s.scheduleType && <Badge colorScheme="purple" fontSize="2xs">{s.scheduleType}</Badge>}
+                                                                    <Badge colorScheme={statusColors[s.dayStatus]} variant="solid" fontSize="2xs">{s.dayStatus}</Badge>
+                                                                </HStack>
+                                                            </Flex>
+
+                                                            {/* Row 2: Client & Site */}
+                                                            <VStack align="start" spacing={0.5} bg="gray.50" p={2.5} borderRadius="lg">
+                                                                <HStack spacing={1.5}>
+                                                                    <Icon as={FaMapMarkerAlt} color="teal.500" w={3.5} h={3.5} />
+                                                                    <Text fontWeight="black" fontSize="sm" color="gray.800" noOfLines={1}>{s.site?.siteName || 'Site'}</Text>
+                                                                </HStack>
+                                                                <HStack spacing={1.5} pl={5}>
+                                                                    <Icon as={FaBuilding} color="gray.400" w={3} h={3} />
+                                                                    <Text fontSize="xs" color="gray.600" fontWeight="bold" noOfLines={1}>{s.client?.clientName || 'Client'}</Text>
+                                                                </HStack>
+                                                                {s.workForAppley && (
+                                                                    <Text fontSize="2xs" color="purple.600" fontWeight="bold" pl={5} mt={0.5}>
+                                                                        Work For Apply: {s.workForAppley}
+                                                                    </Text>
+                                                                )}
                                                             </VStack>
-                                                        ) : (
-                                                            <Text fontSize="xs" color="gray.300">—</Text>
-                                                        )}
-                                                    </Td>
-                                                    <Td py={3} onClick={(e) => e.stopPropagation()}>
-                                                        <HStack spacing={2}>
-                                                            {s.dayStatus === 'Scheduled' && !s.hasExpenses && (
-                                                                <Button size="xs" colorScheme="red" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>Reject</Button>
+
+                                                            {/* Row 3: Operative & Helpers */}
+                                                            <Flex justify="space-between" align="flex-start" wrap="wrap" gap={2}>
+                                                                <VStack align="start" spacing={0.5}>
+                                                                    <Text fontSize="2xs" color="gray.400" fontWeight="bold" textTransform="uppercase">Operative</Text>
+                                                                    <HStack spacing={1}>
+                                                                        <Icon as={FaUserTie} color="blue.500" w={3} h={3} />
+                                                                        <Text fontSize="xs" fontWeight="bold" color={s.operative?.name ? "gray.800" : "red.400"}>
+                                                                            {s.operative?.name || "Unassigned"}
+                                                                        </Text>
+                                                                    </HStack>
+                                                                </VStack>
+
+                                                                {s.helpers?.length > 0 && (
+                                                                    <VStack align="flex-end" spacing={0.5}>
+                                                                        <Text fontSize="2xs" color="gray.400" fontWeight="bold" textTransform="uppercase">Helpers ({s.helpers.length})</Text>
+                                                                        <Wrap spacing={1} justify="flex-end">
+                                                                            {s.helpers.map((h, idx) => (
+                                                                                <Badge key={idx} colorScheme="teal" variant="subtle" fontSize="2xs" borderRadius="full">
+                                                                                    {h.name}
+                                                                                </Badge>
+                                                                            ))}
+                                                                        </Wrap>
+                                                                    </VStack>
+                                                                )}
+                                                            </Flex>
+
+                                                            {/* Row 4: Vehicle & Instruments */}
+                                                            {(s.vehicle || groupsToRender.length > 0 || individualInstrumentsToRender.length > 0) && (
+                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={2} pt={1} borderTop="1px dashed" borderColor="gray.100">
+                                                                    {s.vehicle && (
+                                                                        <HStack spacing={1}>
+                                                                            <Icon as={FaTruck} color="orange.500" w={3} h={3} />
+                                                                            <Text fontSize="2xs" color="orange.700" fontWeight="bold">
+                                                                                {s.vehicle.vehicleName} ({s.vehicle.vehicleNumber})
+                                                                            </Text>
+                                                                        </HStack>
+                                                                    )}
+                                                                    <Wrap spacing={1}>
+                                                                        {groupsToRender.map((grp, idx) => (
+                                                                            <Tag key={`grp-${idx}`} size="sm" colorScheme="teal" fontSize="2xs" borderRadius="full">
+                                                                                📦 {grp.groupId} {grp.name ? `- ${grp.name}` : ''}
+                                                                            </Tag>
+                                                                        ))}
+                                                                        {individualInstrumentsToRender.map((i, idx) => (
+                                                                            <Tag key={`inst-${idx}`} size="sm" colorScheme="purple" fontSize="2xs" borderRadius="full">
+                                                                                🔬 {i.instrumentName} ({i.serialNo})
+                                                                            </Tag>
+                                                                        ))}
+                                                                    </Wrap>
+                                                                </Flex>
                                                             )}
-                                                        </HStack>
-                                                    </Td>
+
+                                                            {/* Reject Reason if any */}
+                                                            {s.dayStatus === 'Rejected' && s.rejectReason && (
+                                                                <Box bg="red.50" p={2} borderRadius="md" border="1px solid" borderColor="red.200">
+                                                                    <Text fontSize="2xs" color="red.700" fontStyle="italic">
+                                                                        <strong>Reject Reason:</strong> {s.rejectReason}
+                                                                    </Text>
+                                                                </Box>
+                                                            )}
+
+                                                            {/* Action button row */}
+                                                            <Flex justify="space-between" align="center" pt={1} borderTop="1px dashed" borderColor="gray.200" onClick={(e) => e.stopPropagation()}>
+                                                                <Text fontSize="2xs" color="blue.600" fontWeight="bold">Tap to edit resources</Text>
+                                                                {s.dayStatus === 'Scheduled' && !s.hasExpenses && (
+                                                                    <Button size="xs" colorScheme="red" variant="outline" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>
+                                                                        Reject
+                                                                    </Button>
+                                                                )}
+                                                            </Flex>
+                                                        </VStack>
+                                                    </CardBody>
+                                                </Card>
+                                            );
+                                        })}
+                                    </VStack>
+
+                                    {/* ── Desktop Table View (Laptops & Desktops) ── */}
+                                    <TableContainer whiteSpace="normal" overflow="hidden" w="full" display={{ base: "none", lg: "block" }}>
+                                        <Table variant="simple" size="sm" sx={{ 'td, th': { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+                                            <Thead bg="gray.50">
+                                                <Tr>
+                                                    <Th py={4} color="gray.500" fontSize="10px" whiteSpace="nowrap">DATE</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">CLIENT & SITE</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">OPERATIVE</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">HELPER</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">VEHICLE</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">INSTRUMENT</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">TYPE</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">STATUS</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px" maxW="200px">REJECT REASON</Th>
+                                                    <Th py={4} color="gray.500" fontSize="10px">ACTIONS</Th>
                                                 </Tr>
-                                            ))}
-                                        </Tbody>
-                                    </Table>
-                                </TableContainer>
+                                            </Thead>
+                                            <Tbody>
+                                                {schedules.map((s) => (
+                                                    <Tr 
+                                                        key={s._id} 
+                                                        _hover={{ bg: 'blue.50', transition: 'background 0.2s' }} 
+                                                        cursor="pointer" 
+                                                        onClick={() => { setAssignTarget(s); onAssignOpen(); }}
+                                                    >
+                                                        <Td py={3} whiteSpace="nowrap">
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.700">
+                                                                {new Date(s.scheduleDate).toLocaleDateString('en-GB')}
+                                                            </Text>
+                                                        </Td>
+                                                        <Td py={3}>
+                                                            <VStack align="start" spacing={0}>
+                                                                <Text fontWeight="bold" fontSize="sm" color="gray.800">{s.site?.siteName}</Text>
+                                                                <Text fontSize="xs" color="gray.500">{s.client?.clientName}</Text>
+                                                                {s.workForAppley && <Text fontSize="xs" color="purple.600" mt={1}>Work For Apply: {s.workForAppley}</Text>}
+                                                            </VStack>
+                                                        </Td>
+                                                        <Td py={3}>
+                                                            <Text fontSize="sm" fontWeight="bold">
+                                                                {s.operative?.name || <Text as="span" color="red.400">Unassigned</Text>}
+                                                            </Text>
+                                                        </Td>
+                                                        <Td py={3} maxW="150px">
+                                                            {s.helpers?.length > 0 ? (
+                                                                <VStack align="start" spacing={1}>
+                                                                    {s.helpers.map((h, idx) => (
+                                                                        <Text key={idx} fontSize="xs" color="teal.600" fontWeight="bold">
+                                                                            {h.name}
+                                                                        </Text>
+                                                                    ))}
+                                                                </VStack>
+                                                            ) : (
+                                                                <Text fontSize="xs" color="gray.400">--</Text>
+                                                            )}
+                                                        </Td>
+                                                        <Td py={3} maxW="150px">
+                                                            {s.vehicle ? (
+                                                                <Text fontSize="xs" color="orange.600" fontWeight="bold">
+                                                                    {s.vehicle.vehicleName} ({s.vehicle.vehicleNumber})
+                                                                </Text>
+                                                            ) : (
+                                                                <Text fontSize="xs" color="gray.400">--</Text>
+                                                            )}
+                                                        </Td>
+                                                        <Td py={3} maxW="150px">
+                                                            {s.instruments?.length > 0 ? (
+                                                                <VStack align="start" spacing={1}>
+                                                                    {(() => {
+                                                                        let remainingInstIds = s.instruments.map(i => i._id || i);
+                                                                        let groupsToRender = [];
+                                                                        
+                                                                        if (instrumentGroups && instrumentGroups.length > 0) {
+                                                                            instrumentGroups.forEach(grp => {
+                                                                                const groupInstIds = grp.instruments?.map(i => i._id || i) || [];
+                                                                                if (groupInstIds.length > 0 && groupInstIds.every(id => remainingInstIds.includes(id))) {
+                                                                                    groupsToRender.push(grp);
+                                                                                    remainingInstIds = remainingInstIds.filter(id => !groupInstIds.includes(id));
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                        
+                                                                        const individualInstrumentsToRender = s.instruments.filter(inst => remainingInstIds.includes(inst._id || inst));
+                                                                        
+                                                                        return (
+                                                                            <>
+                                                                                {groupsToRender.map((grp, idx) => (
+                                                                                    <Text key={`grp-${idx}`} fontSize="xs" color="teal.600" fontWeight="bold">
+                                                                                        {grp.groupId} {grp.name ? `- ${grp.name}` : ''} (Group)
+                                                                                    </Text>
+                                                                                ))}
+                                                                                {individualInstrumentsToRender.map((i, idx) => (
+                                                                                    <Text key={`inst-${idx}`} fontSize="xs" color="purple.600" fontWeight="bold">
+                                                                                        {i.instrumentName} ({i.serialNo})
+                                                                                    </Text>
+                                                                                ))}
+                                                                            </>
+                                                                        );
+                                                                    })()}
+                                                                </VStack>
+                                                            ) : (
+                                                                <Text fontSize="xs" color="gray.400">--</Text>
+                                                            )}
+                                                        </Td>
+                                                        <Td py={3}>
+                                                            <VStack align="start" spacing={1}>
+                                                                {s.scheduleType && <Badge colorScheme="purple" fontSize="9px">{s.scheduleType}</Badge>}
+                                                                {s.scheduleType === 'MONTH' && s.monthGroupId && (
+                                                                    <Badge colorScheme="blue" fontSize="8px">Grp ID: {s.monthGroupId}</Badge>
+                                                                )}
+                                                            </VStack>
+                                                        </Td>
+                                                        <Td py={3}>
+                                                            <Badge colorScheme={statusColors[s.dayStatus]} variant="solid">{s.dayStatus}</Badge>
+                                                        </Td>
+                                                        <Td py={3} maxW="200px">
+                                                            {s.dayStatus === 'Rejected' && s.rejectReason ? (
+                                                                <VStack align="start" spacing={0}>
+                                                                    <HStack spacing={1}>
+                                                                        <Icon as={FaTimes} color="red.400" w={2.5} h={2.5} />
+                                                                        <Text fontSize="10px" fontWeight="bold" color="red.500" textTransform="uppercase">Reason</Text>
+                                                                    </HStack>
+                                                                    <Text fontSize="xs" color="red.600" fontStyle="italic" noOfLines={2} title={s.rejectReason}>
+                                                                        {s.rejectReason}
+                                                                    </Text>
+                                                                </VStack>
+                                                            ) : (
+                                                                <Text fontSize="xs" color="gray.300">—</Text>
+                                                            )}
+                                                        </Td>
+                                                        <Td py={3} onClick={(e) => e.stopPropagation()}>
+                                                            <HStack spacing={2}>
+                                                                {s.dayStatus === 'Scheduled' && !s.hasExpenses && (
+                                                                    <Button size="xs" colorScheme="red" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>Reject</Button>
+                                                                )}
+                                                            </HStack>
+                                                        </Td>
+                                                    </Tr>
+                                                ))}
+                                            </Tbody>
+                                        </Table>
+                                    </TableContainer>
+                                </>
                             )}
                         </CardBody>
                     </Card>
@@ -6997,65 +7464,104 @@ const InstrumentMasterForm = () => {
         return instruments.filter(inst => !otherGroupInstIds.includes(inst._id));
     };
 
-    // Helper counts and lookups
-    const parentInstruments = instruments.filter(i => !i.parentInstrumentId);
-    const childInstruments = instruments.filter(i => !!i.parentInstrumentId);
-    const groupedInstrumentIds = new Set(groups.flatMap(g => g.instruments?.map(i => i._id || i) || []));
+    // Helper counts and memoized O(1) lookups
+    const parentInstruments = useMemo(() => instruments.filter(i => !i.parentInstrumentId), [instruments]);
+    const childInstruments = useMemo(() => instruments.filter(i => !!i.parentInstrumentId), [instruments]);
+    const groupedInstrumentIds = useMemo(() => new Set(groups.flatMap(g => g.instruments?.map(i => i._id || i) || [])), [groups]);
+
+    const childrenMap = useMemo(() => {
+        const map = new Map();
+        instruments.forEach(i => {
+            if (i.parentInstrumentId) {
+                const pid = String(i.parentInstrumentId);
+                if (!map.has(pid)) map.set(pid, []);
+                map.get(pid).push(i);
+            }
+        });
+        return map;
+    }, [instruments]);
+
+    const parentsMap = useMemo(() => {
+        const map = new Map();
+        instruments.forEach(i => {
+            map.set(String(i._id), i);
+        });
+        return map;
+    }, [instruments]);
+
+    const groupMap = useMemo(() => {
+        const map = new Map();
+        groups.forEach(g => {
+            g.instruments?.forEach(i => {
+                const id = String(i._id || i);
+                map.set(id, g);
+            });
+        });
+        return map;
+    }, [groups]);
 
     const getParentOf = (child) => {
         if (!child.parentInstrumentId) return null;
-        return instruments.find(i => String(i._id) === String(child.parentInstrumentId));
+        return parentsMap.get(String(child.parentInstrumentId)) || null;
     };
 
     const getChildrenOf = (parentId) => {
-        return instruments.filter(i => String(i.parentInstrumentId) === String(parentId));
+        return childrenMap.get(String(parentId)) || [];
     };
 
     const getGroupOf = (instId) => {
-        return groups.find(g => g.instruments?.some(i => (i._id || i) === instId));
+        return groupMap.get(String(instId)) || null;
     };
 
     // Filter instruments for View tab
-    const filteredInstruments = instruments.filter(inst => {
-        const matchesSearch = searchQuery === '' || 
-            (inst.serialNo && inst.serialNo.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (inst.instrumentName && inst.instrumentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (inst.model && inst.model.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (inst.notes && inst.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredInstruments = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        return instruments.filter(inst => {
+            const matchesSearch = q === '' || 
+                (inst.serialNo && inst.serialNo.toLowerCase().includes(q)) ||
+                (inst.instrumentName && inst.instrumentName.toLowerCase().includes(q)) ||
+                (inst.model && inst.model.toLowerCase().includes(q)) ||
+                (inst.notes && inst.notes.toLowerCase().includes(q));
 
-        if (!matchesSearch) return false;
+            if (!matchesSearch) return false;
 
-        if (filterCategory === 'parents') return !inst.parentInstrumentId;
-        if (filterCategory === 'children') return !!inst.parentInstrumentId;
-        if (filterCategory === 'grouped') return groupedInstrumentIds.has(inst._id);
-        if (filterCategory === 'ungrouped') return !groupedInstrumentIds.has(inst._id);
-        return true;
-    });
+            if (filterCategory === 'parents') return !inst.parentInstrumentId;
+            if (filterCategory === 'children') return !!inst.parentInstrumentId;
+            if (filterCategory === 'grouped') return groupedInstrumentIds.has(inst._id);
+            if (filterCategory === 'ungrouped') return !groupedInstrumentIds.has(inst._id);
+            return true;
+        });
+    }, [instruments, searchQuery, filterCategory, groupedInstrumentIds]);
 
     // Parent hierarchy list for Hierarchy View
-    const filteredParentInstruments = parentInstruments.filter(p => {
-        if (filterCategory === 'children') return false;
-        
-        const pChildren = getChildrenOf(p._id);
-        const matchesParent = searchQuery === '' ||
-            (p.serialNo && p.serialNo.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (p.instrumentName && p.instrumentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (p.model && p.model.toLowerCase().includes(searchQuery.toLowerCase()));
-        
-        const matchesChildren = pChildren.some(c => 
-            (c.serialNo && c.serialNo.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (c.instrumentName && c.instrumentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (c.model && c.model.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
+    const filteredParentInstruments = useMemo(() => {
+        if (filterCategory === 'children') return [];
+        const q = searchQuery.toLowerCase().trim();
 
-        if (!matchesParent && !matchesChildren) return false;
+        return parentInstruments.filter(p => {
+            const pChildren = childrenMap.get(String(p._id)) || [];
+            const matchesParent = q === '' ||
+                (p.serialNo && p.serialNo.toLowerCase().includes(q)) ||
+                (p.instrumentName && p.instrumentName.toLowerCase().includes(q)) ||
+                (p.model && p.model.toLowerCase().includes(q));
+            
+            const matchesChildren = pChildren.some(c => 
+                (c.serialNo && c.serialNo.toLowerCase().includes(q)) ||
+                (c.instrumentName && c.instrumentName.toLowerCase().includes(q)) ||
+                (c.model && c.model.toLowerCase().includes(q))
+            );
 
-        if (filterCategory === 'grouped') return groupedInstrumentIds.has(p._id);
-        if (filterCategory === 'ungrouped') return !groupedInstrumentIds.has(p._id);
-        return true;
-    });
+            if (!matchesParent && !matchesChildren) return false;
 
-    const orphanChildren = childInstruments.filter(c => !instruments.some(p => String(p._id) === String(c.parentInstrumentId)));
+            if (filterCategory === 'grouped') return groupedInstrumentIds.has(p._id);
+            if (filterCategory === 'ungrouped') return !groupedInstrumentIds.has(p._id);
+            return true;
+        });
+    }, [parentInstruments, childrenMap, searchQuery, filterCategory, groupedInstrumentIds]);
+
+    const orphanChildren = useMemo(() => {
+        return childInstruments.filter(c => !parentsMap.has(String(c.parentInstrumentId)));
+    }, [childInstruments, parentsMap]);
 
     const openViewModal = (inst) => {
         setViewInstrument(inst);
@@ -7063,13 +7569,13 @@ const InstrumentMasterForm = () => {
     };
 
     return (
-        <Box py={6} bg="gray.50" minH="100vh">
-            <Container maxW="container.xl" px={{ base: 3, md: 6 }}>
+        <Box py={{ base: 3, md: 6 }} bg="gray.50" minH="100vh" pb={{ base: "90px", md: 10 }}>
+            <Container maxW="container.xl" px={{ base: 2, sm: 3, md: 6 }}>
                 
                 {/* ── Main Dashboard Header ── */}
                 <Box
-                    mb={6}
-                    p={{ base: 5, md: 7 }}
+                    mb={{ base: 4, md: 6 }}
+                    p={{ base: 4, sm: 5, md: 7 }}
                     borderRadius="2xl"
                     color="white"
                     bgGradient="linear(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%)"
@@ -7077,26 +7583,26 @@ const InstrumentMasterForm = () => {
                     position="relative"
                     overflow="hidden"
                 >
-                    <Box position="absolute" right="-20px" top="-20px" opacity={0.1}>
+                    <Box position="absolute" right="-20px" top="-20px" opacity={0.1} display={{ base: 'none', sm: 'block' }}>
                         <Icon as={FaWrench} boxSize="180px" />
                     </Box>
                     <Flex justify="space-between" align={{ base: 'start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap={4} position="relative" zIndex={1}>
-                        <HStack spacing={4}>
-                            <Center boxSize="54px" borderRadius="xl" bg="whiteAlpha.200" backdropFilter="blur(8px)" border="1px solid" borderColor="whiteAlpha.300">
-                                <Icon as={FaWrench} boxSize={6} color="white" />
+                        <HStack spacing={{ base: 3, md: 4 }} align="center">
+                            <Center boxSize={{ base: "44px", md: "54px" }} borderRadius="xl" bg="whiteAlpha.200" backdropFilter="blur(8px)" border="1px solid" borderColor="whiteAlpha.300" flexShrink={0}>
+                                <Icon as={FaWrench} boxSize={{ base: 5, md: 6 }} color="white" />
                             </Center>
                             <VStack align="start" spacing={0}>
-                                <Heading size="lg" fontWeight="extrabold" letterSpacing="tight">Instrument Master</Heading>
-                                <Text fontSize="sm" opacity={0.9}>
+                                <Heading size={{ base: "md", md: "lg" }} fontWeight="extrabold" letterSpacing="tight">Instrument Master</Heading>
+                                <Text fontSize={{ base: "xs", md: "sm" }} opacity={0.9}>
                                     Register instruments, attach child accessories with photos, view kits, and manage groups.
                                 </Text>
                             </VStack>
                         </HStack>
 
-                        <HStack spacing={3} wrap="wrap">
-                            <Tag size="lg" bg="whiteAlpha.200" color="white" borderRadius="full" px={4} py={2} border="1px solid" borderColor="whiteAlpha.300">
-                                <Icon as={FaCube} mr={2} />
-                                <Text fontWeight="bold">{instruments.length} Instruments</Text>
+                        <HStack spacing={2} wrap="wrap" w={{ base: "full", md: "auto" }} justify={{ base: "space-between", md: "flex-end" }}>
+                            <Tag size={{ base: "md", md: "lg" }} bg="whiteAlpha.200" color="white" borderRadius="full" px={{ base: 3, md: 4 }} py={{ base: 1.5, md: 2 }} border="1px solid" borderColor="whiteAlpha.300">
+                                <Icon as={FaCube} mr={1.5} />
+                                <Text fontWeight="bold" fontSize={{ base: "xs", md: "sm" }}>{instruments.length} Instruments</Text>
                             </Tag>
                             {editId && (
                                 <Button
@@ -7109,8 +7615,9 @@ const InstrumentMasterForm = () => {
                                     px={4}
                                     onClick={handleClear}
                                     shadow="md"
+                                    fontSize="xs"
                                 >
-                                    + Add New Instrument
+                                    + New Instrument
                                 </Button>
                             )}
                         </HStack>
@@ -7119,7 +7626,7 @@ const InstrumentMasterForm = () => {
 
                 {/* ── Main Tab Navigation ── */}
                 {tabConfig.length === 0 ? (
-                    <Card borderRadius="2xl" p={10} textAlign="center" bg="white" shadow="sm">
+                    <Card borderRadius="2xl" p={{ base: 6, md: 10 }} textAlign="center" bg="white" shadow="sm">
                         <VStack spacing={3}>
                             <Icon as={FaWrench} boxSize={12} color="red.400" />
                             <Heading size="md" color="gray.700">Access Denied</Heading>
@@ -7127,17 +7634,23 @@ const InstrumentMasterForm = () => {
                         </VStack>
                     </Card>
                 ) : (
-                    <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} variant="unstyled" isLazy>
+                    <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} variant="unstyled" isLazy lazyBehavior="unmount">
                         <TabList
-                            mb={6}
+                            mb={{ base: 4, md: 6 }}
                             bg="white"
-                            p={2}
+                            p={{ base: 1.5, md: 2 }}
                             borderRadius="2xl"
                             boxShadow="sm"
                             border="1px solid"
                             borderColor="gray.200"
-                            gap={2}
+                            gap={{ base: 1.5, md: 2 }}
                             overflowX="auto"
+                            whiteSpace="nowrap"
+                            sx={{
+                                WebkitOverflowScrolling: 'touch',
+                                scrollbarWidth: 'none',
+                                '&::-webkit-scrollbar': { display: 'none' }
+                            }}
                         >
                             {tabConfig.map((t, idx) => {
                                 const isSelected = activeTab === idx;
@@ -7145,10 +7658,10 @@ const InstrumentMasterForm = () => {
                                     <Tab
                                         key={t.id}
                                         fontWeight="bold"
-                                        fontSize="sm"
+                                        fontSize={{ base: "xs", md: "sm" }}
                                         borderRadius="xl"
-                                        px={6}
-                                        py={3}
+                                        px={{ base: 3.5, md: 6 }}
+                                        py={{ base: 2, md: 3 }}
                                         display="flex"
                                         alignItems="center"
                                         gap={2}
@@ -7157,16 +7670,17 @@ const InstrumentMasterForm = () => {
                                         boxShadow={isSelected ? '0 4px 12px rgba(37, 99, 235, 0.3)' : 'none'}
                                         _hover={{ bg: isSelected ? 'blue.600' : 'gray.100' }}
                                         transition="all 0.2s"
+                                        flexShrink={0}
                                     >
                                         <Icon as={t.icon} />
                                         {t.label}
                                         {t.id === 'view' && (
-                                            <Badge ml={2} colorScheme={isSelected ? 'whiteAlpha' : 'blue'} borderRadius="full" px={2}>
+                                            <Badge ml={1.5} colorScheme={isSelected ? 'whiteAlpha' : 'blue'} borderRadius="full" px={2} fontSize="0.7rem">
                                                 {instruments.length}
                                             </Badge>
                                         )}
                                         {t.id === 'groups' && (
-                                            <Badge ml={2} colorScheme={isSelected ? 'whiteAlpha' : 'purple'} borderRadius="full" px={2}>
+                                            <Badge ml={1.5} colorScheme={isSelected ? 'whiteAlpha' : 'purple'} borderRadius="full" px={2} fontSize="0.7rem">
                                                 {groups.length}
                                             </Badge>
                                         )}
@@ -7186,21 +7700,21 @@ const InstrumentMasterForm = () => {
                                             
                                             {/* Form Card Header Banner */}
                                             <Box
-                                                px={{ base: 6, md: 8 }}
-                                                py={5}
+                                                px={{ base: 4, sm: 6, md: 8 }}
+                                                py={{ base: 3.5, md: 5 }}
                                                 color="white"
                                                 bgGradient={editId ? 'linear(to-r, purple.700, indigo.600)' : 'linear(to-r, blue.700, blue.600)'}
                                             >
                                                 <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
                                                     <HStack spacing={3}>
-                                                        <Center boxSize="40px" borderRadius="lg" bg="whiteAlpha.200">
+                                                        <Center boxSize={{ base: "34px", md: "40px" }} borderRadius="lg" bg="whiteAlpha.200" flexShrink={0}>
                                                             <Icon as={editId ? FaEdit : FaPlus} />
                                                         </Center>
                                                         <VStack align="start" spacing={0}>
-                                                            <Heading size="md">
+                                                            <Heading size={{ base: "sm", md: "md" }}>
                                                                 {editId ? 'Edit Instrument & Accessories' : 'Register New Instrument'}
                                                             </Heading>
-                                                            <Text fontSize="xs" opacity={0.85}>
+                                                            <Text fontSize={{ base: "2xs", sm: "xs" }} opacity={0.85}>
                                                                 Serial number is required. Add photos and designate primary photo for parent and child accessories.
                                                             </Text>
                                                         </VStack>
@@ -7214,15 +7728,15 @@ const InstrumentMasterForm = () => {
                                                 </Flex>
                                             </Box>
 
-                                            <CardBody px={{ base: 6, md: 8 }} py={6}>
-                                                <VStack spacing={7} align="stretch">
+                                            <CardBody px={{ base: 3.5, sm: 6, md: 8 }} py={{ base: 4, md: 6 }}>
+                                                <VStack spacing={{ base: 5, md: 7 }} align="stretch">
 
                                                     {/* Primary Specs Grid */}
                                                     <Box>
                                                         <Text fontSize="xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider" mb={3}>
                                                             1. Instrument Details
                                                         </Text>
-                                                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={5}>
+                                                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={{ base: 3.5, md: 5 }}>
                                                             <FormControl isRequired>
                                                                 <FormLabel fontWeight="bold" fontSize="sm" color="gray.700">
                                                                     <Icon as={FaTag} mr={1} color="orange.500" /> Serial No *
@@ -7238,6 +7752,8 @@ const InstrumentMasterForm = () => {
                                                                     borderColor="gray.300"
                                                                     _focus={{ bg: 'white', borderColor: 'blue.500' }}
                                                                     fontWeight="semibold"
+                                                                    h={{ base: "42px", md: "46px" }}
+                                                                    fontSize="sm"
                                                                 />
                                                             </FormControl>
 
@@ -7255,6 +7771,8 @@ const InstrumentMasterForm = () => {
                                                                     border="1px solid"
                                                                     borderColor="gray.300"
                                                                     _focus={{ bg: 'white', borderColor: 'blue.500' }}
+                                                                    h={{ base: "42px", md: "46px" }}
+                                                                    fontSize="sm"
                                                                 />
                                                             </FormControl>
 
@@ -7272,6 +7790,8 @@ const InstrumentMasterForm = () => {
                                                                     border="1px solid"
                                                                     borderColor="gray.300"
                                                                     _focus={{ bg: 'white', borderColor: 'blue.500' }}
+                                                                    h={{ base: "42px", md: "46px" }}
+                                                                    fontSize="sm"
                                                                 />
                                                             </FormControl>
                                                         </SimpleGrid>
@@ -7281,11 +7801,11 @@ const InstrumentMasterForm = () => {
 
                                                     {/* Photo Gallery Upload Dropzone */}
                                                     <Box>
-                                                        <Flex justify="space-between" align="center" mb={3}>
+                                                        <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
                                                             <Text fontSize="xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider">
                                                                 2. Parent Instrument Photos <Text as="span" color="gray.400" fontWeight="normal">(Optional)</Text>
                                                             </Text>
-                                                            <Badge colorScheme="blue" borderRadius="full" px={3}>
+                                                            <Badge colorScheme="blue" borderRadius="full" px={2.5} py={0.5} fontSize="2xs">
                                                                 {existingPhotos.length + newPhotos.length} Photo(s) Attached
                                                             </Badge>
                                                         </Flex>
@@ -7295,7 +7815,7 @@ const InstrumentMasterForm = () => {
                                                             border="2px dashed"
                                                             borderColor="blue.300"
                                                             borderRadius="2xl"
-                                                            p={5}
+                                                            p={{ base: 3.5, md: 5 }}
                                                             bg="blue.50"
                                                             cursor="pointer"
                                                             onClick={() => document.getElementById('instr-photo-upload').click()}
@@ -7312,15 +7832,15 @@ const InstrumentMasterForm = () => {
                                                                 accept="image/*"
                                                             />
                                                             <HStack justify="center" spacing={3}>
-                                                                <Center boxSize="40px" borderRadius="full" bg="blue.100" color="blue.600">
+                                                                <Center boxSize={{ base: "36px", md: "40px" }} borderRadius="full" bg="blue.100" color="blue.600" flexShrink={0}>
                                                                     <Icon as={FaCloudUploadAlt} boxSize={5} />
                                                                 </Center>
                                                                 <VStack align="start" spacing={0}>
-                                                                    <Text fontSize="sm" fontWeight="bold" color="blue.800">
-                                                                        Click to Upload Parent Instrument Photos
+                                                                    <Text fontSize={{ base: "xs", md: "sm" }} fontWeight="bold" color="blue.800">
+                                                                        Click to Upload Parent Photos
                                                                     </Text>
-                                                                    <Text fontSize="xs" color="gray.500">
-                                                                        PNG, JPG, WebP supported. The first photo is set as primary.
+                                                                    <Text fontSize="2xs" color="gray.500">
+                                                                        PNG, JPG, WebP supported. First photo is set as primary.
                                                                     </Text>
                                                                 </VStack>
                                                             </HStack>
@@ -7328,7 +7848,7 @@ const InstrumentMasterForm = () => {
 
                                                         {/* Photos Preview Grid */}
                                                         {(existingPhotos.length > 0 || newPhotos.length > 0) && (
-                                                            <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing={4} mt={4}>
+                                                            <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing={{ base: 2.5, md: 4 }} mt={3}>
                                                                 {existingPhotos.map((url, i) => (
                                                                     <Box
                                                                         key={`existing-${i}`}
@@ -7344,25 +7864,25 @@ const InstrumentMasterForm = () => {
                                                                             src={`${API_BASE_URL}${url}`}
                                                                             alt="Inst"
                                                                             w="full"
-                                                                            h="100px"
+                                                                            h={{ base: "90px", md: "100px" }}
                                                                             objectFit="cover"
                                                                             cursor="pointer"
                                                                             onClick={() => setLightboxPhoto(`${API_BASE_URL}${url}`)}
                                                                         />
                                                                         {i === 0 ? (
-                                                                            <Badge position="absolute" top={1.5} left={1.5} colorScheme="blue" fontSize="0.65rem" borderRadius="md" px={1.5} fontWeight="bold">
+                                                                            <Badge position="absolute" top={1} left={1} colorScheme="blue" fontSize="2xs" borderRadius="md" px={1.5} fontWeight="bold">
                                                                                 ⭐ PRIMARY
                                                                             </Badge>
                                                                         ) : (
                                                                             <Button
                                                                                 size="xs"
                                                                                 position="absolute"
-                                                                                bottom={1.5}
-                                                                                left={1.5}
+                                                                                bottom={1}
+                                                                                left={1}
                                                                                 colorScheme="blue"
-                                                                                fontSize="0.65rem"
-                                                                                h="20px"
-                                                                                px={2}
+                                                                                fontSize="2xs"
+                                                                                h="18px"
+                                                                                px={1.5}
                                                                                 borderRadius="md"
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
@@ -7381,8 +7901,8 @@ const InstrumentMasterForm = () => {
                                                                             size="xs"
                                                                             colorScheme="red"
                                                                             position="absolute"
-                                                                            top={1.5}
-                                                                            right={1.5}
+                                                                            top={1}
+                                                                            right={1}
                                                                             borderRadius="full"
                                                                             onClick={(e) => { e.stopPropagation(); removeExistingPhoto(i); }}
                                                                         />
@@ -7407,36 +7927,36 @@ const InstrumentMasterForm = () => {
                                                                                 src={blobUrl}
                                                                                 alt="New"
                                                                                 w="full"
-                                                                                h="100px"
+                                                                                h={{ base: "90px", md: "100px" }}
                                                                                 objectFit="cover"
                                                                                 cursor="pointer"
                                                                                 onClick={() => setLightboxPhoto(blobUrl)}
                                                                             />
                                                                             {isAbsolutePrimary ? (
-                                                                                <Badge position="absolute" top={1.5} left={1.5} colorScheme="green" fontSize="0.65rem" borderRadius="md" px={1.5} fontWeight="bold">
+                                                                                <Badge position="absolute" top={1} left={1} colorScheme="green" fontSize="2xs" borderRadius="md" px={1.5} fontWeight="bold">
                                                                                     ⭐ PRIMARY
                                                                                 </Badge>
                                                                             ) : (
-                                                                                <Button
-                                                                                    size="xs"
-                                                                                    position="absolute"
-                                                                                    bottom={1.5}
-                                                                                    left={1.5}
-                                                                                    colorScheme="green"
-                                                                                    fontSize="0.65rem"
-                                                                                    h="20px"
-                                                                                    px={2}
-                                                                                    borderRadius="md"
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        const arr = [...newPhotos];
-                                                                                        const [item] = arr.splice(i, 1);
-                                                                                        arr.unshift(item);
-                                                                                        setNewPhotos(arr);
-                                                                                    }}
-                                                                                >
-                                                                                    Make Primary
-                                                                                </Button>
+                                                                            <Button
+                                                                                size="xs"
+                                                                                position="absolute"
+                                                                                bottom={1}
+                                                                                left={1}
+                                                                                colorScheme="green"
+                                                                                fontSize="2xs"
+                                                                                h="18px"
+                                                                                px={1.5}
+                                                                                borderRadius="md"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    const arr = [...newPhotos];
+                                                                                    const [item] = arr.splice(i, 1);
+                                                                                    arr.unshift(item);
+                                                                                    setNewPhotos(arr);
+                                                                                }}
+                                                                            >
+                                                                                Make Primary
+                                                                            </Button>
                                                                             )}
                                                                             <IconButton
                                                                                 aria-label="Remove Photo"
@@ -7444,8 +7964,8 @@ const InstrumentMasterForm = () => {
                                                                                 size="xs"
                                                                                 colorScheme="red"
                                                                                 position="absolute"
-                                                                                top={1.5}
-                                                                                right={1.5}
+                                                                                top={1}
+                                                                                right={1}
                                                                                 borderRadius="full"
                                                                                 onClick={(e) => { e.stopPropagation(); removeNewPhoto(i); }}
                                                                             />
@@ -7473,6 +7993,7 @@ const InstrumentMasterForm = () => {
                                                             border="1px solid"
                                                             borderColor="gray.300"
                                                             rows={2}
+                                                            fontSize="sm"
                                                         />
                                                     </Box>
 
@@ -7480,7 +8001,7 @@ const InstrumentMasterForm = () => {
                                                     {/* ── 4. COMPLETE IN-FORM CHILD INSTRUMENTS WITH PRIMARY PHOTOS ── */}
                                                     {/* ══════════════════════════════════════════════════════════════ */}
                                                     <Box
-                                                        p={{ base: 4, md: 6 }}
+                                                        p={{ base: 3, sm: 4, md: 6 }}
                                                         borderRadius="2xl"
                                                         border="1.5px solid"
                                                         borderColor="blue.200"
@@ -7491,7 +8012,7 @@ const InstrumentMasterForm = () => {
                                                             <VStack align="start" spacing={0}>
                                                                 <HStack>
                                                                     <Icon as={FaMicrochip} color="blue.600" boxSize={5} />
-                                                                    <Heading size="sm" color="blue.900">
+                                                                    <Heading size={{ base: "xs", md: "sm" }} color="blue.900">
                                                                         Child Instruments & Accessories ({formChildren.length})
                                                                     </Heading>
                                                                 </HStack>
@@ -7510,33 +8031,35 @@ const InstrumentMasterForm = () => {
                                                                 px={4}
                                                                 shadow="md"
                                                                 fontWeight="bold"
+                                                                w={{ base: "full", sm: "auto" }}
+                                                                fontSize="xs"
                                                             >
-                                                                + Add Child Instrument
+                                                                + Add Child Accessory
                                                             </Button>
                                                         </Flex>
 
                                                         {/* Child Instruments Cards in Form */}
-                                                        <VStack align="stretch" spacing={4}>
+                                                        <VStack align="stretch" spacing={3}>
                                                             {formChildren.map((child, idx) => {
                                                                 const totalChildPhotos = (child.existingPhotos?.length || 0) + (child.photoPreviews?.length || 0);
 
                                                                 return (
                                                                     <Card
                                                                         key={child.tempId}
-                                                                        p={4}
+                                                                        p={{ base: 3, md: 4 }}
                                                                         bg="white"
                                                                         borderRadius="xl"
                                                                         border="1.5px solid"
                                                                         borderColor={child._id ? "blue.300" : "green.300"}
                                                                         boxShadow="sm"
                                                                     >
-                                                                        <Flex justify="space-between" align="center" mb={3}>
-                                                                            <HStack>
-                                                                                <Badge colorScheme={child._id ? "blue" : "green"} borderRadius="md" px={2.5} py={0.5} fontWeight="bold">
-                                                                                    {child._id ? `Child Accessory #${idx + 1}` : `New Child Row #${idx + 1}`}
+                                                                        <Flex justify="space-between" align="center" mb={2.5}>
+                                                                            <HStack spacing={2}>
+                                                                                <Badge colorScheme={child._id ? "blue" : "green"} borderRadius="md" px={2} py={0.5} fontWeight="bold" fontSize="2xs">
+                                                                                    {child._id ? `Child #${idx + 1}` : `New Child #${idx + 1}`}
                                                                                 </Badge>
-                                                                                <Text fontSize="xs" color="gray.500">
-                                                                                    {child._id ? 'Saved in database (Editable)' : 'Ready to save with parent'}
+                                                                                <Text fontSize="2xs" color="gray.500">
+                                                                                    {child._id ? 'Saved in database' : 'Ready to save'}
                                                                                 </Text>
                                                                             </HStack>
                                                                             <IconButton
@@ -7551,9 +8074,9 @@ const InstrumentMasterForm = () => {
                                                                         </Flex>
 
                                                                         {/* Child Inputs Grid */}
-                                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3} mb={3}>
+                                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={{ base: 2, md: 3 }} mb={2.5}>
                                                                             <FormControl isRequired>
-                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>
+                                                                                <FormLabel fontSize="2xs" fontWeight="bold" color="gray.700" mb={0.5}>
                                                                                     Child Serial No *
                                                                                 </FormLabel>
                                                                                 <Input
@@ -7566,23 +8089,25 @@ const InstrumentMasterForm = () => {
                                                                                     borderColor="blue.300"
                                                                                     fontWeight="semibold"
                                                                                     bg="blue.50"
+                                                                                    fontSize="xs"
                                                                                 />
                                                                             </FormControl>
                                                                             <FormControl>
-                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>
-                                                                                    Child Instrument / Part Name
+                                                                                <FormLabel fontSize="2xs" fontWeight="bold" color="gray.700" mb={0.5}>
+                                                                                    Accessory Name
                                                                                 </FormLabel>
                                                                                 <Input
                                                                                     size="sm"
-                                                                                    placeholder="e.g. Prism Pole, Battery Pack"
+                                                                                    placeholder="e.g. Prism Pole, Battery"
                                                                                     value={child.instrumentName}
                                                                                     onChange={(e) => handleChildFieldChange(child.tempId, 'instrumentName', e.target.value)}
                                                                                     borderRadius="lg"
                                                                                     bg="gray.50"
+                                                                                    fontSize="xs"
                                                                                 />
                                                                             </FormControl>
                                                                             <FormControl>
-                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>
+                                                                                <FormLabel fontSize="2xs" fontWeight="bold" color="gray.700" mb={0.5}>
                                                                                     Model / Specs (Optional)
                                                                                 </FormLabel>
                                                                                 <Input
@@ -7592,22 +8117,24 @@ const InstrumentMasterForm = () => {
                                                                                     onChange={(e) => handleChildFieldChange(child.tempId, 'model', e.target.value)}
                                                                                     borderRadius="lg"
                                                                                     bg="gray.50"
+                                                                                    fontSize="xs"
                                                                                 />
                                                                             </FormControl>
                                                                         </SimpleGrid>
 
-                                                                        {/* Child Photos Section: Upload + Existing Photos + New Photos + Primary Selection */}
-                                                                        <Box p={3} borderRadius="lg" bg="gray.50" border="1px dashed" borderColor="gray.300">
-                                                                            <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={totalChildPhotos > 0 ? 3 : 0}>
-                                                                                <HStack>
+                                                                        {/* Child Photos Section */}
+                                                                        <Box p={{ base: 2.5, md: 3 }} borderRadius="lg" bg="gray.50" border="1px dashed" borderColor="gray.300">
+                                                                            <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={totalChildPhotos > 0 ? 2 : 0}>
+                                                                                <HStack spacing={2}>
                                                                                     <Button
                                                                                         size="xs"
                                                                                         colorScheme="teal"
                                                                                         leftIcon={<Icon as={FaCamera} />}
                                                                                         onClick={() => document.getElementById(`child-file-${child.tempId}`).click()}
                                                                                         borderRadius="md"
+                                                                                        fontSize="2xs"
                                                                                     >
-                                                                                        Upload Child Photo(s)
+                                                                                        Upload Photo(s)
                                                                                     </Button>
                                                                                     <input
                                                                                         type="file"
@@ -7617,20 +8144,20 @@ const InstrumentMasterForm = () => {
                                                                                         accept="image/*"
                                                                                         onChange={(e) => handleChildPhotoAdd(child.tempId, e)}
                                                                                     />
-                                                                                    <Text fontSize="xs" color="gray.600" fontWeight="medium">
-                                                                                        {totalChildPhotos} photo(s) attached
+                                                                                    <Text fontSize="2xs" color="gray.600" fontWeight="medium">
+                                                                                        {totalChildPhotos} attached
                                                                                     </Text>
                                                                                 </HStack>
                                                                                 {totalChildPhotos > 1 && (
-                                                                                    <Text fontSize="10px" color="blue.600" fontWeight="semibold">
-                                                                                        Tip: Click "Make Primary" on any photo to set it as primary
+                                                                                    <Text fontSize="2xs" color="blue.600" fontWeight="semibold">
+                                                                                        Tap "Make Primary" to set primary
                                                                                     </Text>
                                                                                 )}
                                                                             </Flex>
 
-                                                                            {/* Render All Photos for this Child with Primary Selection */}
+                                                                            {/* Render Child Photos */}
                                                                             {totalChildPhotos > 0 && (
-                                                                                <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing={3} pt={1}>
+                                                                                <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing={2} pt={1}>
                                                                                     {/* Existing Photos */}
                                                                                     {child.existingPhotos?.map((url, pIdx) => {
                                                                                         const isPrimary = (child.primaryType === 'existing' && pIdx === 0) ||
@@ -7647,7 +8174,7 @@ const InstrumentMasterForm = () => {
                                                                                                 borderColor={isPrimary ? "blue.500" : "gray.300"}
                                                                                                 boxShadow={isPrimary ? "sm" : "xs"}
                                                                                                 bg="gray.100"
-                                                                                                h="95px"
+                                                                                                h={{ base: "80px", md: "95px" }}
                                                                                             >
                                                                                                 <Image
                                                                                                     src={`${API_BASE_URL}${url}`}
@@ -7661,14 +8188,13 @@ const InstrumentMasterForm = () => {
                                                                                                 {isPrimary ? (
                                                                                                     <Badge
                                                                                                         position="absolute"
-                                                                                                        top={1.5}
-                                                                                                        left={1.5}
+                                                                                                        top={1}
+                                                                                                        left={1}
                                                                                                         colorScheme="blue"
-                                                                                                        fontSize="0.65rem"
+                                                                                                        fontSize="2xs"
                                                                                                         borderRadius="md"
-                                                                                                        px={1.5}
+                                                                                                        px={1}
                                                                                                         fontWeight="bold"
-                                                                                                        boxShadow="sm"
                                                                                                     >
                                                                                                         ⭐ PRIMARY
                                                                                                     </Badge>
@@ -7676,20 +8202,19 @@ const InstrumentMasterForm = () => {
                                                                                                     <Button
                                                                                                         size="xs"
                                                                                                         position="absolute"
-                                                                                                        bottom={1.5}
-                                                                                                        left={1.5}
+                                                                                                        bottom={1}
+                                                                                                        left={1}
                                                                                                         colorScheme="blue"
-                                                                                                        fontSize="0.65rem"
-                                                                                                        h="20px"
-                                                                                                        px={1.5}
+                                                                                                        fontSize="2xs"
+                                                                                                        h="18px"
+                                                                                                        px={1}
                                                                                                         borderRadius="md"
-                                                                                                        shadow="sm"
                                                                                                         onClick={(e) => {
                                                                                                             e.stopPropagation();
                                                                                                             handleChildSetPrimaryExistingPhoto(child.tempId, pIdx);
                                                                                                         }}
                                                                                                     >
-                                                                                                        Make Primary
+                                                                                                        Primary
                                                                                                     </Button>
                                                                                                 )}
                                                                                                 <IconButton
@@ -7698,8 +8223,8 @@ const InstrumentMasterForm = () => {
                                                                                                     size="xs"
                                                                                                     colorScheme="red"
                                                                                                     position="absolute"
-                                                                                                    top={1.5}
-                                                                                                    right={1.5}
+                                                                                                    top={1}
+                                                                                                    right={1}
                                                                                                     borderRadius="full"
                                                                                                     onClick={(e) => {
                                                                                                         e.stopPropagation();
@@ -7725,7 +8250,7 @@ const InstrumentMasterForm = () => {
                                                                                                 borderColor={isPrimary ? "green.500" : "gray.300"}
                                                                                                 boxShadow={isPrimary ? "sm" : "xs"}
                                                                                                 bg="gray.100"
-                                                                                                h="95px"
+                                                                                                h={{ base: "80px", md: "95px" }}
                                                                                             >
                                                                                                 <Image
                                                                                                     src={preview}
@@ -7739,14 +8264,13 @@ const InstrumentMasterForm = () => {
                                                                                                 {isPrimary ? (
                                                                                                     <Badge
                                                                                                         position="absolute"
-                                                                                                        top={1.5}
-                                                                                                        left={1.5}
+                                                                                                        top={1}
+                                                                                                        left={1}
                                                                                                         colorScheme="green"
-                                                                                                        fontSize="0.65rem"
+                                                                                                        fontSize="2xs"
                                                                                                         borderRadius="md"
-                                                                                                        px={1.5}
+                                                                                                        px={1}
                                                                                                         fontWeight="bold"
-                                                                                                        boxShadow="sm"
                                                                                                     >
                                                                                                         ⭐ PRIMARY
                                                                                                     </Badge>
@@ -7754,20 +8278,19 @@ const InstrumentMasterForm = () => {
                                                                                                     <Button
                                                                                                         size="xs"
                                                                                                         position="absolute"
-                                                                                                        bottom={1.5}
-                                                                                                        left={1.5}
+                                                                                                        bottom={1}
+                                                                                                        left={1}
                                                                                                         colorScheme="green"
-                                                                                                        fontSize="0.65rem"
-                                                                                                        h="20px"
-                                                                                                        px={1.5}
+                                                                                                        fontSize="2xs"
+                                                                                                        h="18px"
+                                                                                                        px={1}
                                                                                                         borderRadius="md"
-                                                                                                        shadow="sm"
                                                                                                         onClick={(e) => {
                                                                                                             e.stopPropagation();
                                                                                                             handleChildSetPrimaryNewPhoto(child.tempId, pIdx);
                                                                                                         }}
                                                                                                     >
-                                                                                                        Make Primary
+                                                                                                        Primary
                                                                                                     </Button>
                                                                                                 )}
                                                                                                 <IconButton
@@ -7776,8 +8299,8 @@ const InstrumentMasterForm = () => {
                                                                                                     size="xs"
                                                                                                     colorScheme="red"
                                                                                                     position="absolute"
-                                                                                                    top={1.5}
-                                                                                                    right={1.5}
+                                                                                                    top={1}
+                                                                                                    right={1}
                                                                                                     borderRadius="full"
                                                                                                     onClick={(e) => {
                                                                                                         e.stopPropagation();
@@ -7795,7 +8318,7 @@ const InstrumentMasterForm = () => {
                                                             })}
 
                                                             {formChildren.length === 0 && (
-                                                                <Box py={5} textAlign="center" bg="white" borderRadius="xl" border="1px dashed" borderColor="blue.300">
+                                                                <Box py={4} textAlign="center" bg="white" borderRadius="xl" border="1px dashed" borderColor="blue.300">
                                                                     <VStack spacing={2}>
                                                                         <Text fontSize="xs" color="gray.500">
                                                                             Need to attach accessories, batteries, or probes to this instrument?
@@ -7808,7 +8331,7 @@ const InstrumentMasterForm = () => {
                                                                             onClick={handleAddChildRow}
                                                                             borderRadius="full"
                                                                         >
-                                                                            + Add Child Instrument
+                                                                            + Add Child Accessory
                                                                         </Button>
                                                                     </VStack>
                                                                 </Box>
@@ -7822,19 +8345,20 @@ const InstrumentMasterForm = () => {
                                                                     leftIcon={<Icon as={FaPlus} />}
                                                                     onClick={handleAddChildRow}
                                                                     alignSelf="start"
+                                                                    fontSize="xs"
                                                                 >
-                                                                    + Add Another Child Instrument
+                                                                    + Add Another Child Accessory
                                                                 </Button>
                                                             )}
                                                         </VStack>
                                                     </Box>
 
                                                     {/* Submit / Cancel Actions */}
-                                                    <HStack spacing={4} pt={2}>
+                                                    <Stack direction={{ base: "column", sm: "row" }} spacing={{ base: 2.5, sm: 4 }} pt={2}>
                                                         <Button
                                                             type="submit"
                                                             flex={1}
-                                                            h="52px"
+                                                            h={{ base: "48px", md: "52px" }}
                                                             borderRadius="xl"
                                                             bgGradient={editId ? 'linear(to-r, purple.600, indigo.600)' : 'linear(to-r, blue.600, indigo.600)'}
                                                             color="white"
@@ -7844,7 +8368,7 @@ const InstrumentMasterForm = () => {
                                                             isLoading={isLoading}
                                                             loadingText="Saving Instrument & Accessories..."
                                                             fontWeight="bold"
-                                                            fontSize="md"
+                                                            fontSize={{ base: "sm", md: "md" }}
                                                         >
                                                             {editId ? 'Update Instrument & Accessories' : 'Save Instrument & Accessories'}
                                                         </Button>
@@ -7854,14 +8378,15 @@ const InstrumentMasterForm = () => {
                                                                 variant="outline"
                                                                 colorScheme="gray"
                                                                 borderRadius="xl"
-                                                                h="52px"
+                                                                h={{ base: "44px", md: "52px" }}
                                                                 px={8}
                                                                 onClick={handleClear}
+                                                                fontSize="sm"
                                                             >
                                                                 Cancel
                                                             </Button>
                                                         )}
-                                                    </HStack>
+                                                    </Stack>
 
                                                 </VStack>
                                             </CardBody>
@@ -7875,12 +8400,12 @@ const InstrumentMasterForm = () => {
                             {/* ══════════════════════════════════════════════════════════════ */}
                             {tabConfig.some(t => t.id === 'view') && (
                                 <TabPanel p={0}>
-                                    <VStack spacing={6} align="stretch">
+                                    <VStack spacing={{ base: 4, md: 6 }} align="stretch">
 
                                         {/* ── Metrics Stats Summary Cards ── */}
-                                        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+                                        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={{ base: 2.5, md: 4 }}>
                                             <Card
-                                                p={4}
+                                                p={{ base: 3, md: 4 }}
                                                 borderRadius="2xl"
                                                 bg="white"
                                                 border="1px solid"
@@ -7889,19 +8414,19 @@ const InstrumentMasterForm = () => {
                                                 _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
                                                 transition="all 0.2s"
                                             >
-                                                <HStack spacing={3}>
-                                                    <Center boxSize="46px" borderRadius="xl" bg="blue.50" color="blue.600">
-                                                        <Icon as={FaWrench} boxSize={5} />
+                                                <HStack spacing={{ base: 2.5, md: 3 }}>
+                                                    <Center boxSize={{ base: "38px", md: "46px" }} borderRadius="xl" bg="blue.50" color="blue.600" flexShrink={0}>
+                                                        <Icon as={FaWrench} boxSize={{ base: 4, md: 5 }} />
                                                     </Center>
                                                     <VStack align="start" spacing={0}>
-                                                        <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Total Equipment</Text>
-                                                        <Heading size="md" color="blue.700">{instruments.length}</Heading>
+                                                        <Text fontSize="2xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Total Equipment</Text>
+                                                        <Heading size={{ base: "sm", md: "md" }} color="blue.700">{instruments.length}</Heading>
                                                     </VStack>
                                                 </HStack>
                                             </Card>
 
                                             <Card
-                                                p={4}
+                                                p={{ base: 3, md: 4 }}
                                                 borderRadius="2xl"
                                                 bg="white"
                                                 border="1px solid"
@@ -7910,19 +8435,19 @@ const InstrumentMasterForm = () => {
                                                 _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
                                                 transition="all 0.2s"
                                             >
-                                                <HStack spacing={3}>
-                                                    <Center boxSize="46px" borderRadius="xl" bg="indigo.50" color="indigo.600">
-                                                        <Icon as={FaBoxes} boxSize={5} />
+                                                <HStack spacing={{ base: 2.5, md: 3 }}>
+                                                    <Center boxSize={{ base: "38px", md: "46px" }} borderRadius="xl" bg="indigo.50" color="indigo.600" flexShrink={0}>
+                                                        <Icon as={FaBoxes} boxSize={{ base: 4, md: 5 }} />
                                                     </Center>
                                                     <VStack align="start" spacing={0}>
-                                                        <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Parent Units</Text>
-                                                        <Heading size="md" color="indigo.700">{parentInstruments.length}</Heading>
+                                                        <Text fontSize="2xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Parent Units</Text>
+                                                        <Heading size={{ base: "sm", md: "md" }} color="indigo.700">{parentInstruments.length}</Heading>
                                                     </VStack>
                                                 </HStack>
                                             </Card>
 
                                             <Card
-                                                p={4}
+                                                p={{ base: 3, md: 4 }}
                                                 borderRadius="2xl"
                                                 bg="white"
                                                 border="1px solid"
@@ -7931,19 +8456,19 @@ const InstrumentMasterForm = () => {
                                                 _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
                                                 transition="all 0.2s"
                                             >
-                                                <HStack spacing={3}>
-                                                    <Center boxSize="46px" borderRadius="xl" bg="teal.50" color="teal.600">
-                                                        <Icon as={FaMicrochip} boxSize={5} />
+                                                <HStack spacing={{ base: 2.5, md: 3 }}>
+                                                    <Center boxSize={{ base: "38px", md: "46px" }} borderRadius="xl" bg="teal.50" color="teal.600" flexShrink={0}>
+                                                        <Icon as={FaMicrochip} boxSize={{ base: 4, md: 5 }} />
                                                     </Center>
                                                     <VStack align="start" spacing={0}>
-                                                        <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Child Accessories</Text>
-                                                        <Heading size="md" color="teal.700">{childInstruments.length}</Heading>
+                                                        <Text fontSize="2xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Child Accessories</Text>
+                                                        <Heading size={{ base: "sm", md: "md" }} color="teal.700">{childInstruments.length}</Heading>
                                                     </VStack>
                                                 </HStack>
                                             </Card>
 
                                             <Card
-                                                p={4}
+                                                p={{ base: 3, md: 4 }}
                                                 borderRadius="2xl"
                                                 bg="white"
                                                 border="1px solid"
@@ -7952,32 +8477,32 @@ const InstrumentMasterForm = () => {
                                                 _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
                                                 transition="all 0.2s"
                                             >
-                                                <HStack spacing={3}>
-                                                    <Center boxSize="46px" borderRadius="xl" bg="purple.50" color="purple.600">
-                                                        <Icon as={FaLayerGroup} boxSize={5} />
+                                                <HStack spacing={{ base: 2.5, md: 3 }}>
+                                                    <Center boxSize={{ base: "38px", md: "46px" }} borderRadius="xl" bg="purple.50" color="purple.600" flexShrink={0}>
+                                                        <Icon as={FaLayerGroup} boxSize={{ base: 4, md: 5 }} />
                                                     </Center>
                                                     <VStack align="start" spacing={0}>
-                                                        <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Active Groups</Text>
-                                                        <Heading size="md" color="purple.700">{groups.length}</Heading>
+                                                        <Text fontSize="2xs" fontWeight="bold" color="gray.500" textTransform="uppercase">Active Groups</Text>
+                                                        <Heading size={{ base: "sm", md: "md" }} color="purple.700">{groups.length}</Heading>
                                                     </VStack>
                                                 </HStack>
                                             </Card>
                                         </SimpleGrid>
 
                                         {/* ── Search & Filter Controls Suite ── */}
-                                        <Card p={4} borderRadius="2xl" bg="white" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                                            <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
+                                        <Card p={{ base: 3, md: 4 }} borderRadius="2xl" bg="white" border="1px solid" borderColor="gray.200" boxShadow="sm">
+                                            <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
                                                 
                                                 {/* Search Box */}
-                                                <Box flex={{ base: '1 1 100%', md: '1 1 320px' }}>
+                                                <Box flex={{ base: '1 1 100%', md: '1 1 280px' }}>
                                                     <HStack bg="gray.50" borderRadius="xl" px={3} py={1} border="1px solid" borderColor="gray.200">
                                                         <Icon as={FaSearch} color="gray.400" />
                                                         <Input
                                                             variant="unstyled"
-                                                            placeholder="Search serial no, name, model, notes..."
+                                                            placeholder="Search serial, name, model, notes..."
                                                             value={searchQuery}
                                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                                            fontSize="sm"
+                                                            fontSize="xs"
                                                         />
                                                         {searchQuery && (
                                                             <IconButton
@@ -7991,27 +8516,40 @@ const InstrumentMasterForm = () => {
                                                     </HStack>
                                                 </Box>
 
-                                                {/* Filter Chips */}
-                                                <HStack spacing={2} wrap="wrap" flex="1">
+                                                {/* Filter Chips with Touch Scroll */}
+                                                <HStack
+                                                    spacing={1.5}
+                                                    overflowX="auto"
+                                                    whiteSpace="nowrap"
+                                                    py={1}
+                                                    flex={{ base: "1 1 100%", md: "1" }}
+                                                    sx={{
+                                                        scrollbarWidth: 'none',
+                                                        '&::-webkit-scrollbar': { display: 'none' }
+                                                    }}
+                                                >
                                                     {[
-                                                        { key: 'all', label: 'All Equipment', count: instruments.length },
-                                                        { key: 'parents', label: 'Parents / Kits', count: parentInstruments.length },
-                                                        { key: 'children', label: 'Child Accessories', count: childInstruments.length },
+                                                        { key: 'all', label: 'All', count: instruments.length },
+                                                        { key: 'parents', label: 'Parents', count: parentInstruments.length },
+                                                        { key: 'children', label: 'Accessories', count: childInstruments.length },
                                                         { key: 'grouped', label: 'In Groups', count: instruments.filter(i => groupedInstrumentIds.has(i._id)).length }
                                                     ].map(chip => {
                                                         const isSelected = filterCategory === chip.key;
                                                         return (
                                                             <Button
                                                                 key={chip.key}
-                                                                size="sm"
+                                                                size="xs"
                                                                 borderRadius="full"
-                                                                fontSize="xs"
+                                                                fontSize="2xs"
                                                                 fontWeight="bold"
                                                                 variant={isSelected ? 'solid' : 'ghost'}
                                                                 colorScheme={isSelected ? 'blue' : 'gray'}
                                                                 bg={isSelected ? 'blue.600' : 'gray.100'}
                                                                 color={isSelected ? 'white' : 'gray.700'}
                                                                 onClick={() => setFilterCategory(chip.key)}
+                                                                flexShrink={0}
+                                                                px={3}
+                                                                py={1}
                                                             >
                                                                 {chip.label} ({chip.count})
                                                             </Button>
@@ -8020,49 +8558,61 @@ const InstrumentMasterForm = () => {
                                                 </HStack>
 
                                                 {/* View Mode Toggle Buttons */}
-                                                <HStack spacing={1} bg="gray.100" p={1} borderRadius="xl">
-                                                    <IconButton
-                                                        aria-label="Hierarchy View"
-                                                        icon={<Icon as={FaSitemap} />}
-                                                        size="sm"
+                                                <HStack spacing={1} bg="gray.100" p={1} borderRadius="xl" ml={{ base: "auto", md: 0 }}>
+                                                    <Button
+                                                        size="xs"
                                                         variant={viewLayout === 'hierarchy' ? 'solid' : 'ghost'}
                                                         colorScheme={viewLayout === 'hierarchy' ? 'blue' : 'gray'}
                                                         onClick={() => setViewLayout('hierarchy')}
-                                                        title="Parent-Child Hierarchy View"
-                                                    />
-                                                    <IconButton
-                                                        aria-label="Table View"
-                                                        icon={<Icon as={FaList} />}
-                                                        size="sm"
-                                                        variant={viewLayout === 'table' ? 'solid' : 'ghost'}
-                                                        colorScheme={viewLayout === 'table' ? 'blue' : 'gray'}
-                                                        onClick={() => setViewLayout('table')}
-                                                        title="Data Table View"
-                                                    />
-                                                    <IconButton
-                                                        aria-label="Grid Cards View"
-                                                        icon={<Icon as={FaThLarge} />}
-                                                        size="sm"
+                                                        borderRadius="lg"
+                                                        fontSize="xs"
+                                                        fontWeight="bold"
+                                                        px={2.5}
+                                                        leftIcon={<Icon as={FaSitemap} />}
+                                                    >
+                                                        Kits
+                                                    </Button>
+                                                    <Button
+                                                        size="xs"
                                                         variant={viewLayout === 'grid' ? 'solid' : 'ghost'}
                                                         colorScheme={viewLayout === 'grid' ? 'blue' : 'gray'}
                                                         onClick={() => setViewLayout('grid')}
-                                                        title="Visual Cards Grid"
-                                                    />
+                                                        borderRadius="lg"
+                                                        fontSize="xs"
+                                                        fontWeight="bold"
+                                                        px={2.5}
+                                                        leftIcon={<Icon as={FaThLarge} />}
+                                                    >
+                                                        Cards
+                                                    </Button>
+                                                    <Button
+                                                        size="xs"
+                                                        variant={viewLayout === 'table' ? 'solid' : 'ghost'}
+                                                        colorScheme={viewLayout === 'table' ? 'blue' : 'gray'}
+                                                        onClick={() => setViewLayout('table')}
+                                                        borderRadius="lg"
+                                                        fontSize="xs"
+                                                        fontWeight="bold"
+                                                        px={2.5}
+                                                        leftIcon={<Icon as={FaTable} />}
+                                                    >
+                                                        Table
+                                                    </Button>
                                                 </HStack>
                                             </Flex>
 
                                             {/* Hierarchy View Quick Collapse / Expand Buttons */}
                                             {viewLayout === 'hierarchy' && (
-                                                <Flex justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor="gray.100">
-                                                    <Text fontSize="xs" color="gray.500">
-                                                        Showing hierarchical kits and their child accessories with photos.
+                                                <Flex justify="space-between" align="center" mt={2.5} pt={2.5} borderTop="1px solid" borderColor="gray.100" wrap="wrap" gap={2}>
+                                                    <Text fontSize="2xs" color="gray.500">
+                                                        Showing hierarchical kits and child accessories with photos.
                                                     </Text>
-                                                    <HStack spacing={2}>
-                                                        <Button size="xs" variant="ghost" colorScheme="blue" onClick={expandAllParents}>
+                                                    <HStack spacing={1.5}>
+                                                        <Button size="xs" variant="ghost" colorScheme="blue" onClick={expandAllParents} fontSize="2xs" h="22px">
                                                             Expand All
                                                         </Button>
-                                                        <Text color="gray.300">|</Text>
-                                                        <Button size="xs" variant="ghost" colorScheme="gray" onClick={collapseAllParents}>
+                                                        <Text color="gray.300" fontSize="2xs">|</Text>
+                                                        <Button size="xs" variant="ghost" colorScheme="gray" onClick={collapseAllParents} fontSize="2xs" h="22px">
                                                             Collapse All
                                                         </Button>
                                                     </HStack>
@@ -8072,7 +8622,7 @@ const InstrumentMasterForm = () => {
 
                                         {/* ── VIEW LAYOUT 1: HIERARCHY TREE VIEW (DEFAULT) ── */}
                                         {viewLayout === 'hierarchy' && (
-                                            <VStack spacing={4} align="stretch">
+                                            <VStack spacing={3} align="stretch">
                                                 {filteredParentInstruments.map(parent => {
                                                     const parentPhoto = parent.photos?.[0]?.url || parent.photo?.url;
                                                     const parentChildren = getChildrenOf(parent._id);
@@ -8084,22 +8634,22 @@ const InstrumentMasterForm = () => {
                                                             key={parent._id}
                                                             borderRadius="2xl"
                                                             border="1px solid"
-                                                            borderColor={isExpanded ? "blue.200" : "gray.200"}
+                                                            borderColor={isExpanded ? "blue.300" : "gray.200"}
                                                             bg="white"
-                                                            boxShadow={isExpanded ? "md" : "sm"}
+                                                            boxShadow={isExpanded ? "md" : "xs"}
                                                             overflow="hidden"
                                                             transition="all 0.2s"
                                                         >
                                                             {/* Parent Card Header */}
-                                                            <Box p={{ base: 4, md: 5 }}>
-                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
+                                                            <Box p={{ base: 3, sm: 4, md: 5 }}>
+                                                                <Flex justify="space-between" align={{ base: 'start', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} gap={3}>
                                                                     
                                                                     {/* Left: Thumbnail & Info */}
-                                                                    <HStack spacing={4} flex="1" minW={{ base: '100%', sm: '320px' }}>
+                                                                    <HStack spacing={3} flex="1" minW={{ base: '100%', sm: '280px' }} align="center">
                                                                         {parentPhoto ? (
                                                                             <Box
                                                                                 position="relative"
-                                                                                boxSize="64px"
+                                                                                boxSize={{ base: "48px", md: "64px" }}
                                                                                 borderRadius="xl"
                                                                                 overflow="hidden"
                                                                                 border="1px solid"
@@ -8117,56 +8667,69 @@ const InstrumentMasterForm = () => {
                                                                                     transition="transform 0.2s"
                                                                                 />
                                                                                 {parent.photos && parent.photos.length > 1 && (
-                                                                                    <Badge position="absolute" bottom={0.5} right={0.5} colorScheme="blackAlpha" fontSize="0.55rem" borderRadius="sm">
+                                                                                    <Badge position="absolute" bottom={0.5} right={0.5} colorScheme="blackAlpha" fontSize="2xs" borderRadius="sm" px={1}>
                                                                                         📷 {parent.photos.length}
                                                                                     </Badge>
                                                                                 )}
                                                                             </Box>
                                                                         ) : (
-                                                                            <Center boxSize="64px" borderRadius="xl" bg="blue.50" color="blue.500" flexShrink={0} border="1px solid" borderColor="blue.100">
-                                                                                <Icon as={FaWrench} boxSize={6} />
+                                                                            <Center boxSize={{ base: "48px", md: "64px" }} borderRadius="xl" bg="blue.50" color="blue.500" flexShrink={0} border="1px solid" borderColor="blue.100">
+                                                                                <Icon as={FaWrench} boxSize={{ base: 5, md: 6 }} />
                                                                             </Center>
                                                                         )}
 
-                                                                        <VStack align="start" spacing={1} flex="1">
-                                                                            <HStack wrap="wrap" spacing={2}>
-                                                                                <Heading size="sm" color="gray.800">
+                                                                        <VStack align="start" spacing={0.5} flex="1">
+                                                                            <HStack wrap="wrap" spacing={1.5}>
+                                                                                <Heading size={{ base: "xs", md: "sm" }} color="gray.800">
                                                                                     {parent.instrumentName || 'Unnamed Parent Unit'}
                                                                                 </Heading>
-                                                                                <Badge colorScheme="blue" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                                                <Badge colorScheme="blue" px={1.5} py={0.5} borderRadius="md" fontWeight="bold" fontSize="2xs">
                                                                                     {parent.serialNo}
                                                                                 </Badge>
+                                                                            </HStack>
+
+                                                                            <HStack wrap="wrap" spacing={1.5} pt={0.5}>
                                                                                 {parent.model && (
-                                                                                    <Tag size="sm" colorScheme="gray" variant="subtle" borderRadius="md">
+                                                                                    <Tag size="sm" colorScheme="gray" variant="subtle" borderRadius="md" fontSize="2xs">
                                                                                         Model: {parent.model}
                                                                                     </Tag>
                                                                                 )}
                                                                                 {groupInfo && (
-                                                                                    <Badge colorScheme="purple" variant="subtle" borderRadius="md">
+                                                                                    <Badge colorScheme="purple" variant="subtle" borderRadius="md" fontSize="2xs">
                                                                                         Group: {groupInfo.name}
                                                                                     </Badge>
                                                                                 )}
                                                                             </HStack>
 
                                                                             {parent.notes && (
-                                                                                <Text fontSize="xs" color="gray.600" noOfLines={1}>
+                                                                                <Text fontSize="2xs" color="gray.500" noOfLines={1} pt={0.5}>
                                                                                     📝 {parent.notes}
                                                                                 </Text>
                                                                             )}
                                                                         </VStack>
                                                                     </HStack>
 
-                                                                    {/* Right: Child Accessories Count Badge & Actions */}
-                                                                    <HStack spacing={3}>
+                                                                    {/* Right / Bottom Controls: Child Accessories Count Badge & Actions */}
+                                                                    <Stack
+                                                                        direction="row"
+                                                                        justify={{ base: "space-between", sm: "flex-end" }}
+                                                                        align="center"
+                                                                        w={{ base: "full", sm: "auto" }}
+                                                                        pt={{ base: 2, sm: 0 }}
+                                                                        borderTop={{ base: "1px dashed #E2E8F0", sm: "none" }}
+                                                                        spacing={2}
+                                                                    >
                                                                         <Button
-                                                                            size="sm"
+                                                                            size="xs"
                                                                             colorScheme={parentChildren.length > 0 ? "blue" : "gray"}
                                                                             variant="subtle"
                                                                             borderRadius="full"
-                                                                            px={3}
+                                                                            px={2.5}
                                                                             leftIcon={<Icon as={FaMicrochip} />}
                                                                             rightIcon={<Icon as={isExpanded ? FaChevronUp : FaChevronDown} />}
                                                                             onClick={() => toggleParentExpand(parent._id)}
+                                                                            fontSize="2xs"
+                                                                            fontWeight="bold"
                                                                         >
                                                                             {parentChildren.length} Accessories
                                                                         </Button>
@@ -8174,7 +8737,7 @@ const InstrumentMasterForm = () => {
                                                                         <HStack spacing={1}>
                                                                             <IconButton
                                                                                 aria-label="View Details"
-                                                                                size="sm"
+                                                                                size="xs"
                                                                                 colorScheme="blue"
                                                                                 variant="ghost"
                                                                                 icon={<Icon as={FaEye} />}
@@ -8182,7 +8745,7 @@ const InstrumentMasterForm = () => {
                                                                             />
                                                                             <IconButton
                                                                                 aria-label="Edit"
-                                                                                size="sm"
+                                                                                size="xs"
                                                                                 colorScheme="blue"
                                                                                 variant="ghost"
                                                                                 icon={<Icon as={FaEdit} />}
@@ -8190,41 +8753,41 @@ const InstrumentMasterForm = () => {
                                                                             />
                                                                             <IconButton
                                                                                 aria-label="Delete"
-                                                                                size="sm"
+                                                                                size="xs"
                                                                                 colorScheme="red"
                                                                                 variant="ghost"
                                                                                 icon={<Icon as={FaTrash} />}
                                                                                 onClick={() => handleDelete(parent._id)}
                                                                             />
                                                                         </HStack>
-                                                                    </HStack>
+                                                                    </Stack>
                                                                 </Flex>
                                                             </Box>
 
                                                             {/* Expanded Nested Child Instruments Section */}
                                                             {isExpanded && (
-                                                                <Box bg="gray.50" px={{ base: 4, md: 6 }} py={4} borderTop="1px solid" borderColor="gray.200">
-                                                                    <Flex justify="space-between" align="center" mb={3}>
-                                                                        <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wide">
+                                                                <Box bg="gray.50" px={{ base: 3, md: 6 }} py={{ base: 3, md: 4 }} borderTop="1px solid" borderColor="gray.200">
+                                                                    <Flex justify="space-between" align="center" mb={2.5}>
+                                                                        <Text fontSize="2xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wide">
                                                                             Attached Child Accessories ({parentChildren.length})
                                                                         </Text>
                                                                     </Flex>
 
                                                                     {parentChildren.length === 0 ? (
-                                                                        <Box p={4} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.300" textAlign="center">
-                                                                            <Text fontSize="xs" color="gray.500" fontStyle="italic" mb={2}>
+                                                                        <Box p={3} bg="white" borderRadius="xl" border="1px dashed" borderColor="gray.300" textAlign="center">
+                                                                            <Text fontSize="2xs" color="gray.500" fontStyle="italic">
                                                                                 No child accessories attached to this instrument.
                                                                             </Text>
                                                                         </Box>
                                                                     ) : (
-                                                                        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={3}>
+                                                                        <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={{ base: 2, md: 3 }}>
                                                                             {parentChildren.map(child => {
                                                                                 const childPhoto = child.photos?.[0]?.url || child.photo?.url;
                                                                                 return (
                                                                                     <Card
                                                                                         key={child._id}
                                                                                         borderRadius="xl"
-                                                                                        p={3}
+                                                                                        p={2.5}
                                                                                         bg="white"
                                                                                         border="1px solid"
                                                                                         borderColor="blue.100"
@@ -8232,10 +8795,10 @@ const InstrumentMasterForm = () => {
                                                                                         _hover={{ borderColor: 'blue.300', shadow: 'sm' }}
                                                                                         transition="all 0.2s"
                                                                                     >
-                                                                                        <HStack spacing={3} align="center">
+                                                                                        <HStack spacing={2.5} align="center">
                                                                                             {childPhoto ? (
                                                                                                 <Box
-                                                                                                    boxSize="48px"
+                                                                                                    boxSize={{ base: "40px", md: "48px" }}
                                                                                                     borderRadius="lg"
                                                                                                     overflow="hidden"
                                                                                                     border="1px solid"
@@ -8254,19 +8817,19 @@ const InstrumentMasterForm = () => {
                                                                                                     />
                                                                                                 </Box>
                                                                                             ) : (
-                                                                                                <Center boxSize="48px" borderRadius="lg" bg="blue.50" color="blue.500" flexShrink={0}>
+                                                                                                <Center boxSize={{ base: "40px", md: "48px" }} borderRadius="lg" bg="blue.50" color="blue.500" flexShrink={0}>
                                                                                                     <Icon as={FaMicrochip} />
                                                                                                 </Center>
                                                                                             )}
 
                                                                                             <VStack align="start" spacing={0} flex={1}>
-                                                                                                <Text fontWeight="bold" fontSize="sm" color="gray.800" noOfLines={1}>
+                                                                                                <Text fontWeight="bold" fontSize="xs" color="gray.800" noOfLines={1}>
                                                                                                     {child.instrumentName || 'Unnamed Child'}
                                                                                                 </Text>
                                                                                                 <HStack spacing={1}>
-                                                                                                    <Badge colorScheme="blue" fontSize="0.65rem">{child.serialNo}</Badge>
+                                                                                                    <Badge colorScheme="blue" fontSize="2xs">{child.serialNo}</Badge>
                                                                                                     {child.model && (
-                                                                                                        <Text fontSize="0.65rem" color="gray.500" noOfLines={1}>
+                                                                                                        <Text fontSize="2xs" color="gray.500" noOfLines={1}>
                                                                                                             {child.model}
                                                                                                         </Text>
                                                                                                     )}
@@ -8297,36 +8860,36 @@ const InstrumentMasterForm = () => {
                                                 })}
 
                                                 {orphanChildren.length > 0 && filterCategory !== 'parents' && (
-                                                    <Box mt={4}>
-                                                        <Text fontSize="xs" fontWeight="bold" color="orange.700" textTransform="uppercase" mb={3}>
+                                                    <Box mt={3}>
+                                                        <Text fontSize="2xs" fontWeight="bold" color="orange.700" textTransform="uppercase" mb={2}>
                                                             Standalone Accessories ({orphanChildren.length})
                                                         </Text>
-                                                        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={3}>
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={2.5}>
                                                             {orphanChildren.map(orphan => {
                                                                 const orphanPhoto = orphan.photos?.[0]?.url || orphan.photo?.url;
                                                                 return (
-                                                                    <Card key={orphan._id} borderRadius="xl" p={3} bg="white" border="1px solid" borderColor="orange.200" boxShadow="xs">
-                                                                        <HStack spacing={3}>
+                                                                    <Card key={orphan._id} borderRadius="xl" p={2.5} bg="white" border="1px solid" borderColor="orange.200" boxShadow="xs">
+                                                                        <HStack spacing={2.5}>
                                                                             {orphanPhoto ? (
                                                                                 <Image
                                                                                     src={`${API_BASE_URL}${orphanPhoto}`}
                                                                                     alt={orphan.instrumentName}
-                                                                                    boxSize="48px"
+                                                                                    boxSize="40px"
                                                                                     borderRadius="lg"
                                                                                     objectFit="cover"
                                                                                     cursor="pointer"
                                                                                     onClick={() => setLightboxPhoto(`${API_BASE_URL}${orphanPhoto}`)}
                                                                                 />
                                                                             ) : (
-                                                                                <Center boxSize="48px" borderRadius="lg" bg="orange.50" color="orange.500">
+                                                                                <Center boxSize="40px" borderRadius="lg" bg="orange.50" color="orange.500">
                                                                                     <Icon as={FaMicrochip} />
                                                                                 </Center>
                                                                             )}
                                                                             <VStack align="start" spacing={0} flex={1}>
-                                                                                <Text fontWeight="bold" fontSize="sm">{orphan.instrumentName || 'Unnamed'}</Text>
+                                                                                <Text fontWeight="bold" fontSize="xs">{orphan.instrumentName || 'Unnamed'}</Text>
                                                                                 <HStack spacing={1}>
-                                                                                    <Badge colorScheme="orange" fontSize="xs">{orphan.serialNo}</Badge>
-                                                                                    <Badge colorScheme="gray" fontSize="xs">Standalone</Badge>
+                                                                                    <Badge colorScheme="orange" fontSize="2xs">{orphan.serialNo}</Badge>
+                                                                                    <Badge colorScheme="gray" fontSize="2xs">Standalone</Badge>
                                                                                 </HStack>
                                                                             </VStack>
                                                                             <HStack spacing={1}>
@@ -8342,10 +8905,10 @@ const InstrumentMasterForm = () => {
                                                 )}
 
                                                 {filteredParentInstruments.length === 0 && orphanChildren.length === 0 && (
-                                                    <Card p={12} textAlign="center" borderRadius="2xl" bg="white" border="1px dashed" borderColor="gray.300">
+                                                    <Card p={{ base: 8, md: 12 }} textAlign="center" borderRadius="2xl" bg="white" border="1px dashed" borderColor="gray.300">
                                                         <VStack spacing={3}>
-                                                            <Center boxSize="60px" borderRadius="full" bg="gray.100" color="gray.400">
-                                                                <Icon as={FaSearch} boxSize={6} />
+                                                            <Center boxSize="50px" borderRadius="full" bg="gray.100" color="gray.400">
+                                                                <Icon as={FaSearch} boxSize={5} />
                                                             </Center>
                                                             <Heading size="sm" color="gray.600">No Instruments Found</Heading>
                                                             <Text fontSize="xs" color="gray.400">
@@ -8359,17 +8922,17 @@ const InstrumentMasterForm = () => {
 
                                         {/* ── VIEW LAYOUT 2: DATA TABLE VIEW ── */}
                                         {viewLayout === 'table' && (
-                                            <Box overflowX="auto" bg="white" borderRadius="2xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                                <Table variant="simple" size="md">
+                                            <TableContainer bg="white" borderRadius="2xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                                <Table variant="simple" size={{ base: "sm", md: "md" }} minW="650px">
                                                     <Thead bg="blue.50">
                                                         <Tr>
-                                                            <Th color="blue.900" py={4}>Photo</Th>
-                                                            <Th color="blue.900" py={4}>Type / Hierarchy</Th>
-                                                            <Th color="blue.900" py={4}>Serial No</Th>
-                                                            <Th color="blue.900" py={4}>Instrument Name</Th>
-                                                            <Th color="blue.900" py={4}>Model</Th>
-                                                            <Th color="blue.900" py={4}>Group</Th>
-                                                            <Th color="blue.900" py={4} textAlign="center">Actions</Th>
+                                                            <Th color="blue.900" py={3.5}>Photo</Th>
+                                                            <Th color="blue.900" py={3.5}>Type / Hierarchy</Th>
+                                                            <Th color="blue.900" py={3.5}>Serial No</Th>
+                                                            <Th color="blue.900" py={3.5}>Instrument Name</Th>
+                                                            <Th color="blue.900" py={3.5}>Model</Th>
+                                                            <Th color="blue.900" py={3.5}>Group</Th>
+                                                            <Th color="blue.900" py={3.5} textAlign="center">Actions</Th>
                                                         </Tr>
                                                     </Thead>
                                                     <Tbody>
@@ -8381,58 +8944,58 @@ const InstrumentMasterForm = () => {
 
                                                             return (
                                                                 <Tr key={inst._id} _hover={{ bg: "blue.50" }} transition="all 0.15s">
-                                                                    <Td py={3}>
+                                                                    <Td py={2.5}>
                                                                         {mainPhoto ? (
                                                                             <Image
                                                                                 src={`${API_BASE_URL}${mainPhoto}`}
                                                                                 alt={inst.instrumentName}
-                                                                                boxSize="44px"
+                                                                                boxSize="40px"
                                                                                 objectFit="cover"
                                                                                 borderRadius="lg"
                                                                                 cursor="pointer"
                                                                                 onClick={() => setLightboxPhoto(`${API_BASE_URL}${mainPhoto}`)}
-                                                                                fallback={<Center boxSize="44px" bg="gray.100" borderRadius="lg"><Icon as={FaWrench} color="gray.400" /></Center>}
+                                                                                fallback={<Center boxSize="40px" bg="gray.100" borderRadius="lg"><Icon as={FaWrench} color="gray.400" /></Center>}
                                                                             />
                                                                         ) : (
-                                                                            <Center boxSize="44px" bg="gray.100" borderRadius="lg">
+                                                                            <Center boxSize="40px" bg="gray.100" borderRadius="lg">
                                                                                 <Icon as={inst.parentInstrumentId ? FaMicrochip : FaWrench} color="gray.400" />
                                                                             </Center>
                                                                         )}
                                                                     </Td>
-                                                                    <Td py={3}>
+                                                                    <Td py={2.5}>
                                                                         {inst.parentInstrumentId ? (
-                                                                            <Badge colorScheme="orange" borderRadius="md" px={2} py={0.5} fontSize="0.7rem">
+                                                                            <Badge colorScheme="orange" borderRadius="md" px={2} py={0.5} fontSize="2xs">
                                                                                 Child of {parentOfInst?.serialNo || 'Parent'}
                                                                             </Badge>
                                                                         ) : (
-                                                                            <Badge colorScheme="blue" borderRadius="md" px={2} py={0.5} fontSize="0.7rem">
+                                                                            <Badge colorScheme="blue" borderRadius="md" px={2} py={0.5} fontSize="2xs">
                                                                                 Parent ({childrenCount} Acc)
                                                                             </Badge>
                                                                         )}
                                                                     </Td>
-                                                                    <Td py={3} fontWeight="bold" color="blue.700">
+                                                                    <Td py={2.5} fontWeight="bold" color="blue.700" fontSize="xs">
                                                                         {inst.serialNo || 'N/A'}
                                                                     </Td>
-                                                                    <Td py={3} fontWeight="semibold">
+                                                                    <Td py={2.5} fontWeight="semibold" fontSize="xs">
                                                                         {inst.instrumentName || 'Unnamed'}
                                                                     </Td>
-                                                                    <Td py={3} color="gray.600">
+                                                                    <Td py={2.5} color="gray.600" fontSize="xs">
                                                                         {inst.model || '—'}
                                                                     </Td>
-                                                                    <Td py={3}>
+                                                                    <Td py={2.5}>
                                                                         {groupInfo ? (
-                                                                            <Badge colorScheme="purple" borderRadius="md" px={2}>
+                                                                            <Badge colorScheme="purple" borderRadius="md" px={2} fontSize="2xs">
                                                                                 {groupInfo.name}
                                                                             </Badge>
                                                                         ) : (
-                                                                            <Text fontSize="xs" color="gray.400">—</Text>
+                                                                            <Text fontSize="2xs" color="gray.400">—</Text>
                                                                         )}
                                                                     </Td>
-                                                                    <Td py={3} textAlign="center">
+                                                                    <Td py={2.5} textAlign="center">
                                                                         <HStack justify="center" spacing={1}>
                                                                             <IconButton
                                                                                 aria-label="View"
-                                                                                size="sm"
+                                                                                size="xs"
                                                                                 colorScheme="teal"
                                                                                 variant="ghost"
                                                                                 icon={<Icon as={FaEye} />}
@@ -8440,7 +9003,7 @@ const InstrumentMasterForm = () => {
                                                                             />
                                                                             <IconButton
                                                                                 aria-label="Edit"
-                                                                                size="sm"
+                                                                                size="xs"
                                                                                 colorScheme="blue"
                                                                                 variant="ghost"
                                                                                 icon={<Icon as={FaEdit} />}
@@ -8448,7 +9011,7 @@ const InstrumentMasterForm = () => {
                                                                             />
                                                                             <IconButton
                                                                                 aria-label="Delete"
-                                                                                size="sm"
+                                                                                size="xs"
                                                                                 colorScheme="red"
                                                                                 variant="ghost"
                                                                                 icon={<Icon as={FaTrash} />}
@@ -8461,22 +9024,22 @@ const InstrumentMasterForm = () => {
                                                         })}
                                                         {filteredInstruments.length === 0 && (
                                                             <Tr>
-                                                                <Td colSpan={7} textAlign="center" py={12} color="gray.400">
+                                                                <Td colSpan={7} textAlign="center" py={10} color="gray.400">
                                                                     <VStack spacing={2}>
-                                                                        <Icon as={FaWrench} boxSize={8} opacity={0.3} />
-                                                                        <Text fontSize="sm">No instruments matching your filters.</Text>
+                                                                        <Icon as={FaWrench} boxSize={6} opacity={0.3} />
+                                                                        <Text fontSize="xs">No instruments matching your filters.</Text>
                                                                     </VStack>
                                                                 </Td>
                                                             </Tr>
                                                         )}
                                                     </Tbody>
                                                 </Table>
-                                            </Box>
+                                            </TableContainer>
                                         )}
 
                                         {/* ── VIEW LAYOUT 3: GRID CARDS VIEW ── */}
                                         {viewLayout === 'grid' && (
-                                            <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
+                                            <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={{ base: 3, md: 4 }}>
                                                 {filteredInstruments.map(inst => {
                                                     const mainPhoto = inst.photos?.[0]?.url || inst.photo?.url;
                                                     const parentOfInst = getParentOf(inst);
@@ -8492,11 +9055,11 @@ const InstrumentMasterForm = () => {
                                                             borderColor="gray.200"
                                                             bg="white"
                                                             boxShadow="sm"
-                                                            _hover={{ transform: 'translateY(-3px)', shadow: 'lg', borderColor: 'blue.300' }}
-                                                            transition="all 0.25s"
+                                                            _hover={{ transform: 'translateY(-2px)', shadow: 'md', borderColor: 'blue.300' }}
+                                                            transition="all 0.2s"
                                                         >
                                                             {/* Card Photo Header */}
-                                                            <Box position="relative" h="150px" bg="gray.100">
+                                                            <Box position="relative" h={{ base: "135px", md: "150px" }} bg="gray.100">
                                                                 {mainPhoto ? (
                                                                     <Image
                                                                         src={`${API_BASE_URL}${mainPhoto}`}
@@ -8509,62 +9072,62 @@ const InstrumentMasterForm = () => {
                                                                     />
                                                                 ) : (
                                                                     <Center h="full" bgGradient="linear(135deg, blue.50, indigo.50)" color="blue.400">
-                                                                        <Icon as={inst.parentInstrumentId ? FaMicrochip : FaWrench} boxSize={10} />
+                                                                        <Icon as={inst.parentInstrumentId ? FaMicrochip : FaWrench} boxSize={8} />
                                                                     </Center>
                                                                 )}
                                                                 <Badge
                                                                     position="absolute"
-                                                                    top={3}
-                                                                    left={3}
+                                                                    top={2.5}
+                                                                    left={2.5}
                                                                     colorScheme={inst.parentInstrumentId ? "orange" : "blue"}
                                                                     variant="solid"
                                                                     borderRadius="md"
                                                                     px={2}
-                                                                    fontSize="0.65rem"
+                                                                    fontSize="2xs"
                                                                     boxShadow="sm"
                                                                 >
                                                                     {inst.parentInstrumentId ? 'CHILD ACCESSORY' : 'PARENT UNIT'}
                                                                 </Badge>
                                                                 {inst.photos && inst.photos.length > 1 && (
-                                                                    <Badge position="absolute" bottom={2} right={2} colorScheme="blackAlpha" borderRadius="md" px={1.5} fontSize="0.65rem">
+                                                                    <Badge position="absolute" bottom={2} right={2} colorScheme="blackAlpha" borderRadius="md" px={1.5} fontSize="2xs">
                                                                         📷 {inst.photos.length} photos
                                                                     </Badge>
                                                                 )}
                                                             </Box>
 
                                                             {/* Card Content */}
-                                                            <Box p={4}>
-                                                                <VStack align="start" spacing={2}>
-                                                                    <Heading size="sm" color="gray.800" noOfLines={1}>
+                                                            <Box p={{ base: 3, md: 4 }}>
+                                                                <VStack align="start" spacing={1.5}>
+                                                                    <Heading size="xs" color="gray.800" noOfLines={1}>
                                                                         {inst.instrumentName || 'Unnamed Instrument'}
                                                                     </Heading>
-                                                                    <HStack spacing={2} wrap="wrap">
-                                                                        <Badge colorScheme="blue" borderRadius="md" px={2}>{inst.serialNo}</Badge>
-                                                                        {inst.model && <Text fontSize="xs" color="gray.500">{inst.model}</Text>}
+                                                                    <HStack spacing={1.5} wrap="wrap">
+                                                                        <Badge colorScheme="blue" borderRadius="md" px={1.5} fontSize="2xs">{inst.serialNo}</Badge>
+                                                                        {inst.model && <Text fontSize="2xs" color="gray.500">{inst.model}</Text>}
                                                                     </HStack>
 
                                                                     {inst.parentInstrumentId && parentOfInst && (
-                                                                        <Text fontSize="xs" color="orange.600" noOfLines={1}>
-                                                                            ↳ Linked to: {parentOfInst.instrumentName || parentOfInst.serialNo}
+                                                                        <Text fontSize="2xs" color="orange.600" noOfLines={1}>
+                                                                            ↳ Linked: {parentOfInst.instrumentName || parentOfInst.serialNo}
                                                                         </Text>
                                                                     )}
 
                                                                     {!inst.parentInstrumentId && childrenCount > 0 && (
-                                                                        <Text fontSize="xs" color="blue.600" fontWeight="bold">
-                                                                            ⚡ {childrenCount} child accessories
+                                                                        <Text fontSize="2xs" color="blue.600" fontWeight="bold">
+                                                                            ⚡ {childrenCount} accessories
                                                                         </Text>
                                                                     )}
 
                                                                     {groupInfo && (
-                                                                        <Badge colorScheme="purple" fontSize="0.65rem" borderRadius="md">
+                                                                        <Badge colorScheme="purple" fontSize="2xs" borderRadius="md">
                                                                             Group: {groupInfo.name}
                                                                         </Badge>
                                                                     )}
 
                                                                     <Divider my={1} />
 
-                                                                    <HStack justify="space-between" w="full" pt={1}>
-                                                                        <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => openViewModal(inst)}>
+                                                                    <HStack justify="space-between" w="full" pt={0.5}>
+                                                                        <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => openViewModal(inst)} fontSize="2xs">
                                                                             View
                                                                         </Button>
                                                                         <HStack spacing={1}>
@@ -8589,16 +9152,16 @@ const InstrumentMasterForm = () => {
                             {/* ══════════════════════════════════════════════════════════════ */}
                             {tabConfig.some(t => t.id === 'groups') && (
                                 <TabPanel p={0}>
-                                    <VStack spacing={6} align="stretch">
+                                    <VStack spacing={{ base: 4, md: 6 }} align="stretch">
 
                                         {/* Instrument Selection & Group Creation Card */}
-                                        <Card borderRadius="2xl" p={{ base: 5, md: 6 }} border="1px solid" borderColor="purple.200" bg="white" boxShadow="sm">
-                                            <Flex justify="space-between" align={{ base: 'start', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} gap={3} mb={4}>
+                                        <Card borderRadius="2xl" p={{ base: 3.5, sm: 5, md: 6 }} border="1px solid" borderColor="purple.200" bg="white" boxShadow="sm">
+                                            <Flex justify="space-between" align={{ base: 'start', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} gap={3} mb={3}>
                                                 <VStack align="start" spacing={0}>
-                                                    <Heading size="sm" color="purple.800">
+                                                    <Heading size={{ base: "xs", md: "sm" }} color="purple.800">
                                                         Select Instruments to Create a Group
                                                     </Heading>
-                                                    <Text fontSize="xs" color="gray.500">
+                                                    <Text fontSize="2xs" color="gray.500">
                                                         Group survey kits, field units, or bundled instrument accessories together under an auto-generated Group ID.
                                                     </Text>
                                                 </VStack>
@@ -8609,9 +9172,11 @@ const InstrumentMasterForm = () => {
                                                     onClick={handleStartCreateGroup}
                                                     isDisabled={selectedInstrumentIds.length === 0}
                                                     borderRadius="xl"
-                                                    px={6}
+                                                    px={5}
                                                     shadow="md"
                                                     leftIcon={<Icon as={FaPlus} />}
+                                                    w={{ base: "full", sm: "auto" }}
+                                                    fontSize="xs"
                                                 >
                                                     Create Group ({selectedInstrumentIds.length})
                                                 </Button>
@@ -8630,14 +9195,14 @@ const InstrumentMasterForm = () => {
                                             </HStack>
 
                                             {getAvailableInstrumentsForGroup().length === 0 ? (
-                                                <Box py={6} textAlign="center" bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300">
+                                                <Box py={5} textAlign="center" bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300">
                                                     <Text fontSize="xs" color="gray.400" fontStyle="italic">
                                                         All instruments are currently assigned to groups or none exist.
                                                     </Text>
                                                 </Box>
                                             ) : (
-                                                <Box border="1px solid" borderColor="gray.200" borderRadius="xl" p={4} maxH="260px" overflowY="auto" bg="gray.50">
-                                                    <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
+                                                <Box border="1px solid" borderColor="gray.200" borderRadius="xl" p={{ base: 2.5, md: 4 }} maxH="240px" overflowY="auto" bg="gray.50">
+                                                    <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={{ base: 2, md: 3 }}>
                                                         {getAvailableInstrumentsForGroup()
                                                             .filter(inst => groupSearchQuery === '' ||
                                                                 (inst.serialNo && inst.serialNo.toLowerCase().includes(groupSearchQuery.toLowerCase())) ||
@@ -8650,7 +9215,7 @@ const InstrumentMasterForm = () => {
                                                                 return (
                                                                     <Box
                                                                         key={inst._id}
-                                                                        p={2.5}
+                                                                        p={2}
                                                                         bg={isChecked ? "purple.50" : "white"}
                                                                         borderRadius="xl"
                                                                         border="1px solid"
@@ -8659,16 +9224,16 @@ const InstrumentMasterForm = () => {
                                                                         onClick={() => handleMainInstrumentToggle(inst._id)}
                                                                         transition="all 0.15s"
                                                                     >
-                                                                        <HStack spacing={3}>
+                                                                        <HStack spacing={2.5}>
                                                                             <Checkbox
                                                                                 isChecked={isChecked}
                                                                                 onChange={() => handleMainInstrumentToggle(inst._id)}
                                                                                 colorScheme="purple"
                                                                             />
                                                                             {instPhoto ? (
-                                                                                <Image src={`${API_BASE_URL}${instPhoto}`} alt="" boxSize="32px" borderRadius="md" objectFit="cover" />
+                                                                                <Image src={`${API_BASE_URL}${instPhoto}`} alt="" boxSize="30px" borderRadius="md" objectFit="cover" />
                                                                             ) : (
-                                                                                <Center boxSize="32px" borderRadius="md" bg="gray.100" color="gray.400">
+                                                                                <Center boxSize="30px" borderRadius="md" bg="gray.100" color="gray.400">
                                                                                     <Icon as={FaWrench} boxSize={3} />
                                                                                 </Center>
                                                                             )}
@@ -8676,7 +9241,7 @@ const InstrumentMasterForm = () => {
                                                                                 <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
                                                                                     {inst.instrumentName || 'Unnamed'}
                                                                                 </Text>
-                                                                                <Text fontSize="0.65rem" color="gray.500">
+                                                                                <Text fontSize="2xs" color="gray.500">
                                                                                     {inst.serialNo} {inst.model ? `| ${inst.model}` : ''}
                                                                                 </Text>
                                                                             </VStack>
@@ -8689,47 +9254,24 @@ const InstrumentMasterForm = () => {
                                             )}
                                         </Card>
 
-                                        {/* Groups List Table */}
-                                        <Box overflowX="auto" border="1px solid" borderColor="gray.200" borderRadius="2xl" bg="white" boxShadow="sm">
-                                            <Table variant="simple" size="md">
-                                                <Thead bg="purple.50">
-                                                    <Tr>
-                                                        <Th color="purple.900" py={4}>Group ID</Th>
-                                                        <Th color="purple.900" py={4}>Group Name</Th>
-                                                        <Th color="purple.900" py={4}>Member Instruments</Th>
-                                                        <Th color="purple.900" py={4} textAlign="center">Actions</Th>
-                                                    </Tr>
-                                                </Thead>
-                                                <Tbody>
-                                                    {groups.map(grp => (
-                                                        <Tr key={grp._id} _hover={{ bg: "purple.50" }}>
-                                                            <Td py={3}>
-                                                                <Badge colorScheme="purple" borderRadius="md" px={2.5} py={1} fontWeight="bold">
-                                                                    {grp.groupId}
-                                                                </Badge>
-                                                            </Td>
-                                                            <Td py={3} fontWeight="bold" color="gray.800">
-                                                                {grp.name}
-                                                            </Td>
-                                                            <Td py={3}>
-                                                                <HStack spacing={1.5} wrap="wrap">
-                                                                    {grp.instruments && grp.instruments.length > 0 ? (
-                                                                        grp.instruments.map(inst => (
-                                                                            <Tag key={inst._id} size="sm" colorScheme="gray" variant="solid" borderRadius="full" px={2.5}>
-                                                                                {inst.instrumentName || 'Unnamed'} ({inst.serialNo})
-                                                                            </Tag>
-                                                                        ))
-                                                                    ) : (
-                                                                        <Text fontSize="xs" color="gray.400">Empty Group</Text>
-                                                                    )}
+                                        {/* Groups List: Mobile Cards + Desktop Table */}
+                                        <Box display={{ base: "block", md: "none" }}>
+                                            <VStack spacing={3} align="stretch">
+                                                {groups.map(grp => (
+                                                    <Card key={grp._id} p={3.5} borderRadius="2xl" bg="white" border="1px solid" borderColor="purple.200" boxShadow="xs">
+                                                        <VStack align="stretch" spacing={2.5}>
+                                                            <Flex justify="space-between" align="center">
+                                                                <HStack spacing={2}>
+                                                                    <Badge colorScheme="purple" borderRadius="md" px={2} py={0.5} fontWeight="bold" fontSize="2xs">
+                                                                        {grp.groupId}
+                                                                    </Badge>
+                                                                    <Heading size="xs" color="gray.800">{grp.name}</Heading>
                                                                 </HStack>
-                                                            </Td>
-                                                            <Td py={3} textAlign="center">
-                                                                <HStack justify="center" spacing={2}>
+                                                                <HStack spacing={1}>
                                                                     <IconButton
                                                                         aria-label="Edit Group"
                                                                         icon={<Icon as={FaEdit} />}
-                                                                        size="sm"
+                                                                        size="xs"
                                                                         colorScheme="purple"
                                                                         variant="ghost"
                                                                         onClick={() => handleGroupEdit(grp)}
@@ -8737,27 +9279,111 @@ const InstrumentMasterForm = () => {
                                                                     <IconButton
                                                                         aria-label="Delete Group"
                                                                         icon={<Icon as={FaTrash} />}
-                                                                        size="sm"
+                                                                        size="xs"
                                                                         colorScheme="red"
                                                                         variant="ghost"
                                                                         onClick={() => handleGroupDelete(grp._id)}
                                                                     />
                                                                 </HStack>
-                                                            </Td>
-                                                        </Tr>
-                                                    ))}
-                                                    {groups.length === 0 && (
+                                                            </Flex>
+                                                            <Box>
+                                                                <Text fontSize="2xs" color="gray.500" fontWeight="bold" mb={1} textTransform="uppercase">Member Equipment</Text>
+                                                                <Wrap spacing={1.5}>
+                                                                    {grp.instruments && grp.instruments.length > 0 ? (
+                                                                        grp.instruments.map(inst => (
+                                                                            <WrapItem key={inst._id}>
+                                                                                <Tag size="sm" colorScheme="purple" variant="subtle" borderRadius="full" px={2} fontSize="2xs">
+                                                                                    {inst.instrumentName || 'Unnamed'} ({inst.serialNo})
+                                                                                </Tag>
+                                                                            </WrapItem>
+                                                                        ))
+                                                                    ) : (
+                                                                        <Text fontSize="2xs" color="gray.400">Empty Group</Text>
+                                                                    )}
+                                                                </Wrap>
+                                                            </Box>
+                                                        </VStack>
+                                                    </Card>
+                                                ))}
+                                                {groups.length === 0 && (
+                                                    <Card p={6} textAlign="center" borderRadius="2xl" bg="white" border="1px dashed" borderColor="gray.300">
+                                                        <Text fontSize="xs" color="gray.400">No instrument groups created yet.</Text>
+                                                    </Card>
+                                                )}
+                                            </VStack>
+                                        </Box>
+
+                                        {/* Desktop Groups List Table */}
+                                        <Box display={{ base: "none", md: "block" }}>
+                                            <TableContainer border="1px solid" borderColor="gray.200" borderRadius="2xl" bg="white" boxShadow="sm">
+                                                <Table variant="simple" size="md">
+                                                    <Thead bg="purple.50">
                                                         <Tr>
-                                                            <Td colSpan={4} textAlign="center" py={10} color="gray.400">
-                                                                <VStack spacing={2}>
-                                                                    <Icon as={FaLayerGroup} boxSize={8} opacity={0.3} />
-                                                                    <Text fontSize="sm">No instrument groups created yet.</Text>
-                                                                </VStack>
-                                                            </Td>
+                                                            <Th color="purple.900" py={4}>Group ID</Th>
+                                                            <Th color="purple.900" py={4}>Group Name</Th>
+                                                            <Th color="purple.900" py={4}>Member Instruments</Th>
+                                                            <Th color="purple.900" py={4} textAlign="center">Actions</Th>
                                                         </Tr>
-                                                    )}
-                                                </Tbody>
-                                            </Table>
+                                                    </Thead>
+                                                    <Tbody>
+                                                        {groups.map(grp => (
+                                                            <Tr key={grp._id} _hover={{ bg: "purple.50" }}>
+                                                                <Td py={3}>
+                                                                    <Badge colorScheme="purple" borderRadius="md" px={2.5} py={1} fontWeight="bold">
+                                                                        {grp.groupId}
+                                                                    </Badge>
+                                                                </Td>
+                                                                <Td py={3} fontWeight="bold" color="gray.800">
+                                                                    {grp.name}
+                                                                </Td>
+                                                                <Td py={3}>
+                                                                    <HStack spacing={1.5} wrap="wrap">
+                                                                        {grp.instruments && grp.instruments.length > 0 ? (
+                                                                            grp.instruments.map(inst => (
+                                                                                <Tag key={inst._id} size="sm" colorScheme="gray" variant="solid" borderRadius="full" px={2.5}>
+                                                                                    {inst.instrumentName || 'Unnamed'} ({inst.serialNo})
+                                                                                </Tag>
+                                                                            ))
+                                                                        ) : (
+                                                                            <Text fontSize="xs" color="gray.400">Empty Group</Text>
+                                                                        )}
+                                                                    </HStack>
+                                                                </Td>
+                                                                <Td py={3} textAlign="center">
+                                                                    <HStack justify="center" spacing={2}>
+                                                                        <IconButton
+                                                                            aria-label="Edit Group"
+                                                                            icon={<Icon as={FaEdit} />}
+                                                                            size="sm"
+                                                                            colorScheme="purple"
+                                                                            variant="ghost"
+                                                                            onClick={() => handleGroupEdit(grp)}
+                                                                        />
+                                                                        <IconButton
+                                                                            aria-label="Delete Group"
+                                                                            icon={<Icon as={FaTrash} />}
+                                                                            size="sm"
+                                                                            colorScheme="red"
+                                                                            variant="ghost"
+                                                                            onClick={() => handleGroupDelete(grp._id)}
+                                                                        />
+                                                                    </HStack>
+                                                                </Td>
+                                                            </Tr>
+                                                        ))}
+                                                        {groups.length === 0 && (
+                                                            <Tr>
+                                                                <Td colSpan={4} textAlign="center" py={10} color="gray.400">
+                                                                    <VStack spacing={2}>
+                                                                        <Icon as={FaLayerGroup} boxSize={8} opacity={0.3} />
+                                                                        <Text fontSize="sm">No instrument groups created yet.</Text>
+                                                                    </VStack>
+                                                                </Td>
+                                                            </Tr>
+                                                        )}
+                                                    </Tbody>
+                                                </Table>
+                                            </TableContainer>
                                         </Box>
                                     </VStack>
                                 </TabPanel>
@@ -8780,29 +9406,29 @@ const InstrumentMasterForm = () => {
                         className="uni-modal-overlay"
                     >
                         <Box
-                            bg="white" borderRadius="3xl" maxW="750px" w="full" boxShadow="2xl"
+                            bg="white" borderRadius={{ base: "2xl", md: "3xl" }} maxW="750px" w="full" boxShadow="2xl"
                             overflow="hidden" onClick={(e) => e.stopPropagation()}
-                            maxH="90vh" display="flex" flexDirection="column"
+                            maxH={{ base: "94vh", md: "90vh" }} display="flex" flexDirection="column"
                             className="uni-modal-box"
                         >
                             {/* Modal Header */}
-                            <Box bgGradient="linear(to-r, blue.800, indigo.700)" p={6} color="white">
+                            <Box bgGradient="linear(to-r, blue.800, indigo.700)" p={{ base: 4, md: 6 }} color="white">
                                 <Flex justify="space-between" align="center">
-                                    <HStack spacing={4}>
-                                        <Center boxSize="46px" borderRadius="xl" bg="whiteAlpha.200">
-                                            <Icon as={viewInstrument.parentInstrumentId ? FaMicrochip : FaWrench} boxSize={6} />
+                                    <HStack spacing={{ base: 2.5, md: 4 }}>
+                                        <Center boxSize={{ base: "36px", md: "46px" }} borderRadius="xl" bg="whiteAlpha.200" flexShrink={0}>
+                                            <Icon as={viewInstrument.parentInstrumentId ? FaMicrochip : FaWrench} boxSize={{ base: 5, md: 6 }} />
                                         </Center>
                                         <VStack align="start" spacing={0}>
-                                            <Heading size="md">{viewInstrument.instrumentName || 'Unnamed Instrument'}</Heading>
-                                            <Text fontSize="xs" opacity={0.85}>
-                                                Serial No: {viewInstrument.serialNo || 'N/A'} • Model: {viewInstrument.model || 'N/A'}
+                                            <Heading size={{ base: "sm", md: "md" }}>{viewInstrument.instrumentName || 'Unnamed Instrument'}</Heading>
+                                            <Text fontSize="2xs" opacity={0.85}>
+                                                SN: {viewInstrument.serialNo || 'N/A'} • Model: {viewInstrument.model || 'N/A'}
                                             </Text>
                                         </VStack>
                                     </HStack>
 
-                                    <HStack spacing={2}>
+                                    <HStack spacing={1.5}>
                                         <Button
-                                            size="sm"
+                                            size="xs"
                                             colorScheme="whiteAlpha"
                                             leftIcon={<Icon as={FaEdit} />}
                                             borderRadius="xl"
@@ -8811,13 +9437,14 @@ const InstrumentMasterForm = () => {
                                                 setViewInstrument(null);
                                                 handleEdit(inst);
                                             }}
+                                            fontSize="2xs"
                                         >
                                             Edit
                                         </Button>
                                         <IconButton
                                             aria-label="Close"
                                             icon={<Icon as={FaTimes} />}
-                                            size="sm"
+                                            size="xs"
                                             variant="ghost"
                                             color="white"
                                             onClick={() => setViewInstrument(null)}
@@ -8827,8 +9454,8 @@ const InstrumentMasterForm = () => {
                             </Box>
 
                             {/* Modal Scrollable Body */}
-                            <Box p={{ base: 5, md: 7 }} overflowY="auto" flex="1">
-                                <VStack spacing={6} align="stretch">
+                            <Box p={{ base: 3.5, sm: 5, md: 7 }} overflowY="auto" flex="1">
+                                <VStack spacing={{ base: 4, md: 6 }} align="stretch">
 
                                     {/* Gallery & Photo Showcase */}
                                     {(() => {
@@ -8840,15 +9467,15 @@ const InstrumentMasterForm = () => {
 
                                         return (
                                             <Box>
-                                                <Text fontSize="xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider" mb={3}>
+                                                <Text fontSize="2xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider" mb={2}>
                                                     Photo Gallery ({allPhotos.length})
                                                 </Text>
                                                 {allPhotos.length > 0 ? (
-                                                    <VStack spacing={3} align="stretch">
+                                                    <VStack spacing={2.5} align="stretch">
                                                         <Box
                                                             borderRadius="2xl"
                                                             overflow="hidden"
-                                                            h="260px"
+                                                            h={{ base: "180px", sm: "240px", md: "260px" }}
                                                             bg="gray.100"
                                                             border="1px solid"
                                                             borderColor="gray.200"
@@ -8864,7 +9491,7 @@ const InstrumentMasterForm = () => {
                                                                 objectFit="contain"
                                                                 bg="blackAlpha.900"
                                                             />
-                                                            <Badge position="absolute" bottom={3} right={3} colorScheme="blackAlpha" borderRadius="md" px={2} py={1}>
+                                                            <Badge position="absolute" bottom={2} right={2} colorScheme="blackAlpha" borderRadius="md" px={2} py={0.5} fontSize="2xs">
                                                                 Click to Enlarge 🔍
                                                             </Badge>
                                                         </Box>
@@ -8874,7 +9501,7 @@ const InstrumentMasterForm = () => {
                                                                 {allPhotos.map((p, pIdx) => (
                                                                     <Box
                                                                         key={pIdx}
-                                                                        boxSize="60px"
+                                                                        boxSize={{ base: "48px", md: "60px" }}
                                                                         borderRadius="xl"
                                                                         overflow="hidden"
                                                                         border={modalActivePhotoIndex === pIdx ? "2px solid" : "1px solid"}
@@ -8890,7 +9517,7 @@ const InstrumentMasterForm = () => {
                                                         )}
                                                     </VStack>
                                                 ) : (
-                                                    <Box p={6} bg="gray.50" borderRadius="2xl" border="1px dashed" borderColor="gray.300" textAlign="center">
+                                                    <Box p={4} bg="gray.50" borderRadius="2xl" border="1px dashed" borderColor="gray.300" textAlign="center">
                                                         <Text fontSize="xs" color="gray.400">No photos uploaded for this instrument.</Text>
                                                     </Box>
                                                 )}
@@ -8900,37 +9527,37 @@ const InstrumentMasterForm = () => {
 
                                     {/* Specifications Grid */}
                                     <Box>
-                                        <Text fontSize="xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider" mb={3}>
+                                        <Text fontSize="2xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider" mb={2}>
                                             Equipment Specifications
                                         </Text>
-                                        <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4} bg="gray.50" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.200">
+                                        <SimpleGrid columns={{ base: 2, md: 3 }} spacing={{ base: 2.5, md: 4 }} bg="gray.50" p={{ base: 3, md: 4 }} borderRadius="2xl" border="1px solid" borderColor="gray.200">
                                             <VStack align="start" spacing={0}>
-                                                <Text fontSize="10px" color="gray.500" textTransform="uppercase">Serial Number</Text>
-                                                <Text fontSize="sm" fontWeight="bold" color="blue.700">{viewInstrument.serialNo || 'N/A'}</Text>
+                                                <Text fontSize="2xs" color="gray.500" textTransform="uppercase">Serial Number</Text>
+                                                <Text fontSize="xs" fontWeight="bold" color="blue.700">{viewInstrument.serialNo || 'N/A'}</Text>
                                             </VStack>
                                             <VStack align="start" spacing={0}>
-                                                <Text fontSize="10px" color="gray.500" textTransform="uppercase">Instrument Name</Text>
-                                                <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewInstrument.instrumentName || 'N/A'}</Text>
+                                                <Text fontSize="2xs" color="gray.500" textTransform="uppercase">Instrument Name</Text>
+                                                <Text fontSize="xs" fontWeight="bold" color="gray.800">{viewInstrument.instrumentName || 'N/A'}</Text>
                                             </VStack>
                                             <VStack align="start" spacing={0}>
-                                                <Text fontSize="10px" color="gray.500" textTransform="uppercase">Model</Text>
-                                                <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewInstrument.model || 'N/A'}</Text>
+                                                <Text fontSize="2xs" color="gray.500" textTransform="uppercase">Model</Text>
+                                                <Text fontSize="xs" fontWeight="bold" color="gray.800">{viewInstrument.model || 'N/A'}</Text>
                                             </VStack>
                                             <VStack align="start" spacing={0}>
-                                                <Text fontSize="10px" color="gray.500" textTransform="uppercase">Role</Text>
-                                                <Badge colorScheme={viewInstrument.parentInstrumentId ? "orange" : "blue"} borderRadius="md">
+                                                <Text fontSize="2xs" color="gray.500" textTransform="uppercase">Role</Text>
+                                                <Badge colorScheme={viewInstrument.parentInstrumentId ? "orange" : "blue"} borderRadius="md" fontSize="2xs">
                                                     {viewInstrument.parentInstrumentId ? 'Child Accessory' : 'Parent Unit'}
                                                 </Badge>
                                             </VStack>
                                             <VStack align="start" spacing={0}>
-                                                <Text fontSize="10px" color="gray.500" textTransform="uppercase">Group</Text>
-                                                <Text fontSize="sm" fontWeight="bold" color="purple.700">
+                                                <Text fontSize="2xs" color="gray.500" textTransform="uppercase">Group</Text>
+                                                <Text fontSize="xs" fontWeight="bold" color="purple.700">
                                                     {getGroupOf(viewInstrument._id)?.name || 'None'}
                                                 </Text>
                                             </VStack>
                                             <VStack align="start" spacing={0}>
-                                                <Text fontSize="10px" color="gray.500" textTransform="uppercase">Created Date</Text>
-                                                <Text fontSize="xs" color="gray.600">
+                                                <Text fontSize="2xs" color="gray.500" textTransform="uppercase">Created Date</Text>
+                                                <Text fontSize="2xs" color="gray.600">
                                                     {viewInstrument.createdAt ? new Date(viewInstrument.createdAt).toLocaleDateString() : 'N/A'}
                                                 </Text>
                                             </VStack>
@@ -8939,10 +9566,10 @@ const InstrumentMasterForm = () => {
 
                                     {/* Remarks & Notes */}
                                     <Box>
-                                        <Text fontSize="xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider" mb={2}>
+                                        <Text fontSize="2xs" fontWeight="bold" color="blue.600" textTransform="uppercase" letterSpacing="wider" mb={1.5}>
                                             Notes & Remarks
                                         </Text>
-                                        <Text fontSize="sm" bg="gray.50" p={4} borderRadius="xl" borderLeft="4px solid" borderColor="blue.400">
+                                        <Text fontSize="xs" bg="gray.50" p={3} borderRadius="xl" borderLeft="4px solid" borderColor="blue.400">
                                             {viewInstrument.notes || 'No specific notes recorded for this instrument.'}
                                         </Text>
                                     </Box>
@@ -8950,43 +9577,43 @@ const InstrumentMasterForm = () => {
                                     {/* Child Instruments (if Parent) */}
                                     {!viewInstrument.parentInstrumentId && (
                                         <Box>
-                                            <Flex justify="space-between" align="center" mb={3}>
-                                                <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wider">
+                                            <Flex justify="space-between" align="center" mb={2}>
+                                                <Text fontSize="2xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wider">
                                                     Attached Child Instruments ({getChildrenOf(viewInstrument._id).length})
                                                 </Text>
                                             </Flex>
 
                                             {getChildrenOf(viewInstrument._id).length === 0 ? (
-                                                <Box p={4} bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300" textAlign="center">
-                                                    <Text fontSize="xs" color="gray.500" fontStyle="italic">No child accessories attached.</Text>
+                                                <Box p={3} bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300" textAlign="center">
+                                                    <Text fontSize="2xs" color="gray.500" fontStyle="italic">No child accessories attached.</Text>
                                                 </Box>
                                             ) : (
-                                                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+                                                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2}>
                                                     {getChildrenOf(viewInstrument._id).map(child => {
                                                         const childPhoto = child.photos?.[0]?.url || child.photo?.url;
                                                         return (
-                                                            <Card key={child._id} borderRadius="xl" p={3} border="1px solid" borderColor="blue.100" bg="gray.50">
-                                                                <HStack spacing={3}>
+                                                            <Card key={child._id} borderRadius="xl" p={2.5} border="1px solid" borderColor="blue.100" bg="gray.50">
+                                                                <HStack spacing={2.5}>
                                                                     {childPhoto ? (
                                                                         <Image
                                                                             src={`${API_BASE_URL}${childPhoto}`}
                                                                             alt={child.instrumentName}
-                                                                            boxSize="44px"
+                                                                            boxSize="36px"
                                                                             borderRadius="lg"
                                                                             objectFit="cover"
                                                                             cursor="pointer"
                                                                             onClick={() => setLightboxPhoto(`${API_BASE_URL}${childPhoto}`)}
                                                                         />
                                                                     ) : (
-                                                                        <Center boxSize="44px" borderRadius="lg" bg="blue.100" color="blue.600">
+                                                                        <Center boxSize="36px" borderRadius="lg" bg="blue.100" color="blue.600">
                                                                             <Icon as={FaMicrochip} />
                                                                         </Center>
                                                                     )}
                                                                     <VStack align="start" spacing={0} flex={1}>
-                                                                        <Text fontWeight="bold" fontSize="xs">{child.instrumentName || 'Unnamed'}</Text>
-                                                                        <Text fontSize="10px" color="gray.500">{child.serialNo} {child.model ? `| ${child.model}` : ''}</Text>
+                                                                        <Text fontWeight="bold" fontSize="2xs">{child.instrumentName || 'Unnamed'}</Text>
+                                                                        <Text fontSize="2xs" color="gray.500">{child.serialNo} {child.model ? `| ${child.model}` : ''}</Text>
                                                                     </VStack>
-                                                                    <Button size="xs" colorScheme="teal" variant="ghost" onClick={() => openViewModal(child)}>
+                                                                    <Button size="xs" colorScheme="teal" variant="ghost" onClick={() => openViewModal(child)} fontSize="2xs">
                                                                         View
                                                                     </Button>
                                                                 </HStack>
@@ -9001,21 +9628,21 @@ const InstrumentMasterForm = () => {
                                     {/* Parent Link (if Child) */}
                                     {viewInstrument.parentInstrumentId && getParentOf(viewInstrument) && (
                                         <Box>
-                                            <Text fontSize="xs" fontWeight="bold" color="blue.700" textTransform="uppercase" letterSpacing="wider" mb={2}>
+                                            <Text fontSize="2xs" fontWeight="bold" color="blue.700" textTransform="uppercase" letterSpacing="wider" mb={1.5}>
                                                 Parent Equipment Unit
                                             </Text>
-                                            <Card borderRadius="xl" p={4} bg="blue.50" border="1px solid" borderColor="blue.200">
+                                            <Card borderRadius="xl" p={3} bg="blue.50" border="1px solid" borderColor="blue.200">
                                                 <Flex justify="space-between" align="center">
-                                                    <HStack spacing={3}>
-                                                        <Center boxSize="40px" borderRadius="lg" bg="blue.100" color="blue.600">
+                                                    <HStack spacing={2.5}>
+                                                        <Center boxSize="36px" borderRadius="lg" bg="blue.100" color="blue.600">
                                                             <Icon as={FaBoxes} />
                                                         </Center>
                                                         <VStack align="start" spacing={0}>
-                                                            <Text fontWeight="bold" fontSize="sm">{getParentOf(viewInstrument).instrumentName || 'Parent Instrument'}</Text>
-                                                            <Text fontSize="xs" color="gray.600">Serial: {getParentOf(viewInstrument).serialNo}</Text>
+                                                            <Text fontWeight="bold" fontSize="xs">{getParentOf(viewInstrument).instrumentName || 'Parent Instrument'}</Text>
+                                                            <Text fontSize="2xs" color="gray.600">Serial: {getParentOf(viewInstrument).serialNo}</Text>
                                                         </VStack>
                                                     </HStack>
-                                                    <Button size="xs" colorScheme="blue" onClick={() => openViewModal(getParentOf(viewInstrument))}>
+                                                    <Button size="xs" colorScheme="blue" onClick={() => openViewModal(getParentOf(viewInstrument))} fontSize="2xs">
                                                         View Parent
                                                     </Button>
                                                 </Flex>
@@ -9027,8 +9654,8 @@ const InstrumentMasterForm = () => {
                             </Box>
 
                             {/* Modal Footer */}
-                            <Box p={4} bg="gray.50" borderTop="1px solid" borderColor="gray.200" textAlign="right">
-                                <Button colorScheme="blue" borderRadius="full" px={8} onClick={() => setViewInstrument(null)}>
+                            <Box p={3.5} bg="gray.50" borderTop="1px solid" borderColor="gray.200" textAlign="right">
+                                <Button colorScheme="blue" borderRadius="full" px={8} onClick={() => setViewInstrument(null)} size="sm" w={{ base: "full", sm: "auto" }}>
                                     Close Spec Sheet
                                 </Button>
                             </Box>
@@ -9044,22 +9671,22 @@ const InstrumentMasterForm = () => {
                         position="fixed" top={0} left={0} right={0} bottom={0}
                         bg="blackAlpha.700"
                         zIndex={10000}
-                        display="flex" alignItems="center" justifyContent="center" p={4}
+                        display="flex" alignItems="center" justifyContent="center" p={{ base: 2, md: 4 }}
                         onClick={handleGroupClear}
                         className="uni-modal-overlay"
                     >
                         <Box
-                            bg="white" borderRadius="3xl" maxW="600px" w="full" boxShadow="2xl"
+                            bg="white" borderRadius={{ base: "2xl", md: "3xl" }} maxW="600px" w="full" boxShadow="2xl"
                             overflow="hidden" onClick={(e) => e.stopPropagation()}
                             className="uni-modal-box"
                         >
-                            <Box bgGradient="linear(to-r, purple.800, purple.600)" p={6} color="white">
+                            <Box bgGradient="linear(to-r, purple.800, purple.600)" p={{ base: 4, md: 6 }} color="white">
                                 <Flex justify="space-between" align="center">
-                                    <HStack spacing={4}>
-                                        <Icon as={FaLayerGroup} boxSize={7} />
+                                    <HStack spacing={3}>
+                                        <Icon as={FaLayerGroup} boxSize={6} />
                                         <VStack align="start" spacing={0}>
-                                            <Heading size="md">{groupEditId ? 'Edit Instrument Group' : 'Create Instrument Group'}</Heading>
-                                            <Text fontSize="xs" opacity={0.85}>Group ID is auto-assigned. Set a friendly group name below.</Text>
+                                            <Heading size={{ base: "sm", md: "md" }}>{groupEditId ? 'Edit Instrument Group' : 'Create Instrument Group'}</Heading>
+                                            <Text fontSize="2xs" opacity={0.85}>Group ID is auto-assigned. Set a friendly group name below.</Text>
                                         </VStack>
                                     </HStack>
                                     <IconButton aria-label="Close" icon={<Icon as={FaTimes} />} size="sm" variant="ghost" color="white" onClick={handleGroupClear} />
@@ -9067,20 +9694,21 @@ const InstrumentMasterForm = () => {
                             </Box>
 
                             <form onSubmit={handleGroupSubmit}>
-                                <Box p={6}>
-                                    <VStack spacing={5} align="stretch">
-                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                <Box p={{ base: 4, md: 6 }}>
+                                    <VStack spacing={4} align="stretch">
+                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
                                             <FormControl isReadOnly>
-                                                <FormLabel fontSize="sm" fontWeight="bold" color="gray.700">Group ID</FormLabel>
+                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Group ID</FormLabel>
                                                 <Input
                                                     value={groupEditId ? (groups.find(g => g._id === groupEditId)?.groupId || '') : groupNextId}
                                                     borderRadius="xl"
                                                     bg="gray.100"
                                                     fontWeight="bold"
+                                                    size="sm"
                                                 />
                                             </FormControl>
                                             <FormControl isRequired>
-                                                <FormLabel fontSize="sm" fontWeight="bold" color="gray.700">Group Name</FormLabel>
+                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700">Group Name</FormLabel>
                                                 <Input
                                                     name="name"
                                                     value={groupFormData.name}
@@ -9088,21 +9716,21 @@ const InstrumentMasterForm = () => {
                                                     placeholder="e.g. Total Station Survey Kit A"
                                                     borderRadius="xl"
                                                     bg="gray.50"
+                                                    size="sm"
                                                 />
                                             </FormControl>
                                         </SimpleGrid>
 
                                         <FormControl>
-                                            <FormLabel fontSize="sm" fontWeight="bold" color="gray.700" mb={2}>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1.5}>
                                                 Included Instruments ({groupFormData.instruments.length})
                                             </FormLabel>
-                                            <Box border="1px solid" borderColor="gray.200" borderRadius="xl" p={4} maxH="220px" overflowY="auto" bg="gray.50">
-                                                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+                                            <Box border="1px solid" borderColor="gray.200" borderRadius="xl" p={{ base: 2.5, md: 4 }} maxH="200px" overflowY="auto" bg="gray.50">
+                                                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2}>
                                                     {getAvailableInstrumentsForGroup().concat(
                                                         instruments.filter(inst => groupFormData.instruments.includes(inst._id) && !getAvailableInstrumentsForGroup().some(ai => ai._id === inst._id))
                                                     ).map(inst => {
                                                         const isChecked = groupFormData.instruments.includes(inst._id);
-                                                        const instPhoto = inst.photos?.[0]?.url || inst.photo?.url;
                                                         return (
                                                             <Checkbox
                                                                 key={inst._id}
@@ -9122,9 +9750,9 @@ const InstrumentMasterForm = () => {
                                     </VStack>
                                 </Box>
 
-                                <Box p={4} bg="gray.50" borderTop="1px solid" borderColor="gray.200">
-                                    <HStack justify="flex-end" spacing={3}>
-                                        <Button onClick={handleGroupClear} variant="ghost" borderRadius="full" px={6}>
+                                <Box p={{ base: 3, md: 4 }} bg="gray.50" borderTop="1px solid" borderColor="gray.200">
+                                    <HStack justify="flex-end" spacing={2}>
+                                        <Button onClick={handleGroupClear} variant="ghost" borderRadius="full" px={5} size="sm">
                                             Cancel
                                         </Button>
                                         <Button
@@ -9132,8 +9760,9 @@ const InstrumentMasterForm = () => {
                                             colorScheme="purple"
                                             isLoading={isGroupLoading}
                                             borderRadius="full"
-                                            px={8}
+                                            px={6}
                                             shadow="md"
+                                            size="sm"
                                         >
                                             {groupEditId ? 'Update Group' : 'Save Group'}
                                         </Button>
@@ -9152,14 +9781,14 @@ const InstrumentMasterForm = () => {
                         position="fixed" top={0} left={0} right={0} bottom={0}
                         bg="blackAlpha.900"
                         zIndex={20000}
-                        display="flex" alignItems="center" justifyContent="center" p={4}
+                        display="flex" alignItems="center" justifyContent="center" p={{ base: 2, md: 4 }}
                         onClick={() => setLightboxPhoto(null)}
                     >
-                        <Box position="relative" maxW="90vw" maxH="90vh" onClick={(e) => e.stopPropagation()}>
+                        <Box position="relative" maxW="95vw" maxH="90vh" onClick={(e) => e.stopPropagation()}>
                             <Image
                                 src={lightboxPhoto}
                                 alt="High Resolution Preview"
-                                maxW="90vw"
+                                maxW="95vw"
                                 maxH="85vh"
                                 objectFit="contain"
                                 borderRadius="2xl"
@@ -9168,11 +9797,11 @@ const InstrumentMasterForm = () => {
                             <IconButton
                                 aria-label="Close Lightbox"
                                 icon={<Icon as={FaTimes} />}
-                                size="md"
+                                size="sm"
                                 colorScheme="whiteAlpha"
                                 position="absolute"
-                                top={-4}
-                                right={-4}
+                                top={2}
+                                right={2}
                                 borderRadius="full"
                                 bg="red.500"
                                 color="white"
@@ -9188,15 +9817,15 @@ const InstrumentMasterForm = () => {
             {/* Confirmation Dialog */}
             <AlertDialog isOpen={isConfirmOpen} leastDestructiveRef={cancelRef} onClose={onConfirmClose} isCentered>
                 <AlertDialogOverlay>
-                    <AlertDialogContent borderRadius="2xl">
+                    <AlertDialogContent borderRadius="2xl" mx={{ base: 3, md: 0 }}>
                         <AlertDialogHeader fontSize="lg" fontWeight="bold">Confirm Instrument Resource</AlertDialogHeader>
                         <AlertDialogBody>
                             Are you sure you want to {editId ? 'update' : 'save'} <strong>{formData.instrumentName || formData.serialNo}</strong>
                             {formChildren.length > 0 && ` along with ${formChildren.length} child accessory records and photos`}?
                         </AlertDialogBody>
                         <AlertDialogFooter>
-                            <Button ref={cancelRef} onClick={onConfirmClose} borderRadius="full">Cancel</Button>
-                            <Button colorScheme="blue" onClick={confirmSubmit} ml={3} borderRadius="full" px={8}>Confirm & Save</Button>
+                            <Button ref={cancelRef} onClick={onConfirmClose} borderRadius="full" size="sm">Cancel</Button>
+                            <Button colorScheme="blue" onClick={confirmSubmit} ml={3} borderRadius="full" px={6} size="sm">Confirm & Save</Button>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialogOverlay>
@@ -9267,6 +9896,10 @@ const ExpenseReportsTab = () => {
 
 const SERVICES_TAB_KEY = 'services_active_tab_key';
 
+const WrappedEmployeeExpensesModule = () => <EmployeeExpensesModule isInsideServices={true} />;
+const WrappedAdminDraftingWork = () => <AdminDraftingWork isInsideServices={true} />;
+const WrappedInvoiceReport = () => <InvoiceReport isInsideServices={true} />;
+
 const Services = () => {
     const { user } = useAuth();
     const isAdmin = user && user.isAdmin;
@@ -9296,18 +9929,18 @@ const Services = () => {
         });
     };
 
-    const adminServiceTabs = [
-        { key: 'vehicleMaster', groupKey: 'vehicleMasterGroup', label: 'Vehicle Master', icon: FaTruck, colorScheme: 'purple', component: <VehicleMasterForm /> },
-        { key: 'employeeMaster', groupKey: 'employeeMasterGroup', label: 'Employee Master', icon: FaUserTie, colorScheme: 'blue', component: <EmployeeMasterForm /> },
-        { key: 'clientMaster', groupKey: 'clientMasterGroup', label: 'Client Master', icon: FaHandshake, colorScheme: 'orange', component: <ClientMasterForm /> },
-        { key: 'siteMaster', groupKey: 'siteMasterGroup', label: 'Site Master', icon: FaMap, colorScheme: 'teal', component: <SiteMasterForm /> },
-        { key: 'scheduleMaster', groupKey: 'scheduleMasterGroup', label: 'Scheduler', icon: FaCalendarAlt, colorScheme: 'green', component: <ScheduleMasterForm /> },
-        { key: 'instrumentMaster', groupKey: 'instrumentMasterGroup', label: 'Instruments', icon: FaWrench, colorScheme: 'blue', component: <InstrumentMasterForm /> },
-        { key: 'employeeExpense', groupKey: 'employeeExpenseGroup', label: 'Employee Ledger', icon: FaMoneyBillWave, colorScheme: 'blue', component: <EmployeeExpensesModule isInsideServices={true} /> },
-        { key: 'draftingWork', groupKey: 'otherServicesGroup', subFilter: 'draftingWork', label: 'Drafting Work', icon: FaFolderOpen, colorScheme: 'purple', component: <AdminDraftingWork isInsideServices={true} /> },
-        { key: 'invoiceReport', groupKey: 'otherServicesGroup', subFilter: 'invoiceReport', label: 'Invoice Report', icon: FaFileInvoiceDollar, colorScheme: 'blue', component: <InvoiceReport isInsideServices={true} /> },
-        { key: 'companyMaster', groupKey: 'otherServicesGroup', subFilter: 'companyMaster', label: 'Our Companies', icon: FaBuilding, colorScheme: 'teal', component: <CompanyMaster /> },
-    ].filter(t => hasPermission(user, t.key, 'read'));
+    const adminServiceTabs = useMemo(() => [
+        { key: 'vehicleMaster', groupKey: 'vehicleMasterGroup', label: 'Vehicle Master', icon: FaTruck, colorScheme: 'purple', Component: VehicleMasterForm },
+        { key: 'employeeMaster', groupKey: 'employeeMasterGroup', label: 'Employee Master', icon: FaUserTie, colorScheme: 'blue', Component: EmployeeMasterForm },
+        { key: 'clientMaster', groupKey: 'clientMasterGroup', label: 'Client Master', icon: FaHandshake, colorScheme: 'orange', Component: ClientMasterForm },
+        { key: 'siteMaster', groupKey: 'siteMasterGroup', label: 'Site Master', icon: FaMap, colorScheme: 'teal', Component: SiteMasterForm },
+        { key: 'scheduleMaster', groupKey: 'scheduleMasterGroup', label: 'Scheduler', icon: FaCalendarAlt, colorScheme: 'green', Component: ScheduleMasterForm },
+        { key: 'instrumentMaster', groupKey: 'instrumentMasterGroup', label: 'Instruments', icon: FaWrench, colorScheme: 'blue', Component: InstrumentMasterForm },
+        { key: 'employeeExpense', groupKey: 'employeeExpenseGroup', label: 'Employee Ledger', icon: FaMoneyBillWave, colorScheme: 'blue', Component: WrappedEmployeeExpensesModule },
+        { key: 'draftingWork', groupKey: 'otherServicesGroup', subFilter: 'draftingWork', label: 'Drafting Work', icon: FaFolderOpen, colorScheme: 'purple', Component: WrappedAdminDraftingWork },
+        { key: 'invoiceReport', groupKey: 'otherServicesGroup', subFilter: 'invoiceReport', label: 'Invoice Report', icon: FaFileInvoiceDollar, colorScheme: 'blue', Component: WrappedInvoiceReport },
+        { key: 'companyMaster', groupKey: 'otherServicesGroup', subFilter: 'companyMaster', label: 'Our Companies', icon: FaBuilding, colorScheme: 'teal', Component: CompanyMaster },
+    ].filter(t => hasPermission(user, t.key, 'read')), [user]);
 
     // Store tab KEY ('siteMaster', 'clientMaster', etc.) to avoid race conditions with permission loading
     const [activeTabKey, setActiveTabKey] = useState(() => {
@@ -9469,6 +10102,7 @@ const Services = () => {
                                     index={activeTabIndex} 
                                     onChange={handleTabChange} 
                                     isLazy 
+                                    lazyBehavior="keepMounted"
                                     variant="soft-rounded" 
                                     colorScheme="purple" 
                                     orientation="vertical" 
@@ -9509,7 +10143,7 @@ const Services = () => {
                                             <TabPanel key={t.key} p={0} w="full">
                                                 <ModulePermissionBar moduleGroupKey={t.groupKey} subModuleFilterKey={t.subFilter} />
                                                 <Box w="full" overflowX="auto">
-                                                    {t.component}
+                                                    <t.Component />
                                                 </Box>
                                             </TabPanel>
                                         ))}

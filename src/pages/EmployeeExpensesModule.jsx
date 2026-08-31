@@ -8,7 +8,7 @@ import {
     Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverArrow, Portal,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
     useDisclosure, Switch, Alert, AlertIcon, AlertTitle, AlertDescription,
-    Tag, TagLabel, TagLeftIcon
+    Tag, TagLabel, TagLeftIcon, Wrap, WrapItem
 } from '@chakra-ui/react';
 import { 
     FaMoneyBillWave, FaExchangeAlt, FaPlus, FaTrash, FaEye,
@@ -17,7 +17,7 @@ import {
     FaPaperclip, FaUsers, FaChevronLeft, FaChevronRight, FaUserCheck, FaUserSlash, FaClipboardList,
     FaHome, FaWarehouse, FaChevronDown, FaChevronUp, FaBed,
     FaTools, FaCar, FaReceipt, FaFilePdf, FaDownload, FaExternalLinkAlt, FaInfoCircle, FaMapMarkerAlt,
-    FaThLarge, FaList
+    FaThLarge, FaList, FaTruck, FaBriefcase
 } from 'react-icons/fa';
 import api from '../api/axios';
 import AdminEmployeeExpenses from '../components/AdminEmployeeExpenses';
@@ -306,26 +306,50 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
         if (!selectedDetailEntry) return;
 
         let isMounted = true;
-        const fetchMonthTotals = async () => {
-            setMonthStats(prev => ({ ...prev, loading: true }));
-            try {
-                // Find matching employee object
-                const empObj = employees.find(e => 
-                    String(e._id) === String(selectedDetailEntry.empId) || 
-                    String(e.empId) === String(selectedDetailEntry.empId) || 
-                    (e.name && e.name.trim().toLowerCase() === (selectedDetailEntry.empName || '').trim().toLowerCase())
-                );
-                const empObjectId = empObj ? empObj._id : selectedDetailEntry.empId;
 
+        // 1. Immediately calculate initial stats synchronously from in-memory data for instant 0ms modal opening!
+        const empObj = employees.find(e => 
+            String(e._id) === String(selectedDetailEntry.empId) || 
+            String(e.empId) === String(selectedDetailEntry.empId) || 
+            (e.name && e.name.trim().toLowerCase() === (selectedDetailEntry.empName || '').trim().toLowerCase())
+        );
+        const empObjectId = empObj ? empObj._id : selectedDetailEntry.empId;
+        const entryDt = new Date(selectedDetailEntry.date || new Date());
+        const curM = entryDt.getMonth();
+        const curY = entryDt.getFullYear();
+
+        let initialDebit = 0;
+        let initialCredit = 0;
+        let initialExpense = 0;
+
+        if (Array.isArray(allExpenses)) {
+            allExpenses.forEach(exp => {
+                const ed = new Date(exp.date);
+                if (ed.getMonth() === curM && ed.getFullYear() === curY) {
+                    const expEmpId = exp.employeeId?._id || exp.employeeId || exp.employee?._id || exp.employee;
+                    const expEmpName = exp.employeeId?.name || exp.employee?.name || '';
+                    if (isSameEmployee(selectedDetailEntry.empId, expEmpId, selectedDetailEntry.empName, expEmpName)) {
+                        const expAmt = Number(exp.totalExpense) || 0;
+                        initialExpense += expAmt;
+                        initialDebit += expAmt;
+                        (exp.creditDebit?.givenTo || []).forEach(g => { initialDebit += (Number(g.amount) || 0); });
+                        (exp.creditDebit?.receivedFrom || []).forEach(r => { initialCredit += (Number(r.amount) || 0); });
+                    }
+                }
+            });
+        }
+
+        const initialCurBal = empObj?.totalAmount || 0;
+        setMonthStats({ credit: initialCredit, debit: initialDebit, expense: initialExpense, currentBalance: initialCurBal, loading: false });
+
+        // 2. Fetch non-blocking in background to update any deep data
+        const fetchMonthTotals = async () => {
+            try {
                 const [expRes, trRes, empRes] = await Promise.all([
                     api.get(`/employee-expense/admin/${empObjectId}`).catch(() => ({ data: { success: false } })),
-                    api.get(`/employee-transfer`).catch(() => ({ data: { success: false } })),
+                    api.get(`/employee-transfer?employeeId=${empObjectId}`).catch(() => ({ data: { success: false } })),
                     empObj ? Promise.resolve({ data: { success: true, data: empObj } }) : api.get(`/employee-master/${empObjectId}`).catch(() => ({ data: { success: false } }))
                 ]);
-
-                const entryDt = new Date(selectedDetailEntry.date || new Date());
-                const curM = entryDt.getMonth();
-                const curY = entryDt.getFullYear();
 
                 let mDebit = 0;
                 let mCredit = 0;
@@ -1360,9 +1384,9 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                 {/* — Column headers — */}
                                                 <Flex minW="1100px" px={4} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.100" align="center">
                                                     <Text flex="1.3" minW="160px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Operative</Text>
-                                                    <Text flex="1.1" minW="130px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Helper</Text>
-                                                    <Text flex="1.8" minW="210px" pr={3} fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Client</Text>
-                                                    <Text flex="1.8" minW="210px" pr={3} fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Site</Text>
+                                                    <Text flex="1.4" minW="150px" pr={2} fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Helper</Text>
+                                                    <Text flex="1.6" minW="180px" pr={3} fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Client</Text>
+                                                    <Text flex="1.6" minW="180px" pr={3} fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider">Site</Text>
                                                     <Text flex="0 0 75px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider" textAlign="center">Report</Text>
                                                     <Text flex="0 0 75px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider" textAlign="center">Data</Text>
                                                     <Text flex="0 0 85px" fontSize="10px" fontWeight="800" color="gray.500" textTransform="uppercase" letterSpacing="wider" textAlign="right">Credit</Text>
@@ -1415,34 +1439,70 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                             </HStack>
 
                                                             {/* 2. Helper (Partitioned per assignment) */}
-                                                            <Box flex="1.1" minW="130px" pr={2}>
-                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
+                                                            <Box flex="1.4" minW="150px" pr={2} overflow="hidden">
+                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} w="full" divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
                                                                     {assignments.map((asg, aIdx) => (
-                                                                        <Text key={aIdx} fontSize="xs" color={asg.helpers ? "gray.800" : "gray.300"} fontWeight={asg.helpers ? "800" : "normal"} textTransform={asg.helpers ? "uppercase" : "none"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
-                                                                            {asg.helpers ? `🤝 ${asg.helpers}` : '—'}
-                                                                        </Text>
+                                                                        <Tooltip key={aIdx} label={asg.helpers || ''} isDisabled={!asg.helpers} placement="top" hasArrow>
+                                                                            <Text
+                                                                                w="full"
+                                                                                fontSize="xs"
+                                                                                color={asg.helpers ? "gray.800" : "gray.300"}
+                                                                                fontWeight={asg.helpers ? "800" : "normal"}
+                                                                                textTransform={asg.helpers ? "uppercase" : "none"}
+                                                                                noOfLines={1}
+                                                                                isTruncated
+                                                                                minH={assignments.length > 1 ? "22px" : "auto"}
+                                                                                lineHeight="22px"
+                                                                            >
+                                                                                {asg.helpers ? `🤝 ${asg.helpers}` : '—'}
+                                                                            </Text>
+                                                                        </Tooltip>
                                                                     ))}
                                                                 </VStack>
                                                             </Box>
 
                                                             {/* 3. Client (Partitioned per assignment) */}
-                                                            <Box flex="1.8" minW="210px" pr={3} overflow="hidden">
-                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
+                                                            <Box flex="1.6" minW="180px" pr={3} overflow="hidden">
+                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} w="full" divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
                                                                     {assignments.map((asg, aIdx) => (
-                                                                        <Text key={aIdx} fontSize="xs" fontWeight="800" color={asg.client && asg.client !== '—' ? "gray.800" : "gray.300"} textTransform={asg.client && asg.client !== '—' ? "uppercase" : "none"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
-                                                                            {asg.client && asg.client !== '—' ? `🏢 ${asg.client}` : '—'}
-                                                                        </Text>
+                                                                        <Tooltip key={aIdx} label={asg.client && asg.client !== '—' ? asg.client : ''} isDisabled={!asg.client || asg.client === '—'} placement="top" hasArrow>
+                                                                            <Text
+                                                                                w="full"
+                                                                                fontSize="xs"
+                                                                                fontWeight="800"
+                                                                                color={asg.client && asg.client !== '—' ? "gray.800" : "gray.300"}
+                                                                                textTransform={asg.client && asg.client !== '—' ? "uppercase" : "none"}
+                                                                                noOfLines={1}
+                                                                                isTruncated
+                                                                                minH={assignments.length > 1 ? "22px" : "auto"}
+                                                                                lineHeight="22px"
+                                                                            >
+                                                                                {asg.client && asg.client !== '—' ? `🏢 ${asg.client}` : '—'}
+                                                                            </Text>
+                                                                        </Tooltip>
                                                                     ))}
                                                                 </VStack>
                                                             </Box>
 
                                                             {/* 4. Site (Partitioned per assignment) */}
-                                                            <Box flex="1.8" minW="210px" pr={3} overflow="hidden">
-                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
+                                                            <Box flex="1.6" minW="180px" pr={3} overflow="hidden">
+                                                                <VStack align="start" spacing={assignments.length > 1 ? 2 : 0} w="full" divider={assignments.length > 1 ? <Divider borderColor="gray.200" /> : null}>
                                                                     {assignments.map((asg, aIdx) => (
-                                                                        <Text key={aIdx} fontSize="xs" fontWeight="800" color={asg.site && asg.site !== '—' ? "blue.600" : "gray.300"} textTransform={asg.site && asg.site !== '—' ? "uppercase" : "none"} isTruncated minH={assignments.length > 1 ? "22px" : "auto"} display="flex" alignItems="center">
-                                                                            {asg.site && asg.site !== '—' ? `📍 ${asg.site}` : '—'}
-                                                                        </Text>
+                                                                        <Tooltip key={aIdx} label={asg.site && asg.site !== '—' ? asg.site : ''} isDisabled={!asg.site || asg.site === '—'} placement="top" hasArrow>
+                                                                            <Text
+                                                                                w="full"
+                                                                                fontSize="xs"
+                                                                                fontWeight="800"
+                                                                                color={asg.site && asg.site !== '—' ? "blue.600" : "gray.300"}
+                                                                                textTransform={asg.site && asg.site !== '—' ? "uppercase" : "none"}
+                                                                                noOfLines={1}
+                                                                                isTruncated
+                                                                                minH={assignments.length > 1 ? "22px" : "auto"}
+                                                                                lineHeight="22px"
+                                                                            >
+                                                                                {asg.site && asg.site !== '—' ? `📍 ${asg.site}` : '—'}
+                                                                            </Text>
+                                                                        </Tooltip>
                                                                     ))}
                                                                 </VStack>
                                                             </Box>
@@ -1659,7 +1719,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
             )}
 
             {/* Expense Detail Modal */}
-            <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="3xl" isCentered scrollBehavior="inside">
+            <Modal isOpen={isDetailOpen} onClose={onDetailClose} isLazy lazyBehavior="unmount" size="3xl" isCentered scrollBehavior="inside">
                 <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
                 <ModalContent borderRadius={{ base: "24px 24px 0 0", md: "2xl" }} overflow="hidden" shadow="2xl" maxW={{ base: '100%', md: '880px', lg: '960px' }} m={{ base: 0, md: 'auto' }} mt={{ base: 'auto', md: 'auto' }}>
                     {(() => {
@@ -2791,6 +2851,100 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
         });
     }, [daySchedules, selectedEmployeeId]);
 
+    // Fetch Instrument Groups to display group name if a group was selected
+    const [instrumentGroups, setInstrumentGroups] = useState([]);
+    useEffect(() => {
+        const fetchInstrumentGroups = async () => {
+            try {
+                const res = await api.get('/instrument-master/groups');
+                if (res.data.success) {
+                    setInstrumentGroups(res.data.data || []);
+                }
+            } catch (err) {
+                console.error("Failed to fetch instrument groups", err);
+            }
+        };
+        fetchInstrumentGroups();
+    }, []);
+
+    // Calculate allocated resources (helpers, vehicle, instruments/group) for the selected employee on this date
+    const allocatedResources = useMemo(() => {
+        if (!employeeSchedules || employeeSchedules.length === 0) return null;
+
+        // Collect all helpers across schedules for this employee on this date
+        const helperMap = new Map();
+        employeeSchedules.forEach(s => {
+            (s.helpers || []).forEach(h => {
+                const hId = h?._id || h;
+                const hName = typeof h === 'object' && h.name ? h.name : (employees.find(e => String(e._id) === String(hId))?.name || 'Helper');
+                if (hId && !helperMap.has(String(hId))) {
+                    helperMap.set(String(hId), hName);
+                }
+            });
+        });
+        const helpersList = Array.from(helperMap.values());
+
+        // Collect vehicles across schedules
+        const vehicleMap = new Map();
+        employeeSchedules.forEach(s => {
+            if (s.vehicle) {
+                const vObj = s.vehicle;
+                const vId = vObj._id || vObj;
+                const vLabel = typeof vObj === 'object' && vObj.vehicleNumber 
+                    ? `${vObj.vehicleName ? vObj.vehicleName + ' (' + vObj.vehicleNumber + ')' : vObj.vehicleNumber}`
+                    : String(vObj);
+                if (vId && !vehicleMap.has(String(vId))) {
+                    vehicleMap.set(String(vId), vLabel);
+                }
+            }
+        });
+        const vehiclesList = Array.from(vehicleMap.values());
+
+        // Collect instruments & groups across schedules
+        // If group is selected (all instruments in the group are present in schedule), show Group Name, else Instrument Name!
+        const groupsList = [];
+        const instrumentsList = [];
+        const processedGroupIds = new Set();
+        const processedInstIds = new Set();
+
+        employeeSchedules.forEach(s => {
+            let remainingInstIds = (s.instruments || []).map(i => String(i?._id || i)).filter(Boolean);
+
+            if (instrumentGroups && instrumentGroups.length > 0) {
+                instrumentGroups.forEach(grp => {
+                    const groupInstIds = (grp.instruments || []).map(i => String(i?._id || i)).filter(Boolean);
+                    if (groupInstIds.length > 0 && groupInstIds.every(id => remainingInstIds.includes(id))) {
+                        if (!processedGroupIds.has(String(grp._id || grp.groupId))) {
+                            processedGroupIds.add(String(grp._id || grp.groupId));
+                            groupsList.push(grp.name ? `${grp.groupId ? grp.groupId + ' - ' : ''}${grp.name}` : grp.groupId);
+                        }
+                        remainingInstIds = remainingInstIds.filter(id => !groupInstIds.includes(id));
+                    }
+                });
+            }
+
+            // Remaining instruments not part of a fully matched group
+            (s.instruments || []).forEach(inst => {
+                const instId = String(inst?._id || inst);
+                if (remainingInstIds.includes(instId) && !processedInstIds.has(instId)) {
+                    processedInstIds.add(instId);
+                    const instName = typeof inst === 'object' && inst.instrumentName 
+                        ? `${inst.instrumentName}${inst.serialNo ? ' (' + inst.serialNo + ')' : ''}`
+                        : (typeof inst === 'object' && inst.model ? inst.model : (typeof inst === 'string' ? inst : 'Instrument'));
+                    instrumentsList.push(instName);
+                }
+            });
+        });
+
+        return {
+            helpers: helpersList,
+            vehicles: vehiclesList,
+            groups: groupsList,
+            instruments: instrumentsList,
+            hasAny: helpersList.length > 0 || vehiclesList.length > 0 || groupsList.length > 0 || instrumentsList.length > 0
+        };
+    }, [employeeSchedules, instrumentGroups, employees]);
+
     // Auto-mark Attendance based on schedule status (for current and past dates only)
     useEffect(() => {
         if (!date || !selectedEmployeeId) return;
@@ -3282,6 +3436,111 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                             </Box>
                         )}
                     </SimpleGrid>
+
+                    {/* Assigned Resources: Helpers, Instruments/Groups & Vehicles */}
+                    {selectedEmployee && (
+                        <Box mt={4} pt={3.5} borderTop="1px dashed" borderColor="gray.200">
+                            <Flex justify="space-between" align={{ base: "start", sm: "center" }} wrap="wrap" gap={2} mb={2.5}>
+                                <HStack spacing={1.5}>
+                                    <Icon as={FaBriefcase} color="blue.500" w={3.5} h={3.5} />
+                                    <Text fontSize="xs" fontWeight="black" color="gray.700" textTransform="uppercase" letterSpacing="wider">
+                                        Assigned Resources ({employeeSchedules.length} {employeeSchedules.length === 1 ? 'Site Visit' : 'Site Visits'})
+                                    </Text>
+                                </HStack>
+                                {employeeSchedules.length > 0 && (
+                                    <Wrap spacing={1.5}>
+                                        {employeeSchedules.map((sch, sIdx) => {
+                                            const siteTitle = sch.site?.siteName || 'Site';
+                                            const clientTitle = sch.client?.clientName || '';
+                                            return (
+                                                <Badge key={sIdx} colorScheme="blue" variant="subtle" borderRadius="full" px={2.5} py={0.5} fontSize="2xs" fontWeight="bold">
+                                                    📍 {siteTitle}{clientTitle ? ` (${clientTitle})` : ''}
+                                                </Badge>
+                                            );
+                                        })}
+                                    </Wrap>
+                                )}
+                            </Flex>
+
+                            {allocatedResources && allocatedResources.hasAny ? (
+                                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+                                    {/* 1. Helper Names */}
+                                    <Box bg="teal.50" p={2.5} borderRadius="xl" border="1px solid" borderColor="teal.200">
+                                        <HStack spacing={1.5} mb={1}>
+                                            <Icon as={FaUsers} color="teal.600" w={3.5} h={3.5} />
+                                            <Text fontSize="2xs" fontWeight="black" color="teal.800" textTransform="uppercase">
+                                                Helpers {allocatedResources.helpers.length > 0 ? `(${allocatedResources.helpers.length})` : ''}
+                                            </Text>
+                                        </HStack>
+                                        {allocatedResources.helpers.length > 0 ? (
+                                            <Wrap spacing={1.5}>
+                                                {allocatedResources.helpers.map((hName, idx) => (
+                                                    <Tag key={idx} size="sm" colorScheme="teal" variant="solid" borderRadius="full" fontSize="xs" fontWeight="bold">
+                                                        <TagLabel>👤 {hName}</TagLabel>
+                                                    </Tag>
+                                                ))}
+                                            </Wrap>
+                                        ) : (
+                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">No helpers assigned</Text>
+                                        )}
+                                    </Box>
+
+                                    {/* 2. Instruments / Group */}
+                                    <Box bg="purple.50" p={2.5} borderRadius="xl" border="1px solid" borderColor="purple.200">
+                                        <HStack spacing={1.5} mb={1}>
+                                            <Icon as={FaTools} color="purple.600" w={3.5} h={3.5} />
+                                            <Text fontSize="2xs" fontWeight="black" color="purple.800" textTransform="uppercase">
+                                                Instruments / Groups
+                                            </Text>
+                                        </HStack>
+                                        {(allocatedResources.groups.length > 0 || allocatedResources.instruments.length > 0) ? (
+                                            <Wrap spacing={1.5}>
+                                                {allocatedResources.groups.map((grpName, idx) => (
+                                                    <Tag key={`grp-${idx}`} size="sm" colorScheme="purple" variant="solid" borderRadius="full" fontSize="xs" fontWeight="bold">
+                                                        <TagLabel>📦 Group: {grpName}</TagLabel>
+                                                    </Tag>
+                                                ))}
+                                                {allocatedResources.instruments.map((instName, idx) => (
+                                                    <Tag key={`inst-${idx}`} size="sm" colorScheme="purple" variant="subtle" border="1px solid" borderColor="purple.300" borderRadius="full" fontSize="xs" fontWeight="bold">
+                                                        <TagLabel>🔬 {instName}</TagLabel>
+                                                    </Tag>
+                                                ))}
+                                            </Wrap>
+                                        ) : (
+                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">No instruments assigned</Text>
+                                        )}
+                                    </Box>
+
+                                    {/* 3. Vehicle Name */}
+                                    <Box bg="orange.50" p={2.5} borderRadius="xl" border="1px solid" borderColor="orange.200">
+                                        <HStack spacing={1.5} mb={1}>
+                                            <Icon as={FaTruck} color="orange.600" w={3.5} h={3.5} />
+                                            <Text fontSize="2xs" fontWeight="black" color="orange.800" textTransform="uppercase">
+                                                Vehicle
+                                            </Text>
+                                        </HStack>
+                                        {allocatedResources.vehicles.length > 0 ? (
+                                            <Wrap spacing={1.5}>
+                                                {allocatedResources.vehicles.map((vName, idx) => (
+                                                    <Tag key={idx} size="sm" colorScheme="orange" variant="solid" borderRadius="full" fontSize="xs" fontWeight="bold">
+                                                        <TagLabel>🚗 {vName}</TagLabel>
+                                                    </Tag>
+                                                ))}
+                                            </Wrap>
+                                        ) : (
+                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">No vehicle assigned</Text>
+                                        )}
+                                    </Box>
+                                </SimpleGrid>
+                            ) : (
+                                <Box bg="gray.50" p={2.5} borderRadius="xl" border="1px dashed" borderColor="gray.200" textAlign="center">
+                                    <Text fontSize="xs" color="gray.500">
+                                        No resources (helpers, vehicle, or instruments) scheduled for this employee on this date.
+                                    </Text>
+                                </Box>
+                            )}
+                        </Box>
+                    )}
                 </CardBody>
             </Card>
 
