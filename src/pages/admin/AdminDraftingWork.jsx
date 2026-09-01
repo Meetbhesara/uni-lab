@@ -213,7 +213,6 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                 const updatedGroup = { ...group };
                 updatedGroup.schedules.forEach(s => {
                     s.draftingWorkFiles = s.draftingWorkFiles || {};
-                    // We only get the mailFiles from response, or we just rely on fetchDrafts
                     s.draftingWorkFiles.mailFiles = res.data.data.mailFiles || s.draftingWorkFiles.mailFiles;
                 });
                 setScheduleGroupToSelect(updatedGroup);
@@ -224,6 +223,37 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
             toast({ title: 'Upload failed', status: 'error' });
         } finally {
             setUploadingCategory(null);
+        }
+    };
+
+    const handleGroupMailDelete = async (group, file) => {
+        if (!window.confirm(`Are you sure you want to remove "${file.name}"?`)) {
+            return;
+        }
+
+        const survey = group.schedules[0];
+        if (!survey) return;
+
+        try {
+            const fileId = file._id || encodeURIComponent(file.name);
+            const res = await axios.delete(`${API_URL}/schedule-master/drafting-work/${survey._id}/mailFiles/${fileId}?applyToAll=true&fileUrl=${encodeURIComponent(file.url || '')}`);
+            if (res.data.success) {
+                toast({ title: 'Mail file removed successfully', status: 'success' });
+                
+                // Update local state instantly
+                const updatedGroup = { ...group };
+                updatedGroup.schedules.forEach(s => {
+                    if (s.draftingWorkFiles && s.draftingWorkFiles.mailFiles) {
+                        s.draftingWorkFiles.mailFiles = s.draftingWorkFiles.mailFiles.filter(
+                            f => (f._id && f._id !== file._id) && (f.url !== file.url) && (f.name !== file.name)
+                        );
+                    }
+                });
+                setScheduleGroupToSelect(updatedGroup);
+                fetchDrafts();
+            }
+        } catch (error) {
+            toast({ title: 'Remove failed', description: error.message, status: 'error' });
         }
     };
 
@@ -1177,14 +1207,25 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
                                                                     <Icon as={FaFilePdf} color="red.400" />
                                                                     <Text fontSize="xs" isTruncated>{file.name}</Text>
                                                                 </HStack>
-                                                                <IconButton 
-                                                                    size="xs" 
-                                                                    icon={<FaEye />} 
-                                                                    aria-label="View"
-                                                                    as="a"
-                                                                    href={API_BASE_URL.replace('/api', '') + file.url}
-                                                                    target="_blank"
-                                                                />
+                                                                <HStack spacing={1}>
+                                                                    <IconButton 
+                                                                        size="xs" 
+                                                                        icon={<FaEye />} 
+                                                                        aria-label="View"
+                                                                        as="a"
+                                                                        href={API_BASE_URL.replace('/api', '') + file.url}
+                                                                        target="_blank"
+                                                                    />
+                                                                    <IconButton 
+                                                                        size="xs" 
+                                                                        colorScheme="red"
+                                                                        variant="ghost"
+                                                                        icon={<FaTrash />} 
+                                                                        aria-label="Remove Mail File"
+                                                                        title="Remove Mail File"
+                                                                        onClick={() => handleGroupMailDelete(scheduleGroupToSelect, file)}
+                                                                    />
+                                                                </HStack>
                                                             </HStack>
                                                         ))}
                                                     </VStack>
