@@ -265,8 +265,6 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
 
     const [data, setData]               = useState([]);
     const [allSchedules, setAllSchedules] = useState([]);
-    const [allExpenses, setAllExpenses]   = useState([]);
-    const [allAttendance, setAllAttendance] = useState([]);
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [lastRefreshed, setLastRefreshed]   = useState(null);
     const [selectedDetailEntry, setSelectedDetailEntry] = useState(null);
@@ -277,6 +275,37 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
     const [monthStats, setMonthStats] = useState({ credit: 0, debit: 0, expense: 0, currentBalance: 0, loading: false });
     const [selectedDetailExpenses, setSelectedDetailExpenses] = useState([]);
     const [selectedDetailTransfers, setSelectedDetailTransfers] = useState([]);
+
+    // Fast indexed lookups for O(1) entity resolution
+    const empLookup = useMemo(() => {
+        const byId = new Map();
+        const byName = new Map();
+        (employees || []).forEach(e => {
+            const name = (e.name || '').trim();
+            if (e._id) byId.set(String(e._id), name);
+            if (e.empId) byId.set(String(e.empId), name);
+            if (name) byName.set(name.toLowerCase(), e);
+        });
+        return { byId, byName };
+    }, [employees]);
+
+    const clientLookup = useMemo(() => {
+        const byId = new Map();
+        (clients || []).forEach(c => {
+            if (c._id) byId.set(String(c._id), c.clientName || c.name || '');
+            if (c.clientId) byId.set(String(c.clientId), c.clientName || c.name || '');
+        });
+        return byId;
+    }, [clients]);
+
+    const siteLookup = useMemo(() => {
+        const byId = new Map();
+        (sites || []).forEach(s => {
+            if (s._id) byId.set(String(s._id), s.siteName || s.name || '');
+            if (s.siteId) byId.set(String(s.siteId), s.siteName || s.name || '');
+        });
+        return byId;
+    }, [sites]);
 
     const getFileHref = (file) => {
         if (!file) return '#';
@@ -318,29 +347,14 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
         const curM = entryDt.getMonth();
         const curY = entryDt.getFullYear();
 
-        let initialDebit = 0;
-        let initialCredit = 0;
-        let initialExpense = 0;
-
-        if (Array.isArray(allExpenses)) {
-            allExpenses.forEach(exp => {
-                const ed = new Date(exp.date);
-                if (ed.getMonth() === curM && ed.getFullYear() === curY) {
-                    const expEmpId = exp.employeeId?._id || exp.employeeId || exp.employee?._id || exp.employee;
-                    const expEmpName = exp.employeeId?.name || exp.employee?.name || '';
-                    if (isSameEmployee(selectedDetailEntry.empId, expEmpId, selectedDetailEntry.empName, expEmpName)) {
-                        const expAmt = Number(exp.totalExpense) || 0;
-                        initialExpense += expAmt;
-                        initialDebit += expAmt;
-                        (exp.creditDebit?.givenTo || []).forEach(g => { initialDebit += (Number(g.amount) || 0); });
-                        (exp.creditDebit?.receivedFrom || []).forEach(r => { initialCredit += (Number(r.amount) || 0); });
-                    }
-                }
-            });
-        }
-
         const initialCurBal = empObj?.totalAmount || 0;
-        setMonthStats({ credit: initialCredit, debit: initialDebit, expense: initialExpense, currentBalance: initialCurBal, loading: false });
+        setMonthStats({
+            credit: Number(selectedDetailEntry.totalCredit) || 0,
+            debit: Number(selectedDetailEntry.totalDebit) || 0,
+            expense: Number(selectedDetailEntry.totalExpense) || 0,
+            currentBalance: initialCurBal,
+            loading: true
+        });
 
         // 2. Fetch non-blocking in background to update any deep data
         const fetchMonthTotals = async () => {
@@ -467,27 +481,19 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
         if (!canReadLast5Days) return;
         setSummaryLoading(true);
         try {
-            const [res, schRes, allExpRes, attRes] = await Promise.all([
-                api.get('/employee-expense/report/daily-summary'),
-                api.get('/schedule-master').catch(() => ({ data: { success: false } })),
-                api.get('/employee-expense/all').catch(() => ({ data: { success: false } })),
-                api.get('/employee-expense/attendance').catch(() => ({ data: { success: false } }))
-            ]);
+            const res = await api.get('/employee-expense/report/daily-summary');
             if (res.data?.success) { 
-                setData(res.data.data); 
+                setData(res.data.data || []); 
+                if (Array.isArray(res.data.schedules)) {
+                    setAllSchedules(res.data.schedules);
+                }
                 setLastRefreshed(new Date()); 
             }
-            if (schRes?.data?.success && Array.isArray(schRes.data.data)) {
-                setAllSchedules(schRes.data.data);
-            }
-            if (allExpRes?.data?.success && Array.isArray(allExpRes.data.data)) {
-                setAllExpenses(allExpRes.data.data);
-            }
-            if (attRes?.data?.success && Array.isArray(attRes.data.data)) {
-                setAllAttendance(attRes.data.data);
-            }
-        } catch (e) { console.error(e); }
-        finally { setSummaryLoading(false); }
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setSummaryLoading(false); 
+        }
     };
     useEffect(() => { fetchSummary(); }, [canReadLast5Days]);
 
@@ -499,8 +505,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
             return val.clientName || val.name || resolveClientName(val._id || val.clientId);
         }
         const str = String(val).trim();
-        const found = clients.find(c => String(c._id) === str || c.clientName === str);
-        return found ? found.clientName : str;
+        return clientLookup.get(str) || str;
     };
 
     const resolveSiteName = (val) => {
@@ -509,8 +514,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
             return val.siteName || val.name || resolveSiteName(val._id || val.siteId);
         }
         const str = String(val).trim();
-        const found = sites.find(s => String(s._id) === str || s.siteName === str);
-        return found ? found.siteName : str;
+        return siteLookup.get(str) || str;
     };
 
     const resolveEmployeeName = (val) => {
@@ -519,8 +523,7 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
             return val.name || val.employeeName || resolveEmployeeName(val._id || val.employeeId);
         }
         const str = String(val).trim();
-        const found = employees.find(e => String(e._id) === str || e.name === str);
-        return found ? found.name : str;
+        return empLookup.byId.get(str) || str;
     };
 
     const isSameEmployee = (valA, valB, empNameA, empNameB) => {
@@ -532,8 +535,8 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
         if (strA && strB && strA === strB) return true;
         if (nameA && nameB && nameA === nameB) return true;
 
-        const foundA = employees.find(e => String(e._id) === strA || String(e.empId) === strA || (e.name && e.name.trim().toLowerCase() === nameA));
-        const foundB = employees.find(e => String(e._id) === strB || String(e.empId) === strB || (e.name && e.name.trim().toLowerCase() === nameB));
+        const foundA = (strA && empLookup.byId.has(strA)) ? (employees.find(e => String(e._id) === strA || String(e.empId) === strA) || (nameA ? empLookup.byName.get(nameA) : null)) : (nameA ? empLookup.byName.get(nameA) : null);
+        const foundB = (strB && empLookup.byId.has(strB)) ? (employees.find(e => String(e._id) === strB || String(e.empId) === strB) || (nameB ? empLookup.byName.get(nameB) : null)) : (nameB ? empLookup.byName.get(nameB) : null);
 
         if (foundA && foundB && String(foundA._id) === String(foundB._id)) return true;
         if (foundA && (String(foundA._id) === strB || String(foundA.empId) === strB || (foundA.name && foundA.name.trim().toLowerCase() === nameB))) return true;
@@ -787,41 +790,6 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
 
         if (entry.details?.otherExpensesList?.some(oe => Array.isArray(oe.files) && oe.files.length > 0)) return true;
 
-        const entryDateKey = toLocalDateKey(entry.date);
-        const empIdStr = String(entry.empId || entry.employeeId || entry.employee || '').trim();
-        const empNameStr = (entry.empName || '').trim().toLowerCase();
-
-        // Check allExpenses for this employee and date
-        if (Array.isArray(allExpenses) && allExpenses.length > 0) {
-            const matchedExps = allExpenses.filter(exp => {
-                const expDateKey = toLocalDateKey(exp.date);
-                if (expDateKey !== entryDateKey) return false;
-                const expEmpId = exp.employee?._id || exp.employee || exp.employeeId || '';
-                const expEmpName = exp.employee?.name || exp.employeeName || (typeof exp.employee === 'string' && !/^[0-9a-fA-F]{24}$/.test(exp.employee) ? exp.employee : '');
-                return isSameEmployee(entry.empId, expEmpId, entry.empName, expEmpName);
-            });
-
-            for (const exp of matchedExps) {
-                if (exp.hasReport || exp.hasDailyReport || exp.hasExpenseReport) return true;
-                if (Array.isArray(exp.dailyReports) && exp.dailyReports.length > 0) return true;
-                if (Array.isArray(exp.reports) && exp.reports.length > 0) return true;
-                if (Array.isArray(exp.files?.dailyReports) && exp.files.dailyReports.length > 0) return true;
-                if (Array.isArray(exp.files?.reports) && exp.files.reports.length > 0) return true;
-                if (Array.isArray(exp.clientSites)) {
-                    const csHasRep = exp.clientSites.some(cs => 
-                        (Array.isArray(cs.files?.dailyReports) && cs.files.dailyReports.length > 0) ||
-                        (Array.isArray(cs.files?.reports) && cs.files.reports.length > 0) ||
-                        (Array.isArray(cs.dailyReports) && cs.dailyReports.length > 0) ||
-                        (Array.isArray(cs.reports) && cs.reports.length > 0) ||
-                        (cs.files && Object.keys(cs.files).some(k => k.toLowerCase().includes('report') && cs.files[k]?.length > 0)) ||
-                        cs.hasReport === true ||
-                        cs.hasDailyReport === true
-                    );
-                    if (csHasRep) return true;
-                }
-            }
-        }
-
         // Check schedule-master schedules for this operative and date
         const opSchedules = getSchedulesWhereOperative(entry);
         for (const s of opSchedules) {
@@ -861,36 +829,6 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                 cs.hasData === true
             );
             if (hasCsData) return true;
-        }
-
-        const entryDateKey = toLocalDateKey(entry.date);
-
-        // Check allExpenses for this employee and date
-        if (Array.isArray(allExpenses) && allExpenses.length > 0) {
-            const matchedExps = allExpenses.filter(exp => {
-                const expDateKey = toLocalDateKey(exp.date);
-                if (expDateKey !== entryDateKey) return false;
-                const expEmpId = exp.employee?._id || exp.employee || exp.employeeId || '';
-                const expEmpName = exp.employee?.name || exp.employeeName || (typeof exp.employee === 'string' && !/^[0-9a-fA-F]{24}$/.test(exp.employee) ? exp.employee : '');
-                return isSameEmployee(entry.empId, expEmpId, entry.empName, expEmpName);
-            });
-
-            for (const exp of matchedExps) {
-                if (exp.hasDataFile || exp.hasData) return true;
-                if (Array.isArray(exp.dataFiles) && exp.dataFiles.length > 0) return true;
-                if (Array.isArray(exp.data) && exp.data.length > 0) return true;
-                if (Array.isArray(exp.files?.data) && exp.files.data.length > 0) return true;
-                if (Array.isArray(exp.clientSites)) {
-                    const csHasDat = exp.clientSites.some(cs => 
-                        (Array.isArray(cs.files?.data) && cs.files.data.length > 0) ||
-                        (Array.isArray(cs.dataFiles) && cs.dataFiles.length > 0) ||
-                        (Array.isArray(cs.data) && cs.data.length > 0) ||
-                        cs.hasDataFile === true ||
-                        cs.hasData === true
-                    );
-                    if (csHasDat) return true;
-                }
-            }
         }
 
         // Check schedule-master schedules for this operative and date
@@ -964,6 +902,186 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
         return false;
     };
 
+    // ── Memoized 5-Day Report Processor (Instant 1ms computation) ──
+    const processedDates = useMemo(() => {
+        if (!data || data.length === 0) return { datesMap: {}, sortedDateKeys: [] };
+
+        const datesMap = {};
+        data.forEach((emp) => {
+            // 1. Group emp.entries by date
+            const empEntriesByDate = {};
+            (emp.entries || []).forEach(e => {
+                const dk = toLocalDateKey(e.date);
+                if (!empEntriesByDate[dk]) {
+                    empEntriesByDate[dk] = { 
+                        ...e,
+                        empId: emp.empId,
+                        empName: emp.empName,
+                        totalDebit: Number(e.totalDebit) || 0,
+                        totalCredit: Number(e.totalCredit) || 0,
+                        clientSites: Array.isArray(e.clientSites) ? [...e.clientSites] : [],
+                        files: e.files ? { ...e.files } : {},
+                        details: e.details ? { ...e.details } : {},
+                        hasReport: e.hasReport || false,
+                        hasDataFile: e.hasDataFile || false
+                    };
+                } else {
+                    empEntriesByDate[dk].totalDebit += (Number(e.totalDebit) || 0);
+                    empEntriesByDate[dk].totalCredit += (Number(e.totalCredit) || 0);
+                    if ((!empEntriesByDate[dk].attendance || empEntriesByDate[dk].attendance === '-') && e.attendance && e.attendance !== '-') {
+                        empEntriesByDate[dk].attendance = e.attendance;
+                    }
+                    if (!empEntriesByDate[dk].workLocation && (e.workLocation || e.details?.workLocation)) {
+                        empEntriesByDate[dk].workLocation = e.workLocation || e.details?.workLocation;
+                    }
+                    if (Array.isArray(e.clientSites)) {
+                        empEntriesByDate[dk].clientSites = [...empEntriesByDate[dk].clientSites, ...e.clientSites];
+                    }
+                    if (e.files) {
+                        empEntriesByDate[dk].files = { ...empEntriesByDate[dk].files, ...e.files };
+                    }
+                    if (e.hasReport || e.hasDailyReport || e.hasExpenseReport) {
+                        empEntriesByDate[dk].hasReport = true;
+                    }
+                    if (e.hasDataFile || e.hasData) {
+                        empEntriesByDate[dk].hasDataFile = true;
+                    }
+                }
+            });
+
+            const activeDates = new Set(Object.keys(empEntriesByDate));
+            (allSchedules || []).forEach(s => {
+                const sDk = toLocalDateKey(s.scheduleDate || s.date);
+                if (!sDk) return;
+                const sOpId = s.operative?._id || s.operative;
+                const sOpName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
+                if (isSameEmployee(emp.empId, sOpId, emp.empName, sOpName)) {
+                    activeDates.add(sDk);
+                }
+            });
+
+            activeDates.forEach(dk => {
+                const dayEntry = empEntriesByDate[dk] || {
+                    empId: emp.empId,
+                    empName: emp.empName,
+                    date: dk,
+                    totalDebit: 0,
+                    totalCredit: 0,
+                    attendance: 'Present',
+                    details: {},
+                    files: {},
+                    clientSites: []
+                };
+
+                // ── Check if Employee is Absent on this date ──
+                const dayAtt = (dayEntry.attendance || dayEntry.details?.attendance || '').trim().toLowerCase();
+                if (dayAtt === 'absent' || dayAtt === 'leave') {
+                    return; // Skip absent employee
+                }
+
+                const opSchedules = (allSchedules || []).filter(s => {
+                    const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
+                    if (sDateKey !== dk) return false;
+                    const opId = s.operative?._id || s.operative;
+                    const opName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
+                    return isSameEmployee(emp.empId, opId, emp.empName, opName);
+                });
+
+                const hlpSchedules = (allSchedules || []).filter(s => {
+                    const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
+                    if (sDateKey !== dk) return false;
+                    if (Array.isArray(s.helpers)) {
+                        return s.helpers.some(h => isSameEmployee(emp.empId, h?._id || h, emp.empName, h?.name || (typeof h === 'string' ? h : '')));
+                    } else if (s.helper) {
+                        return isSameEmployee(emp.empId, s.helper?._id || s.helper, emp.empName, s.helper?.name || (typeof s.helper === 'string' ? s.helper : ''));
+                    }
+                    return false;
+                });
+
+                const assignments = [];
+
+                if (opSchedules.length > 0) {
+                    opSchedules.forEach((s) => {
+                        const sClientName = s.client?.clientName || resolveClientName(s.client?._id || s.client) || '—';
+                        const sSiteName = s.site?.siteName || resolveSiteName(s.site?._id || s.site) || '—';
+
+                        let sHelperNames = [];
+                        if (Array.isArray(s.helpers)) {
+                            s.helpers.forEach(h => sHelperNames.push(resolveEmployeeName(h)));
+                        } else if (s.helper) {
+                            sHelperNames.push(resolveEmployeeName(s.helper));
+                        }
+                        const cleanHelpers = [...new Set(sHelperNames.filter(Boolean))].filter(h => h.toLowerCase() !== emp.empName.toLowerCase()).join(', ');
+
+                        const sHasRep = s.hasReport || s.hasDailyReport || (Array.isArray(s.files?.dailyReports) && s.files.dailyReports.length > 0) || (Array.isArray(s.dailyReports) && s.dailyReports.length > 0) || (Array.isArray(s.documents) && s.documents.some(d => (typeof d === 'string' && d.toLowerCase().includes('report')) || d?.category === 'Daily Report')) || extractHasReport(dayEntry);
+                        const sHasDat = s.hasDataFile || s.hasData || (Array.isArray(s.files?.data) && s.files.data.length > 0) || (Array.isArray(s.dataFiles) && s.dataFiles.length > 0) || (Array.isArray(s.documents) && s.documents.some(d => (typeof d === 'string' && d.toLowerCase().includes('data')) || d?.category === 'Data')) || extractHasData(dayEntry);
+
+                        assignments.push({
+                            client: sClientName,
+                            site: sSiteName,
+                            helpers: cleanHelpers,
+                            hasReport: sHasRep,
+                            hasDataFile: sHasDat,
+                            schedule: s
+                        });
+                    });
+                } else if (hlpSchedules.length > 0) {
+                    if (hasExpensesApplied(dayEntry)) {
+                        hlpSchedules.forEach((s) => {
+                            const sClientName = s.client?.clientName || resolveClientName(s.client?._id || s.client) || '—';
+                            const sSiteName = s.site?.siteName || resolveSiteName(s.site?._id || s.site) || '—';
+                            const sOpName = s.operative?.name || resolveEmployeeName(s.operative?._id || s.operative) || '—';
+
+                            assignments.push({
+                                operative: sOpName,
+                                client: sClientName,
+                                site: sSiteName,
+                                helpers: emp.empName,
+                                hasReport: extractHasReport(dayEntry),
+                                hasDataFile: extractHasData(dayEntry),
+                                schedule: s
+                            });
+                        });
+                    }
+                } else {
+                    if (hasExpensesApplied(dayEntry)) {
+                        const loc = (dayEntry.workLocation || dayEntry.details?.workLocation || '').trim();
+                        const inHouseKeywords = ['Room', 'Godown', 'Office', 'Home'];
+                        const isInHouse = inHouseKeywords.includes(loc) || inHouseKeywords.some(k => (dayEntry.siteNames || '').includes(k));
+
+                        assignments.push({
+                            client: isInHouse ? 'Office' : (dayEntry.clientNames || dayEntry.clientName || '—'),
+                            site: loc || dayEntry.siteNames || '—',
+                            helpers: '',
+                            hasReport: extractHasReport(dayEntry),
+                            hasDataFile: extractHasData(dayEntry)
+                        });
+                    }
+                }
+
+                if (assignments.length > 0) {
+                    const rowItem = {
+                        ...dayEntry,
+                        empId: emp.empId,
+                        empName: emp.empName,
+                        rowKey: `${emp.empId}-${dk}`,
+                        assignments: assignments,
+                        totalDebit: dayEntry.totalDebit,
+                        totalCredit: dayEntry.totalCredit
+                    };
+
+                    if (!datesMap[dk]) datesMap[dk] = [];
+                    datesMap[dk].push(rowItem);
+                }
+            });
+        });
+
+        let sortedDateKeys = Object.keys(datesMap).sort((a, b) => new Date(b) - new Date(a)).slice(0, 5);
+        sortedDateKeys.reverse(); // Dates ascending as per header text
+
+        return { datesMap, sortedDateKeys };
+    }, [data, allSchedules, employees, clients, sites]);
+
     return (
         <VStack spacing={8} align="stretch">
 
@@ -1024,209 +1142,20 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                     ) : (
                         <VStack spacing={4} align="stretch">
                             {(() => {
-                                const datesMap = {};
-                                data.forEach((emp) => {
-                                    // 1. Group emp.entries by date
-                                    const empEntriesByDate = {};
-                                    (emp.entries || []).forEach(e => {
-                                        const dk = toLocalDateKey(e.date);
-                                        if (!empEntriesByDate[dk]) {
-                                            empEntriesByDate[dk] = { 
-                                                ...e,
-                                                empId: emp.empId,
-                                                empName: emp.empName,
-                                                totalDebit: Number(e.totalDebit) || 0,
-                                                totalCredit: Number(e.totalCredit) || 0,
-                                                clientSites: Array.isArray(e.clientSites) ? [...e.clientSites] : [],
-                                                files: e.files ? { ...e.files } : {},
-                                                details: e.details ? { ...e.details } : {},
-                                                hasReport: e.hasReport || false,
-                                                hasDataFile: e.hasDataFile || false
-                                            };
-                                        } else {
-                                            empEntriesByDate[dk].totalDebit += (Number(e.totalDebit) || 0);
-                                            empEntriesByDate[dk].totalCredit += (Number(e.totalCredit) || 0);
-                                            if ((!empEntriesByDate[dk].attendance || empEntriesByDate[dk].attendance === '-') && e.attendance && e.attendance !== '-') {
-                                                empEntriesByDate[dk].attendance = e.attendance;
-                                            }
-                                            if (!empEntriesByDate[dk].workLocation && (e.workLocation || e.details?.workLocation)) {
-                                                empEntriesByDate[dk].workLocation = e.workLocation || e.details?.workLocation;
-                                            }
-                                            if (Array.isArray(e.clientSites)) {
-                                                empEntriesByDate[dk].clientSites = [...empEntriesByDate[dk].clientSites, ...e.clientSites];
-                                            }
-                                            if (e.files) {
-                                                empEntriesByDate[dk].files = { ...empEntriesByDate[dk].files, ...e.files };
-                                            }
-                                            if (e.hasReport || e.hasDailyReport || e.hasExpenseReport) {
-                                                empEntriesByDate[dk].hasReport = true;
-                                            }
-                                            if (e.hasDataFile || e.hasData) {
-                                                empEntriesByDate[dk].hasDataFile = true;
-                                            }
-                                        }
-                                    });
-
-                                    const activeDates = new Set(Object.keys(empEntriesByDate));
-                                    (allSchedules || []).forEach(s => {
-                                        const sDk = toLocalDateKey(s.scheduleDate || s.date);
-                                        if (!sDk) return;
-                                        const sOpId = s.operative?._id || s.operative;
-                                        const sOpName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
-                                        if (isSameEmployee(emp.empId, sOpId, emp.empName, sOpName)) {
-                                            activeDates.add(sDk);
-                                        }
-                                    });
-
-                                    activeDates.forEach(dk => {
-                                        const dayEntry = empEntriesByDate[dk] || {
-                                            empId: emp.empId,
-                                            empName: emp.empName,
-                                            date: dk,
-                                            totalDebit: 0,
-                                            totalCredit: 0,
-                                            attendance: 'Present',
-                                            details: {},
-                                            files: {},
-                                            clientSites: []
-                                        };
-
-                                        // ── Check if Employee is Absent on this date ──
-                                        const dayAtt = (dayEntry.attendance || dayEntry.details?.attendance || '').trim().toLowerCase();
-                                        if (dayAtt === 'absent' || dayAtt === 'leave') {
-                                            return; // Skip absent employee
-                                        }
-
-                                        const expMatch = (allExpenses || []).find(exp => {
-                                            const expDk = toLocalDateKey(exp.date);
-                                            if (expDk !== dk) return false;
-                                            const expEmpId = exp.employeeId?._id || exp.employeeId || exp.employee?._id || exp.employee;
-                                            const expEmpName = exp.employeeId?.name || exp.employee?.name || '';
-                                            return isSameEmployee(emp.empId, expEmpId, emp.empName, expEmpName);
-                                        });
-                                        if (expMatch) {
-                                            const expAtt = (expMatch.attendance || expMatch.details?.attendance || '').trim().toLowerCase();
-                                            if (expAtt === 'absent' || expAtt === 'leave') {
-                                                return; // Skip absent employee
-                                            }
-                                        }
-
-                                        const attMatch = (allAttendance || []).find(att => {
-                                            const attDk = toLocalDateKey(att.date);
-                                            if (attDk !== dk) return false;
-                                            const attEmpId = att.employeeId?._id || att.employeeId || att.employee?._id || att.employee;
-                                            const attEmpName = att.employeeId?.name || att.employee?.name || '';
-                                            return isSameEmployee(emp.empId, attEmpId, emp.empName, attEmpName);
-                                        });
-                                        if (attMatch) {
-                                            const attStatus = (attMatch.attendance || '').trim().toLowerCase();
-                                            if (attStatus === 'absent' || attStatus === 'leave') {
-                                                return; // Skip absent employee
-                                            }
-                                        }
-
-                                        const opSchedules = (allSchedules || []).filter(s => {
-                                            const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
-                                            if (sDateKey !== dk) return false;
-                                            const opId = s.operative?._id || s.operative;
-                                            const opName = s.operative?.name || (typeof s.operative === 'string' ? s.operative : '');
-                                            return isSameEmployee(emp.empId, opId, emp.empName, opName);
-                                        });
-
-                                        const hlpSchedules = (allSchedules || []).filter(s => {
-                                            const sDateKey = toLocalDateKey(s.scheduleDate || s.date);
-                                            if (sDateKey !== dk) return false;
-                                            if (Array.isArray(s.helpers)) {
-                                                return s.helpers.some(h => isSameEmployee(emp.empId, h?._id || h, emp.empName, h?.name || (typeof h === 'string' ? h : '')));
-                                            } else if (s.helper) {
-                                                return isSameEmployee(emp.empId, s.helper?._id || s.helper, emp.empName, s.helper?.name || (typeof s.helper === 'string' ? s.helper : ''));
-                                            }
-                                            return false;
-                                        });
-
-                                        const assignments = [];
-
-                                        if (opSchedules.length > 0) {
-                                            opSchedules.forEach((s) => {
-                                                const sClientName = s.client?.clientName || resolveClientName(s.client?._id || s.client) || '—';
-                                                const sSiteName = s.site?.siteName || resolveSiteName(s.site?._id || s.site) || '—';
-
-                                                let sHelperNames = [];
-                                                if (Array.isArray(s.helpers)) {
-                                                    s.helpers.forEach(h => sHelperNames.push(resolveEmployeeName(h)));
-                                                } else if (s.helper) {
-                                                    sHelperNames.push(resolveEmployeeName(s.helper));
-                                                }
-                                                const cleanHelpers = [...new Set(sHelperNames.filter(Boolean))].filter(h => h.toLowerCase() !== emp.empName.toLowerCase()).join(', ');
-
-                                                const sHasRep = s.hasReport || s.hasDailyReport || (Array.isArray(s.files?.dailyReports) && s.files.dailyReports.length > 0) || (Array.isArray(s.dailyReports) && s.dailyReports.length > 0) || (Array.isArray(s.documents) && s.documents.some(d => (typeof d === 'string' && d.toLowerCase().includes('report')) || d?.category === 'Daily Report')) || extractHasReport(dayEntry);
-                                                const sHasDat = s.hasDataFile || s.hasData || (Array.isArray(s.files?.data) && s.files.data.length > 0) || (Array.isArray(s.dataFiles) && s.dataFiles.length > 0) || (Array.isArray(s.documents) && s.documents.some(d => (typeof d === 'string' && d.toLowerCase().includes('data')) || d?.category === 'Data')) || extractHasData(dayEntry);
-
-                                                assignments.push({
-                                                    client: sClientName,
-                                                    site: sSiteName,
-                                                    helpers: cleanHelpers,
-                                                    hasReport: sHasRep,
-                                                    hasDataFile: sHasDat,
-                                                    schedule: s
-                                                });
-                                            });
-                                        } else if (hlpSchedules.length > 0) {
-                                            if (hasExpensesApplied(dayEntry)) {
-                                                hlpSchedules.forEach((s) => {
-                                                    const sClientName = s.client?.clientName || resolveClientName(s.client?._id || s.client) || '—';
-                                                    const sSiteName = s.site?.siteName || resolveSiteName(s.site?._id || s.site) || '—';
-                                                    const sOpName = s.operative?.name || resolveEmployeeName(s.operative?._id || s.operative) || '—';
-
-                                                    assignments.push({
-                                                        operative: sOpName,
-                                                        client: sClientName,
-                                                        site: sSiteName,
-                                                        helpers: emp.empName,
-                                                        hasReport: extractHasReport(dayEntry),
-                                                        hasDataFile: extractHasData(dayEntry),
-                                                        schedule: s
-                                                    });
-                                                });
-                                            }
-                                        } else {
-                                            if (hasExpensesApplied(dayEntry)) {
-                                                const loc = (dayEntry.workLocation || dayEntry.details?.workLocation || '').trim();
-                                                const inHouseKeywords = ['Room', 'Godown', 'Office', 'Home'];
-                                                const isInHouse = inHouseKeywords.includes(loc) || inHouseKeywords.some(k => (dayEntry.siteNames || '').includes(k));
-
-                                                assignments.push({
-                                                    client: isInHouse ? 'Office' : (dayEntry.clientNames || dayEntry.clientName || '—'),
-                                                    site: loc || dayEntry.siteNames || '—',
-                                                    helpers: '',
-                                                    hasReport: extractHasReport(dayEntry),
-                                                    hasDataFile: extractHasData(dayEntry)
-                                                });
-                                            }
-                                        }
-
-                                        if (assignments.length > 0) {
-                                            const rowItem = {
-                                                ...dayEntry,
-                                                empId: emp.empId,
-                                                empName: emp.empName,
-                                                rowKey: `${emp.empId}-${dk}`,
-                                                assignments: assignments,
-                                                totalDebit: dayEntry.totalDebit,
-                                                totalCredit: dayEntry.totalCredit
-                                            };
-
-                                            if (!datesMap[dk]) datesMap[dk] = [];
-                                            datesMap[dk].push(rowItem);
-                                        }
-                                    });
-                                });
-
-                                let sortedDateKeys = Object.keys(datesMap).sort((a, b) => new Date(b) - new Date(a)).slice(0, 5);
-                                sortedDateKeys.reverse(); // Dates ascending as per header text
+                                const { datesMap, sortedDateKeys } = processedDates;
+                                if (!sortedDateKeys || sortedDateKeys.length === 0) {
+                                    return (
+                                        <Center py={14}>
+                                            <VStack spacing={2}>
+                                                <Icon as={FaChartBar} w={9} h={9} color="gray.200"/>
+                                                <Text color="gray.400" fontSize="sm">No entries found in last 5 days</Text>
+                                            </VStack>
+                                        </Center>
+                                    );
+                                }
 
                                 return sortedDateKeys.map((dateKey) => {
-                                    const dateEntries = datesMap[dateKey];
+                                    const dateEntries = datesMap[dateKey] || [];
                                     dateEntries.sort((a, b) => a.empName.localeCompare(b.empName));
 
                                     const totD = dateEntries.reduce((s,e)=>s+(e.totalDebit||0),0);
