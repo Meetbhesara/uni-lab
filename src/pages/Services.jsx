@@ -53,6 +53,38 @@ export const getFileUrl = (docOrPath) => {
 
 const CivilEngineeringServices = () => {
     const navigate = useNavigate();
+    const toast = useToast();
+    const { isOpen: isDocModalOpen, onOpen: onDocModalOpen, onClose: onDocModalClose } = useDisclosure();
+    const [selectedDoc, setSelectedDoc] = useState('udyam'); // 'udyam' | 'pan'
+    const [panSide, setPanSide] = useState('front'); // 'front' | 'back'
+    const [copiedKey, setCopiedKey] = useState('');
+
+    const handleCopy = (text, key) => {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+        }
+        setCopiedKey(key);
+        toast({
+            title: "Copied to clipboard!",
+            description: `${key}: ${text}`,
+            status: "success",
+            duration: 2000,
+            isClosable: true,
+            position: "bottom-right"
+        });
+        setTimeout(() => setCopiedKey(''), 2500);
+    };
+
+    const handleOpenDoc = (type) => {
+        setSelectedDoc(type);
+        setPanSide('front');
+        onDocModalOpen();
+    };
+
+    const handlePrint = () => {
+        window.print();
+    };
+
     const services = [
         { title: "Road Infrastructure", description: "Expert design and construction of national highways and state roads.", icon: FaRoad, color: "blue.500" },
         { title: "Industrial Construction", description: "Turnkey solutions for industrial complexes and manufacturing units.", icon: FaBuilding, color: "orange.500" },
@@ -61,16 +93,25 @@ const CivilEngineeringServices = () => {
     ];
 
     return (
-        <Box py={20} bg="gray.50">
+        <Box py={{ base: 10, md: 16 }} bg="gray.50">
             <Container maxW="container.xl">
+                {/* Hero / Header */}
                 <Stack spacing={4} as={Container} maxW={'3xl'} textAlign={'center'} mb={12}>
-                    <Heading fontSize={{ base: '3xl', md: '5xl' }} fontWeight={'bold'} color="brand.800">Our Civil Engineering Services</Heading>
-                    <Text color={'gray.600'} fontSize={{ base: 'sm', sm: 'lg' }}>Providing world-class infrastructure solutions with precision engineering.</Text>
+                    <Badge colorScheme="blue" px={3} py={1} borderRadius="full" alignSelf="center" fontWeight="800">
+                        UNIQUE SURVEY & CIVIL SOLUTIONS
+                    </Badge>
+                    <Heading fontSize={{ base: '3xl', md: '5xl' }} fontWeight={'bold'} color="brand.800">
+                        Our Civil Engineering & Survey Services
+                    </Heading>
+                    <Text color={'gray.600'} fontSize={{ base: 'sm', sm: 'lg' }}>
+                        Providing world-class infrastructure solutions, topographical land surveys, and precision civil engineering.
+                    </Text>
                 </Stack>
 
-                <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={10}>
+                {/* Core Services Grid */}
+                <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={8} mb={16}>
                     {services.map((service, index) => (
-                        <Card key={index} height="full" borderRadius="2xl" overflow="hidden" borderTop="4px solid" borderColor={service.color} variant="elevated" bg="white">
+                        <Card key={index} height="full" borderRadius="2xl" overflow="hidden" borderTop="4px solid" borderColor={service.color} variant="elevated" bg="white" shadow="md">
                             <CardBody p={8}>
                                 <Flex w={16} h={16} align={'center'} justify={'center'} color={'white'} rounded={'xl'} bg={service.color} mb={6} boxShadow="lg">
                                     <Icon as={service.icon} w={8} h={8} />
@@ -82,25 +123,370 @@ const CivilEngineeringServices = () => {
                     ))}
                 </SimpleGrid>
 
-                <Box mt={20} p={{ base: 8, md: 12 }} bg="white" borderRadius="3xl" boxShadow="2xl">
+                {/* Precision Engineering Banner */}
+                <Box mb={16} p={{ base: 8, md: 12 }} bg="white" borderRadius="3xl" boxShadow="2xl">
                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={10} align={'center'}>
                         <Box textAlign="left">
                             <Badge colorScheme="orange" mb={4} px={3} py={1} borderRadius="full">Expertise</Badge>
-                            <Heading size="xl" mb={6} color="brand.800">Precision Engineering</Heading>
-                            <Text color="gray.600" mb={6} fontSize="lg">Over 25+ years of delivering excellence in civil construction and instrumental surveying.</Text>
+                            <Heading size="xl" mb={6} color="brand.800">Precision Engineering & Surveying</Heading>
+                            <Text color="gray.600" mb={6} fontSize="lg">
+                                Delivering high-precision digital topography, layout setting, civil survey consultancy, and industrial construction across India.
+                            </Text>
                             <VStack align="start" spacing={4}>
-                                {["Certified ISO 9001:2015", "Sustainable Construction", "Advanced Safety Protocols"].map((item, i) => (
+                                {["Registered MSME Enterprise: UNIQUE SURVEY", "Government Tax Compliant (PAN: AANHD0443B)", "State-of-the-Art Survey Total Stations & GPS", "Field-Proven Accuracy & Engineering Quality"].map((item, i) => (
                                     <HStack key={i}><Icon as={FaCheckCircle} color="brand.500" /><Text fontWeight="600" color="gray.700">{item}</Text></HStack>
                                 ))}
                             </VStack>
-                            <Button mt={10} colorScheme="orange" size="lg" px={10} borderRadius="xl" boxShadow="lg">Consult Now</Button>
+                            <HStack mt={10} spacing={4} flexWrap="wrap">
+                                <Button colorScheme="orange" size="lg" px={8} borderRadius="xl" boxShadow="lg" onClick={() => handleOpenDoc('udyam')}>
+                                    View Udyam Certificate
+                                </Button>
+                                <Button colorScheme="blue" variant="outline" size="lg" px={8} borderRadius="xl" onClick={() => handleOpenDoc('pan')}>
+                                    View PAN Card
+                                </Button>
+                            </HStack>
                         </Box>
                         <Box>
-                            <Image borderRadius="3xl" src={`${API_BASE_URL}/uploads/local/construction.jpeg`} alt="Construction" objectFit="cover" h="400px" w="full" fallbackSrc="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" />
+                            <Image borderRadius="3xl" src={`${API_BASE_URL}/uploads/local/construction.jpeg`} alt="Construction & Surveying" objectFit="cover" h="400px" w="full" fallbackSrc="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" />
                         </Box>
                     </SimpleGrid>
                 </Box>
+
+                {/* ════════ OFFICIAL REGISTRATIONS & CREDENTIALS SECTION ════════ */}
+                <Box mb={8}>
+                    <Box textAlign="center" mb={10}>
+                        <Badge colorScheme="purple" px={3.5} py={1} borderRadius="full" textTransform="uppercase" fontWeight="extrabold" fontSize="xs" mb={3}>
+                            Government Verified Documents
+                        </Badge>
+                        <Heading size="lg" color="gray.800" fontWeight="900">
+                            Unique Survey Credentials & Registrations
+                        </Heading>
+                        <Text color="gray.500" fontSize="sm" maxW="2xl" mx="auto" mt={2}>
+                            Unique Survey is officially registered with the Ministry of Micro, Small & Medium Enterprises (MSME) and the Income Tax Department, Government of India.
+                        </Text>
+                    </Box>
+
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
+                        {/* 1. Udyam Registration Card */}
+                        <Card 
+                            borderRadius="3xl" 
+                            bg="linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)" 
+                            border="1px solid" 
+                            borderColor="green.200" 
+                            shadow="md"
+                            _hover={{ transform: 'translateY(-4px)', shadow: 'xl', borderColor: 'green.400' }}
+                            transition="all 0.25s ease"
+                        >
+                            <CardBody p={{ base: 6, md: 8 }} display="flex" flexDirection="column" justifyContent="space-between">
+                                <Box>
+                                    <Flex justify="space-between" align="start" mb={4}>
+                                        <Flex w={14} h={14} bg="green.100" color="green.700" rounded="2xl" align="center" justify="center" shadow="xs">
+                                            <Icon as={FaFilePdf} boxSize={7} />
+                                        </Flex>
+                                        <Badge colorScheme="green" px={3} py={1} borderRadius="full" fontSize="2xs" fontWeight="bold">
+                                            ✓ MSME Verified
+                                        </Badge>
+                                    </Flex>
+
+                                    <Heading size="md" color="gray.800" mb={1}>
+                                        Udyam Registration Certificate
+                                    </Heading>
+                                    <Text fontSize="xs" color="gray.500" mb={5}>
+                                        Ministry of Micro, Small & Medium Enterprises (Govt. of India)
+                                    </Text>
+
+                                    <Box bg="white" p={4} borderRadius="2xl" border="1px dashed" borderColor="green.300" mb={6}>
+                                        <Flex justify="space-between" align="center">
+                                            <Box>
+                                                <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" letterSpacing="wider">
+                                                    Udyam Reg. Number
+                                                </Text>
+                                                <Text fontFamily="monospace" fontSize="md" fontWeight="black" color="green.700">
+                                                    UDYAM-GJ-01-0569418
+                                                </Text>
+                                            </Box>
+                                            <IconButton
+                                                size="sm"
+                                                icon={<Icon as={copiedKey === 'Udyam' ? FaCheck : FaCopy} />}
+                                                colorScheme={copiedKey === 'Udyam' ? "green" : "gray"}
+                                                variant="ghost"
+                                                onClick={() => handleCopy('UDYAM-GJ-01-0569418', 'Udyam')}
+                                                aria-label="Copy Udyam Number"
+                                            />
+                                        </Flex>
+                                        <Divider my={2.5} />
+                                        <SimpleGrid columns={2} spacing={2} fontSize="2xs" color="gray.600">
+                                            <Box><Text color="gray.400">Enterprise:</Text><Text fontWeight="bold">UNIQUE SURVEY</Text></Box>
+                                            <Box><Text color="gray.400">Category:</Text><Text fontWeight="bold">Micro (Trading / Services)</Text></Box>
+                                        </SimpleGrid>
+                                    </Box>
+                                </Box>
+
+                                <HStack spacing={3}>
+                                    <Button
+                                        leftIcon={<Icon as={FaEye} />}
+                                        colorScheme="green"
+                                        onClick={() => handleOpenDoc('udyam')}
+                                        flex={1}
+                                        borderRadius="xl"
+                                        h={12}
+                                        fontWeight="bold"
+                                        shadow="md"
+                                    >
+                                        View Udyam Certificate
+                                    </Button>
+                                    <IconButton
+                                        icon={<Icon as={FaCopy} />}
+                                        variant="outline"
+                                        colorScheme="green"
+                                        h={12}
+                                        w={12}
+                                        borderRadius="xl"
+                                        onClick={() => handleCopy('UDYAM-GJ-01-0569418', 'Udyam')}
+                                        aria-label="Copy Udyam Reg Number"
+                                    />
+                                </HStack>
+                            </CardBody>
+                        </Card>
+
+                        {/* 2. PAN Card */}
+                        <Card 
+                            borderRadius="3xl" 
+                            bg="linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)" 
+                            border="1px solid" 
+                            borderColor="blue.200" 
+                            shadow="md"
+                            _hover={{ transform: 'translateY(-4px)', shadow: 'xl', borderColor: 'blue.400' }}
+                            transition="all 0.25s ease"
+                        >
+                            <CardBody p={{ base: 6, md: 8 }} display="flex" flexDirection="column" justifyContent="space-between">
+                                <Box>
+                                    <Flex justify="space-between" align="start" mb={4}>
+                                        <Flex w={14} h={14} bg="blue.100" color="blue.700" rounded="2xl" align="center" justify="center" shadow="xs">
+                                            <Icon as={FaIdCard} boxSize={7} />
+                                        </Flex>
+                                        <Badge colorScheme="blue" px={3} py={1} borderRadius="full" fontSize="2xs" fontWeight="bold">
+                                            ✓ Income Tax Verified
+                                        </Badge>
+                                    </Flex>
+
+                                    <Heading size="md" color="gray.800" mb={1}>
+                                        Permanent Account Number (PAN) Card
+                                    </Heading>
+                                    <Text fontSize="xs" color="gray.500" mb={5}>
+                                        Income Tax Department (Government of India)
+                                    </Text>
+
+                                    <Box bg="white" p={4} borderRadius="2xl" border="1px dashed" borderColor="blue.300" mb={6}>
+                                        <Flex justify="space-between" align="center">
+                                            <Box>
+                                                <Text fontSize="10px" fontWeight="bold" color="gray.400" textTransform="uppercase" letterSpacing="wider">
+                                                    PAN Number
+                                                </Text>
+                                                <Text fontFamily="monospace" fontSize="md" fontWeight="black" color="blue.700">
+                                                    AANHD0443B
+                                                </Text>
+                                            </Box>
+                                            <IconButton
+                                                size="sm"
+                                                icon={<Icon as={copiedKey === 'PAN' ? FaCheck : FaCopy} />}
+                                                colorScheme={copiedKey === 'PAN' ? "blue" : "gray"}
+                                                variant="ghost"
+                                                onClick={() => handleCopy('AANHD0443B', 'PAN')}
+                                                aria-label="Copy PAN Number"
+                                            />
+                                        </Flex>
+                                        <Divider my={2.5} />
+                                        <SimpleGrid columns={2} spacing={2} fontSize="2xs" color="gray.600">
+                                            <Box><Text color="gray.400">Entity Name:</Text><Text fontWeight="bold">DHIRUBHAI KANAK HUF</Text></Box>
+                                            <Box><Text color="gray.400">Incorporation Date:</Text><Text fontWeight="bold">06/06/2024</Text></Box>
+                                        </SimpleGrid>
+                                    </Box>
+                                </Box>
+
+                                <HStack spacing={3}>
+                                    <Button
+                                        leftIcon={<Icon as={FaEye} />}
+                                        colorScheme="blue"
+                                        onClick={() => handleOpenDoc('pan')}
+                                        flex={1}
+                                        borderRadius="xl"
+                                        h={12}
+                                        fontWeight="bold"
+                                        shadow="md"
+                                    >
+                                        View PAN Card
+                                    </Button>
+                                    <IconButton
+                                        icon={<Icon as={FaCopy} />}
+                                        variant="outline"
+                                        colorScheme="blue"
+                                        h={12}
+                                        w={12}
+                                        borderRadius="xl"
+                                        onClick={() => handleCopy('AANHD0443B', 'PAN')}
+                                        aria-label="Copy PAN Number"
+                                    />
+                                </HStack>
+                            </CardBody>
+                        </Card>
+                    </SimpleGrid>
+                </Box>
             </Container>
+
+            {/* ════════ INTERACTIVE DOCUMENT MODAL VIEWER (ORIGINAL SCANS) ════════ */}
+            <Modal isOpen={isDocModalOpen} onClose={onDocModalClose} size="4xl" isCentered scrollBehavior="inside">
+                <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+                <ModalContent borderRadius="3xl" overflow="hidden" maxW={{ base: "96vw", md: "880px" }} shadow="2xl">
+                    <ModalHeader bg="gray.900" color="white" py={4} px={{ base: 4, md: 6 }}>
+                        <Flex justify="space-between" align="center" pr={8} flexWrap="wrap" gap={2}>
+                            <HStack spacing={3}>
+                                <Flex w={10} h={10} bg={selectedDoc === 'udyam' ? 'green.500' : 'blue.500'} rounded="xl" align="center" justify="center" color="white" shadow="sm">
+                                    <Icon as={selectedDoc === 'udyam' ? FaFilePdf : FaIdCard} boxSize={5} />
+                                </Flex>
+                                <VStack align="start" spacing={0}>
+                                    <Text fontSize={{ base: "sm", md: "md" }} fontWeight="bold">
+                                        {selectedDoc === 'udyam' ? 'UDYAM REGISTRATION CERTIFICATE' : 'PERMANENT ACCOUNT NUMBER (PAN) CARD'}
+                                    </Text>
+                                    <Text fontSize="2xs" color="gray.400">
+                                        {selectedDoc === 'udyam' ? 'Official MSME Certificate • UDYAM-GJ-01-0569418' : 'Income Tax Department • AANHD0443B'}
+                                    </Text>
+                                </VStack>
+                            </HStack>
+                            <HStack spacing={2}>
+                                {selectedDoc === 'pan' && (
+                                    <HStack bg="gray.800" p={1} borderRadius="xl" spacing={1}>
+                                        <Button
+                                            size="xs"
+                                            colorScheme={panSide === 'front' ? 'blue' : 'gray'}
+                                            variant={panSide === 'front' ? 'solid' : 'ghost'}
+                                            borderRadius="lg"
+                                            onClick={() => setPanSide('front')}
+                                        >
+                                            Front
+                                        </Button>
+                                        <Button
+                                            size="xs"
+                                            colorScheme={panSide === 'back' ? 'blue' : 'gray'}
+                                            variant={panSide === 'back' ? 'solid' : 'ghost'}
+                                            borderRadius="lg"
+                                            onClick={() => setPanSide('back')}
+                                        >
+                                            Back
+                                        </Button>
+                                        <Button
+                                            size="xs"
+                                            colorScheme={panSide === 'both' ? 'blue' : 'gray'}
+                                            variant={panSide === 'both' ? 'solid' : 'ghost'}
+                                            borderRadius="lg"
+                                            onClick={() => setPanSide('both')}
+                                        >
+                                            Both
+                                        </Button>
+                                    </HStack>
+                                )}
+                            </HStack>
+                        </Flex>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={4} right={4} />
+
+                    <ModalBody p={{ base: 3, md: 6 }} bg="gray.800">
+                        {selectedDoc === 'udyam' ? (
+                            /* ── UDYAM REGISTRATION CERTIFICATE (EXACT ORIGINAL SCANS) ── */
+                            <VStack spacing={6} align="stretch">
+                                <Box bg="white" p={{ base: 2, md: 4 }} borderRadius="2xl" shadow="2xl" overflow="hidden">
+                                    <Flex justify="space-between" align="center" mb={2} px={2}>
+                                        <Badge colorScheme="green" fontSize="2xs" px={2} py={0.5} borderRadius="md">Page 1 of 2</Badge>
+                                        <Text fontSize="2xs" color="gray.400">Official Government Scan</Text>
+                                    </Flex>
+                                    <Image 
+                                        src="/documents/udyam-page-1.png" 
+                                        alt="Udyam Registration Certificate Page 1" 
+                                        borderRadius="xl" 
+                                        w="full"
+                                        fallbackSrc="/documents/udyam-page-1.png"
+                                    />
+                                </Box>
+
+                                <Box bg="white" p={{ base: 2, md: 4 }} borderRadius="2xl" shadow="2xl" overflow="hidden">
+                                    <Flex justify="space-between" align="center" mb={2} px={2}>
+                                        <Badge colorScheme="green" fontSize="2xs" px={2} py={0.5} borderRadius="md">Page 2 of 2</Badge>
+                                        <Text fontSize="2xs" color="gray.400">Official Verification Page</Text>
+                                    </Flex>
+                                    <Image 
+                                        src="/documents/udyam-page-2.png" 
+                                        alt="Udyam Registration Certificate Page 2" 
+                                        borderRadius="xl" 
+                                        w="full"
+                                        fallbackSrc="/documents/udyam-page-2.png"
+                                    />
+                                </Box>
+                            </VStack>
+                        ) : (
+                            /* ── PERMANENT ACCOUNT NUMBER (PAN) CARD (EXACT ORIGINAL SCANS) ── */
+                            <VStack spacing={6} align="center" py={4}>
+                                {(panSide === 'front' || panSide === 'both') && (
+                                    <Box maxW="600px" w="full" bg="white" p={{ base: 2, md: 3 }} borderRadius="2xl" shadow="2xl">
+                                        <Flex justify="space-between" align="center" mb={2} px={2}>
+                                            <Badge colorScheme="blue" fontSize="2xs" px={2} py={0.5} borderRadius="md">Front Side</Badge>
+                                            <Text fontSize="2xs" color="gray.400">Permanent Account Number Card</Text>
+                                        </Flex>
+                                        <Image 
+                                            src="/documents/pan-front.png" 
+                                            alt="PAN Card Front Side" 
+                                            borderRadius="xl" 
+                                            w="full"
+                                            fallbackSrc="/documents/pan-front.png"
+                                        />
+                                    </Box>
+                                )}
+
+                                {(panSide === 'back' || panSide === 'both') && (
+                                    <Box maxW="600px" w="full" bg="white" p={{ base: 2, md: 3 }} borderRadius="2xl" shadow="2xl">
+                                        <Flex justify="space-between" align="center" mb={2} px={2}>
+                                            <Badge colorScheme="purple" fontSize="2xs" px={2} py={0.5} borderRadius="md">Back Side</Badge>
+                                            <Text fontSize="2xs" color="gray.400">Protean eGov Technologies Limited</Text>
+                                        </Flex>
+                                        <Image 
+                                            src="/documents/pan-back.png" 
+                                            alt="PAN Card Back Side" 
+                                            borderRadius="xl" 
+                                            w="full"
+                                            fallbackSrc="/documents/pan-back.png"
+                                        />
+                                    </Box>
+                                )}
+
+                                {panSide !== 'both' && (
+                                    <Button
+                                        size="sm"
+                                        colorScheme="blue"
+                                        variant="solid"
+                                        borderRadius="xl"
+                                        onClick={() => setPanSide(panSide === 'front' ? 'back' : 'front')}
+                                    >
+                                        {panSide === 'front' ? '🔄 View Back Side' : '🔄 View Front Side'}
+                                    </Button>
+                                )}
+                            </VStack>
+                        )}
+                    </ModalBody>
+
+                    <ModalFooter bg="gray.900" borderTop="1px" borderColor="gray.800" py={3} px={6}>
+                        <Button variant="ghost" color="gray.300" mr={3} borderRadius="xl" onClick={onDocModalClose}>
+                            Close
+                        </Button>
+                        <Button 
+                            colorScheme={selectedDoc === 'udyam' ? 'green' : 'blue'} 
+                            leftIcon={<Icon as={FaCopy} />} 
+                            borderRadius="xl" 
+                            onClick={() => handleCopy(selectedDoc === 'udyam' ? 'UDYAM-GJ-01-0569418' : 'AANHD0443B', selectedDoc === 'udyam' ? 'Udyam' : 'PAN')}
+                        >
+                            {selectedDoc === 'udyam' ? 'Copy Reg. Number' : 'Copy PAN Number'}
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </Box>
     );
 };
@@ -9997,7 +10383,7 @@ const Services = () => {
                                     fontWeight="bold"
                                     px={{ base: 3, sm: 4 }}
                                 >
-                                    Masters
+                                    Unique Lab Survey
                                 </Button>
                                 <Button
                                     size={{ base: "xs", sm: "sm" }}

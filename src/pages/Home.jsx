@@ -51,7 +51,7 @@ const Home = () => {
                         textAlign="center"
                     >
                         <Heading as="h1" size={{ base: '2xl', md: '4xl' }} mb={6} fontWeight="900" letterSpacing="tight" lineHeight="1.1">
-                            Engineering & Surveying <br />
+                            Unique Engineering <br />
                             <Text as="span" bgGradient="linear(to-r, orange.300, brand.300)" bgClip="text">
                                 Excellence with Precision
                             </Text>
@@ -91,7 +91,7 @@ const Home = () => {
                                 to="/services?view=public"
                                 rightIcon={<Icon as={FiArrowRight} />}
                             >
-                                UNIQUE SURVEY & ENGINEERING
+                                UNIQUE SURVEY
                             </Button>
                         </Stack>
                     </MotionBox>
@@ -101,11 +101,63 @@ const Home = () => {
             {/* Division Sections */}
             <Container maxW="6xl" py={24}>
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={10}>
-                    {/* Instruments Card */}
+                    {/* Survey Card */}
                     <MotionBox
                         whileHover={{ y: -6, shadow: '2xl' }}
                         transition={{ duration: 0.3 }}
                         initial={{ opacity: 0, x: -30 }}
+                        animate={{ opacity: 1, x: 0 }}
+                    >
+                        <Card
+                            height="100%"
+                            bg="#0f172a"
+                            bgGradient="linear(to-br, #0f172a, #020617)"
+                            color="white"
+                            borderRadius="3xl"
+                            borderWidth="1px"
+                            borderColor="whiteAlpha.100"
+                            shadow="xl"
+                            overflow="hidden"
+                            position="relative"
+                        >
+                            <CardBody p={10} display="flex" flexDirection="column" justifyContent="space-between">
+                                <Box>
+                                    <Flex w={16} h={16} align="center" justify="center" bg="whiteAlpha.100" rounded="2xl" mb={8} color="blue.300">
+                                        <Icon as={FiMap} boxSize={8} />
+                                    </Flex>
+                                    <Heading size="lg" mb={4} fontWeight="800" letterSpacing="tight">
+                                        UNIQUE SURVEY
+                                    </Heading>
+                                    <Text color="gray.300" mb={8} fontSize="md" lineHeight="1.6">
+                                        Access professional land surveying, topographical mapping, layouts drafting, and civil consultancy. We deliver precision-oriented, field-proven accuracy for all site operations.
+                                    </Text>
+                                </Box>
+                                <Button
+                                    bg="blue.500"
+                                    color="white"
+                                    size="lg"
+                                    h={14}
+                                    _hover={{ bg: 'blue.600', transform: 'translateY(-2px)' }}
+                                    _active={{ bg: 'blue.700' }}
+                                    transition="all 0.2s"
+                                    rightIcon={<Icon as={FiArrowRight} />}
+                                    as={RouterLink}
+                                    to="/services?view=public"
+                                    w="full"
+                                    fontWeight="bold"
+                                    shadow="md"
+                                >
+                                    Explore Survey Services
+                                </Button>
+                            </CardBody>
+                        </Card>
+                    </MotionBox>
+
+                    {/* Instruments Card */}
+                    <MotionBox
+                        whileHover={{ y: -6, shadow: '2xl' }}
+                        transition={{ duration: 0.3 }}
+                        initial={{ opacity: 0, x: 30 }}
                         animate={{ opacity: 1, x: 0 }}
                     >
                         <Card
@@ -148,58 +200,6 @@ const Home = () => {
                                     shadow="md"
                                 >
                                     Browse Instruments Catalog
-                                </Button>
-                            </CardBody>
-                        </Card>
-                    </MotionBox>
-
-                    {/* Survey Card */}
-                    <MotionBox
-                        whileHover={{ y: -6, shadow: '2xl' }}
-                        transition={{ duration: 0.3 }}
-                        initial={{ opacity: 0, x: 30 }}
-                        animate={{ opacity: 1, x: 0 }}
-                    >
-                        <Card
-                            height="100%"
-                            bg="#0f172a"
-                            bgGradient="linear(to-br, #0f172a, #020617)"
-                            color="white"
-                            borderRadius="3xl"
-                            borderWidth="1px"
-                            borderColor="whiteAlpha.100"
-                            shadow="xl"
-                            overflow="hidden"
-                            position="relative"
-                        >
-                            <CardBody p={10} display="flex" flexDirection="column" justifyContent="space-between">
-                                <Box>
-                                    <Flex w={16} h={16} align="center" justify="center" bg="whiteAlpha.100" rounded="2xl" mb={8} color="blue.300">
-                                        <Icon as={FiMap} boxSize={8} />
-                                    </Flex>
-                                    <Heading size="lg" mb={4} fontWeight="800" letterSpacing="tight">
-                                        UNIQUE SURVEY & ENGINEERING
-                                    </Heading>
-                                    <Text color="gray.300" mb={8} fontSize="md" lineHeight="1.6">
-                                        Access professional land surveying, topographical mapping, layouts drafting, and civil consultancy. We deliver precision-oriented, field-proven accuracy for all site operations.
-                                    </Text>
-                                </Box>
-                                <Button
-                                    bg="blue.500"
-                                    color="white"
-                                    size="lg"
-                                    h={14}
-                                    _hover={{ bg: 'blue.600', transform: 'translateY(-2px)' }}
-                                    _active={{ bg: 'blue.700' }}
-                                    transition="all 0.2s"
-                                    rightIcon={<Icon as={FiArrowRight} />}
-                                    as={RouterLink}
-                                    to="/services?view=public"
-                                    w="full"
-                                    fontWeight="bold"
-                                    shadow="md"
-                                >
-                                    Explore Survey Services
                                 </Button>
                             </CardBody>
                         </Card>
