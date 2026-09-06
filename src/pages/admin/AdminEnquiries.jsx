@@ -1593,6 +1593,7 @@ const AdminEnquiries = () => {
                                         <Th>Date</Th>
                                         <Th>Client Name & Contact</Th>
                                         <Th>Products Sent</Th>
+                                        <Th>WA Status</Th>
                                         <Th>Next Follow-Up</Th>
                                         <Th textAlign="right">Action</Th>
                                     </Tr>
@@ -1612,6 +1613,19 @@ const AdminEnquiries = () => {
                                             </Td>
                                             <Td>
                                                 <Badge colorScheme="green">{(e.products || []).length} products sent</Badge>
+                                            </Td>
+                                            <Td>
+                                                {e.whatsappStatus === 'failed'
+                                                    ? <Badge colorScheme="red" variant="solid">❌ Failed</Badge>
+                                                    : e.whatsappStatus === 'partial'
+                                                    ? <Badge colorScheme="orange" variant="solid">⚠️ Partial</Badge>
+                                                    : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
+                                                }
+                                                {e.whatsappSentAt && (
+                                                    <Text fontSize="10px" color="gray.400" mt={0.5}>
+                                                        {new Date(e.whatsappSentAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                    </Text>
+                                                )}
                                             </Td>
                                             <Td>
                                                 {(() => {
