@@ -43,23 +43,26 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
     const canWriteReport = hasPermission(user, 'employeeExpense_report', 'write');
 
     const [employees, setEmployees] = useState([]);
-    const [clients, setClients] = useState([]);
-    const [sites, setSites] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [fuelType, setFuelType] = useState('Petrol');
+    const [clients, setClients]     = useState([]);
+    const [sites, setSites]         = useState([]);
+    const [instruments, setInstruments] = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [fuelType, setFuelType]   = useState('Petrol');
     const toast = useToast();
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [empRes, cliRes, siteRes] = await Promise.all([
+            const [empRes, cliRes, siteRes, instRes] = await Promise.all([
                 api.get('/employee-master'),
                 api.get('/client-master'),
-                api.get('/site-master')
+                api.get('/site-master'),
+                api.get('/instrument-master').catch(() => ({ data: { success: false } }))
             ]);
             if (empRes.data.success) setEmployees(empRes.data.data);
             if (cliRes.data.success) setClients(cliRes.data.data);
             if (siteRes.data.success) setSites(siteRes.data.data);
+            if (instRes.data?.success && Array.isArray(instRes.data.data)) setInstruments(instRes.data.data);
         } catch (error) {
             console.error("Failed to fetch data for Employee Expenses Module", error);
             toast({
@@ -130,14 +133,14 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
                 key: 'report',
                 label: 'Daily Report',
                 icon: FaChartBar,
-                component: <DailyReportSection employees={employees} clients={clients} sites={sites} />
+                component: <DailyReportSection employees={employees} clients={clients} sites={sites} instruments={instruments} />
             });
         }
         return list;
     }, [
         canReadTransfer, canWriteTransferCreate, canReadTransferView, canWriteTransferView, 
         canReadTransferAttendance, canWriteTransferAttendance, canReadTransferCustomAccount, canWriteTransferCustomAccount,
-        canReadDaily, canWriteDaily, canReadReport, employees, clients, sites, loading
+        canReadDaily, canWriteDaily, canReadReport, employees, clients, sites, instruments, loading
     ]);
 
     if (!canReadModule) {
@@ -258,7 +261,7 @@ const EmployeeExpensesModule = ({ isInsideServices = false }) => {
 // ── Daily Report Section ──────────────────────────────────────────────
 const _getCurrFY = () => { const t = new Date(); return t.getMonth() < 3 ? t.getFullYear()-1 : t.getFullYear(); };
 
-const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
+const DailyReportSection = ({ employees = [], clients = [], sites = [], instruments = [] }) => {
     const { user } = useAuth();
     const canReadLast5Days = hasPermission(user, 'employeeExpense_report_last5days', 'read');
     const canReadAdvanced = hasPermission(user, 'employeeExpense_report_advanced', 'read');
@@ -275,6 +278,38 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
     const [monthStats, setMonthStats] = useState({ credit: 0, debit: 0, expense: 0, currentBalance: 0, loading: false });
     const [selectedDetailExpenses, setSelectedDetailExpenses] = useState([]);
     const [selectedDetailTransfers, setSelectedDetailTransfers] = useState([]);
+    const [instrumentsList, setInstrumentsList] = useState(instruments);
+
+    useEffect(() => {
+        if (instruments && instruments.length > 0) {
+            setInstrumentsList(instruments);
+        } else {
+            api.get('/instrument-master').then(res => {
+                if (res.data?.success && Array.isArray(res.data.data)) {
+                    setInstrumentsList(res.data.data);
+                }
+            }).catch(() => {});
+        }
+    }, [instruments]);
+
+    const instrumentLookup = useMemo(() => {
+        const byId = new Map();
+        (instrumentsList || []).forEach(inst => {
+            if (inst._id) byId.set(String(inst._id), inst);
+            if (inst.id) byId.set(String(inst.id), inst);
+            if (inst.serialNo) byId.set(String(inst.serialNo), inst);
+        });
+        return byId;
+    }, [instrumentsList]);
+
+    const resolveInstrument = (inst) => {
+        if (!inst) return null;
+        if (typeof inst === 'object' && (inst.instrumentName || inst.serialNo || inst.model)) {
+            return inst;
+        }
+        const key = typeof inst === 'object' ? String(inst._id || inst.id || '') : String(inst).trim();
+        return instrumentLookup.get(key) || inst;
+    };
 
     // Fast indexed lookups for O(1) entity resolution
     const empLookup = useMemo(() => {
@@ -2169,11 +2204,24 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                                         </HStack>
                                                                         {sInstList.length > 0 ? (
                                                                             <VStack align="stretch" spacing={1.5} pl={1}>
-                                                                                {sInstList.map((inst, iIdx) => {
-                                                                                    const iPhoto = inst && typeof inst === 'object' ? (inst.primaryPhotoUrl || (Array.isArray(inst.photos) && inst.photos[0]) || (Array.isArray(inst.existingPhotos) && inst.existingPhotos[0]) || inst.photoUrl || inst.photo || inst.image) : null;
+                                                                                {sInstList.map((rawInst, iIdx) => {
+                                                                                    const inst = resolveInstrument(rawInst) || rawInst;
+                                                                                    const iPhoto = inst && typeof inst === 'object' ? (
+                                                                                        inst.primaryPhotoUrl || 
+                                                                                        (Array.isArray(inst.photos) && (inst.photos[0]?.url || inst.photos[0]?.path || inst.photos[0])) || 
+                                                                                        (Array.isArray(inst.existingPhotos) && (inst.existingPhotos[0]?.url || inst.existingPhotos[0]?.path || inst.existingPhotos[0])) || 
+                                                                                        inst.photoUrl || 
+                                                                                        inst.photo?.url || 
+                                                                                        inst.photo?.path || 
+                                                                                        inst.photo || 
+                                                                                        inst.image
+                                                                                    ) : null;
                                                                                     const iPhotoUrl = typeof iPhoto === 'string' ? iPhoto : (iPhoto?.url || iPhoto?.path || null);
-                                                                                    const iName = inst.instrumentName || inst.name || 'Instrument';
-                                                                                    const iSerial = inst.serialNo ? `[S/N: ${inst.serialNo}]` : '';
+                                                                                    const iName = typeof inst === 'object' 
+                                                                                        ? (inst.instrumentName || inst.name || (inst.model ? `Model: ${inst.model}` : (inst.serialNo ? `Instrument [${inst.serialNo}]` : 'Instrument'))) 
+                                                                                        : (typeof inst === 'string' ? `Instrument #${inst.slice(-4)}` : 'Instrument');
+                                                                                    const iSerial = typeof inst === 'object' && inst.serialNo ? `[S/N: ${inst.serialNo}]` : '';
+                                                                                    const iModel = typeof inst === 'object' && inst.model && inst.model !== iName ? inst.model : '';
 
                                                                                     return (
                                                                                         <Flex key={iIdx} justify="space-between" align="center" p={1.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.100">
@@ -2214,8 +2262,12 @@ const DailyReportSection = ({ employees = [], clients = [], sites = [] }) => {
                                                                                                     <Text fontSize="10px" fontWeight="700" color="gray.800" isTruncated>
                                                                                                         {iName}
                                                                                                     </Text>
-                                                                                                    {iSerial && (
-                                                                                                        <Text fontSize="9px" color="gray.500" fontWeight="600">{iSerial}</Text>
+                                                                                                    {(iModel || iSerial) && (
+                                                                                                        <HStack spacing={1} fontSize="9px">
+                                                                                                            {iModel && <Text color="blue.600" fontWeight="600" isTruncated>{iModel}</Text>}
+                                                                                                            {iModel && iSerial && <Text color="gray.400">•</Text>}
+                                                                                                            {iSerial && <Text color="gray.500" fontWeight="600">{iSerial}</Text>}
+                                                                                                        </HStack>
                                                                                                     )}
                                                                                                 </VStack>
                                                                                             </HStack>

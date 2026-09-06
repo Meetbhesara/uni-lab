@@ -4457,6 +4457,15 @@ const ClientMasterForm = () => {
     );
 };
 
+const normalizeSiteStatus = (status) => {
+    if (!status) return 'Active';
+    const s = String(status).trim().toLowerCase();
+    if (s === 'deactive' || s === 'inactive' || s === 'deactivated' || s === 'false') {
+        return 'Deactive';
+    }
+    return 'Active';
+};
+
 const SiteMasterForm = () => {
     const toast = useToast();
     const [isLoading, setIsLoading] = useState(false);
@@ -4466,6 +4475,7 @@ const SiteMasterForm = () => {
     const [ledgerSites, setLedgerSites] = useState([]);
     const [allSites, setAllSites] = useState([]);
     const [filterClientId, setFilterClientId] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
     const [editId, setEditId] = useState('');
     const [viewSite, setViewSite] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -4646,7 +4656,9 @@ const SiteMasterForm = () => {
         try {
             const uploadData = new FormData();
             Object.keys(formData).forEach(key => {
-                if (formData[key]) uploadData.append(key, formData[key]);
+                if (formData[key] !== undefined && formData[key] !== null) {
+                    uploadData.append(key, formData[key]);
+                }
             });
             if (nextSiteId) uploadData.append('siteId', nextSiteId);
             const cleanedLedgers = ledgerItems.filter(li => li.ledger && li.ledger.trim() !== '' && li.amount !== '' && li.amount !== null);
@@ -4693,7 +4705,7 @@ const SiteMasterForm = () => {
             siteName: s.siteName || '',
             siteAddress: s.siteAddress || '',
             siteLocation: s.siteLocation || '',
-            status: s.status || 'Active'
+            status: normalizeSiteStatus(s.status)
         });
         const items = s.ledgerItems?.length > 0 ? s.ledgerItems.map(li => ({
             ledger: li.ledger || '',
@@ -4734,16 +4746,21 @@ const SiteMasterForm = () => {
 
     const filteredSites = allSites.filter(s => {
         const q = tableSearch.toLowerCase();
+        const sStatus = normalizeSiteStatus(s.status);
         const matchesTableSearch = 
             !tableSearch ||
             s.siteName?.toLowerCase().includes(q) ||
             s.siteId?.toLowerCase().includes(q) ||
             s.siteAddress?.toLowerCase().includes(q) ||
-            s.client?.clientName?.toLowerCase().includes(q);
+            s.client?.clientName?.toLowerCase().includes(q) ||
+            sStatus.toLowerCase().includes(q);
 
         if (filterClientId) {
             const cId = s.client?._id || s.client;
-            return cId === filterClientId && matchesTableSearch;
+            if (cId !== filterClientId) return false;
+        }
+        if (filterStatus) {
+            if (sStatus !== filterStatus) return false;
         }
         return matchesTableSearch;
     });
@@ -4867,9 +4884,9 @@ const SiteMasterForm = () => {
                                                 </FormControl>
                                                 <FormControl>
                                                     <FormLabel fontWeight="bold" fontSize="sm">Status</FormLabel>
-                                                    <Select name="status" value={formData.status} onChange={handleChange} borderRadius="xl" size="md" bg="gray.50">
+                                                    <Select name="status" value={normalizeSiteStatus(formData.status)} onChange={handleChange} borderRadius="xl" size="md" bg="gray.50">
                                                         <option value="Active">Active</option>
-                                                        <option value="Inactive">Inactive</option>
+                                                        <option value="Deactive">Deactive</option>
                                                     </Select>
                                                 </FormControl>
                                             </SimpleGrid>
@@ -5116,6 +5133,18 @@ const SiteMasterForm = () => {
                                                 <option value="">All Clients</option>
                                                 {clients.map(c => <option key={c._id} value={c._id}>{c.clientName}</option>)}
                                             </Select>
+                                            <Select
+                                                size="sm"
+                                                borderRadius="lg"
+                                                bg="white"
+                                                w={{ base: "full", sm: "160px" }}
+                                                value={filterStatus}
+                                                onChange={(e) => setFilterStatus(e.target.value)}
+                                            >
+                                                <option value="">All Status ({allSites.length})</option>
+                                                <option value="Active">Active ({allSites.filter(s => normalizeSiteStatus(s.status) === 'Active').length})</option>
+                                                <option value="Deactive">Deactive ({allSites.filter(s => normalizeSiteStatus(s.status) === 'Deactive').length})</option>
+                                            </Select>
                                         </HStack>
 
                                         {viewMode === 'table' ? (
@@ -5148,8 +5177,8 @@ const SiteMasterForm = () => {
                                                                         </VStack>
                                                                     </Td>
                                                                     <Td>
-                                                                        <Badge colorScheme={s.status === 'Active' ? 'green' : 'red'} variant="subtle" borderRadius="full" px={2} fontSize="9px">
-                                                                            {s.status}
+                                                                        <Badge colorScheme={normalizeSiteStatus(s.status) === 'Active' ? 'green' : 'red'} variant="subtle" borderRadius="full" px={2} fontSize="9px">
+                                                                            {normalizeSiteStatus(s.status).toUpperCase()}
                                                                         </Badge>
                                                                     </Td>
                                                                     <Td>
@@ -5186,8 +5215,8 @@ const SiteMasterForm = () => {
                                                                     <Text fontWeight="black" fontSize="sm" color="gray.800" isTruncated>{s.siteName}</Text>
                                                                     <Text fontSize="xs" color="gray.500" isTruncated>{s.client?.clientName || 'General Client'}</Text>
                                                                 </Box>
-                                                                <Badge colorScheme={s.status === 'Active' ? 'green' : 'red'} variant="subtle" borderRadius="full" fontSize="9px">
-                                                                    {s.status}
+                                                                <Badge colorScheme={normalizeSiteStatus(s.status) === 'Active' ? 'green' : 'red'} variant="subtle" borderRadius="full" fontSize="9px">
+                                                                    {normalizeSiteStatus(s.status).toUpperCase()}
                                                                 </Badge>
                                                             </HStack>
 
@@ -5243,7 +5272,17 @@ const SiteMasterForm = () => {
                         <HStack spacing={3}>
                             <Icon as={FaMapMarkerAlt} w={7} h={7} />
                             <VStack align="start" spacing={0}>
-                                <Heading size="md">{viewSite?.siteName}</Heading>
+                                <HStack spacing={2} align="center">
+                                    <Heading size="md">{viewSite?.siteName}</Heading>
+                                    <Badge
+                                        colorScheme={normalizeSiteStatus(viewSite?.status) === 'Active' ? 'green' : 'red'}
+                                        borderRadius="full"
+                                        px={2}
+                                        fontSize="10px"
+                                    >
+                                        {normalizeSiteStatus(viewSite?.status).toUpperCase()}
+                                    </Badge>
+                                </HStack>
                                 <Text fontSize="xs" opacity={0.85}>{viewSite?.client?.clientName} • Project Site</Text>
                             </VStack>
                         </HStack>
@@ -5258,6 +5297,19 @@ const SiteMasterForm = () => {
                             <Box w="full" bg="teal.50" p={4} borderRadius="2xl" border="1px solid" borderColor="teal.100">
                                 <Text fontSize="10px" fontWeight="black" color="teal.600" textTransform="uppercase" mb={2}>Site Information</Text>
                                 <VStack align="start" spacing={2}>
+                                    <Box>
+                                        <Text fontSize="9px" color="teal.600" fontWeight="bold">STATUS</Text>
+                                        <Badge
+                                            colorScheme={normalizeSiteStatus(viewSite.status) === 'Active' ? 'green' : 'red'}
+                                            variant="subtle"
+                                            borderRadius="full"
+                                            px={2}
+                                            fontSize="10px"
+                                        >
+                                            {normalizeSiteStatus(viewSite.status).toUpperCase()}
+                                        </Badge>
+                                    </Box>
+
                                     <Box>
                                         <Text fontSize="9px" color="teal.600" fontWeight="bold">ADDRESS</Text>
                                         <Text fontSize="xs" color="gray.800">{viewSite.siteAddress || 'N/A'}</Text>
