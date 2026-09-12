@@ -3851,7 +3851,6 @@ const ClientMasterForm = () => {
 
     const [formData, setFormData] = useState({
         clientName: '',
-        email: '',
         contactPersonName: '',
         panCard: '',
         clientAddress: '',
@@ -3861,6 +3860,7 @@ const ClientMasterForm = () => {
         msmeNo: ''
     });
     const [contactNumbers, setContactNumbers] = useState(['']);
+    const [emails, setEmails] = useState(['']);
     const [files, setFiles] = useState({
         gstCert: null,
         msmeCert: null
@@ -3889,8 +3889,9 @@ const ClientMasterForm = () => {
         const id = e.target.value;
         setEditId(id);
         if (!id) {
-            setFormData({ clientName: '', email: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
+            setFormData({ clientName: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
             setContactNumbers(['']);
+            setEmails(['']);
             setFiles({ gstCert: null, msmeCert: null });
             fetchNextId();
             return;
@@ -3900,7 +3901,6 @@ const ClientMasterForm = () => {
             setNextId(c.clientId || '');
             setFormData({
                 clientName: c.clientName || '',
-                email: c.email || '',
                 contactPersonName: c.contactPerson?.name || '',
                 panCard: c.panCard || '',
                 clientAddress: c.clientAddress || '',
@@ -3910,6 +3910,9 @@ const ClientMasterForm = () => {
                 msmeNo: c.msmeNo || ''
             });
             setContactNumbers(c.contactNumbers?.length > 0 ? c.contactNumbers : (c.contactPerson?.phone ? [c.contactPerson.phone] : ['']));
+            // Load multiple emails: prefer emails array, fall back to single email
+            const loadedEmails = c.emails?.length > 0 ? c.emails : (c.email ? [c.email] : ['']);
+            setEmails(loadedEmails.length > 0 ? loadedEmails : ['']);
             setActiveTab(0);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -3923,8 +3926,9 @@ const ClientMasterForm = () => {
             fetchClients();
             if (editId === id) {
                 setEditId('');
-                setFormData({ clientName: '', email: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
+                setFormData({ clientName: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
                 setContactNumbers(['']);
+                setEmails(['']);
                 fetchNextId();
             }
         } catch (err) {
@@ -3939,6 +3943,14 @@ const ClientMasterForm = () => {
     };
     const addContactNumber = () => setContactNumbers([...contactNumbers, '']);
     const removeContactNumber = (index) => setContactNumbers(contactNumbers.filter((_, i) => i !== index));
+
+    const handleEmailChange = (index, value) => {
+        const newEmails = [...emails];
+        newEmails[index] = value;
+        setEmails(newEmails);
+    };
+    const addEmail = () => setEmails([...emails, '']);
+    const removeEmail = (index) => setEmails(emails.filter((_, i) => i !== index));
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -3964,6 +3976,11 @@ const ClientMasterForm = () => {
                 uploadData.append(key, formData[key] || '');
             });
             uploadData.append('contactNumbers', JSON.stringify(contactNumbers.filter(n => n.trim() !== '')));
+            // Send emails as JSON array
+            const cleanedEmails = emails.filter(e => e.trim() !== '');
+            uploadData.append('emails', JSON.stringify(cleanedEmails));
+            // Also send first email as legacy `email` field for backward compat
+            uploadData.append('email', cleanedEmails[0] || '');
             if (files.gstCert) uploadData.append('gstCert', files.gstCert);
             if (files.msmeCert) uploadData.append('msmeCert', files.msmeCert);
 
@@ -3976,8 +3993,9 @@ const ClientMasterForm = () => {
 
             if (response.data.success) {
                 toast({ title: editId ? "Updated" : "Success", description: editId ? "Client updated successfully" : "Client record stored successfully", status: "success", duration: 3000 });
-                setFormData({ clientName: '', email: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
+                setFormData({ clientName: '', contactPersonName: '', panCard: '', clientAddress: '', pincode: '', state: '', gstNo: '', msmeNo: '' });
                 setContactNumbers(['']);
+                setEmails(['']);
                 setFiles({ gstCert: null, msmeCert: null });
                 setEditId('');
                 fetchNextId();
@@ -4101,11 +4119,35 @@ const ClientMasterForm = () => {
                                                     </HStack>
                                                 </FormControl>
                                                 <FormControl>
-                                                    <FormLabel fontWeight="bold" fontSize="sm">Billing Email Address</FormLabel>
-                                                    <HStack bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                                        <Icon as={FaEnvelope} ml={3} color="orange.500" />
-                                                        <Input name="email" type="email" variant="unstyled" p={2} placeholder="accounts@client.com" value={formData.email} onChange={handleChange} />
-                                                    </HStack>
+                                                    <FormLabel fontWeight="bold" fontSize="sm">Email Address(es)</FormLabel>
+                                                    <VStack align="stretch" spacing={2}>
+                                                        {emails.map((em, i) => (
+                                                            <HStack key={i} bg="gray.50" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                                <Icon as={FaEnvelope} ml={3} color="orange.500" flexShrink={0} />
+                                                                <Input
+                                                                    type="email"
+                                                                    variant="unstyled"
+                                                                    p={2}
+                                                                    placeholder={i === 0 ? 'accounts@client.com' : 'additional@client.com'}
+                                                                    value={em}
+                                                                    onChange={(e) => handleEmailChange(i, e.target.value)}
+                                                                />
+                                                                {i > 0 && (
+                                                                    <IconButton
+                                                                        icon={<FaTrash />}
+                                                                        size="sm"
+                                                                        colorScheme="red"
+                                                                        variant="ghost"
+                                                                        onClick={() => removeEmail(i)}
+                                                                        flexShrink={0}
+                                                                    />
+                                                                )}
+                                                            </HStack>
+                                                        ))}
+                                                        <Button size="xs" colorScheme="orange" variant="ghost" onClick={addEmail} alignSelf="flex-start" leftIcon={<FaEnvelope />}>
+                                                            + Add Email
+                                                        </Button>
+                                                    </VStack>
                                                 </FormControl>
                                             </SimpleGrid>
 
@@ -4296,11 +4338,13 @@ const ClientMasterForm = () => {
                                                                                 <Text as="a" href={`tel:${phone}`} fontWeight="bold" color="blue.600">{phone}</Text>
                                                                             </HStack>
                                                                         )}
-                                                                        {c.email && (
-                                                                            <HStack fontSize="xs" justify="space-between">
-                                                                                <Text color="gray.500">Email:</Text>
-                                                                                <Text as="a" href={`mailto:${c.email}`} color="blue.600" isTruncated maxW="160px">{c.email}</Text>
-                                                                            </HStack>
+                                                                        {(c.emails?.length > 0 || c.email) && (
+                                                                            <VStack align="stretch" spacing={0.5}>
+                                                                                <Text color="gray.500" fontSize="xs">Email{(c.emails?.length > 1) ? 's' : ''}:</Text>
+                                                                                {(c.emails?.length > 0 ? c.emails : [c.email]).map((em, ei) => (
+                                                                                    <Text key={ei} as="a" href={`mailto:${em}`} color="blue.600" fontSize="xs" isTruncated maxW="180px">{em}</Text>
+                                                                                ))}
+                                                                            </VStack>
                                                                         )}
                                                                     </VStack>
                                                                 </Box>
@@ -4365,10 +4409,18 @@ const ClientMasterForm = () => {
                                                 <Text fontSize="xs" color="gray.600">Phone:</Text>
                                                 <Text fontSize="xs" fontWeight="bold" color="blue.600">{viewClient.contactNumbers?.length > 0 ? viewClient.contactNumbers.join(', ') : (viewClient.contactPersonPhone || viewClient.contactPerson?.phone || 'N/A')}</Text>
                                             </HStack>
-                                            <HStack justify="space-between" w="full">
-                                                <Text fontSize="xs" color="gray.600">Email:</Text>
-                                                <Text fontSize="xs" fontWeight="bold">{viewClient.email || 'N/A'}</Text>
-                                            </HStack>
+                                            <Box w="full">
+                                                <HStack justify="space-between" w="full" mb={1}>
+                                                    <Text fontSize="xs" color="gray.600">Email{(viewClient.emails?.length > 1) ? 's' : ''}:</Text>
+                                                    {(!viewClient.emails?.length && !viewClient.email) && <Text fontSize="xs" fontWeight="bold">N/A</Text>}
+                                                </HStack>
+                                                <VStack align="flex-end" spacing={0.5}>
+                                                    {(viewClient.emails?.length > 0 ? viewClient.emails : (viewClient.email ? [viewClient.email] : [])).map((em, ei) => (
+                                                        <Text key={ei} as="a" href={`mailto:${em}`} fontSize="xs" fontWeight="bold" color="blue.600">{em}</Text>
+                                                    ))}
+                                                    {!viewClient.emails?.length && !viewClient.email && null}
+                                                </VStack>
+                                            </Box>
                                         </VStack>
                                     </Box>
 

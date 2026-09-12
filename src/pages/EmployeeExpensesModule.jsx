@@ -3280,6 +3280,9 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     const sId = fullSite?.siteId || '0000';
                     formData.append(`site_${idx}_clientShortId`, cShortId);
                     formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
+                    // siteIdForLookup lets the backend find the existing NAS folder by
+                    // siteId prefix — avoids creating duplicate folders due to case drift
+                    formData.append(`site_${idx}_siteIdForLookup`, sId);
                 }
                 
                 if (site.files.photos) site.files.photos.forEach(f => formData.append(`site_${idx}_photos`, f));
@@ -3288,12 +3291,14 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 if (site.files.drawing) site.files.drawing.forEach(f => formData.append(`site_${idx}_drawing`, f));
             });
 
-            // Fallback metadata
+            // Fallback metadata (used when no per-site fieldname found)
             if (allocations[0]) {
                 const client = clients.find(c => c._id === allocations[0].clientId);
                 const site = sites.find(s => s._id === allocations[0].siteId);
+                const fbSiteId = site?.siteId || '0000';
                 formData.append('clientShortId', (client?.clientId || 'unknown').toLowerCase());
-                formData.append('siteSubfolder', `${site?.siteId || '0000'}-${(site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_')}`);
+                formData.append('siteSubfolder', `${fbSiteId}-${(site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_')}`);
+                formData.append('siteIdForLookup', fbSiteId);
             }
 
             const res = await api.post('/employee-expense/admin/add-expense', formData, {
