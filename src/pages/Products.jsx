@@ -47,32 +47,49 @@ const PRODUCT_CATEGORIES = [
 
 // Inject marquee keyframe once
 const MARQUEE_STYLE_ID = 'product-marquee-style';
-if (!document.getElementById(MARQUEE_STYLE_ID)) {
-    const style = document.createElement('style');
-    style.id = MARQUEE_STYLE_ID;
-    style.innerHTML = `
-        @keyframes marquee {
-            0%   { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-        }
-        .marquee-track {
-            display: flex;
-            width: max-content;
-            animation: marquee 40s linear infinite;
-        }
-        .marquee-track:hover {
-            animation-play-state: paused;
-        }
-    `;
-    document.head.appendChild(style);
+let styleEl = document.getElementById(MARQUEE_STYLE_ID);
+if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = MARQUEE_STYLE_ID;
+    document.head.appendChild(styleEl);
 }
+styleEl.innerHTML = `
+    @keyframes marquee {
+        0%   { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
+    .marquee-track {
+        display: flex;
+        width: max-content;
+        animation-name: marquee;
+        animation-timing-function: linear;
+        animation-iteration-count: infinite;
+        will-change: transform;
+    }
+    .marquee-track:hover {
+        animation-play-state: paused;
+    }
+`;
 
 const ProductSlider = ({ products }) => {
     const navigate = useNavigate();
-    // Double the list for seamless infinite loop
-    const items = [...products, ...products];
 
-    if (!products.length) return null;
+    if (!products || !products.length) return null;
+
+    // Ensure we have enough items so the base list spans well beyond screen width for seamless looping
+    let baseList = [...products];
+    while (baseList.length > 0 && baseList.length < 15) {
+        baseList = [...baseList, ...products];
+    }
+    // Double the list for seamless infinite loop (0% to -50% translates exactly baseList width)
+    const items = [...baseList, ...baseList];
+
+    // Constant speed calculation:
+    // Each item is 140px + 24px margins = 164px.
+    // 5 seconds per item gives ~32.8 px/second — smooth, slow, and perfectly consistent
+    // regardless of whether there are 5, 50, 100, or 500 products!
+    const SECONDS_PER_ITEM = 5;
+    const duration = baseList.length * SECONDS_PER_ITEM;
 
     return (
         <Box
@@ -88,12 +105,13 @@ const ProductSlider = ({ products }) => {
             <Box position="absolute" right={0} top={0} bottom={0} w="80px" zIndex={1}
                 bgGradient="linear(to-l, white, transparent)" pointerEvents="none" />
 
-            <div className="marquee-track">
+            <div className="marquee-track" style={{ animationDuration: `${duration}s` }}>
                 {items.map((product, idx) => {
                     const imgSrc = getImageUrl(product.localImages?.[0] || product.images?.[0] || product.photos?.[0]);
+                    const productId = product._id || product.id || `prod-${idx}`;
                     return (
                         <Box
-                            key={`${product._id}-${idx}`}
+                            key={`${productId}-${idx}`}
                             mx={3}
                             flexShrink={0}
                             cursor="pointer"
@@ -104,13 +122,16 @@ const ProductSlider = ({ products }) => {
                             boxShadow="md"
                             border="2px solid"
                             borderColor="gray.100"
+                            bg="white"
+                            position="relative"
+                            title={product.name}
                             transition="all 0.3s"
                             _hover={{
                                 transform: 'scale(1.07)',
                                 boxShadow: '2xl',
                                 borderColor: 'brand.400'
                             }}
-                            onClick={() => navigate(`/products?category=${encodeURIComponent(product.category || '')}&highlight=${product._id}`)}
+                            onClick={() => navigate(`/products?category=${encodeURIComponent(product.category || '')}&highlight=${productId}`)}
                         >
                             <Image
                                 src={imgSrc}
@@ -118,7 +139,13 @@ const ProductSlider = ({ products }) => {
                                 w="100%"
                                 h="100%"
                                 objectFit="cover"
-                                fallbackSrc="https://via.placeholder.com/140x120?text=No+Img"
+                                fallback={
+                                    <Flex w="100%" h="100%" bg="gray.50" align="center" justify="center" p={2} textAlign="center">
+                                        <Text fontSize="xs" fontWeight="600" color="gray.600" noOfLines={3}>
+                                            {product.name}
+                                        </Text>
+                                    </Flex>
+                                }
                             />
                         </Box>
                     );

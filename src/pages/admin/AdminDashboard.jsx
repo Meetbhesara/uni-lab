@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText,
     Icon, Spinner, Text, FormControl, FormLabel, Input, Button, Flex,
     useToast, Table, Thead, Tbody, Tr, Th, Td, Badge, Avatar, Stack,
     InputGroup, InputLeftElement, Tooltip, Tag, TagLabel, Tabs, TabList,
     TabPanels, Tab, TabPanel, AlertDialog, AlertDialogBody, AlertDialogFooter,
-    AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, IconButton
+    AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, IconButton,
+    Skeleton, SkeletonText
 } from '@chakra-ui/react';
 import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar, FiTrash2, FiShield, FiUser, FiActivity } from 'react-icons/fi';
 import { motion } from 'framer-motion';
@@ -36,7 +37,8 @@ const AdminDashboard = () => {
         rejectedQuotations: 0,
         totalUsers: 0
     });
-    const [loading, setLoading] = useState(true);
+    // statsLoading tracks individual stat cards (not full page block)
+    const [statsLoading, setStatsLoading] = useState(true);
 
     // Users state
     const [users, setUsers] = useState([]);
@@ -54,6 +56,8 @@ const AdminDashboard = () => {
     const [deleteAccountModal, setDeleteAccountModal] = useState({ isOpen: false, user: null, type: '' });
     const [isDeleting, setIsDeleting] = useState(false);
     const cancelRef = useRef();
+    // Debounce ref for realtime listener
+    const realtimeDebounceRef = useRef(null);
 
     const defaultPermissions = {
         dashboard: { read: true, write: true },
@@ -90,75 +94,83 @@ const AdminDashboard = () => {
     const [adminForm, setAdminForm] = useState({ name: '', email: '', phone: '', permissions: defaultPermissions });
     const [adminLoading, setAdminLoading] = useState(false);
 
-    const fetchData = async () => {
-        let pCount = 0;
-        try {
-            const prodRes = await api.get('/products');
-            const pData = prodRes.data.products || prodRes.data.data || prodRes.data;
-            pCount = Array.isArray(pData) ? pData.length : 0;
-        } catch {
-            pCount = DEMO_PRODUCTS.length;
+    // ─── SINGLE PARALLEL FETCH: All 5 endpoints fire at once ───────────────────
+    const fetchAllDashboardData = useCallback(async () => {
+        setStatsLoading(true);
+        setUsersLoading(true);
+        setAdminsLoading(true);
+
+        // Fire all 5 requests simultaneously — no waiting between rounds
+        const [prodRes, quoteRes, enqRes, usersRes, adminsRes] = await Promise.allSettled([
+            api.get('/products/count'),          // returns { count: N } — tiny payload
+            api.get('/quotations/stats'),         // returns { total, done, rejected } — tiny payload
+            api.get('/enquiries/stats'),          // returns { total, unseen } — tiny payload
+            api.get('/auth/users'),               // full list needed for table display
+            api.get('/auth/admins')               // full list needed for table display
+        ]);
+
+        // ── Stats ──────────────────────────────────────────────────────────────
+        const productCount = prodRes.status === 'fulfilled'
+            ? (prodRes.value.data.count ?? DEMO_PRODUCTS.length)
+            : DEMO_PRODUCTS.length;
+
+        const qStats = quoteRes.status === 'fulfilled' && quoteRes.value.data.success
+            ? quoteRes.value.data
+            : { done: 0, rejected: 0 };
+
+        const eStats = enqRes.status === 'fulfilled' && enqRes.value.data.success
+            ? enqRes.value.data
+            : { total: DEMO_ENQUIRIES.length, unseen: 0 };
+
+        // ── Users & Admins ─────────────────────────────────────────────────────
+        let totalUsers = 0;
+        if (usersRes.status === 'fulfilled') {
+            const uData = usersRes.value.data.users || usersRes.value.data || [];
+            const uArr = Array.isArray(uData) ? uData : [];
+            setUsers(uArr);
+            totalUsers = usersRes.value.data.total || uArr.length;
         }
 
-        try {
-            const [quoteRes, enqRes] = await Promise.all([
-                api.get('/quotations'),
-                api.get('/enquiries')
-            ]);
-            const qData = quoteRes.data.quotations || quoteRes.data.data || quoteRes.data || [];
-            const eData = enqRes.data.enquiries || enqRes.data.data || enqRes.data || [];
-            setStats(prev => ({
-                ...prev,
-                products: pCount,
-                totalEnquiries: Array.isArray(eData) ? eData.length : 0,
-                pendingEnquiries: Array.isArray(eData) ? eData.filter(e => !e.isSeen).length : 0,
-                doneQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Done').length : 0,
-                rejectedQuotations: Array.isArray(qData) ? qData.filter(q => q.status === 'Reject').length : 0,
-            }));
-        } catch {
-            setStats(prev => ({ ...prev, products: pCount, totalEnquiries: DEMO_ENQUIRIES.length, pendingEnquiries: 0, doneQuotations: 0, rejectedQuotations: 0 }));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchUsersAndAdmins = async () => {
-        try {
-            setUsersLoading(true);
-            setAdminsLoading(true);
-            const [uRes, aRes] = await Promise.all([
-                api.get('/auth/users'),
-                api.get('/auth/admins')
-            ]);
-            const uData = uRes.data.users || uRes.data || [];
-            setUsers(Array.isArray(uData) ? uData : []);
-            setStats(prev => ({ ...prev, totalUsers: uRes.data.total || uData.length }));
-
-            const aData = aRes.data.admins || aRes.data || [];
-            // Note: not take if isSuperAdmin=true then not show
+        if (adminsRes.status === 'fulfilled') {
+            const aData = adminsRes.value.data.admins || adminsRes.value.data || [];
             const cleanAdmins = (Array.isArray(aData) ? aData : []).filter(a => !a.isSuperAdmin);
             setAdmins(cleanAdmins);
-        } catch (err) {
-            console.error('Failed to fetch users/admins:', err);
-        } finally {
-            setUsersLoading(false);
-            setAdminsLoading(false);
         }
-    };
 
-    useEffect(() => {
-        fetchData();
-        fetchUsersAndAdmins();
+        // ── Commit all stats in one setState call ──────────────────────────────
+        setStats({
+            products: productCount,
+            totalEnquiries: eStats.total ?? 0,
+            pendingEnquiries: eStats.unseen ?? 0,
+            doneQuotations: qStats.done ?? 0,
+            rejectedQuotations: qStats.rejected ?? 0,
+            totalUsers
+        });
+
+        setStatsLoading(false);
+        setUsersLoading(false);
+        setAdminsLoading(false);
     }, []);
 
+    useEffect(() => {
+        fetchAllDashboardData();
+    }, [fetchAllDashboardData]);
+
+    // ─── DEBOUNCED REALTIME LISTENER ────────────────────────────────────────────
+    // Prevents re-fetching on every rapid SSE push — waits 1.5s of silence
     useEffect(() => {
         const handleRealtimeUpdate = () => {
-            fetchData();
-            fetchUsersAndAdmins();
+            if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+            realtimeDebounceRef.current = setTimeout(() => {
+                fetchAllDashboardData();
+            }, 1500);
         };
         window.addEventListener('app-realtime-update', handleRealtimeUpdate);
-        return () => window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
-    }, []);
+        return () => {
+            window.removeEventListener('app-realtime-update', handleRealtimeUpdate);
+            if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+        };
+    }, [fetchAllDashboardData]);
 
     const handleCreateAdmin = async () => {
         if (!adminForm.name || !adminForm.email || !adminForm.phone) {
@@ -176,7 +188,7 @@ const AdminDashboard = () => {
         if (res.success) {
             toast({ title: '✅ Admin Created!', description: res.msg, status: 'success' });
             setAdminForm({ name: '', email: '', phone: '', permissions: defaultPermissions });
-            fetchUsersAndAdmins();
+            fetchAllDashboardData();
         } else {
             toast({ title: 'Failed', description: res.message, status: 'error' });
         }
@@ -197,7 +209,7 @@ const AdminDashboard = () => {
                     description: `${deleteAccountModal.user.name || deleteAccountModal.user.contactPersonName || 'Account'} has been permanently deleted.`,
                     status: 'success'
                 });
-                fetchUsersAndAdmins();
+                fetchAllDashboardData();
                 setDeleteAccountModal({ isOpen: false, user: null, type: '' });
             } else {
                 toast({ title: 'Failed to delete account', description: res.data?.message || 'Error occurred', status: 'error' });
@@ -246,13 +258,7 @@ const AdminDashboard = () => {
     const AVATAR_COLORS = ['blue', 'teal', 'purple', 'orange', 'pink', 'cyan', 'green', 'red'];
     const getColor = (idx) => AVATAR_COLORS[idx % AVATAR_COLORS.length];
 
-    if (loading) {
-        return (
-            <Box h="100vh" display="flex" justifyContent="center" alignItems="center">
-                <Spinner size="xl" color="brand.500" thickness="4px" />
-            </Box>
-        );
-    }
+    // No full-page blocking spinner — page renders immediately with skeletons
 
     return (
         <Box>
@@ -283,7 +289,7 @@ const AdminDashboard = () => {
                 </Flex>
             </Box>
 
-            {/* Stats Grid */}
+            {/* Stats Grid — renders immediately, numbers fill in as data arrives */}
             <SimpleGrid columns={{ base: 2, md: 3, lg: 6 }} spacing={5} mb={10}>
                 {[
                     { label: 'Products', value: stats.products, icon: FiBox, color: 'brand.500', help: 'Active catalog', bg: 'brand.50' },
@@ -297,7 +303,7 @@ const AdminDashboard = () => {
                         key={s.label}
                         initial={{ opacity: 0, y: 16 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: i * 0.07 }}
+                        transition={{ duration: 0.35, delay: i * 0.05 }}
                         bg="white"
                         p={5}
                         borderRadius="xl"
@@ -312,9 +318,19 @@ const AdminDashboard = () => {
                                 <Icon as={s.icon} w={4} h={4} color={s.color} />
                             </Box>
                         </Flex>
-                        <Text fontSize="2xl" fontWeight="900" color="gray.800" lineHeight="1">{s.value}</Text>
-                        <Text fontSize="xs" fontWeight="700" color="gray.600" mt={1}>{s.label}</Text>
-                        <Text fontSize="10px" color="gray.400" mt={0.5}>{s.help}</Text>
+                        {statsLoading ? (
+                            <>
+                                <Skeleton height="28px" width="60px" borderRadius="md" mb={2} />
+                                <Skeleton height="12px" width="80px" borderRadius="md" mb={1} />
+                                <Skeleton height="10px" width="55px" borderRadius="md" />
+                            </>
+                        ) : (
+                            <>
+                                <Text fontSize="2xl" fontWeight="900" color="gray.800" lineHeight="1">{s.value}</Text>
+                                <Text fontSize="xs" fontWeight="700" color="gray.600" mt={1}>{s.label}</Text>
+                                <Text fontSize="10px" color="gray.400" mt={0.5}>{s.help}</Text>
+                            </>
+                        )}
                     </MotionBox>
                 ))}
             </SimpleGrid>
