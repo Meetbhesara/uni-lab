@@ -2319,15 +2319,24 @@ const VehicleMasterForm = () => {
                                                     const fuelColorScheme = fuelColorMap[r.fuelType] || 'gray';
                                                     const primaryPhoto = r.vehicle ? getVehiclePrimaryPhoto(r.vehicle) : null;
                                                     return (
-                                                        <Box key={i} mb={2} bg="white" borderRadius="xl" border="1.5px solid" borderColor="blue.100" overflow="hidden" boxShadow="sm">
-                                                            <Flex bg="#1E3A5F" p={2.5} align="center" gap={2}>
-                                                                {primaryPhoto ? <Image src={primaryPhoto} w="44px" h="32px" objectFit="cover" borderRadius="md" /> : <Center w="44px" h="32px" bg="blue.800" borderRadius="md"><Icon as={FaTruck} color="blue.300" w={3} h={3} /></Center>}
+                                                        <Box key={i} mb={2} bg="white" borderRadius="xl" border={r.vehicle ? '1.5px solid' : '2px solid'} borderColor={r.vehicle ? 'blue.100' : 'red.300'} overflow="hidden" boxShadow="sm">
+                                                            <Flex bg={r.vehicle ? '#1E3A5F' : '#7f1d1d'} p={2.5} align="center" gap={2}>
+                                                                {primaryPhoto
+                                                                    ? <Image src={primaryPhoto} w="44px" h="32px" objectFit="cover" borderRadius="md" />
+                                                                    : <Center w="44px" h="32px" bg={r.vehicle ? 'blue.800' : 'red.900'} borderRadius="md"><Icon as={FaTruck} color={r.vehicle ? 'blue.300' : 'red.300'} w={3} h={3} /></Center>
+                                                                }
                                                                 <Box flex={1}>
-                                                                    <Text fontWeight="black" color="white" fontSize="xs" fontFamily="monospace">{r.vehicle?.vehicleNumber || '—'}</Text>
-                                                                    <Text fontSize="10px" color="blue.300">{r.vehicle?.vehicleName || '—'}</Text>
+                                                                    {r.vehicle ? (
+                                                                        <>
+                                                                            <Text fontWeight="black" color="white" fontSize="xs" fontFamily="monospace">{r.vehicle.vehicleNumber}</Text>
+                                                                            <Text fontSize="10px" color="blue.300">{r.vehicle.vehicleName}</Text>
+                                                                        </>
+                                                                    ) : (
+                                                                        <Text fontWeight="black" color="red.300" fontSize="9px" letterSpacing="wide">⚠ NOT ASSIGNED OUR VEHICLE</Text>
+                                                                    )}
                                                                 </Box>
                                                                 <VStack spacing={0} align="flex-end">
-                                                                    <Text fontSize="10px" color="blue.300">{fmtDate(r.date)}</Text>
+                                                                    <Text fontSize="10px" color={r.vehicle ? 'blue.300' : 'red.200'}>{fmtDate(r.date)}</Text>
                                                                     <Badge colorScheme={fuelColorScheme} fontSize="9px" borderRadius="full"><Icon as={FaGasPump} mr={0.5} />{r.fuelType}</Badge>
                                                                 </VStack>
                                                             </Flex>
@@ -2366,12 +2375,27 @@ const VehicleMasterForm = () => {
                                                             const fuelColorScheme = fuelColorMap[r.fuelType] || 'gray';
                                                             const primaryPhoto = r.vehicle ? getVehiclePrimaryPhoto(r.vehicle) : null;
                                                             return (
-                                                                <Tr key={i} bg={i % 2 === 0 ? 'white' : 'blue.25'} _hover={{ bg: 'blue.50' }} transition="background 0.15s">
+                                                                <Tr key={i} bg={!r.vehicle ? 'red.50' : i % 2 === 0 ? 'white' : 'blue.25'} _hover={{ bg: !r.vehicle ? 'red.100' : 'blue.50' }} transition="background 0.15s">
                                                                     <Td fontSize="xs" fontWeight="bold" color="gray.400" textAlign="center" px={2}>{i + 1}</Td>
                                                                     <Td px={2}><Text fontSize="xs" color="gray.600" fontWeight="semibold" whiteSpace="nowrap">{fmtDate(r.date)}</Text></Td>
-                                                                    <Td px={2}>{primaryPhoto ? <Image src={primaryPhoto} w="44px" h="32px" objectFit="cover" borderRadius="lg" border="2px solid" borderColor="blue.300" /> : <Center w="44px" h="32px" bg="blue.100" borderRadius="lg" border="2px dashed" borderColor="blue.300"><Icon as={FaTruck} w={3} h={3} color="blue.400" /></Center>}</Td>
-                                                                    <Td px={2}><Text fontSize="xs" fontWeight="black" color="blue.800" fontFamily="monospace">{r.vehicle?.vehicleNumber || '—'}</Text></Td>
-                                                                    <Td px={2}><Text fontSize="xs" color="gray.700" noOfLines={1}>{r.vehicle?.vehicleName || '—'}</Text></Td>
+                                                                    <Td px={2}>
+                                                                        {primaryPhoto
+                                                                            ? <Image src={primaryPhoto} w="44px" h="32px" objectFit="cover" borderRadius="lg" border="2px solid" borderColor="blue.300" />
+                                                                            : <Center w="44px" h="32px" bg={r.vehicle ? 'blue.100' : 'red.100'} borderRadius="lg" border="2px dashed" borderColor={r.vehicle ? 'blue.300' : 'red.400'}><Icon as={FaTruck} w={3} h={3} color={r.vehicle ? 'blue.400' : 'red.500'} /></Center>
+                                                                        }
+                                                                    </Td>
+                                                                    <Td px={2}>
+                                                                        {r.vehicle
+                                                                            ? <Text fontSize="xs" fontWeight="black" color="blue.800" fontFamily="monospace">{r.vehicle.vehicleNumber}</Text>
+                                                                            : <Text fontSize="9px" fontWeight="black" color="red.600" whiteSpace="nowrap">⚠ NOT ASSIGNED</Text>
+                                                                        }
+                                                                    </Td>
+                                                                    <Td px={2}>
+                                                                        {r.vehicle
+                                                                            ? <Text fontSize="xs" color="gray.700" noOfLines={1}>{r.vehicle.vehicleName}</Text>
+                                                                            : <Text fontSize="9px" fontWeight="black" color="red.600" whiteSpace="nowrap">OUR VEHICLE</Text>
+                                                                        }
+                                                                    </Td>
                                                                     <Td px={2}><Text fontSize="xs" color="gray.700" noOfLines={1}>{r.employeeName}</Text></Td>
                                                                     <Td px={2}><Text fontSize="xs" color="gray.600" noOfLines={1}>{r.clientName}</Text></Td>
                                                                     <Td px={2}><Text fontSize="xs" color="gray.600" noOfLines={1}>{r.siteName}</Text></Td>
