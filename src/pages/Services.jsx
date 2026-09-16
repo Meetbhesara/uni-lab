@@ -604,6 +604,15 @@ const VehicleMasterForm = () => {
                 });
             }
 
+            let clientNames = '—';
+            let siteNames = '—';
+            if (exp.clientSites && exp.clientSites.length > 0) {
+                const cNames = exp.clientSites.map(cs => cs.clientId?.clientName || '').filter(Boolean);
+                const sNames = exp.clientSites.map(cs => cs.siteId?.siteName || '').filter(Boolean);
+                if (cNames.length) clientNames = Array.from(new Set(cNames)).join(', ');
+                if (sNames.length) siteNames = Array.from(new Set(sNames)).join(', ');
+            }
+
             if (fuelAmount <= 0 && vehiclesOnDay.size === 0) return;
 
             // Emit one row per vehicle found, or a generic row
@@ -615,6 +624,8 @@ const VehicleMasterForm = () => {
                         date: expDate,
                         vehicle,
                         employeeName: exp.employeeId?.name || exp.employee?.name || 'Unknown',
+                        clientName: clientNames,
+                        siteName: siteNames,
                         fuelType: fuelType || '—',
                         fuelAmount,
                         insuranceDate: vehicle.insuranceDate?.substring(0, 10) || '',
@@ -628,6 +639,8 @@ const VehicleMasterForm = () => {
                     date: expDate,
                     vehicle: null,
                     employeeName: exp.employeeId?.name || exp.employee?.name || 'Unknown',
+                    clientName: clientNames,
+                    siteName: siteNames,
                     fuelType: fuelType || 'Petrol',
                     fuelAmount,
                     insuranceDate: '',
@@ -868,7 +881,7 @@ const VehicleMasterForm = () => {
             const ws = wb.addWorksheet('⛽ Vehicle Usage Report');
 
             const usageHeaders = ['Sr.', 'Date', 'Photo', 'Vehicle Number', 'Vehicle Name',
-                'Employee', 'Fuel Type', 'Fuel Amount (₹)',
+                'Employee', 'Client', 'Site', 'Fuel Type', 'Fuel Amount (₹)',
                 'Insurance Expiry', 'PUC Expiry', 'Next Service Date'];
             
             ws.columns = usageHeaders.map((h, i) => ({ header: h, key: `col${i}`, width: i === 2 ? 12 : 18 }));
@@ -904,6 +917,8 @@ const VehicleMasterForm = () => {
                     r.vehicle?.vehicleNumber || '—',
                     r.vehicle?.vehicleName || '—',
                     r.employeeName,
+                    r.clientName,
+                    r.siteName,
                     r.fuelType,
                     r.fuelAmount || 0,
                     toExcelDate(r.insuranceDate),
@@ -2317,7 +2332,8 @@ const VehicleMasterForm = () => {
                                                                 </VStack>
                                                             </Flex>
                                                             <Flex p={2.5} justify="space-between" align="center" wrap="wrap" gap={1}>
-                                                                <Box><Text fontSize="9px" color="gray.400" fontWeight="bold">EMPLOYEE</Text><Text fontSize="xs" color="gray.700">{r.employeeName}</Text></Box>
+                                                                <Box><Text fontSize="9px" color="gray.400" fontWeight="bold">EMPLOYEE</Text><Text fontSize="xs" color="gray.700" noOfLines={1}>{r.employeeName}</Text></Box>
+                                                                <Box><Text fontSize="9px" color="gray.400" fontWeight="bold">CLIENT / SITE</Text><Text fontSize="xs" color="gray.600" noOfLines={1}>{r.clientName} / {r.siteName}</Text></Box>
                                                                 <Box textAlign="center"><Text fontSize="9px" color="gray.400" fontWeight="bold">FUEL AMT</Text><Text fontSize="xs" fontWeight="bold" color="gray.800">₹{(r.fuelAmount || 0).toLocaleString('en-IN')}</Text></Box>
                                                                 <SimpleGrid columns={3} spacing={1} mt={1} w="full">
                                                                     <Box bg={expiryBg(insStatus)} borderRadius="md" p={1} textAlign="center"><Text fontSize="8px" fontWeight="bold" color={expiryColor(insStatus)}>INS{insStatus==='expired'&&' ⚠️'}</Text><Text fontSize="9px" fontWeight="black" color={expiryColor(insStatus)}>{fmtDate(r.insuranceDate)}</Text></Box>
@@ -2334,7 +2350,7 @@ const VehicleMasterForm = () => {
                                                 <Table size="sm" variant="simple">
                                                     <Thead>
                                                         <Tr bg="#1E3A5F">
-                                                            {['#', 'Date', 'Photo', 'Vehicle No.', 'Vehicle Name', 'Employee', 'Fuel Type', 'Fuel Amt', 'Insurance', 'PUC', 'Service'].map(h => (
+                                                            {['#', 'Date', 'Photo', 'Vehicle No.', 'Vehicle Name', 'Employee', 'Client', 'Site', 'Fuel Type', 'Fuel Amt', 'Insurance', 'PUC', 'Service'].map(h => (
                                                                 <Th key={h} color="white" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wide" whiteSpace="nowrap" py={3} px={2}>{h}</Th>
                                                             ))}
                                                         </Tr>
@@ -2357,6 +2373,8 @@ const VehicleMasterForm = () => {
                                                                     <Td px={2}><Text fontSize="xs" fontWeight="black" color="blue.800" fontFamily="monospace">{r.vehicle?.vehicleNumber || '—'}</Text></Td>
                                                                     <Td px={2}><Text fontSize="xs" color="gray.700" noOfLines={1}>{r.vehicle?.vehicleName || '—'}</Text></Td>
                                                                     <Td px={2}><Text fontSize="xs" color="gray.700" noOfLines={1}>{r.employeeName}</Text></Td>
+                                                                    <Td px={2}><Text fontSize="xs" color="gray.600" noOfLines={1}>{r.clientName}</Text></Td>
+                                                                    <Td px={2}><Text fontSize="xs" color="gray.600" noOfLines={1}>{r.siteName}</Text></Td>
                                                                     <Td px={2}><Badge colorScheme={fuelColorScheme} borderRadius="full" fontSize="10px" fontWeight="black" px={2}><Icon as={FaGasPump} mr={1} />{r.fuelType}</Badge></Td>
                                                                     <Td px={2}><Text fontSize="xs" fontWeight="bold" color="gray.800">₹{(r.fuelAmount || 0).toLocaleString('en-IN')}</Text></Td>
                                                                     <Td px={1}><Box bg={expiryBg(insStatus)} borderRadius="md" px={2} py={1}><Text fontSize="10px" fontWeight="bold" color={expiryColor(insStatus)}>{fmtDate(r.insuranceDate)}{insStatus==='expired'&&' ⚠️'}</Text></Box></Td>
