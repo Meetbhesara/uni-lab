@@ -545,16 +545,13 @@ const VehicleMasterForm = () => {
         setReportLoading(true);
         try {
             const [expRes, schedRes] = await Promise.all([
-                api.get('/employee-expense/all'),
-                api.get(`/schedule-master?date=${new Date().toISOString().split('T')[0]}`)
+                api.get(`/employee-expense/all?startDate=${reportStartDate}&endDate=${reportEndDate}`)
+                    .catch(() => ({ data: { success: false, data: [] } })),
+                api.get(`/schedule-master?startDate=${reportStartDate}&endDate=${reportEndDate}`)
                     .catch(() => ({ data: { success: false, data: [] } }))
             ]);
             if (expRes.data.success) setAllExpenses(expRes.data.data);
-            // Also fetch schedules for a wide range for the report
-            const schedRangeRes = await api.get('/schedule-master/all')
-                .catch(() => ({ data: { success: false, data: [] } }));
-            if (schedRangeRes.data.success) setAllSchedules(schedRangeRes.data.data);
-            else if (schedRes.data.success) setAllSchedules(schedRes.data.data);
+            if (schedRes.data.success) setAllSchedules(schedRes.data.data);
         } catch (err) {
             console.error('Failed to fetch report data', err);
         } finally {
