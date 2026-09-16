@@ -24,6 +24,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['vite.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
       workbox: {
+        maximumFileSizeToCacheInBytes: 5000000,
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/app/, /\.(pdf|jpg|jpeg|png|gif|svg|dta|doc|docx|xls|xlsx)$/i]
       },
       manifest: {
