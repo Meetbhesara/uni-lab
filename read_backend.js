@@ -1,0 +1,1669 @@
+const mongoose = require('mongoose');
+const EmployeeExpense = require('../models/EmployeeExpense');
+const EmployeeMaster = require('../models/EmployeeMaster');
+const EmployeeLedger = require('../models/EmployeeLedger');
+const { sendWhatsapp } = require('../utils/whatsappService');
+const { broadcast } = require('../utils/sseManager');
+
+exports.adminAddExpense = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        const { employeeId, date, notes, expenses, otherExpensesList, clientSites, attendance, attendanceRemark, givenTo, receivedFrom, fuelType } = req.body;
+        if (!employeeId) return res.status(400).json({ success: false, message: 'Employee ID is required' });
+
+        const cleanNum = (val) => (!val || isNaN(Number(val)) ? 0 : Number(val));
+
+        // Parse JSON fields from FormData
+        const rawExpenses = typeof expenses === 'string' ? JSON.parse(expenses) : (expenses || {});
+        const parsedExpenses = {
+            breakfast: cleanNum(rawExpenses.breakfast),
+            lunch: cleanNum(rawExpenses.lunch),
+            dinner: cleanNum(rawExpenses.dinner),
+            petrol: cleanNum(rawExpenses.petrol)
+        };
+        if (rawExpenses.fuelType || fuelType) {
+            parsedExpenses.fuelType = rawExpenses.fuelType || fuelType;
+        }
+
+        const rawOtherExpenses = typeof otherExpensesList === 'string' ? JSON.parse(otherExpensesList) : (otherExpensesList || []);
+        const parsedOtherExpenses = (Array.isArray(rawOtherExpenses) ? rawOtherExpenses : []).map(item => ({
+            ...item,
+            amount: cleanNum(item?.amount)
+        }));
+
+        const rawClientSites = typeof clientSites === 'string' ? JSON.parse(clientSites) : (clientSites || []);
+        const parsedClientSites = (Array.isArray(rawClientSites) ? rawClientSites : []).map(cs => ({
+            ...cs,
+            quantity: cleanNum(cs?.quantity),
+            allocatedExpense: cleanNum(cs?.allocatedExpense),
+            allocatedCredit: cleanNum(cs?.allocatedCredit)
+        }));
+
+        const rawGivenTo = typeof givenTo === 'string' ? JSON.parse(givenTo) : (givenTo || []);
+        const parsedGivenTo = (Array.isArray(rawGivenTo) ? rawGivenTo : []).map(item => ({
+            ...item,
+            amount: cleanNum(item?.amount)
+        }));
+
+        const rawReceivedFrom = typeof receivedFrom === 'string' ? JSON.parse(receivedFrom) : (receivedFrom || []);
+        const parsedReceivedFrom = (Array.isArray(rawReceivedFrom) ? rawReceivedFrom : []).map(item => ({
+            ...item,
+            amount: cleanNum(item?.amount)
+        }));
+
+        const { deletedExistingFiles } = req.body;
+        const parsedDeletedExistingFiles = typeof deletedExistingFiles === 'string' ? JSON.parse(deletedExistingFiles) : (deletedExistingFiles || []);
+
+        // 1. Calculate Totals
+        const standardTotal = parsedExpenses.breakfast + parsedExpenses.lunch + parsedExpenses.dinner + parsedExpenses.petrol;
+        const otherTotal = parsedOtherExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+        
+        // Money Given To Others (Debit for current employee)
+        const totalGiven = parsedGivenTo.reduce((acc, curr) => acc + curr.amount, 0);
+        
+        // Money Received From Others (Credit for current employee)
+        const totalReceived = parsedReceivedFrom.reduce((acc, curr) => acc + curr.amount, 0);
+
+        const totalExpense = standardTotal + otherTotal;
+        const netImpact = totalExpense + totalGiven - totalReceived;
+
+        // 2. Process Files (from upload.any() array)
+        const photos = [];
+        const dataFiles = [];
+        const dailyReports = [];
+        const expenseFiles = { breakfast: [], lunch: [], dinner: [], petrol: [] };
+
+        // Initialize files structure in each clientSite
+        parsedClientSites.forEach(cs => {
+            cs.files = {
+                photos: [],
+                dailyReports: [],
+                data: [],
+                drawing: []
+            };
+        });
+
+        if (req.files && Array.isArray(req.files)) {
+            req.files.forEach(f => {
+                const normalizedPath = f.path.replace(/\\/g, '/');
+                let relativePath = normalizedPath.includes('/uploads/') ? normalizedPath.split('/uploads/')[1] : (normalizedPath.includes('/storage/') ? normalizedPath.split('/storage/')[1] : normalizedPath);
+                // The URL depends on how static files are served; assuming /uploads/ prefix works for local
+                const fileUrl = normalizedPath.includes('/uploads/') ? `/uploads/${relativePath}` : `/uploads/${relativePath}`;
+                
+                const fileObj = { name: f.originalname, url: fileUrl, path: f.path };
+                
+                if (f.fieldname.startsWith('site_')) {
+                    const parts = f.fieldname.split('_'); // ['site', '0', 'photos']
+                    const siteIdx = parseInt(parts[1]);
+                    const category = parts[2]; // 'photos', 'dailyReports', 'data', 'drawing'
+                    
+                    if (parsedClientSites[siteIdx]) {
+                        if (!parsedClientSites[siteIdx].files) {
+                            parsedClientSites[siteIdx].files = {
+                                photos: [],
+                                dailyReports: [],
+                                data: [],
+                                drawing: []
+                            };
+                        }
+                        
+                        let mappedCategory = category;
+                        if (category === 'dailyReports') mappedCategory = 'dailyReports';
+                        else if (category === 'data') mappedCategory = 'data';
+                        else if (category === 'drawing') mappedCategory = 'drawing';
+                        else if (category === 'photos') mappedCategory = 'photos';
+                        
+                        if (parsedClientSites[siteIdx].files[mappedCategory]) {
+                            parsedClientSites[siteIdx].files[mappedCategory].push(fileObj);
+                        } else {
+                            parsedClientSites[siteIdx].files[mappedCategory] = [fileObj];
+                        }
+                    }
+                } else if (f.fieldname.includes('photos')) {
+                    photos.push(fileObj);
+                } else if (f.fieldname.includes('dailyReports')) {
+                    dailyReports.push(fileObj);
+                } else if (f.fieldname.includes('drawing') || f.fieldname.includes('data')) {
+                    dataFiles.push(fileObj);
+                } else if (f.fieldname.startsWith('expense_')) {
+                    const expenseName = f.fieldname.split('_')[1];
+                    if (expenseFiles[expenseName]) expenseFiles[expenseName].push(fileObj);
+                } else if (f.fieldname.startsWith('otherExpense_')) {
+                    const idx = f.fieldname.split('_')[1];
+                    if (parsedOtherExpenses[idx]) {
+                        if (!parsedOtherExpenses[idx].files) parsedOtherExpenses[idx].files = [];
+                        parsedOtherExpenses[idx].files.push(fileObj);
+                    }
+                }
+            });
+        }
+
+        // 3. Find if record already exists for this employee and date
+        const targetDate = new Date(date || new Date());
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0,0,0,0);
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23,59,59,999);
+
+        let existingExpense = await EmployeeExpense.findOne({
+            employeeId,
+            date: { $gte: startOfDay, $lte: endOfDay }
+        }).session(session);
+
+        let employee;
+        let savedExpense;
+
+        if (existingExpense) {
+            // MERGE / OVERWRITE INTO EXISTING RECORD
+            const oldTotalExpense = existingExpense.totalExpense || 0;
+            const oldTotalGiven = existingExpense.creditDebit?.givenTo?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
+            const oldTotalReceived = existingExpense.creditDebit?.receivedFrom?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
+            const oldNetImpact = oldTotalExpense + oldTotalGiven - oldTotalReceived;
+
+            const difference = netImpact - oldNetImpact;
+
+            // Update Current Employee Balance with the difference
+            employee = await EmployeeMaster.findByIdAndUpdate(
+                employeeId,
+                { $inc: { totalAmount: -difference } },
+                { new: true, session }
+            );
+
+            // Update details
+            existingExpense.attendance = attendance || existingExpense.attendance;
+            existingExpense.attendanceRemark = attendanceRemark || '';
+            existingExpense.notes = notes || '';
+            
+            // Process deleted existing files
+            if (parsedDeletedExistingFiles && parsedDeletedExistingFiles.length > 0) {
+                existingExpense.clientSites.forEach(cs => {
+                    if (cs.files) {
+                        ['photos', 'dailyReports', 'data', 'drawing'].forEach(cat => {
+                            if (cs.files[cat] && cs.files[cat].length > 0) {
+                                cs.files[cat] = cs.files[cat].filter(f => !parsedDeletedExistingFiles.includes(f.url || f));
+                            }
+                        });
+                    }
+                });
+                
+                ['photos', 'dataFiles', 'dailyReports'].forEach(cat => {
+                    if (existingExpense[cat] && existingExpense[cat].length > 0) {
+                        existingExpense[cat] = existingExpense[cat].filter(f => !parsedDeletedExistingFiles.includes(f.url || f));
+                    }
+                });
+
+                if (existingExpense.expenseFiles) {
+                    ['breakfast', 'lunch', 'dinner', 'petrol'].forEach(key => {
+                        if (existingExpense.expenseFiles[key]) {
+                            existingExpense.expenseFiles[key] = existingExpense.expenseFiles[key].filter(
+                                f => !parsedDeletedExistingFiles.includes(f.url || f)
+                            );
+                        }
+                    });
+                }
+            }
+
+            // Merge clientSites
+            for (const newSite of parsedClientSites) {
+                const existingSite = existingExpense.clientSites.find(cs => {
+                    if (newSite.scheduleId && cs.scheduleId) {
+                        return String(cs.scheduleId) === String(newSite.scheduleId);
+                    }
+                    if (newSite.scheduleId || cs.scheduleId) {
+                        return false;
+                    }
+                    return String(cs.siteId) === String(newSite.siteId) && String(cs.clientId) === String(newSite.clientId);
+                });
+                
+                if (newSite.scheduleId) {
+                    const updateObj = {};
+                    if (newSite.ledger) updateObj.ledger = newSite.ledger;
+                    if (newSite.quantity !== undefined) updateObj.quantity = newSite.quantity;
+                    if (Object.keys(updateObj).length > 0) {
+                        await mongoose.model('ScheduleMaster').findByIdAndUpdate(
+                            newSite.scheduleId,
+                            updateObj,
+                            { session }
+                        );
+                    }
+                }
+                if (existingSite) {
+                    if (newSite.ledger) existingSite.ledger = newSite.ledger;
+                    if (newSite.quantity !== undefined) existingSite.quantity = newSite.quantity;
+                    
+                    if (newSite.files) {
+                        ['photos', 'dailyReports', 'data', 'drawing'].forEach(cat => {
+                            if (newSite.files[cat] && newSite.files[cat].length > 0) {
+                                if (!existingSite.files) existingSite.files = { photos: [], dailyReports: [], data: [], drawing: [] };
+                                if (!existingSite.files[cat]) existingSite.files[cat] = [];
+                                existingSite.files[cat].push(...newSite.files[cat]);
+                            }
+                        });
+                    }
+                } else {
+                    existingExpense.clientSites.push(newSite);
+                }
+            }
+
+            // Calculate Option B splits for debits (totalExpense) and credits (totalReceived)
+            const siteCount = existingExpense.clientSites.length;
+            const splitExpense = siteCount > 0 ? (totalExpense / siteCount) : 0;
+            const splitCredit = siteCount > 0 ? (totalReceived / siteCount) : 0;
+            existingExpense.clientSites.forEach(cs => {
+                cs.allocatedExpense = splitExpense;
+                cs.allocatedCredit = splitCredit;
+            });
+
+            // Overwrite expenses (Breakfast, Lunch, Dinner, Petrol)
+            existingExpense.expenses = parsedExpenses;
+            if (fuelType) {
+                existingExpense.expenses.fuelType = fuelType;
+            }
+
+            // Merge/append new standard expense files
+            if (!existingExpense.expenseFiles) {
+                existingExpense.expenseFiles = { breakfast: [], lunch: [], dinner: [], petrol: [] };
+            }
+            ['breakfast', 'lunch', 'dinner', 'petrol'].forEach(key => {
+                if (expenseFiles[key] && expenseFiles[key].length > 0) {
+                    if (!existingExpense.expenseFiles[key]) existingExpense.expenseFiles[key] = [];
+                    existingExpense.expenseFiles[key].push(...expenseFiles[key]);
+                }
+            });
+
+            // Overwrite otherExpensesList
+            existingExpense.otherExpensesList = parsedOtherExpenses;
+
+            // Merge Givers and Takers if they were provided (or preserve existing)
+            if (!existingExpense.creditDebit) {
+                existingExpense.creditDebit = { givenTo: [], receivedFrom: [] };
+            }
+            if (req.body.givenTo !== undefined) {
+                existingExpense.creditDebit.givenTo = parsedGivenTo;
+            }
+            if (req.body.receivedFrom !== undefined) {
+                existingExpense.creditDebit.receivedFrom = parsedReceivedFrom;
+            }
+
+            // Merge photos, dataFiles, dailyReports
+            if (photos.length > 0) {
+                if (!existingExpense.photos) existingExpense.photos = [];
+                existingExpense.photos.push(...photos);
+            }
+            if (dataFiles.length > 0) {
+                if (!existingExpense.dataFiles) existingExpense.dataFiles = [];
+                existingExpense.dataFiles.push(...dataFiles);
+            }
+            if (dailyReports.length > 0) {
+                if (!existingExpense.dailyReports) existingExpense.dailyReports = [];
+                existingExpense.dailyReports.push(...dailyReports);
+            }
+
+            existingExpense.totalExpense = totalExpense;
+            existingExpense.remainingBalance = employee.totalAmount;
+
+            savedExpense = await existingExpense.save({ session });
+
+            // Delete old Ledger Entry for Expense so we can recreate it with new amount
+            await EmployeeLedger.deleteMany({ referenceId: existingExpense._id, category: 'Expense' }, { session });
+        } else {
+            // SAVE AS NEW EXPENSE RECORD
+            employee = await EmployeeMaster.findByIdAndUpdate(
+                employeeId,
+                { $inc: { totalAmount: -netImpact } },
+                { new: true, session }
+            );
+
+            // Calculate Option B splits for debits (totalExpense) and credits (totalReceived)
+            const siteCount = parsedClientSites.length;
+            const splitExpense = siteCount > 0 ? (totalExpense / siteCount) : 0;
+            const splitCredit = siteCount > 0 ? (totalReceived / siteCount) : 0;
+            parsedClientSites.forEach(cs => {
+                cs.allocatedExpense = splitExpense;
+                cs.allocatedCredit = splitCredit;
+            });
+
+            let calculatedAttendance = attendance;
+            let calculatedRemark = attendanceRemark;
+
+            if (!calculatedAttendance) {
+                const ScheduleMaster = require('../models/ScheduleMaster');
+                const targetDate = date ? new Date(date) : new Date();
+                const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+                const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+
+                const daySchedules = await ScheduleMaster.find({
+                    $or: [
+                        { operative: employeeId },
+                        { helpers: employeeId }
+                    ],
+                    scheduleDate: { $gte: startOfDay, $lte: endOfDay },
+                    dayStatus: { $nin: ['Rejected'] }
+                });
+
+                if (daySchedules.length > 0) {
+                    const hasActive = daySchedules.some(s => s.dayStatus !== 'Skipped');
+                    if (hasActive) {
+                        calculatedAttendance = 'Present';
+                        calculatedRemark = '';
+                    } else {
+                        calculatedAttendance = 'Absent';
+                        calculatedRemark = 'Schedule was rejected or skipped';
+                    }
+                } else {
+                    calculatedAttendance = 'Absent';
+                    calculatedRemark = 'Unscheduled Duty';
+                }
+            }
+
+            const newExpense = new EmployeeExpense({
+                employeeId,
+                date: date || new Date(),
+                clientSites: parsedClientSites,
+                expenses: parsedExpenses,
+                expenseFiles,
+                otherExpensesList: parsedOtherExpenses,
+                totalExpense,
+                remainingBalance: employee.totalAmount,
+                notes,
+                attendance: calculatedAttendance,
+                attendanceRemark: calculatedRemark,
+                creditDebit: {
+                    givenTo: parsedGivenTo,
+                    receivedFrom: parsedReceivedFrom
+                },
+                photos,
+                dataFiles,
+                dailyReports
+            });
+            savedExpense = await newExpense.save({ session });
+            
+            // Update ScheduleMaster ledger and quantity if provided and a scheduleId is present
+            for (const newSite of parsedClientSites) {
+                if (newSite.scheduleId) {
+                    const updateObj = {};
+                    if (newSite.ledger) updateObj.ledger = newSite.ledger;
+                    if (newSite.quantity !== undefined) updateObj.quantity = newSite.quantity;
+                    if (Object.keys(updateObj).length > 0) {
+                        await mongoose.model('ScheduleMaster').findByIdAndUpdate(
+                            newSite.scheduleId,
+                            updateObj,
+                            { session }
+                        );
+                    }
+                }
+            }
+        }
+
+        const expenseDate = date || new Date();
+
+        // 5. Create Ledger Entry for Expense
+        if (totalExpense > 0) {
+            await new EmployeeLedger({
+                employee: employeeId,
+                date: expenseDate,
+                amount: totalExpense,
+                type: 'Debit',
+                category: 'Expense',
+                description: existingExpense 
+                    ? `Daily Expense on ${new Date(expenseDate).toLocaleDateString()} (Updated)`
+                    : `Daily Expense on ${new Date(expenseDate).toLocaleDateString()}`,
+                referenceId: savedExpense._id
+            }).save({ session });
+        }
+
+        // 6. Handle Internal Transfers (Given To)
+        for (const item of parsedGivenTo) {
+            if (item.employeeRef && item.amount > 0) {
+                // Update receiver's balance (Credit)
+                await EmployeeMaster.findByIdAndUpdate(item.employeeRef, { $inc: { totalAmount: item.amount } }, { session });
+                
+                // Ledger for Giver (Current Employee)
+                await new EmployeeLedger({
+                    employee: employeeId,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Debit',
+                    category: 'Transfer',
+                    description: `Money Given to employee`,
+                    relatedEmployee: item.employeeRef,
+                    referenceId: savedExpense._id
+                }).save({ session });
+
+                // Ledger for Taker
+                await new EmployeeLedger({
+                    employee: item.employeeRef,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Credit',
+                    category: 'Transfer',
+                    description: `Money Received from ${employee.name}`,
+                    relatedEmployee: employeeId,
+                    referenceId: savedExpense._id
+                }).save({ session });
+            }
+        }
+
+        // 7. Handle Internal Transfers (Received From)
+        for (const item of parsedReceivedFrom) {
+            if (item.employeeRef && item.amount > 0) {
+                // Update giver's balance (Debit)
+                const giver = await EmployeeMaster.findByIdAndUpdate(item.employeeRef, { $inc: { totalAmount: -item.amount } }, { new: true, session });
+                
+                // Ledger for Taker (Current Employee)
+                await new EmployeeLedger({
+                    employee: employeeId,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Credit',
+                    category: 'Transfer',
+                    description: `Money Received from employee`,
+                    relatedEmployee: item.employeeRef,
+                    referenceId: savedExpense._id
+                }).save({ session });
+
+                // Ledger for Giver
+                await new EmployeeLedger({
+                    employee: item.employeeRef,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Debit',
+                    category: 'Transfer',
+                    description: `Money Given to ${employee.name}`,
+                    relatedEmployee: employeeId,
+                    referenceId: savedExpense._id
+                }).save({ session });
+            }
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+
+        // ── WhatsApp Notification to Employee after Expense Submission ───────────
+        try {
+            const empDoc = await EmployeeMaster.findById(employeeId).select('name phone foodAllowance');
+
+            if (empDoc && empDoc.phone) {
+                const formattedDate = new Date(date || new Date()).toLocaleDateString('en-IN', {
+                    day: '2-digit', month: 'short', year: 'numeric'
+                });
+
+                const hasFood = empDoc.foodAllowance !== 'Without Food';
+                const exp     = parsedExpenses;
+                const fuel    = Number(exp.petrol) || 0;
+
+                // Build expense lines based on food allowance
+                let expenseLines = '';
+
+                if (hasFood) {
+                    // ✔ Food allowed: show Breakfast, Lunch, Dinner, Fuel
+                    const breakfast = Number(exp.breakfast) || 0;
+                    const lunch     = Number(exp.lunch)     || 0;
+                    const dinner    = Number(exp.dinner)    || 0;
+
+                    if (breakfast > 0) expenseLines += `  • *Breakfast:* ₹${breakfast.toLocaleString('en-IN')}\n`;
+                    if (lunch     > 0) expenseLines += `  • *Lunch:* ₹${lunch.toLocaleString('en-IN')}\n`;
+                    if (dinner    > 0) expenseLines += `  • *Dinner:* ₹${dinner.toLocaleString('en-IN')}\n`;
+                    if (fuel      > 0) expenseLines += `  • *Fuel:* ₹${fuel.toLocaleString('en-IN')}\n`;
+                } else {
+                    // ✔ Without Food: show only Fuel
+                    if (fuel > 0) expenseLines += `  • *Fuel:* ₹${fuel.toLocaleString('en-IN')}\n`;
+                }
+
+                // Other Expenses (shown for both food/without-food)
+                if (parsedOtherExpenses && parsedOtherExpenses.length > 0) {
+                    parsedOtherExpenses.forEach(item => {
+                        const amt = Number(item.amount) || 0;
+                        if (amt > 0 && item.name) {
+                            expenseLines += `  • *${item.name}:* ₹${amt.toLocaleString('en-IN')}\n`;
+                        }
+                    });
+                }
+
+                const msg =
+                    `📝 *Daily Expense Submitted*\n\n` +
+                    `*Employee:* *${empDoc.name}*\n` +
+                    `*Date:* ${formattedDate}\n` +
+                    `*Attendance:* ${attendance || 'Present'}\n\n` +
+                    (expenseLines ? `*Expense Breakdown:*\n${expenseLines}\n` : '') +
+                    `*Total Expense:* *₹${Number(totalExpense).toLocaleString('en-IN')}*`;
+
+                await sendWhatsapp(empDoc.phone, msg, req.user?.id);
+            }
+        } catch (wpErr) {
+            // WhatsApp failure must NOT affect the expense submission
+            console.error('[DailyExpense] WhatsApp notification failed (non-critical):', wpErr.message);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
+        broadcast('expense-changed', { action: 'saved', employeeId });
+        res.status(201).json({ 
+            success: true, 
+            message: existingExpense ? 'Expense merged and balance updated' : 'Expense saved and balance updated', 
+            data: savedExpense,
+            updatedEmployee: employee
+        });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error('adminAddExpense Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.deleteExpense = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        const { id } = req.params;
+        const expense = await EmployeeExpense.findById(id);
+        if (!expense) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({ success: false, message: 'Expense record not found' });
+        }
+
+        const ScheduleMaster = require('../models/ScheduleMaster');
+
+        // 1. Revert Employee balances (Option B: Givers & Receivers)
+        if (expense.creditDebit) {
+            // Revert givenTo: the receiver's balance was increased, so we decrease it
+            if (expense.creditDebit.givenTo && expense.creditDebit.givenTo.length > 0) {
+                for (const item of expense.creditDebit.givenTo) {
+                    await EmployeeMaster.findByIdAndUpdate(
+                        item.employeeRef,
+                        { $inc: { totalAmount: -item.amount } },
+                        { session }
+                    );
+                }
+            }
+            // Revert receivedFrom: the giver's balance was decreased, so we increase it
+            if (expense.creditDebit.receivedFrom && expense.creditDebit.receivedFrom.length > 0) {
+                for (const item of expense.creditDebit.receivedFrom) {
+                    await EmployeeMaster.findByIdAndUpdate(
+                        item.employeeRef,
+                        { $inc: { totalAmount: item.amount } },
+                        { session }
+                    );
+                }
+            }
+        }
+
+        // 2. Revert Giver/Receiver netImpact on the main employee
+        const totalGiven = expense.creditDebit?.givenTo?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
+        const totalReceived = expense.creditDebit?.receivedFrom?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
+        const netImpact = expense.totalExpense + totalGiven - totalReceived;
+
+        await EmployeeMaster.findByIdAndUpdate(
+            expense.employeeId,
+            { $inc: { totalAmount: netImpact } },
+            { session }
+        );
+
+        // 3. Reset Schedule quantity for clientSites linked to this expense
+        if (expense.clientSites && expense.clientSites.length > 0) {
+            for (const cs of expense.clientSites) {
+                if (cs.scheduleId) {
+                    await ScheduleMaster.findByIdAndUpdate(
+                        cs.scheduleId,
+                        { $set: { quantity: 0 } },
+                        { session }
+                    );
+                }
+            }
+        }
+
+        // 4. Remove Ledger Entries
+        await EmployeeLedger.deleteMany({ referenceId: expense._id }, { session });
+
+        // 5. Remove Expense document
+        await EmployeeExpense.findByIdAndDelete(id, { session });
+
+        await session.commitTransaction();
+        session.endSession();
+        
+        broadcast('expense-changed', { action: 'deleted', id });
+        res.json({ success: true, message: 'Expense deleted and balances/schedules updated successfully' });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error('Error in deleteExpense:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const enrichExpensesWithUniversalNames = async (expenses) => {
+    const EmployeeMaster = require('../models/EmployeeMaster');
+    const MoneyTransferAccount = require('../models/MoneyTransferAccount');
+    const empsList = await EmployeeMaster.find({}, 'name status').lean();
+    const customAccsList = await MoneyTransferAccount.find({}, 'name').lean();
+    const universalNameMap = {};
+    empsList.forEach(e => universalNameMap[String(e._id)] = e.name);
+    customAccsList.forEach(c => universalNameMap[String(c._id)] = `${c.name} (BANK)`);
+
+    return expenses.map(exp => {
+        const expObj = exp.toObject ? exp.toObject() : { ...exp };
+        const givenTo = (expObj.creditDebit?.givenTo || []).map(g => {
+            const rawId = String(g.employeeRef?._id || g.employeeRef || '');
+            const targetName = universalNameMap[rawId];
+            return {
+                ...g,
+                employeeRef: targetName ? { _id: rawId, name: targetName } : (g.employeeRef && typeof g.employeeRef === 'object' && g.employeeRef.name ? g.employeeRef : { _id: rawId, name: 'Unknown Account' }),
+                employeeName: targetName || (g.employeeRef && typeof g.employeeRef === 'object' && g.employeeRef.name ? g.employeeRef.name : 'Unknown Account')
+            };
+        });
+        const receivedFrom = (expObj.creditDebit?.receivedFrom || []).map(r => {
+            const rawId = String(r.employeeRef?._id || r.employeeRef || '');
+            const targetName = universalNameMap[rawId];
+            return {
+                ...r,
+                employeeRef: targetName ? { _id: rawId, name: targetName } : (r.employeeRef && typeof r.employeeRef === 'object' && r.employeeRef.name ? r.employeeRef : { _id: rawId, name: 'Unknown Account' }),
+                employeeName: targetName || (r.employeeRef && typeof r.employeeRef === 'object' && r.employeeRef.name ? r.employeeRef.name : 'Unknown Account')
+            };
+        });
+        return {
+            ...expObj,
+            creditDebit: { givenTo, receivedFrom }
+        };
+    });
+};
+
+exports.getExpensesByEmployee = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        const expenses = await EmployeeExpense.find({ employeeId })
+            .populate('employeeId', 'name')
+            .populate('clientSites.clientId', 'clientName')
+            .populate('clientSites.siteId', 'siteName')
+            .sort({ date: -1 })
+            .lean();
+        const enriched = await enrichExpensesWithUniversalNames(expenses);
+        res.json({ success: true, data: enriched });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getAllExpenses = async (req, res) => {
+    try {
+        const expenses = await EmployeeExpense.find()
+            .populate('employeeId', 'name')
+            .populate('clientSites.clientId', 'clientName')
+            .populate('clientSites.siteId', 'siteName')
+            .sort({ date: -1 })
+            .lean();
+        const enriched = await enrichExpensesWithUniversalNames(expenses);
+        res.json({ success: true, data: enriched });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.addExpense = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        const employeeId = req.employee.id || req.employeeId || req.employee._id;
+        const { date, notes, expenses, otherExpensesList, siteIds, clientSites, attendance, attendanceRemark } = req.body;
+        
+        let creditDebit = req.body.creditDebit;
+        if (typeof creditDebit === 'string') {
+            try { creditDebit = JSON.parse(creditDebit); } catch (e) { creditDebit = {}; }
+        }
+
+        const cleanNum = (val) => (!val || isNaN(Number(val)) ? 0 : Number(val));
+        const rawExpenses = typeof expenses === 'string' ? JSON.parse(expenses) : (expenses || {});
+        const parsedExpenses = {
+            breakfast: cleanNum(rawExpenses.breakfast),
+            lunch: cleanNum(rawExpenses.lunch),
+            dinner: cleanNum(rawExpenses.dinner),
+            petrol: cleanNum(rawExpenses.petrol)
+        };
+        if (rawExpenses.fuelType) parsedExpenses.fuelType = rawExpenses.fuelType;
+
+        const rawOtherExpenses = typeof otherExpensesList === 'string' ? JSON.parse(otherExpensesList) : (otherExpensesList || []);
+        const parsedOtherExpenses = (Array.isArray(rawOtherExpenses) ? rawOtherExpenses : []).map(item => ({
+            ...item,
+            amount: cleanNum(item?.amount)
+        }));
+
+        const rawGivenTo = typeof creditDebit?.givenTo === 'string' ? JSON.parse(creditDebit.givenTo) : (creditDebit?.givenTo || []);
+        const givenTo = (Array.isArray(rawGivenTo) ? rawGivenTo : []).map(item => ({
+            ...item,
+            amount: cleanNum(item?.amount)
+        }));
+
+        const rawReceivedFrom = typeof creditDebit?.receivedFrom === 'string' ? JSON.parse(creditDebit.receivedFrom) : (creditDebit?.receivedFrom || []);
+        const receivedFrom = (Array.isArray(rawReceivedFrom) ? rawReceivedFrom : []).map(item => ({
+            ...item,
+            amount: cleanNum(item?.amount)
+        }));
+
+        // 1. Calculate Totals
+        const standardTotal = parsedExpenses.breakfast + parsedExpenses.lunch + parsedExpenses.dinner + parsedExpenses.petrol;
+        const otherTotal = parsedOtherExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+        const totalGiven = givenTo.reduce((acc, curr) => acc + curr.amount, 0);
+        const totalReceived = receivedFrom.reduce((acc, curr) => acc + curr.amount, 0);
+
+        const totalExpense = standardTotal + otherTotal;
+        const netImpact = totalExpense + totalGiven - totalReceived;
+
+        // 2. Update Employee Balance
+        const employee = await EmployeeMaster.findByIdAndUpdate(
+            employeeId,
+            { $inc: { totalAmount: -netImpact } },
+            { new: true, session }
+        );
+
+        // Parse clientSites from FormData
+        let parsedClientSites = [];
+        if (clientSites) {
+            const rawClientSites = typeof clientSites === 'string' ? JSON.parse(clientSites) : clientSites;
+            parsedClientSites = (Array.isArray(rawClientSites) ? rawClientSites : []).map(cs => ({
+                ...cs,
+                quantity: cleanNum(cs?.quantity),
+                allocatedExpense: cleanNum(cs?.allocatedExpense),
+                allocatedCredit: cleanNum(cs?.allocatedCredit),
+                files: { photos: [], dailyReports: [], data: [], drawing: [] }
+            }));
+        } else if (siteIds) {
+            const parsedSiteIds = typeof siteIds === 'string' ? JSON.parse(siteIds) : siteIds;
+            parsedClientSites = (Array.isArray(parsedSiteIds) ? parsedSiteIds : []).map(sid => ({
+                siteId: sid,
+                allocatedExpense: 0,
+                allocatedCredit: 0,
+                files: { photos: [], dailyReports: [], data: [], drawing: [] }
+            }));
+        }
+
+        // Process Files (from upload.any() array)
+        if (req.files && Array.isArray(req.files)) {
+            req.files.forEach(f => {
+                const normalizedPath = f.path.replace(/\\/g, '/');
+                let relativePath = normalizedPath.includes('/uploads/') ? normalizedPath.split('/uploads/')[1] : (normalizedPath.includes('/storage/') ? normalizedPath.split('/storage/')[1] : normalizedPath);
+                const fileUrl = '/uploads/' + relativePath;
+                const fileObj = { name: f.originalname, url: fileUrl, path: f.path };
+                
+                if (f.fieldname.startsWith('site_')) {
+                    const parts = f.fieldname.split('_');
+                    const siteIdx = parseInt(parts[1]);
+                    const category = parts[2];
+                    
+                    if (parsedClientSites[siteIdx]) {
+                        if (!parsedClientSites[siteIdx].files) {
+                            parsedClientSites[siteIdx].files = { photos: [], dailyReports: [], data: [], drawing: [] };
+                        }
+                        let mappedCategory = category;
+                        if (category === 'dailyReports') mappedCategory = 'dailyReports';
+                        else if (category === 'data') mappedCategory = 'data';
+                        else if (category === 'drawing') mappedCategory = 'drawing';
+                        else if (category === 'photos') mappedCategory = 'photos';
+                        
+                        if (parsedClientSites[siteIdx].files[mappedCategory]) {
+                            parsedClientSites[siteIdx].files[mappedCategory].push(fileObj);
+                        } else {
+                            parsedClientSites[siteIdx].files[mappedCategory] = [fileObj];
+                        }
+                    }
+                }
+            });
+        }
+
+        // Spread expenses equally among sites if not explicitly provided
+        const siteCount = parsedClientSites.length;
+        if (siteCount > 0) {
+            const splitExpense = totalExpense / siteCount;
+            const splitCredit = totalReceived / siteCount;
+            parsedClientSites = parsedClientSites.map(cs => ({
+                ...cs,
+                allocatedExpense: cs.allocatedExpense || splitExpense,
+                allocatedCredit: cs.allocatedCredit || splitCredit
+            }));
+        }
+        
+        let calculatedAttendance = attendance;
+        let calculatedRemark = attendanceRemark;
+
+        if (!calculatedAttendance) {
+            const ScheduleMaster = require('../models/ScheduleMaster');
+            const targetDate = date ? new Date(date) : new Date();
+            const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+            const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+
+            const daySchedules = await ScheduleMaster.find({
+                $or: [
+                    { operative: employeeId },
+                    { helpers: employeeId }
+                ],
+                scheduleDate: { $gte: startOfDay, $lte: endOfDay },
+                dayStatus: { $nin: ['Rejected'] }
+            });
+
+            if (daySchedules.length > 0) {
+                const hasActive = daySchedules.some(s => s.dayStatus !== 'Skipped');
+                if (hasActive) {
+                    calculatedAttendance = 'Present';
+                    calculatedRemark = '';
+                } else {
+                    calculatedAttendance = 'Absent';
+                    calculatedRemark = 'Schedule was rejected or skipped';
+                }
+            } else {
+                calculatedAttendance = 'Absent';
+                calculatedRemark = 'Unscheduled Duty';
+            }
+        }
+
+        const newExpense = new EmployeeExpense({
+            employeeId,
+            date: date || new Date(),
+            clientSites: parsedClientSites,
+            expenses: parsedExpenses,
+            otherExpensesList: parsedOtherExpenses,
+            totalExpense,
+            remainingBalance: employee.totalAmount,
+            notes,
+            attendance: calculatedAttendance,
+            attendanceRemark: calculatedRemark,
+            creditDebit: {
+                givenTo,
+                receivedFrom
+            }
+        });
+
+        await newExpense.save({ session });
+
+        const expenseDate = date || new Date();
+
+        // 4. Create Ledger Entry for Expense
+        if (totalExpense > 0) {
+            await new EmployeeLedger({
+                employee: employeeId,
+                date: expenseDate,
+                amount: totalExpense,
+                type: 'Debit',
+                category: 'Expense',
+                description: `Daily Expense on ${new Date(expenseDate).toLocaleDateString()}`,
+                referenceId: newExpense._id
+            }).save({ session });
+        }
+
+        // 5. Handle Internal Transfers (Given To)
+        for (const item of givenTo) {
+            if (item.employeeRef && item.amount > 0) {
+                await EmployeeMaster.findByIdAndUpdate(item.employeeRef, { $inc: { totalAmount: item.amount } }, { session });
+                
+                await new EmployeeLedger({
+                    employee: employeeId,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Debit',
+                    category: 'Transfer',
+                    description: `Money Given to employee`,
+                    relatedEmployee: item.employeeRef,
+                    referenceId: newExpense._id
+                }).save({ session });
+
+                await new EmployeeLedger({
+                    employee: item.employeeRef,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Credit',
+                    category: 'Transfer',
+                    description: `Money Received from ${employee.name}`,
+                    relatedEmployee: employeeId,
+                    referenceId: newExpense._id
+                }).save({ session });
+            }
+        }
+
+        // 6. Handle Internal Transfers (Received From)
+        for (const item of receivedFrom) {
+            if (item.employeeRef && item.amount > 0) {
+                await EmployeeMaster.findByIdAndUpdate(item.employeeRef, { $inc: { totalAmount: -item.amount } }, { session });
+                
+                await new EmployeeLedger({
+                    employee: employeeId,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Credit',
+                    category: 'Transfer',
+                    description: `Money Received from employee`,
+                    relatedEmployee: item.employeeRef,
+                    referenceId: newExpense._id
+                }).save({ session });
+
+                await new EmployeeLedger({
+                    employee: item.employeeRef,
+                    date: expenseDate,
+                    amount: item.amount,
+                    type: 'Debit',
+                    category: 'Transfer',
+                    description: `Money Given to ${employee.name}`,
+                    relatedEmployee: employeeId,
+                    referenceId: newExpense._id
+                }).save({ session });
+            }
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+        broadcast('expense-changed', { action: 'saved', employeeId });
+        res.status(201).json({ success: true, message: 'Expense saved successfully', data: newExpense });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error('addExpense Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getExpensesForEmployee = async (req, res) => {
+    try {
+        const employeeId = req.employee.id || req.employeeId || req.employee._id;
+        const expenses = await EmployeeExpense.find({ employeeId })
+            .populate('employeeId', 'name')
+            .populate('clientSites.siteId', 'siteName siteAddress')
+            .sort({ date: -1 })
+            .lean();
+        const enriched = await enrichExpensesWithUniversalNames(expenses);
+        res.json({ success: true, data: enriched });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ── GET: Fetch attendance records for unscheduled employees on a given date ──
+exports.getAttendanceByDate = async (req, res) => {
+    try {
+        const { date } = req.query;
+        if (!date) return res.status(400).json({ success: false, message: 'date query param is required' });
+
+        // Build strict 24-hour local range
+        const [year, month, day] = date.split('-').map(Number);
+        const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const endOfDay   = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+        // Fetch only records that have attendance set but zero expenses
+        // (these are the "attendance-only" records created by bulkSaveAttendance)
+        const records = await EmployeeExpense.find({
+            date: { $gte: startOfDay, $lte: endOfDay },
+            attendance: { $exists: true }
+        }).select('employeeId attendance attendanceRemark workLocation expenses');
+
+        const data = records.map(r => {
+            const rawRemark = r.attendanceRemark || '';
+            const cleanRemark = rawRemark.toLowerCase().includes('auto-marked') || rawRemark.toLowerCase().includes('auto marked') ? '' : rawRemark;
+            return {
+                employeeId: String(r.employeeId),
+                attendance: r.attendance,
+                attendanceRemark: cleanRemark,
+                workLocation: r.workLocation || '',
+                expenses: r.expenses || { breakfast: 0, lunch: 0, dinner: 0, petrol: 0 }
+            };
+        });
+
+        // Also check AdminLoginLogs for this exact date to know which Admins logged into the portal today
+        const User = require('../models/User');
+        const AdminLoginLog = require('../models/AdminLoginLog');
+        const EmployeeMaster = require('../models/EmployeeMaster');
+
+        const adminUsers = await User.find({ isAdmin: true }).select('_id email').lean();
+        const adminEmailMap = {};
+        adminUsers.forEach(u => {
+            if (u.email && typeof u.email === 'string' && u.email.trim().length > 3) adminEmailMap[u.email.toLowerCase().trim()] = String(u._id);
+        });
+
+        const adminLogs = await AdminLoginLog.find({ dateStr: date }).select('userId').lean();
+        const loggedInUserIds = new Set(adminLogs.map(l => String(l.userId)).filter(Boolean));
+
+        const activeEmployees = await EmployeeMaster.find({ status: { $ne: 'Deactive' } }).select('_id email createdAt').lean();
+        const adminLoggedInEmpIds = [];
+        const isLinkedAdminMap = {};
+
+        activeEmployees.forEach(emp => {
+            const empIdStr = String(emp._id);
+            const empCreatedDateStr = emp.createdAt ? new Date(emp.createdAt).toISOString().split('T')[0] : '2000-01-01';
+            if (date < empCreatedDateStr) return;
+
+            const empEmail = (emp.email && typeof emp.email === 'string') ? emp.email.toLowerCase().trim() : '';
+
+            const matchedUserId = (empEmail && empEmail.length > 3 && adminEmailMap[empEmail]) ? adminEmailMap[empEmail] : null;
+            if (matchedUserId) {
+                isLinkedAdminMap[empIdStr] = true;
+                if (loggedInUserIds.has(matchedUserId)) {
+                    adminLoggedInEmpIds.push(empIdStr);
+                }
+            }
+        });
+
+        res.json({ success: true, data, adminLoggedInEmpIds, isLinkedAdminMap });
+    } catch (error) {
+        console.error('getAttendanceByDate Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ── POST: Bulk upsert attendance for unscheduled employees (no money touched) ──
+// ── GET: 5 Days Daily Summary Report ──
+exports.getDailySummary = async (req, res) => {
+    try {
+        const toLocalDateKey = (d) => {
+            if (!d) return '';
+            if (typeof d === 'string') {
+                const trimmed = d.trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+            }
+            const dt = new Date(d);
+            if (isNaN(dt.getTime())) return '';
+            return dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        };
+
+        // Last 5 calendar days (today inclusive)
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        const fiveDaysAgo = new Date();
+        fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 4);
+        fiveDaysAgo.setHours(0, 0, 0, 0);
+
+        // Generate dateStr keys for the 5-day window
+        const windowDateKeys = [];
+        for (let d = new Date(fiveDaysAgo); d <= today; d.setDate(d.getDate() + 1)) {
+            windowDateKeys.push(toLocalDateKey(d));
+        }
+
+        const ScheduleMaster = require('../models/ScheduleMaster');
+        const EmployeeMaster = require('../models/EmployeeMaster');
+        const MoneyTransferAccount = require('../models/MoneyTransferAccount');
+        const EmployeeLedger = require('../models/EmployeeLedger');
+        const User = require('../models/User');
+        const AdminLoginLog = require('../models/AdminLoginLog');
+
+        // Parallelize primary queries
+        const [schedules, empsList, customAccsList, ledgers, allUsers, adminLogs] = await Promise.all([
+            ScheduleMaster.find({
+                scheduleDate: { $gte: fiveDaysAgo, $lte: today },
+                dayStatus: { $nin: ['Rejected'] }
+            })
+                .populate('operative', 'name status')
+                .populate('helpers', 'name status')
+                .populate('site', 'siteName')
+                .populate('client', 'clientName')
+                .lean(),
+            EmployeeMaster.find({}, '_id name email totalAmount foodAllowance status createdAt').lean(),
+            MoneyTransferAccount.find({}, '_id name').lean(),
+            EmployeeLedger.find({
+                date: { $gte: fiveDaysAgo, $lte: today }
+            }).sort({ date: -1 }).lean(),
+            User.find().select('_id name email isAdmin isSuperAdmin').lean(),
+            AdminLoginLog.find({
+                dateStr: { $in: windowDateKeys }
+            }).lean()
+        ]);
+
+        const schedIdsInWindow = schedules.map(s => s._id);
+
+        // Query expenses in window
+        const expenses = await EmployeeExpense.find({
+            $or: [
+                { date: { $gte: fiveDaysAgo, $lte: today } },
+                { 'clientSites.scheduleId': { $in: schedIdsInWindow } }
+            ]
+        })
+            .populate('employeeId', 'name totalAmount foodAllowance status')
+            .populate('clientSites.clientId', 'clientName')
+            .populate('clientSites.siteId', 'siteName')
+            .populate('clientSites.scheduleId', 'scheduleDate date')
+            .populate('creditDebit.givenTo.employeeRef', 'name')
+            .populate('creditDebit.receivedFrom.employeeRef', 'name')
+            .sort({ 'employeeId': 1, date: -1 })
+            .lean();
+
+        // Build scheduledPresenceMap
+        const scheduledPresenceMap = {}; // key: `${empId}|${dateKey}`
+        schedules.forEach(s => {
+            const dateKey = toLocalDateKey(s.scheduleDate);
+            const siteName = s.site?.siteName || '';
+            const addEntry = (emp) => {
+                if (!emp || emp.status === 'Deactive') return;
+                const empId = String(emp._id);
+                const mapKey = `${empId}|${dateKey}`;
+                if (!scheduledPresenceMap[mapKey]) {
+                    scheduledPresenceMap[mapKey] = { empId, empName: emp.name, siteName, date: s.scheduleDate };
+                } else if (siteName && !scheduledPresenceMap[mapKey].siteName.includes(siteName)) {
+                    scheduledPresenceMap[mapKey].siteName += `, ${siteName}`;
+                }
+            };
+            if (s.operative) addEntry(s.operative);
+            (s.helpers || []).forEach(h => addEntry(h));
+        });
+
+        // Universal name map & Active employees list
+        const universalNameMap = {};
+        const activeEmployeesList = [];
+        empsList.forEach(e => {
+            const idStr = String(e._id);
+            universalNameMap[idStr] = { _id: e._id, name: e.name, status: e.status };
+            if (e.status !== 'Deactive') {
+                activeEmployeesList.push(e);
+            }
+        });
+        customAccsList.forEach(c => {
+            universalNameMap[String(c._id)] = { _id: c._id, name: `${c.name} (BANK)`, isBank: true };
+        });
+
+        // Map Employee ID -> Matched Admin User ID
+        const userEmailMap = {};
+        allUsers.forEach(u => {
+            if (u.email && typeof u.email === 'string' && u.email.trim().length > 3) {
+                userEmailMap[u.email.toLowerCase().trim()] = u;
+            }
+        });
+
+        const empIdToMatchedUserMap = {};
+        activeEmployeesList.forEach(emp => {
+            const empEmail = (emp.email && typeof emp.email === 'string') ? emp.email.toLowerCase().trim() : '';
+            const matchedUser = (empEmail && empEmail.length > 3 && userEmailMap[empEmail]) ? userEmailMap[empEmail] : null;
+            if (matchedUser) {
+                empIdToMatchedUserMap[String(emp._id)] = String(matchedUser._id);
+            }
+        });
+
+        // Admin login lookup
+        const adminLoginLookup = new Set(); // key: `${userId}|${dateStr}`
+        adminLogs.forEach(log => {
+            if (log.userId && log.dateStr) {
+                adminLoginLookup.add(`${String(log.userId)}|${log.dateStr}`);
+            }
+        });
+
+        // Index ledgers by `${referenceId}|${employeeId}` for O(1) matching
+        const ledgersByRefAndEmp = new Map();
+        ledgers.forEach(l => {
+            if (l.referenceId) {
+                const empId = String(l.employee?._id || l.employee || '');
+                const key = `${String(l.referenceId)}|${empId}`;
+                if (!ledgersByRefAndEmp.has(key)) ledgersByRefAndEmp.set(key, []);
+                ledgersByRefAndEmp.get(key).push(l);
+            }
+        });
+
+        const empMap = {};
+        const expenseHandledLedgerIds = new Set();
+
+        expenses.forEach(exp => {
+            // Skip if employee is deactivated
+            const empStatus = exp.employeeId?.status || universalNameMap[String(exp.employeeId?._id || exp.employeeId)]?.status;
+            if (empStatus === 'Deactive') return;
+
+            const empId = String(exp.employeeId?._id || exp.employeeId);
+            const empName = exp.employeeId?.name || universalNameMap[empId]?.name || 'Unknown Account';
+            if (!empMap[empId]) {
+                empMap[empId] = { empId, empName, matchedUserId: empIdToMatchedUserMap[empId] || null, entries: [] };
+            } else if (!empMap[empId].matchedUserId) {
+                empMap[empId].matchedUserId = empIdToMatchedUserMap[empId] || null;
+            }
+
+            // Get site names
+            let siteNames = (exp.clientSites || [])
+                .map(cs => cs.siteId?.siteName || cs.siteId || '')
+                .filter(Boolean)
+                .join(', ');
+            
+            // If no client sites (like in Unscheduled Attendance), fallback to workLocation (Home/Godown)
+            if (!siteNames && exp.workLocation) {
+                siteNames = exp.workLocation;
+            }
+
+            // Sum credit/debit from ledger using Map O(1) lookup
+            const expLedgers = ledgersByRefAndEmp.get(`${String(exp._id)}|${empId}`) || [];
+            expLedgers.forEach(l => expenseHandledLedgerIds.add(String(l._id)));
+
+            let totalDebit = 0;
+            let totalCredit = 0;
+            expLedgers.forEach(l => {
+                if (l.type === 'Debit') totalDebit += (l.amount || 0);
+                else if (l.type === 'Credit') totalCredit += (l.amount || 0);
+            });
+
+            const rawRemark = exp.attendanceRemark || '';
+            const cleanRemark = rawRemark.toLowerCase().includes('auto-marked') || rawRemark.toLowerCase().includes('auto marked') ? '' : rawRemark;
+
+            // Details for row click breakdown
+            const details = {
+                breakfast: exp.expenses?.breakfast || 0,
+                lunch: exp.expenses?.lunch || 0,
+                dinner: exp.expenses?.dinner || 0,
+                petrol: exp.expenses?.petrol || 0,
+                fuelType: exp.expenses?.fuelType || '',
+                otherExpensesList: exp.otherExpensesList || [],
+                givenTo: (exp.creditDebit?.givenTo || []).map(g => ({
+                    employeeName: universalNameMap[String(g.employeeRef?._id || g.employeeRef)]?.name || g.employeeRef?.name || 'Unknown Account',
+                    amount: g.amount
+                })),
+                receivedFrom: (exp.creditDebit?.receivedFrom || []).map(r => ({
+                    employeeName: universalNameMap[String(r.employeeRef?._id || r.employeeRef)]?.name || r.employeeRef?.name || 'Unknown Account',
+                    amount: r.amount
+                })),
+                notes: exp.notes || ''
+            };
+
+            const hasReport = Boolean(
+                (exp.clientSites || []).some(cs => (cs.files?.dailyReports && cs.files.dailyReports.length > 0) || (cs.dailyReports && cs.dailyReports.length > 0)) ||
+                (exp.dailyReports && exp.dailyReports.length > 0)
+            );
+            const hasDataFile = Boolean(
+                (exp.clientSites || []).some(cs => (cs.files?.data && cs.files.data.length > 0) || (cs.dataFiles && cs.dataFiles.length > 0)) ||
+                (exp.dataFiles && exp.dataFiles.length > 0)
+            );
+
+            // Target date: If expense is linked to a schedule, use that schedule's scheduled date
+            let effectiveDate = exp.date;
+            const schedWithDate = (exp.clientSites || []).find(cs => cs.scheduleId && (cs.scheduleId.scheduleDate || cs.scheduleId.date));
+            if (schedWithDate) {
+                effectiveDate = schedWithDate.scheduleId.scheduleDate || schedWithDate.scheduleId.date;
+            }
+
+            empMap[empId].entries.push({
+                date: effectiveDate,
+                attendance: exp.attendance || 'Present',
+                attendanceRemark: cleanRemark,
+                siteNames,
+                workLocation: exp.workLocation || '',
+                totalExpense: exp.totalExpense || 0,
+                totalDebit,
+                totalCredit,
+                category: 'Expense',
+                hasReport,
+                hasDataFile,
+                clientSites: exp.clientSites || [],
+                files: {
+                    dailyReports: exp.dailyReports || [],
+                    data: exp.dataFiles || [],
+                    photos: exp.photos || []
+                },
+                details
+            });
+        });
+
+        // Inject Transfer ledger entries that don't belong to any expense for this employee
+        ledgers.forEach(l => {
+            if (l.category === 'Transfer' && !expenseHandledLedgerIds.has(String(l._id))) {
+                // Skip deactivated employees in ledger-only entries too
+                const lEmpStatus = universalNameMap[String(l.employee?._id || l.employee)]?.status;
+                if (lEmpStatus === 'Deactive') return;
+
+                const empId = String(l.employee?._id || l.employee);
+                const empName = universalNameMap[empId]?.name || 'Unknown Account';
+                if (!empMap[empId]) {
+                    empMap[empId] = { empId, empName, matchedUserId: empIdToMatchedUserMap[empId] || null, entries: [] };
+                } else if (!empMap[empId].matchedUserId) {
+                    empMap[empId].matchedUserId = empIdToMatchedUserMap[empId] || null;
+                }
+                // Avoid duplicate entries for same referenceId in same employee
+                const alreadyIn = empMap[empId].entries.some(e =>
+                    String(e.referenceId) === String(l.referenceId) && e.category === 'Transfer' && e.type === l.type
+                );
+                if (!alreadyIn) {
+                    const relatedName = universalNameMap[String(l.relatedEmployee?._id || l.relatedEmployee)]?.name || 'Unknown Account';
+                    empMap[empId].entries.push({
+                        date: l.date,
+                        attendance: '-',
+                        siteNames: '',
+                        totalExpense: 0,
+                        totalDebit: l.type === 'Debit' ? l.amount : 0,
+                        totalCredit: l.type === 'Credit' ? l.amount : 0,
+                        category: 'Transfer',
+                        type: l.type,
+                        description: l.description,
+                        referenceId: l.referenceId,
+                        details: {
+                            breakfast: 0,
+                            lunch: 0,
+                            dinner: 0,
+                            petrol: 0,
+                            fuelType: '',
+                            otherExpensesList: [],
+                            givenTo: l.type === 'Debit' ? [{ employeeName: relatedName, amount: l.amount }] : [],
+                            receivedFrom: l.type === 'Credit' ? [{ employeeName: relatedName, amount: l.amount }] : [],
+                            notes: l.description || ''
+                        }
+                    });
+                }
+            }
+        });
+
+        // Always inject a schedule-based Present entry for every allocation
+        Object.values(scheduledPresenceMap).forEach(({ empId, empName, siteName, date: schedDate }) => {
+            if (!empMap[empId]) {
+                empMap[empId] = { empId, empName, matchedUserId: empIdToMatchedUserMap[empId] || null, entries: [] };
+            } else if (!empMap[empId].matchedUserId) {
+                empMap[empId].matchedUserId = empIdToMatchedUserMap[empId] || null;
+            }
+            empMap[empId].entries.push({
+                date: schedDate,
+                attendance: 'Present',
+                attendanceRemark: '',
+                siteNames: siteName,
+                totalExpense: 0,
+                totalDebit: 0,
+                totalCredit: 0,
+                category: 'Schedule',
+                details: {
+                    breakfast: 0, lunch: 0, dinner: 0, petrol: 0,
+                    fuelType: '', otherExpensesList: [],
+                    givenTo: [], receivedFrom: [], notes: ''
+                }
+            });
+        });
+
+        // Inject AdminLoginLog entries for matched employees
+        adminLogs.forEach(log => {
+            if (!log.userId || !log.dateStr) return;
+            const matchingEmps = activeEmployeesList.filter(e => empIdToMatchedUserMap[String(e._id)] === String(log.userId));
+            matchingEmps.forEach(empDoc => {
+                const empCreatedDateStr = empDoc.createdAt ? toLocalDateKey(empDoc.createdAt) : '2000-01-01';
+                if (log.dateStr < empCreatedDateStr) return; // Do not inject logins before employee creation date
+                const empId = String(empDoc._id);
+                if (!empMap[empId]) {
+                    empMap[empId] = { 
+                        empId, 
+                        empName: empDoc.name, 
+                        matchedUserId: String(log.userId), 
+                        entries: [] 
+                    };
+                }
+                empMap[empId].entries.push({
+                    date: new Date(`${log.dateStr}T12:00:00.000Z`),
+                    attendance: 'Present',
+                    attendanceRemark: 'Admin Portal Login',
+                    siteNames: 'Admin Office / Login',
+                    totalExpense: 0,
+                    totalDebit: 0,
+                    totalCredit: 0,
+                    category: 'Admin',
+                    details: {
+                        breakfast: 0, lunch: 0, dinner: 0, petrol: 0,
+                        fuelType: '', otherExpensesList: [],
+                        givenTo: [], receivedFrom: [], notes: 'Admin Portal Login'
+                    }
+                });
+            });
+        });
+
+        // Consolidate entries by date so there are no duplicate dates per employee
+        const result = Object.values(empMap).map(emp => {
+            const dateGrouped = {};
+            emp.entries.forEach(entry => {
+                const dateKey = toLocalDateKey(entry.date);
+                if (!dateGrouped[dateKey]) {
+                    dateGrouped[dateKey] = { 
+                        ...entry,
+                        date: new Date(`${dateKey}T12:00:00.000Z`)
+                    };
+                    if (entry.details) {
+                        dateGrouped[dateKey].details = { ...entry.details };
+                    }
+                } else {
+                    const existing = dateGrouped[dateKey];
+                    if (entry.hasReport) existing.hasReport = true;
+                    if (entry.hasDataFile) existing.hasDataFile = true;
+                    if (entry.workLocation) existing.workLocation = entry.workLocation;
+                    if (Array.isArray(entry.clientSites) && entry.clientSites.length > 0) {
+                        existing.clientSites = [...(existing.clientSites || []), ...entry.clientSites];
+                    }
+                    if (entry.files) {
+                        existing.files = {
+                            dailyReports: [...(existing.files?.dailyReports || []), ...(entry.files?.dailyReports || [])],
+                            data: [...(existing.files?.data || []), ...(entry.files?.data || [])],
+                            photos: [...(existing.files?.photos || []), ...(entry.files?.photos || [])]
+                        };
+                    }
+                    existing.totalDebit = (existing.totalDebit || 0) + (entry.totalDebit || 0);
+                    existing.totalCredit = (existing.totalCredit || 0) + (entry.totalCredit || 0);
+                    existing.totalExpense = (existing.totalExpense || 0) + (entry.totalExpense || 0);
+
+                    if ((!existing.attendance || existing.attendance === '-') && entry.attendance && entry.attendance !== '-') {
+                        existing.attendance = entry.attendance;
+                    }
+                    if (entry.siteNames && !(existing.siteNames || '').includes(entry.siteNames)) {
+                        existing.siteNames = existing.siteNames ? `${existing.siteNames} | ${entry.siteNames}` : entry.siteNames;
+                    }
+                    if (entry.attendanceRemark && !(existing.attendanceRemark || '').includes(entry.attendanceRemark)) {
+                        existing.attendanceRemark = existing.attendanceRemark ? `${existing.attendanceRemark} | ${entry.attendanceRemark}` : entry.attendanceRemark;
+                    }
+                    if (existing.category !== entry.category) {
+                        existing.category = 'Combined';
+                    }
+
+                    // Merge details
+                    if (entry.details) {
+                        if (!existing.details) {
+                            existing.details = {
+                                breakfast: 0, lunch: 0, dinner: 0, petrol: 0, fuelType: '',
+                                otherExpensesList: [], givenTo: [], receivedFrom: [], notes: ''
+                            };
+                        }
+                        existing.details.breakfast = (existing.details.breakfast || 0) + (entry.details.breakfast || 0);
+                        existing.details.lunch = (existing.details.lunch || 0) + (entry.details.lunch || 0);
+                        existing.details.dinner = (existing.details.dinner || 0) + (entry.details.dinner || 0);
+                        existing.details.petrol = (existing.details.petrol || 0) + (entry.details.petrol || 0);
+                        if (entry.details.fuelType) existing.details.fuelType = entry.details.fuelType;
+                        if (entry.details.otherExpensesList?.length > 0) {
+                            existing.details.otherExpensesList = [...(existing.details.otherExpensesList || []), ...entry.details.otherExpensesList];
+                        }
+                        if (entry.details.givenTo?.length > 0) {
+                            existing.details.givenTo = [...(existing.details.givenTo || []), ...entry.details.givenTo];
+                        }
+                        if (entry.details.receivedFrom?.length > 0) {
+                            existing.details.receivedFrom = [...(existing.details.receivedFrom || []), ...entry.details.receivedFrom];
+                        }
+                        if (entry.details.notes) {
+                            existing.details.notes = existing.details.notes ? `${existing.details.notes} | ${entry.details.notes}` : entry.details.notes;
+                        }
+                    }
+                }
+            });
+
+            // Apply Employee and Admin Report Synchronization
+            Object.keys(dateGrouped).forEach(dateKey => {
+                const existing = dateGrouped[dateKey];
+                const hasSchedule = Boolean(scheduledPresenceMap[`${emp.empId}|${dateKey}`]);
+                const hasAdminLogin = emp.matchedUserId ? adminLoginLookup.has(`${emp.matchedUserId}|${dateKey}`) : false;
+
+                if (emp.matchedUserId) {
+                    // Admin Report is the primary source for employees with matching email
+                    if (hasAdminLogin) {
+                        existing.attendance = 'Present';
+                        if (!existing.siteNames || existing.siteNames === '-' || existing.siteNames === '—') {
+                            existing.siteNames = 'Admin Office / Login';
+                        }
+                    } else if (hasSchedule) {
+                        existing.attendance = 'Present';
+                        if (!existing.siteNames || existing.siteNames === '-' || existing.siteNames === '—') {
+                            existing.siteNames = scheduledPresenceMap[`${emp.empId}|${dateKey}`].siteName || 'Scheduled Duty';
+                        }
+                    } else {
+                        if (existing.attendance !== 'Present' && existing.attendance !== 'Half Day') {
+                            existing.attendance = 'Absent';
+                            if (!existing.attendanceRemark) {
+                                existing.attendanceRemark = 'No Admin Login';
+                            }
+                        }
+                    }
+                } else {
+                    if (hasSchedule) {
+                        existing.attendance = 'Present';
+                        if (!existing.siteNames || existing.siteNames === '-' || existing.siteNames === '—') {
+                            existing.siteNames = scheduledPresenceMap[`${emp.empId}|${dateKey}`].siteName || 'Scheduled Duty';
+                        }
+                    }
+                }
+            });
+
+            return {
+                ...emp,
+                entries: Object.values(dateGrouped)
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .slice(0, 5)
+            };
+        }).sort((a, b) => a.empName.localeCompare(b.empName));
+
+        res.json({ success: true, data: result, schedules });
+    } catch (error) {
+        console.error('getDailySummary Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ── POST: Bulk upsert attendance for unscheduled employees (no money touched) ──
+exports.bulkSaveAttendance = async (req, res) => {
+    try {
+        const { entries } = req.body;
+        if (!Array.isArray(entries) || entries.length === 0) {
+            return res.status(400).json({ success: false, message: 'No entries provided' });
+        }
+
+        const saved = [];
+
+        for (const entry of entries) {
+            const { employeeId, date, attendance, attendanceRemark, workLocation, expenses: entryExpenses } = entry;
+            if (!employeeId || !date || !attendance) continue;
+
+            // Build strict 24-hour local range for the entry date
+            const [year, month, day] = date.split('-').map(Number);
+            const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+            const endOfDay   = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+            // Calculate total expenses for this new submission
+            let newTotalExpense = 0;
+            const finalExpenses = { breakfast: 0, lunch: 0, dinner: 0, petrol: 0 };
+            if (entryExpenses) {
+                finalExpenses.breakfast = Number(entryExpenses.breakfast) || 0;
+                finalExpenses.lunch     = Number(entryExpenses.lunch)     || 0;
+                finalExpenses.dinner    = Number(entryExpenses.dinner)    || 0;
+                finalExpenses.petrol    = Number(entryExpenses.petrol)    || 0;
+                if (entryExpenses.fuelType) finalExpenses.fuelType = entryExpenses.fuelType;
+                
+                newTotalExpense += (finalExpenses.breakfast + finalExpenses.lunch + finalExpenses.dinner + finalExpenses.petrol);
+            }
+            
+            let finalOtherExpensesList = [];
+            if (Array.isArray(entry.otherExpensesList) && entry.otherExpensesList.length > 0) {
+                finalOtherExpensesList = entry.otherExpensesList.map(r => ({
+                    expenseName: r.expenseName || '',
+                    amount: Number(r.amount) || 0,
+                    files: []
+                }));
+                newTotalExpense += finalOtherExpensesList.reduce((acc, curr) => acc + curr.amount, 0);
+            }
+
+            // Find existing to calculate difference
+            const existingExpense = await EmployeeExpense.findOne({
+                employeeId,
+                date: { $gte: startOfDay, $lte: endOfDay }
+            });
+
+            const oldTotalExpense = existingExpense ? (existingExpense.totalExpense || 0) : 0;
+            // Unscheduled attendance doesn't handle givenTo/receivedFrom, so difference is just the expense change
+            const difference = newTotalExpense - oldTotalExpense;
+
+            // Update Employee Balance
+            const employee = await EmployeeMaster.findByIdAndUpdate(
+                employeeId,
+                { $inc: { totalAmount: -difference } },
+                { new: true }
+            );
+
+            // Save/Update Expense Record
+            let updated;
+            if (existingExpense) {
+                existingExpense.attendance = attendance;
+                existingExpense.attendanceRemark = attendanceRemark || '';
+                if (workLocation) existingExpense.workLocation = workLocation;
+                
+                existingExpense.expenses = finalExpenses;
+                existingExpense.otherExpensesList = finalOtherExpensesList;
+                existingExpense.totalExpense = newTotalExpense;
+                existingExpense.remainingBalance = employee ? employee.totalAmount : 0;
+                
+                updated = await existingExpense.save();
+                
+                // Delete old ledger entries for this expense
+                await EmployeeLedger.deleteMany({ referenceId: existingExpense._id, category: 'Expense' });
+            } else {
+                updated = await new EmployeeExpense({
+                    employeeId,
+                    date: startOfDay,
+                    attendance,
+                    attendanceRemark: attendanceRemark || '',
+                    workLocation: workLocation || '',
+                    expenses: finalExpenses,
+                    otherExpensesList: finalOtherExpensesList,
+                    totalExpense: newTotalExpense,
+                    remainingBalance: employee ? employee.totalAmount : 0,
+                    clientSites: []
+                }).save();
+            }
+
+            // Re-create Ledger Entry if there's an expense
+            if (newTotalExpense > 0) {
+                await new EmployeeLedger({
+                    employee: employeeId,
+                    date: startOfDay,
+                    amount: newTotalExpense,
+                    type: 'Debit',
+                    category: 'Expense',
+                    description: `Daily Expense on ${startOfDay.toLocaleDateString()}${existingExpense ? ' (Updated)' : ''}`,
+                    referenceId: updated._id
+                }).save();
+            }
+
+            saved.push({
+                employeeId: String(updated.employeeId),
+                attendance: updated.attendance,
+                attendanceRemark: updated.attendanceRemark,
+                workLocation: updated.workLocation || '',
+                expenses: updated.expenses
+            });
+        }
+
+        broadcast('expense-changed', { action: 'attendance-bulk' });
+        res.json({ success: true, message: `${saved.length} attendance record(s) saved`, data: saved });
+    } catch (error) {
+        console.error('bulkSaveAttendance Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.deleteFile = async (req, res) => {
+    try {
+        const { id, siteIdx, category, fileId } = req.params;
+        const EmployeeExpense = require('../models/EmployeeExpense');
+        const expense = await EmployeeExpense.findById(id);
+        if (!expense) return res.status(404).json({ success: false, message: 'Expense not found' });
+
+        if (!expense.clientSites || !expense.clientSites[siteIdx]) {
+            return res.status(404).json({ success: false, message: 'Site not found' });
+        }
+
+        const site = expense.clientSites[siteIdx];
+        if (!site.files || !site.files[category]) {
+            return res.status(404).json({ success: false, message: 'File category not found' });
+        }
+
+        const originalLength = site.files[category].length;
+        site.files[category] = site.files[category].filter(f => f._id.toString() !== fileId);
+
+        if (site.files[category].length === originalLength) {
+            return res.status(404).json({ success: false, message: 'File not found' });
+        }
+
+        await expense.save();
+        res.json({ success: true, message: 'File deleted successfully' });
+    } catch (err) {
+        console.error('Failed to delete file', err);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
