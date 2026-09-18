@@ -257,6 +257,7 @@ const AdminLayout = () => {
     const { user, logout, loading, refreshUser } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const mainBg = useColorModeValue('gray.100', 'gray.900');
 
     useEffect(() => {
         if (!loading && (!user || !user.isAdmin)) {
@@ -275,7 +276,7 @@ const AdminLayout = () => {
     if (!user || !user.isAdmin) return null;
 
     return (
-        <Box minH="100vh" bg={useColorModeValue('gray.100', 'gray.900')}>
+        <Box minH="100vh" bg={mainBg}>
             {/* Sidebar — desktop only */}
             <SidebarContent
                 user={user}

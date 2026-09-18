@@ -11,15 +11,28 @@ import { hasPermission } from '../../utils/permissions';
 
 const AdminEnquiries = () => {
     const [enquiries, setEnquiries] = useState([]);
-    const [quotations, setQuotations] = useState([]); // Active (Sent/Pending)
+    const [quotations, setQuotations] = useState([]); // Active (Sent)
     const [processedQuotations, setProcessedQuotations] = useState([]); // Done/Rejected
+    const [whatsappLogs, setWhatsappLogs] = useState([]); // WhatsApp type enquiries
     const [selectedEnquiry, setSelectedEnquiry] = useState(null);
     const [selectedQuotation, setSelectedQuotation] = useState(null);
     const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
     const [allProducts, setAllProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    
-    // Search & Pagination States
+
+    // ── Per-tab loading flags ─────────────────────────────────────────────────
+    const [loadingEnquiries, setLoadingEnquiries] = useState(true);
+    const [loadingQuotations, setLoadingQuotations] = useState(true);
+    const [loadingHistory, setLoadingHistory] = useState(true);
+    const [loadingWhatsapp, setLoadingWhatsapp] = useState(true);
+    const [loadingProducts, setLoadingProducts] = useState(true);
+
+    // ── Server-side totals (for pagination controls) ──────────────────────────
+    const [enquiriesTotal, setEnquiriesTotal] = useState(0);
+    const [quotationsTotal, setQuotationsTotal] = useState(0);
+    const [historyTotal, setHistoryTotal] = useState(0);
+    const [whatsappTotal, setWhatsappTotal] = useState(0);
+
+    // ── Search & Pagination States ────────────────────────────────────────────
     const [enquirySearch, setEnquirySearch] = useState('');
     const [activeSearch, setActiveSearch] = useState('');
     const [historySearch, setHistorySearch] = useState('');
@@ -130,47 +143,140 @@ const AdminEnquiries = () => {
 
     const toast = useToast();
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    // ── Helper: normalise paginated or plain-array response ──────────────────
+    const normalisePaged = (resData) => {
+        if (Array.isArray(resData)) {
+            // Backend not yet paginated — wrap it so the rest of the code works
+            return { data: resData, total: resData.length, page: 1, totalPages: 1 };
+        }
+        // Expected shape: { data: [], total: N, page: N, totalPages: N }
+        return {
+            data: resData.data || [],
+            total: resData.total ?? (resData.data || []).length,
+            page: resData.page ?? 1,
+            totalPages: resData.totalPages ?? 1,
+        };
+    };
 
-    const fetchData = async () => {
+    // ── 1. Incoming Enquiries — type=enquiry ──────────────────────────────────
+    const fetchEnquiries = async (page = 1, search = '') => {
         try {
-            setLoading(true);
-            const [enqRes, quoteRes, prodRes] = await Promise.all([
-                api.get('/enquiries'),
-                api.get('/quotations'),
-                api.get('/products')
-            ]);
-
-            // Normalize Products
-            const prods = (Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data.data || []));
-            setAllProducts(prods);
-
-            // Normalize Enquiries
-            const enqs = (Array.isArray(enqRes.data) ? enqRes.data : (enqRes.data.data || []));
-            setEnquiries(enqs);
-
-            // Normalize Quotations and Split
-            const allQuotes = (Array.isArray(quoteRes.data) ? quoteRes.data : (quoteRes.data.data || []));
-            setQuotations(allQuotes.filter(q => q.status !== 'Done' && q.status !== 'Reject'));
-            setProcessedQuotations(allQuotes.filter(q => q.status === 'Done' || q.status === 'Reject'));
-
-        } catch (error) {
-            console.error("Backend unavailable, loading demo data");
-            setEnquiries(DEMO_ENQUIRIES);
-            setQuotations(DEMO_QUOTATIONS);
-            toast({
-                title: "Backend Unavailable",
-                description: "Loaded demo data for visualization.",
-                status: "info",
-                duration: 5000,
-                isClosable: true
+            setLoadingEnquiries(true);
+            const res = await api.get('/enquiries', {
+                params: { type: 'enquiry', page, limit: ITEMS_PER_PAGE, search: search || undefined }
             });
+            const { data, total } = normalisePaged(res.data);
+            setEnquiries(data);
+            setEnquiriesTotal(total);
+        } catch (error) {
+            console.error('fetchEnquiries failed', error);
+            setEnquiries(DEMO_ENQUIRIES.filter(e => e.type !== 'whatsapp'));
+            setEnquiriesTotal(DEMO_ENQUIRIES.filter(e => e.type !== 'whatsapp').length);
+            toast({ title: 'Enquiries: Backend Unavailable', description: 'Showing demo data.', status: 'info', duration: 4000, isClosable: true });
         } finally {
-            setLoading(false);
+            setLoadingEnquiries(false);
         }
     };
+
+    // ── 2. WhatsApp Logs — type=whatsapp ──────────────────────────────────────
+    const fetchWhatsapp = async (page = 1, search = '') => {
+        try {
+            setLoadingWhatsapp(true);
+            const res = await api.get('/enquiries', {
+                params: { type: 'whatsapp', page, limit: ITEMS_PER_PAGE, search: search || undefined }
+            });
+            const { data, total } = normalisePaged(res.data);
+            setWhatsappLogs(data);
+            setWhatsappTotal(total);
+        } catch (error) {
+            console.error('fetchWhatsapp failed', error);
+            setWhatsappLogs([]);
+            setWhatsappTotal(0);
+        } finally {
+            setLoadingWhatsapp(false);
+        }
+    };
+
+    // ── 3. Outgoing Quotations — status=Sent ─────────────────────────────────
+    const fetchQuotations = async (page = 1, search = '') => {
+        try {
+            setLoadingQuotations(true);
+            const res = await api.get('/quotations', {
+                params: { status: 'Sent', page, limit: ITEMS_PER_PAGE, search: search || undefined }
+            });
+            const { data, total } = normalisePaged(res.data);
+            setQuotations(data);
+            setQuotationsTotal(total);
+        } catch (error) {
+            console.error('fetchQuotations failed', error);
+            setQuotations(DEMO_QUOTATIONS);
+            setQuotationsTotal(DEMO_QUOTATIONS.length);
+            toast({ title: 'Quotations: Backend Unavailable', description: 'Showing demo data.', status: 'info', duration: 4000, isClosable: true });
+        } finally {
+            setLoadingQuotations(false);
+        }
+    };
+
+    // ── 4. Processed History — status=Done or status=Reject ───────────────────
+    const fetchHistory = async (page = 1, search = '') => {
+        try {
+            setLoadingHistory(true);
+            const res = await api.get('/quotations', {
+                params: { status: 'Done,Reject', page, limit: ITEMS_PER_PAGE, search: search || undefined }
+            });
+            const { data, total } = normalisePaged(res.data);
+            setProcessedQuotations(data);
+            setHistoryTotal(total);
+        } catch (error) {
+            console.error('fetchHistory failed', error);
+            setProcessedQuotations([]);
+            setHistoryTotal(0);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    // ── Products — fetched once on mount ──────────────────────────────────────
+    const fetchProducts = async () => {
+        try {
+            setLoadingProducts(true);
+            const res = await api.get('/products');
+            const prods = Array.isArray(res.data) ? res.data : (res.data.data || []);
+            setAllProducts(prods);
+        } catch (error) {
+            console.error('fetchProducts failed', error);
+        } finally {
+            setLoadingProducts(false);
+        }
+    };
+
+    // ── Active tab index (0=Enquiries,1=Quotations,2=History,3=WhatsApp) ──────
+    const [activeTabIndex, setActiveTabIndex] = useState(0);
+
+    // ── Mount: only fetch Tab 1 (default visible) + products ─────────────────
+    // Other tabs load lazily when first selected (see handleTabChange).
+    useEffect(() => {
+        fetchEnquiries(1, '');
+        fetchProducts();
+    }, []);
+
+    // ── Tab switch: fetch that tab's data on first visit ──────────────────────
+    const handleTabChange = (index) => {
+        setActiveTabIndex(index);
+        if (index === 0) fetchEnquiries(enquiryPage, enquirySearch);
+        if (index === 1) fetchQuotations(activePage, activeSearch);
+        if (index === 2) fetchHistory(historyPage, historySearch);
+        if (index === 3) fetchWhatsapp(whatsappPage, whatsappSearch);
+    };
+
+    // ── Convenience: refresh only the currently active tab ───────────────────
+    const fetchData = () => {
+        if (activeTabIndex === 0) fetchEnquiries(enquiryPage, enquirySearch);
+        if (activeTabIndex === 1) fetchQuotations(activePage, activeSearch);
+        if (activeTabIndex === 2) fetchHistory(historyPage, historySearch);
+        if (activeTabIndex === 3) fetchWhatsapp(whatsappPage, whatsappSearch);
+    };
+
 
     const handleViewEnquiry = async (enq) => {
         setSelectedEnquiry(enq);
@@ -1038,40 +1144,18 @@ const AdminEnquiries = () => {
     };
 
 
-    const baseEnquiries = enquiries.filter(e => e.type !== 'whatsapp');
-    const baseWhatsappLogs = enquiries.filter(e => e.type === 'whatsapp');
+    // ── Server already filtered & paginated — use data directly ─────────────
+    // These are the rows returned from the server for the current page.
+    const paginatedEnquiries = enquiries;
+    const paginatedQuotations = quotations;
+    const paginatedHistory = processedQuotations;
+    const paginatedWhatsappLogs = whatsappLogs;
 
-    const filteredEnquiries = baseEnquiries.filter(e => {
-        const term = enquirySearch.toLowerCase();
-        return (e.Name || '').toLowerCase().includes(term) ||
-               (e.email || '').toLowerCase().includes(term) ||
-               (e.phone || '').toLowerCase().includes(term);
-    });
-
-    const filteredWhatsappLogs = baseWhatsappLogs.filter(e => {
-        const term = whatsappSearch.toLowerCase();
-        return (e.Name || '').toLowerCase().includes(term) ||
-               (e.phone || '').toLowerCase().includes(term);
-    });
-
-    const filteredQuotations = quotations.filter(q => {
-        const term = activeSearch.toLowerCase();
-        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || '';
-        const refNo = q.refNo || '';
-        return clientName.toLowerCase().includes(term) || refNo.toLowerCase().includes(term);
-    });
-
-    const filteredHistory = processedQuotations.filter(q => {
-        const term = historySearch.toLowerCase();
-        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || '';
-        const refNo = q.refNo || '';
-        return clientName.toLowerCase().includes(term) || refNo.toLowerCase().includes(term);
-    });
-
-    const paginatedEnquiries = filteredEnquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
-    const paginatedQuotations = filteredQuotations.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
-    const paginatedHistory = filteredHistory.slice((historyPage - 1) * ITEMS_PER_PAGE, historyPage * ITEMS_PER_PAGE);
-    const paginatedWhatsappLogs = filteredWhatsappLogs.slice((whatsappPage - 1) * ITEMS_PER_PAGE, whatsappPage * ITEMS_PER_PAGE);
+    // Keep legacy filter names pointing at the same arrays (used in empty-row checks)
+    const filteredEnquiries = enquiries;
+    const filteredQuotations = quotations;
+    const filteredHistory = processedQuotations;
+    const filteredWhatsappLogs = whatsappLogs;
 
     const PaginationControls = ({ currentPage, totalItems, onPageChange }) => {
         const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
@@ -1159,30 +1243,30 @@ const AdminEnquiries = () => {
                     <VStack align="start" spacing={1}>
                         <Text fontSize="sm" color="blue.600" fontWeight="bold" textTransform="uppercase">New Enquiries</Text>
                         <Heading size="xl" color="blue.800">{enquiries.filter(e => !e.isSeen).length}</Heading>
-                        <Text fontSize="xs" color="blue.500">Unseen client requests in inbox</Text>
+                        <Text fontSize="xs" color="blue.500">Unseen on this page · {enquiriesTotal} total</Text>
                     </VStack>
                 </Box>
                 <Box p={5} bg="orange.50" borderRadius="2xl" border="1px" borderColor="orange.100">
                     <VStack align="start" spacing={1}>
                         <Text fontSize="sm" color="orange.600" fontWeight="bold" textTransform="uppercase">Active Quotations</Text>
-                        <Heading size="xl" color="orange.800">{quotations.length}</Heading>
+                        <Heading size="xl" color="orange.800">{quotationsTotal}</Heading>
                         <Text fontSize="xs" color="orange.500">Sent quotes awaiting client decision</Text>
                     </VStack>
                 </Box>
                 <Box p={5} bg="green.50" borderRadius="2xl" border="1px" borderColor="green.100">
                     <VStack align="start" spacing={1}>
-                        <Text fontSize="sm" color="green.600" fontWeight="bold" textTransform="uppercase">Successful Sales</Text>
-                        <Heading size="xl" color="green.800">{processedQuotations.filter(q => q.status === 'Done').length}</Heading>
-                        <Text fontSize="xs" color="green.500">Approved orders synced with billing</Text>
+                        <Text fontSize="sm" color="green.600" fontWeight="bold" textTransform="uppercase">Processed History</Text>
+                        <Heading size="xl" color="green.800">{historyTotal}</Heading>
+                        <Text fontSize="xs" color="green.500">Total Done / Rejected quotations</Text>
                     </VStack>
                 </Box>
             </SimpleGrid>
 
-            <Tabs colorScheme="brand" isLazy>
+            <Tabs colorScheme="brand" isLazy index={activeTabIndex} onChange={handleTabChange}>
                 <TabList>
                     <Tab fontWeight="bold">
                         Incoming Enquiries
-                        {baseEnquiries.some(e => !e.isSeen) && (
+                        {enquiries.some(e => !e.isSeen) && (
                             <Badge ml={2} colorScheme="red" borderRadius="full">NEW</Badge>
                         )}
                     </Tab>
@@ -1196,12 +1280,8 @@ const AdminEnquiries = () => {
                     </Tab>
                 </TabList>
 
-                {loading ? (
-                    <Flex justify="center" align="center" py={20}>
-                        <Spinner size="xl" color="brand.500" thickness="4px" />
-                    </Flex>
-                ) : (
                 <TabPanels>
+                    {/* ── Tab 1: Incoming Enquiries ───────────────────────── */}
                     <TabPanel p={0} pt={4}>
                         <Flex justify="space-between" mb={4} align="center">
                             <InputGroup maxW="350px" size="sm">
@@ -1213,12 +1293,19 @@ const AdminEnquiries = () => {
                                     borderRadius="xl"
                                     value={enquirySearch}
                                     onChange={(e) => {
-                                        setEnquirySearch(e.target.value);
+                                        const val = e.target.value;
+                                        setEnquirySearch(val);
                                         setEnquiryPage(1);
+                                        fetchEnquiries(1, val);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
+                        {loadingEnquiries && (
+                            <Flex justify="center" align="center" py={16}>
+                                <Spinner size="xl" color="brand.500" thickness="4px" speed="0.65s" />
+                            </Flex>
+                        )}
                         <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="500px">
                                 <Thead bg="gray.50">
@@ -1267,9 +1354,10 @@ const AdminEnquiries = () => {
                                 </Tbody>
                             </Table>
                         </Box>
-                        <PaginationControls currentPage={enquiryPage} totalItems={filteredEnquiries.length} onPageChange={setEnquiryPage} />
+                        <PaginationControls currentPage={enquiryPage} totalItems={enquiriesTotal} onPageChange={setEnquiryPage} />
                     </TabPanel>
 
+                    {/* ── Tab 2: Outgoing Quotations (status=Sent) ─────────── */}
                     <TabPanel p={0} pt={4}>
                         <Flex justify="space-between" mb={4} align="center">
                             <InputGroup maxW="350px" size="sm">
@@ -1281,12 +1369,19 @@ const AdminEnquiries = () => {
                                     borderRadius="xl"
                                     value={activeSearch}
                                     onChange={(e) => {
-                                        setActiveSearch(e.target.value);
+                                        const val = e.target.value;
+                                        setActiveSearch(val);
                                         setActivePage(1);
+                                        fetchQuotations(1, val);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
+                        {loadingQuotations && (
+                            <Flex justify="center" align="center" py={16}>
+                                <Spinner size="xl" color="orange.400" thickness="4px" speed="0.65s" />
+                            </Flex>
+                        )}
                         <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="560px">
                                 <Thead bg="gray.50">
@@ -1486,9 +1581,10 @@ const AdminEnquiries = () => {
                                 </Tbody>
                             </Table>
                         </Box>
-                        <PaginationControls currentPage={activePage} totalItems={filteredQuotations.length} onPageChange={setActivePage} />
+                        <PaginationControls currentPage={activePage} totalItems={quotationsTotal} onPageChange={setActivePage} />
                     </TabPanel>
 
+                    {/* ── Tab 3: SS History (status=Done or Reject) ────────── */}
                     <TabPanel p={0} pt={4}>
                         <Flex justify="space-between" mb={4} align="center">
                             <InputGroup maxW="350px" size="sm">
@@ -1500,12 +1596,19 @@ const AdminEnquiries = () => {
                                     borderRadius="xl"
                                     value={historySearch}
                                     onChange={(e) => {
-                                        setHistorySearch(e.target.value);
+                                        const val = e.target.value;
+                                        setHistorySearch(val);
                                         setHistoryPage(1);
+                                        fetchHistory(1, val);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
+                        {loadingHistory && (
+                            <Flex justify="center" align="center" py={16}>
+                                <Spinner size="xl" color="purple.400" thickness="4px" speed="0.65s" />
+                            </Flex>
+                        )}
                         <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="560px">
                                 <Thead bg="gray.50">
@@ -1565,10 +1668,10 @@ const AdminEnquiries = () => {
                                 </Tbody>
                             </Table>
                         </Box>
-                        <PaginationControls currentPage={historyPage} totalItems={filteredHistory.length} onPageChange={setHistoryPage} />
+                        <PaginationControls currentPage={historyPage} totalItems={historyTotal} onPageChange={setHistoryPage} />
                     </TabPanel>
 
-                    {/* WhatsApp Logs Tab Panel */}
+                    {/* ── Tab 4: WhatsApp Logs (type=whatsapp) ─────────────── */}
                     <TabPanel p={0} pt={4}>
                         <Flex justify="space-between" mb={4} align="center">
                             <InputGroup maxW="350px" size="sm">
@@ -1580,12 +1683,19 @@ const AdminEnquiries = () => {
                                     borderRadius="xl"
                                     value={whatsappSearch}
                                     onChange={(e) => {
-                                        setWhatsappSearch(e.target.value);
+                                        const val = e.target.value;
+                                        setWhatsappSearch(val);
                                         setWhatsappPage(1);
+                                        fetchWhatsapp(1, val);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
+                        {loadingWhatsapp && (
+                            <Flex justify="center" align="center" py={16}>
+                                <Spinner size="xl" color="green.400" thickness="4px" speed="0.65s" />
+                            </Flex>
+                        )}
                         <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="500px">
                                 <Thead bg="green.50">
@@ -1698,14 +1808,13 @@ const AdminEnquiries = () => {
                                             </Td>
                                         </Tr>
                                     ))}
-                                    {filteredWhatsappLogs.length === 0 && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
+                                    {filteredWhatsappLogs.length === 0 && !loadingWhatsapp && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
                                 </Tbody>
                             </Table>
                         </Box>
-                        <PaginationControls currentPage={whatsappPage} totalItems={filteredWhatsappLogs.length} onPageChange={setWhatsappPage} />
+                        <PaginationControls currentPage={whatsappPage} totalItems={whatsappTotal} onPageChange={setWhatsappPage} />
                     </TabPanel>
                 </TabPanels>
-                )}
             </Tabs>
 
             {/* ENQUIRY DETAILS / CREATE QUOTE MODAL */}
