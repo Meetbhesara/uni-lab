@@ -633,7 +633,7 @@ const getImageUrl = (path) => {
 const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
     const toast = useToast();
     const { clearCart, removeFromCart, updateQuantity } = useCart();
-    const { user, phoneRegister, sendOtp, verifyOtp } = useAuth();
+    const { user, phoneLogin, phoneRegister, sendOtp, verifyOtp } = useAuth();
     const navigate = useNavigate();
 
     const [isSending, setIsSending] = React.useState(false);

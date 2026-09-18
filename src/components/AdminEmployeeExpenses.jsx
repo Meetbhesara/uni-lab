@@ -32,7 +32,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
 
     const [sites, setSites] = useState([]);
     const [employees, setEmployees] = useState([]);
-    const { isOpen, onClose } = useDisclosure();
+    const { isOpen, onOpen, onClose } = useDisclosure();
     const [submitting, setSubmitting] = useState(false);
     const [expenseForm, setExpenseForm] = useState({
         date: new Date().toISOString().slice(0, 10),
@@ -304,7 +304,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                 const fullClient = fullSite?.client;
                 if (fullSite) {
                     const cShortId = (fullClient?.clientId || 'unknown').toLowerCase();
-                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/[<>:"/\\|?*]+/g, '_');
+                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
                     const sId = fullSite?.siteId || '0000';
                     formData.append(`site_${idx}_clientShortId`, cShortId);
                     formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
@@ -321,7 +321,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                 const fullSite = sites.find(s => s._id === allocations[0].siteId);
                 const fullClient = fullSite?.client;
                 formData.append('clientShortId', (fullClient?.clientId || 'unknown').toLowerCase());
-                formData.append('siteSubfolder', `${fullSite?.siteId || '0000'}-${(fullSite?.siteName || 'unknown').trim().replace(/[<>:"/\\|?*]+/g, '_')}`);
+                formData.append('siteSubfolder', `${fullSite?.siteId || '0000'}-${(fullSite?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_')}`);
             }
 
             const res = await api.post('/employee-expense/admin/add-expense', formData, {
@@ -433,7 +433,7 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
 
         if (reportType === 'EmployeeSiteLedger') {
             let csvContent = "SR. NO.,DATE,CLIENT NAME,SITE NAME,CREDIT,DEBIT,NET (Cr-Dr)\n";
-
+            let currentSrNo = 0;
             let totalCr = 0;
             let totalDr = 0;
 
@@ -1354,7 +1354,11 @@ const AdminEmployeeExpenses = ({ employeeId, employeeName, externalReportType, g
                                 : '-';
                             const attColor = attendance === 'P' ? 'green.400' : attendance === 'HD' ? 'orange.400' : attendance === 'A' ? 'red.400' : 'gray.400';
                             const attRemark = exp?.attendanceRemark || '-';
-
+                            const sideWork = exp?.clientSites?.map(cs => {
+                                const siteName = cs.siteId?.siteName || '';
+                                const ledgerPart = cs.ledger ? ` [${cs.ledger.toUpperCase()}]` : '';
+                                return `${siteName}${ledgerPart}`;
+                            }).filter(Boolean) || [];
 
                             // Build combined line items for this date
                             const allItems = [];

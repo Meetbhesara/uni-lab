@@ -15,6 +15,7 @@ const EmployeeExpenses = () => {
     const [sites, setSites] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [myExpenses, setMyExpenses] = useState([]);
+    const [mySchedules, setMySchedules] = useState([]);
 
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');

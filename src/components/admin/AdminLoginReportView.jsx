@@ -13,6 +13,7 @@ const AdminLoginReportView = () => {
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState([]);
     const [daysInMonth, setDaysInMonth] = useState(30);
+    const [evaluateUpToDay, setEvaluateUpToDay] = useState(30);
     const [searchQuery, setSearchQuery] = useState('');
     const toast = useToast();
 
