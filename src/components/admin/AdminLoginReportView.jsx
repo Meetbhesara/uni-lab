@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Box, Flex, Text, Heading, VStack, HStack, Select, Spinner, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, Icon, useToast, Tooltip, Input
+    Box, Flex, Text, Heading, VStack, HStack, Spinner, Table, Thead, Tbody, Tr, Th, Td,
+    Badge, Button, Icon, useToast, Tooltip, Input, Divider
 } from '@chakra-ui/react';
-import { FiDownload, FiUserCheck, FiCalendar, FiClock, FiAlertCircle } from 'react-icons/fi';
+import { FiDownload, FiCalendar, FiClock, FiAlertCircle, FiSearch, FiRefreshCw } from 'react-icons/fi';
+import { MdAdminPanelSettings } from 'react-icons/md';
+import { RiVipCrownFill } from 'react-icons/ri';
 import api from '../../api/axios';
 
 const AdminLoginReportView = () => {
@@ -12,9 +15,11 @@ const AdminLoginReportView = () => {
     });
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState([]);
+    const [superAdminData, setSuperAdminData] = useState([]);
     const [daysInMonth, setDaysInMonth] = useState(30);
     const [evaluateUpToDay, setEvaluateUpToDay] = useState(30);
     const [searchQuery, setSearchQuery] = useState('');
+    const [activeTab, setActiveTab] = useState('all');
     const toast = useToast();
 
     useEffect(() => {
@@ -24,9 +29,11 @@ const AdminLoginReportView = () => {
     const fetchReport = async () => {
         setLoading(true);
         try {
-            const res = await api.get(`/auth/admin-login-report?month=${month}`);
+            const res = await api.get(`/auth/admin-login-report?month=${month}&includeSuperAdmin=true`);
             if (res.data.success) {
-                setReportData(res.data.data);
+                const allData = res.data.data || [];
+                setSuperAdminData(allData.filter(a => a.isSuperAdmin));
+                setReportData(allData.filter(a => !a.isSuperAdmin));
                 setDaysInMonth(res.data.daysInMonth);
                 setEvaluateUpToDay(res.data.evaluateUpToDay);
             }
@@ -39,9 +46,33 @@ const AdminLoginReportView = () => {
                 duration: 3000,
                 isClosable: true
             });
-        } finally {
-            setLoading(false);
         }
+        setLoading(false);
+    };
+
+    const isDaySunday = (dayNum) => {
+        if (!month) return false;
+        const [year, m] = month.split('-');
+        return new Date(parseInt(year), parseInt(m) - 1, dayNum).getDay() === 0;
+    };
+
+    const getDisplayData = () => {
+        const combinedAll = [
+            ...superAdminData.map(a => ({ ...a, _isSuperAdmin: true })),
+            ...reportData.map(a => ({ ...a, _isSuperAdmin: false }))
+        ];
+        let base = activeTab === 'superadmin'
+            ? superAdminData.map(a => ({ ...a, _isSuperAdmin: true }))
+            : activeTab === 'admin'
+                ? reportData.map(a => ({ ...a, _isSuperAdmin: false }))
+                : combinedAll;
+        if (!searchQuery.trim()) return base;
+        const q = searchQuery.toLowerCase();
+        return base.filter(a =>
+            a.name?.toLowerCase().includes(q) ||
+            a.email?.toLowerCase().includes(q) ||
+            a.phone?.includes(searchQuery)
+        );
     };
 
     const getDayHeaderInfo = (dayNum) => {
@@ -54,23 +85,32 @@ const AdminLoginReportView = () => {
         return { dateStr, dayName, csvHeader };
     };
 
+    const filteredData = getDisplayData();
+    const totalPresent = filteredData.reduce((s, a) => s + (a.presentDays || 0), 0);
+    const totalAbsent = filteredData.reduce((s, a) => s + (a.absentDays || 0), 0);
+    const avgRate = filteredData.length
+        ? Math.round(filteredData.reduce((s, a) => s + (a.attendancePercentage || 0), 0) / filteredData.length)
+        : 0;
+    const tabs = [
+        { key: 'all', label: `All (${superAdminData.length + reportData.length})`, color: 'purple' },
+        { key: 'superadmin', label: `Super Admins (${superAdminData.length})`, color: 'yellow' },
+        { key: 'admin', label: `Admins (${reportData.length})`, color: 'blue' },
+    ];
+
     const handleExportCSV = () => {
-        if (!reportData.length) return;
-
-        // Build headers
+        const data = getDisplayData();
+        if (!data.length) return;
         const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => getDayHeaderInfo(i + 1).csvHeader).join(',');
-        let csv = `Admin Name,Email,Phone,Present Days,Absent Days,Attendance %,${dayHeaders}\n`;
-
-        reportData.forEach(admin => {
-            const dayStatuses = admin.dailyAttendance.map(d => {
+        let csv = `Role,Admin Name,Email,Phone,Present Days,Absent Days,Attendance %,${dayHeaders}\n`;
+        data.forEach(admin => {
+            const dayStatuses = (admin.dailyAttendance || []).map(d => {
                 if (d.status === 'Present') return `Present (${d.firstLogin})`;
-                return d.status;
+                return d.status || '-';
             }).join(',');
-            
             const clean = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
-            csv += `${clean(admin.name)},${clean(admin.email)},${clean(admin.phone)},${admin.presentDays},${admin.absentDays},${admin.attendancePercentage}%,${dayStatuses}\n`;
+            const role = admin._isSuperAdmin ? 'Super Admin' : 'Admin';
+            csv += `${clean(role)},${clean(admin.name)},${clean(admin.email)},${clean(admin.phone)},${admin.presentDays ?? 'N/A'},${admin.absentDays ?? 'N/A'},${admin.attendancePercentage != null ? admin.attendancePercentage + '%' : 'N/A'},${dayStatuses}\n`;
         });
-
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -82,82 +122,58 @@ const AdminLoginReportView = () => {
     };
 
     const handleExportExcelColor = () => {
-        if (!reportData.length) return;
-
+        const data = getDisplayData();
+        if (!data.length) return;
         let html = `
         <html xmlns:x="urn:schemas-microsoft-com:office:excel">
-        <head>
-            <meta charset="utf-8">
-            <style>
-                table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
-                th { background-color: #4C51BF; color: #FFFFFF; font-weight: bold; border: 1px solid #2D3748; padding: 10px; text-align: center; }
-                td { border: 1px solid #CBD5E0; padding: 8px; text-align: center; font-size: 12px; }
-                .present { background-color: #C6F6D5; color: #22543D; font-weight: bold; }
-                .absent { background-color: #FED7D7; color: #742A2A; font-weight: bold; }
-                .notjoined { background-color: #EDF2F7; color: #718096; }
-                .upcoming { background-color: #F7FAFC; color: #A0AEC0; }
-                .name-col { text-align: left; font-weight: bold; background-color: #F8FAFC; }
-            </style>
-        </head>
+        <head><meta charset="utf-8"><style>
+            table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
+            th { background-color: #4C51BF; color: #FFFFFF; font-weight: bold; border: 1px solid #2D3748; padding: 10px; text-align: center; }
+            td { border: 1px solid #CBD5E0; padding: 8px; text-align: center; font-size: 12px; }
+            .present { background-color: #C6F6D5; color: #22543D; font-weight: bold; }
+            .absent { background-color: #FED7D7; color: #742A2A; font-weight: bold; }
+            .notjoined { background-color: #EDF2F7; color: #718096; }
+            .upcoming { background-color: #F7FAFC; color: #A0AEC0; }
+            .name-col { text-align: left; font-weight: bold; background-color: #F8FAFC; }
+            .sa-row { background-color: #FFFFF0; }
+        </style></head>
         <body>
             <h2>Admin Login Attendance Report (${month})</h2>
-            <p>Note: At least 1 daily login is required for Present status. Super Admins are excluded from attendance evaluation.</p>
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 50px;">#</th>
-                        <th style="width: 200px; text-align: left;">Admin Name</th>
-                        <th style="width: 180px; text-align: left;">Email / Phone</th>
-                        <th style="width: 80px;">Present</th>
-                        <th style="width: 80px;">Absent</th>
-                        <th style="width: 80px;">Rate</th>`;
-
+            <p>⭐ Super Admins included. At least 1 daily login = Present.</p>
+            <table><thead><tr>
+                <th style="width:50px;">#</th>
+                <th style="width:80px;">Role</th>
+                <th style="width:200px;text-align:left;">Admin Name</th>
+                <th style="width:180px;text-align:left;">Email / Phone</th>
+                <th style="width:80px;">Present</th>
+                <th style="width:80px;">Absent</th>
+                <th style="width:80px;">Rate</th>`;
         for (let i = 1; i <= daysInMonth; i++) {
             const { dateStr, dayName } = getDayHeaderInfo(i);
-            const dayLabel = `${dateStr}<br/><span style="font-size: 10px; color: #E9D8FD;">${dayName}</span>`;
-            html += `<th style="width: 95px;">${dayLabel}</th>`;
+            html += `<th style="width:95px;">${dateStr}<br/><span style="font-size:10px;color:#E9D8FD;">${dayName}</span></th>`;
         }
-
-        html += `   </tr>
-                </thead>
-                <tbody>`;
-
-        const filtered = reportData.filter(a => 
-            a.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            a.email?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-
-        filtered.forEach((admin, idx) => {
-            html += `
-                    <tr>
-                        <td style="font-weight: bold;">${idx + 1}</td>
-                        <td class="name-col">${admin.name}</td>
-                        <td style="text-align: left;">${admin.email || ''}<br/>${admin.phone || ''}</td>
-                        <td style="color: #276749; font-weight: bold; background-color: #F0FFF4;">${admin.presentDays}</td>
-                        <td style="color: #9B2C2C; font-weight: bold; background-color: #FFF5F5;">${admin.absentDays}</td>
-                        <td style="font-weight: bold;">${admin.attendancePercentage}%</td>`;
-
-            admin.dailyAttendance.forEach(d => {
-                let cellClass = 'upcoming';
-                let content = '-';
-                if (d.status === 'Present') {
-                    cellClass = 'present';
-                    content = `PRESENT<br/><span style="font-size: 10px; color: #234E52;">In: ${d.firstLogin}<br/>Out: ${d.logoutTime || d.lastLogin}</span>`;
-                } else if (d.status === 'Absent') {
-                    cellClass = 'absent';
-                    content = 'ABSENT';
-                } else if (d.status === 'Not Joined') {
-                    cellClass = 'notjoined';
-                    content = 'N/A';
-                }
+        html += `</tr></thead><tbody>`;
+        data.forEach((admin, idx) => {
+            const roleLabel = admin._isSuperAdmin ? '⭐ Super Admin' : '🔵 Admin';
+            const rowClass = admin._isSuperAdmin ? 'sa-row' : '';
+            html += `<tr class="${rowClass}">
+                <td style="font-weight:bold;">${idx + 1}</td>
+                <td style="font-size:11px;font-weight:bold;">${roleLabel}</td>
+                <td class="name-col">${admin.name}</td>
+                <td style="text-align:left;">${admin.email || ''}<br/>${admin.phone || ''}</td>
+                <td style="color:#276749;font-weight:bold;background-color:#F0FFF4;">${admin.presentDays ?? 'N/A'}</td>
+                <td style="color:#9B2C2C;font-weight:bold;background-color:#FFF5F5;">${admin.absentDays ?? 'N/A'}</td>
+                <td style="font-weight:bold;">${admin.attendancePercentage != null ? admin.attendancePercentage + '%' : 'N/A'}</td>`;
+            (admin.dailyAttendance || []).forEach(d => {
+                let cellClass = 'upcoming'; let content = '-';
+                if (d.status === 'Present') { cellClass = 'present'; content = `PRESENT<br/><span style="font-size:10px;">In:${d.firstLogin}<br/>Out:${d.logoutTime || d.lastLogin}</span>`; }
+                else if (d.status === 'Absent') { cellClass = 'absent'; content = 'ABSENT'; }
+                else if (d.status === 'Not Joined') { cellClass = 'notjoined'; content = 'N/A'; }
                 html += `<td class="${cellClass}">${content}</td>`;
             });
-
             html += `</tr>`;
         });
-
         html += `</tbody></table></body></html>`;
-
         const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -168,26 +184,21 @@ const AdminLoginReportView = () => {
         document.body.removeChild(link);
     };
 
-    const filteredData = reportData.filter(a => 
-        a.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        a.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.phone?.includes(searchQuery)
-    );
-
     return (
         <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" boxShadow="md" border="1px" borderColor="gray.100">
-            <Flex justify="space-between" align={{ base: 'start', md: 'center' }} direction={{ base: 'column', md: 'row' }} mb={6} gap={4}>
+
+            {/* ── Header ─────────────────────────────────────── */}
+            <Flex justify="space-between" align={{ base: 'start', md: 'center' }} direction={{ base: 'column', md: 'row' }} mb={5} gap={4}>
                 <VStack align="start" spacing={1}>
                     <HStack>
-                        <Icon as={FiUserCheck} color="purple.600" w={6} h={6} />
+                        <Icon as={MdAdminPanelSettings} color="purple.600" w={6} h={6} />
                         <Heading size="md" color="gray.800">Admin Login Attendance Report</Heading>
                     </HStack>
                     <Text fontSize="xs" color="gray.500" fontWeight="medium">
-                        Tracks daily presence when administrators log in. At least 1 login per day is required for Present status. Super Admins are exempted.
+                        Tracks daily admin &amp; super admin presence. At least 1 login per day = Present.
                     </Text>
                 </VStack>
-
-                <HStack spacing={3} wrap="wrap">
+                <HStack spacing={2} wrap="wrap">
                     <HStack bg="gray.50" px={3} py={1} borderRadius="lg" border="1px" borderColor="gray.200">
                         <Icon as={FiCalendar} color="gray.500" />
                         <Input
@@ -200,60 +211,138 @@ const AdminLoginReportView = () => {
                             color="purple.700"
                         />
                     </HStack>
-
-                    <Button
-                        size="sm"
-                        colorScheme="green"
-                        leftIcon={<FiDownload />}
-                        onClick={handleExportExcelColor}
-                        boxShadow="sm"
-                        _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
-                    >
-                        Export Colorful Excel (.xls)
+                    <Tooltip label="Refresh data">
+                        <Button size="sm" variant="outline" colorScheme="purple" onClick={fetchReport} isLoading={loading}>
+                            <Icon as={FiRefreshCw} />
+                        </Button>
+                    </Tooltip>
+                    <Button size="sm" colorScheme="teal" leftIcon={<FiDownload />} onClick={handleExportCSV} variant="outline" boxShadow="sm">
+                        CSV
+                    </Button>
+                    <Button size="sm" colorScheme="green" leftIcon={<FiDownload />} onClick={handleExportExcelColor} boxShadow="sm" _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}>
+                        Colorful Excel
                     </Button>
                 </HStack>
             </Flex>
 
-            <Flex mb={4} justify="space-between" align="center">
-                <Input
-                    placeholder="Search admin by name, email, or phone..."
-                    size="sm"
-                    maxW="300px"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    borderRadius="lg"
-                />
-                <Text fontSize="xs" color="gray.500">
-                    Showing {filteredData.length} Administrator(s)
+            {/* ── Summary Stats ─────────────────────────────── */}
+            {!loading && filteredData.length > 0 && (
+                <HStack mb={4} spacing={3} wrap="wrap">
+                    <Box px={4} py={2} borderRadius="xl" bg="purple.50" border="1px" borderColor="purple.100">
+                        <Text fontSize="10px" color="purple.500" fontWeight="800" textTransform="uppercase" letterSpacing="wide">People</Text>
+                        <Text fontWeight="extrabold" fontSize="lg" color="purple.700">{filteredData.length}</Text>
+                    </Box>
+                    <Box px={4} py={2} borderRadius="xl" bg="green.50" border="1px" borderColor="green.100">
+                        <Text fontSize="10px" color="green.500" fontWeight="800" textTransform="uppercase" letterSpacing="wide">Total Present Days</Text>
+                        <Text fontWeight="extrabold" fontSize="lg" color="green.700">{totalPresent}</Text>
+                    </Box>
+                    <Box px={4} py={2} borderRadius="xl" bg="red.50" border="1px" borderColor="red.100">
+                        <Text fontSize="10px" color="red.500" fontWeight="800" textTransform="uppercase" letterSpacing="wide">Total Absent Days</Text>
+                        <Text fontWeight="extrabold" fontSize="lg" color="red.700">{totalAbsent}</Text>
+                    </Box>
+                    <Box px={4} py={2} borderRadius="xl" bg="blue.50" border="1px" borderColor="blue.100">
+                        <Text fontSize="10px" color="blue.500" fontWeight="800" textTransform="uppercase" letterSpacing="wide">Avg Attendance</Text>
+                        <Text fontWeight="extrabold" fontSize="lg" color="blue.700">{avgRate}%</Text>
+                    </Box>
+                </HStack>
+            )}
+
+            {/* ── Filter Tabs ───────────────────────────────── */}
+            <HStack spacing={2} mb={4} wrap="wrap">
+                {tabs.map(tab => (
+                    <Button
+                        key={tab.key}
+                        size="xs"
+                        borderRadius="full"
+                        colorScheme={tab.color}
+                        variant={activeTab === tab.key ? 'solid' : 'outline'}
+                        onClick={() => setActiveTab(tab.key)}
+                        fontWeight="700"
+                        leftIcon={tab.key === 'superadmin' ? <RiVipCrownFill /> : undefined}
+                    >
+                        {tab.label}
+                    </Button>
+                ))}
+            </HStack>
+
+            {/* ── Search ────────────────────────────────────── */}
+            <Flex mb={4} justify="space-between" align="center" gap={3} wrap="wrap">
+                <HStack bg="gray.50" px={3} py={1.5} borderRadius="lg" border="1px" borderColor="gray.200" flex="1" maxW="320px">
+                    <Icon as={FiSearch} color="gray.400" />
+                    <Input
+                        placeholder="Search by name, email or phone..."
+                        size="sm"
+                        variant="unstyled"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </HStack>
+                <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                    Showing <strong>{filteredData.length}</strong> record(s)
                 </Text>
             </Flex>
 
+            {/* ── Legend ────────────────────────────────────── */}
+            <HStack spacing={4} mb={3} wrap="wrap">
+                <HStack spacing={1}>
+                    <Icon as={RiVipCrownFill} color="yellow.500" w={3} h={3} />
+                    <Text fontSize="10px" color="gray.600" fontWeight="bold">Super Admin</Text>
+                </HStack>
+                <HStack spacing={1}>
+                    <Box w={3} h={3} borderRadius="sm" bg="purple.500" />
+                    <Text fontSize="10px" color="gray.600" fontWeight="bold">Admin</Text>
+                </HStack>
+                <HStack spacing={1}>
+                    <Box w={3} h={3} borderRadius="sm" bg="green.200" />
+                    <Text fontSize="10px" color="gray.600" fontWeight="bold">Present</Text>
+                </HStack>
+                <HStack spacing={1}>
+                    <Box w={3} h={3} borderRadius="sm" bg="red.200" />
+                    <Text fontSize="10px" color="gray.600" fontWeight="bold">Absent</Text>
+                </HStack>
+                <HStack spacing={1}>
+                    <Box w={3} h={3} borderRadius="sm" bg="orange.100" />
+                    <Text fontSize="10px" color="gray.600" fontWeight="bold">Sunday</Text>
+                </HStack>
+            </HStack>
+
+            <Divider mb={4} />
+
+            {/* ── Table ─────────────────────────────────────── */}
             {loading ? (
                 <Flex justify="center" align="center" py={12}>
-                    <Spinner size="xl" color="purple.600" thickness="4px" />
+                    <VStack>
+                        <Spinner size="xl" color="purple.600" thickness="4px" />
+                        <Text fontSize="sm" color="gray.500">Loading attendance data...</Text>
+                    </VStack>
                 </Flex>
             ) : filteredData.length === 0 ? (
                 <Box p={8} textAlign="center" bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300">
                     <Icon as={FiAlertCircle} w={8} h={8} color="gray.400" mb={2} />
-                    <Text fontWeight="bold" color="gray.600">No Regular Admin Users Found</Text>
-                    <Text fontSize="xs" color="gray.400">Regular administrator accounts will appear here. Super Admins are excluded as per report rules.</Text>
+                    <Text fontWeight="bold" color="gray.600">No Records Found</Text>
+                    <Text fontSize="xs" color="gray.400" mt={1}>
+                        {searchQuery ? 'No results match your search.' : 'No admin login data available for this month.'}
+                    </Text>
                 </Box>
             ) : (
                 <Box overflowX="auto" border="1px" borderColor="gray.200" borderRadius="xl">
                     <Table size="sm" variant="simple">
-                        <Thead bg="purple.700">
+                        <Thead>
                             <Tr>
-                                <Th color="white" py={3} minW="180px">Administrator</Th>
-                                <Th color="white" py={3} textAlign="center" w="80px">Present</Th>
-                                <Th color="white" py={3} textAlign="center" w="80px">Absent</Th>
-                                <Th color="white" py={3} textAlign="center" w="80px">Rate</Th>
+                                <Th bg="purple.700" color="white" py={3} minW="200px" position="sticky" left={0} zIndex={3}>
+                                    Administrator
+                                </Th>
+                                <Th bg="purple.700" color="white" py={3} textAlign="center" w="80px">Present</Th>
+                                <Th bg="purple.700" color="white" py={3} textAlign="center" w="80px">Absent</Th>
+                                <Th bg="purple.700" color="white" py={3} textAlign="center" w="80px">Rate</Th>
                                 {Array.from({ length: daysInMonth }, (_, i) => {
                                     const { dateStr, dayName } = getDayHeaderInfo(i + 1);
+                                    const isSun = isDaySunday(i + 1);
                                     return (
-                                        <Th key={i} color="white" py={2} px={1} textAlign="center" minW="85px">
+                                        <Th key={i} py={2} px={1} textAlign="center" minW="85px" bg={isSun ? 'orange.600' : 'purple.700'} color="white">
                                             <VStack spacing={0}>
                                                 <Text fontSize="11px" fontWeight="extrabold" lineHeight="1.2">{dateStr}</Text>
-                                                <Text fontSize="9px" color="purple.200" fontWeight="bold">{dayName}</Text>
+                                                <Text fontSize="9px" color={isSun ? 'orange.100' : 'purple.200'} fontWeight="bold">{dayName}</Text>
                                             </VStack>
                                         </Th>
                                     );
@@ -261,74 +350,87 @@ const AdminLoginReportView = () => {
                             </Tr>
                         </Thead>
                         <Tbody>
-                            {filteredData.map(admin => (
-                                <Tr key={admin._id} _hover={{ bg: "gray.50" }}>
-                                    <Td py={3} borderRight="1px" borderColor="gray.100" bg="white" position="sticky" left={0} zIndex={1} boxShadow="2px 0 5px rgba(0,0,0,0.03)">
-                                        <VStack align="start" spacing={0}>
-                                            <Text fontWeight="bold" fontSize="xs" color="gray.800">{admin.name}</Text>
-                                            <Text fontSize="9px" color="gray.500">{admin.email || admin.phone}</Text>
-                                        </VStack>
-                                    </Td>
-                                    <Td textAlign="center" fontWeight="extrabold" color="green.600" bg="green.50">
-                                        {admin.presentDays}
-                                    </Td>
-                                    <Td textAlign="center" fontWeight="extrabold" color="red.600" bg="red.50">
-                                        {admin.absentDays}
-                                    </Td>
-                                    <Td textAlign="center" fontWeight="bold">
-                                        <Badge colorScheme={admin.attendancePercentage >= 75 ? "green" : admin.attendancePercentage >= 50 ? "orange" : "red"}>
-                                            {admin.attendancePercentage}%
-                                        </Badge>
-                                    </Td>
-                                    {admin.dailyAttendance.map(d => {
-                                        if (d.status === 'Present') {
-                                            return (
-                                                <Td key={d.day} textAlign="center" bg="green.50" borderRight="1px" borderColor="green.100" p={1.5}>
-                                                    <Tooltip label={`Login Time: ${d.firstLogin} | Logout Time: ${d.logoutTime || d.lastLogin} (${d.loginCount} session${d.loginCount > 1 ? 's' : ''})`}>
-                                                        <Box>
-                                                            <Badge colorScheme="green" fontSize="9px" px={1.5} py={0.5} borderRadius="md" mb={1}>
-                                                                PRESENT
-                                                            </Badge>
-                                                            <VStack spacing={0.5} align="center">
-                                                                <HStack justify="center" spacing={1}>
-                                                                    <Icon as={FiClock} w={2.5} h={2.5} color="green.700" />
-                                                                    <Text fontSize="8px" fontWeight="extrabold" color="green.800">In: {d.firstLogin}</Text>
-                                                                </HStack>
-                                                                <HStack justify="center" spacing={1}>
-                                                                    <Icon as={FiClock} w={2.5} h={2.5} color={d.logoutTime?.includes('Active') ? 'blue.600' : 'red.600'} />
-                                                                    <Text fontSize="8px" fontWeight="extrabold" color={d.logoutTime?.includes('Active') ? 'blue.700' : 'red.700'}>
-                                                                        Out: {d.logoutTime || d.lastLogin}
-                                                                    </Text>
-                                                                </HStack>
-                                                            </VStack>
-                                                        </Box>
-                                                    </Tooltip>
-                                                </Td>
-                                            );
-                                        } else if (d.status === 'Absent') {
-                                            return (
-                                                <Td key={d.day} textAlign="center" bg="red.50" borderRight="1px" borderColor="red.100">
-                                                    <Badge colorScheme="red" fontSize="9px" px={1.5} py={0.5} borderRadius="md">
-                                                        ABSENT
-                                                    </Badge>
-                                                </Td>
-                                            );
-                                        } else if (d.status === 'Not Joined') {
-                                            return (
-                                                <Td key={d.day} textAlign="center" bg="gray.50" borderRight="1px" borderColor="gray.100">
-                                                    <Text fontSize="9px" color="gray.400" fontStyle="italic">N/A</Text>
-                                                </Td>
-                                            );
-                                        } else {
-                                            return (
-                                                <Td key={d.day} textAlign="center" bg="gray.50" borderRight="1px" borderColor="gray.100">
-                                                    <Text fontSize="10px" color="gray.300">—</Text>
-                                                </Td>
-                                            );
-                                        }
-                                    })}
-                                </Tr>
-                            ))}
+                            {filteredData.map((admin, rowIdx) => {
+                                const isSA = admin._isSuperAdmin;
+                                return (
+                                    <Tr key={admin._id || rowIdx} _hover={{ bg: isSA ? 'yellow.50' : 'gray.50' }} bg={isSA ? 'yellow.50' : 'white'}>
+                                        <Td py={3} borderRight="1px" borderColor={isSA ? 'yellow.200' : 'gray.100'} bg={isSA ? 'yellow.50' : 'white'} position="sticky" left={0} zIndex={1} boxShadow="2px 0 5px rgba(0,0,0,0.03)">
+                                            <HStack spacing={2} align="center">
+                                                {isSA
+                                                    ? <Icon as={RiVipCrownFill} color="yellow.500" w={4} h={4} flexShrink={0} />
+                                                    : <Icon as={MdAdminPanelSettings} color="purple.400" w={4} h={4} flexShrink={0} />
+                                                }
+                                                <VStack align="start" spacing={0}>
+                                                    <HStack spacing={1}>
+                                                        <Text fontWeight="bold" fontSize="xs" color={isSA ? 'yellow.800' : 'gray.800'}>{admin.name}</Text>
+                                                        {isSA && <Badge colorScheme="yellow" fontSize="7px" px={1} py={0} borderRadius="sm">SUPER</Badge>}
+                                                    </HStack>
+                                                    <Text fontSize="9px" color="gray.500">{admin.email || admin.phone}</Text>
+                                                </VStack>
+                                            </HStack>
+                                        </Td>
+                                        <Td textAlign="center" fontWeight="extrabold" color="green.600" bg="green.50">
+                                            {admin.presentDays ?? <Text color="gray.300">—</Text>}
+                                        </Td>
+                                        <Td textAlign="center" fontWeight="extrabold" color="red.600" bg="red.50">
+                                            {admin.absentDays ?? <Text color="gray.300">—</Text>}
+                                        </Td>
+                                        <Td textAlign="center" fontWeight="bold">
+                                            {admin.attendancePercentage != null ? (
+                                                <Badge colorScheme={admin.attendancePercentage >= 75 ? 'green' : admin.attendancePercentage >= 50 ? 'orange' : 'red'}>
+                                                    {admin.attendancePercentage}%
+                                                </Badge>
+                                            ) : <Text fontSize="9px" color="gray.400">N/A</Text>}
+                                        </Td>
+                                        {(admin.dailyAttendance || []).map(d => {
+                                            const isSun = isDaySunday(d.day);
+                                            if (d.status === 'Present') {
+                                                return (
+                                                    <Td key={d.day} textAlign="center" bg={isSA ? 'green.100' : 'green.50'} borderRight="1px" borderColor="green.100" p={1.5}>
+                                                        <Tooltip label={`Login: ${d.firstLogin} | Logout: ${d.logoutTime || d.lastLogin} (${d.loginCount} session${d.loginCount > 1 ? 's' : ''})`}>
+                                                            <Box>
+                                                                <Badge colorScheme="green" fontSize="9px" px={1.5} py={0.5} borderRadius="md" mb={1}>PRESENT</Badge>
+                                                                <VStack spacing={0.5} align="center">
+                                                                    <HStack justify="center" spacing={1}>
+                                                                        <Icon as={FiClock} w={2.5} h={2.5} color="green.700" />
+                                                                        <Text fontSize="8px" fontWeight="extrabold" color="green.800">In: {d.firstLogin}</Text>
+                                                                    </HStack>
+                                                                    <HStack justify="center" spacing={1}>
+                                                                        <Icon as={FiClock} w={2.5} h={2.5} color={d.logoutTime?.includes('Active') ? 'blue.600' : 'red.600'} />
+                                                                        <Text fontSize="8px" fontWeight="extrabold" color={d.logoutTime?.includes('Active') ? 'blue.700' : 'red.700'}>
+                                                                            Out: {d.logoutTime || d.lastLogin}
+                                                                        </Text>
+                                                                    </HStack>
+                                                                </VStack>
+                                                            </Box>
+                                                        </Tooltip>
+                                                    </Td>
+                                                );
+                                            } else if (d.status === 'Absent') {
+                                                return (
+                                                    <Td key={d.day} textAlign="center" bg={isSun ? 'orange.50' : 'red.50'} borderRight="1px" borderColor="red.100">
+                                                        <Badge colorScheme={isSun ? 'orange' : 'red'} fontSize="9px" px={1.5} py={0.5} borderRadius="md">
+                                                            {isSun ? 'SUN' : 'ABSENT'}
+                                                        </Badge>
+                                                    </Td>
+                                                );
+                                            } else if (d.status === 'Not Joined') {
+                                                return (
+                                                    <Td key={d.day} textAlign="center" bg="gray.50" borderRight="1px" borderColor="gray.100">
+                                                        <Text fontSize="9px" color="gray.400" fontStyle="italic">N/A</Text>
+                                                    </Td>
+                                                );
+                                            } else {
+                                                return (
+                                                    <Td key={d.day} textAlign="center" bg={isSun ? 'orange.50' : 'gray.50'} borderRight="1px" borderColor="gray.100">
+                                                        <Text fontSize="10px" color={isSun ? 'orange.300' : 'gray.300'}>{isSun ? 'SUN' : '—'}</Text>
+                                                    </Td>
+                                                );
+                                            }
+                                        })}
+                                    </Tr>
+                                );
+                            })}
                         </Tbody>
                     </Table>
                 </Box>
