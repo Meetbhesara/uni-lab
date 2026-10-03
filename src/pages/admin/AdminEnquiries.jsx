@@ -65,7 +65,7 @@ const AdminEnquiries = () => {
 
     // Legacy refs kept for backward compat — unified modal handles both
     const isHistoryOpen = false;
-    const onHistoryClose = () => {};
+    const onHistoryClose = () => { };
     const historyTarget = null;
 
     const getImageUrl = (path) => {
@@ -121,7 +121,7 @@ const AdminEnquiries = () => {
     }, [policies]);
     const [customNotes, setCustomNotes] = useState("(1) Payment After Performer Invoice\n(2) Transportation And Packing Charge Will be Extra As Per Actual");
     const [newPolicy, setNewPolicy] = useState({ label: '', value: '' });
-    
+
     // Product Picker Modal State
     const { isOpen: isPickerOpen, onOpen: onPickerOpen, onClose: onPickerClose } = useDisclosure();
     const [pickerCategory, setPickerCategory] = useState(null);
@@ -311,9 +311,9 @@ const AdminEnquiries = () => {
         try {
             const endpoint = type === 'enquiry' ? `/enquiries/${id}` : `/quotations/${id}`;
             await api.put(endpoint, { status });
-            toast({ 
-                title: `Success`, 
-                description: `Quotation has been moved to ${status} status.`, 
+            toast({
+                title: `Success`,
+                description: `Quotation has been moved to ${status} status.`,
                 status: "success",
                 duration: 3000,
                 isClosable: true
@@ -337,10 +337,10 @@ const AdminEnquiries = () => {
         try {
             const endpoint = type === 'enquiry' ? `/enquiries/${id}` : `/quotations/${id}`;
             await api.delete(endpoint);
-            toast({ 
-                title: "Deleted!", 
-                description: `${type.charAt(0).toUpperCase() + type.slice(1)} has been removed.`, 
-                status: "success" 
+            toast({
+                title: "Deleted!",
+                description: `${type.charAt(0).toUpperCase() + type.slice(1)} has been removed.`,
+                status: "success"
             });
             onDeleteConfirmClose();
             fetchData();
@@ -548,11 +548,11 @@ const AdminEnquiries = () => {
                 };
             });
         }
-        
+
         const prevDiscount = lastQuote ? (lastQuote.discount || 0) : 0;
         setQuoteItems(initialItems);
         setQuoteDiscount(prevDiscount);
-        
+
         // Pass packaging if we want it too
         calculateTotals(initialItems, prevDiscount, lastQuote?.packaging || 0);
     };
@@ -619,7 +619,7 @@ const AdminEnquiries = () => {
             const cGst = parseFloat(item.calibrationGst !== undefined ? item.calibrationGst : item.gst) || 0;
             const qty = item.quantity || 1;
             const cQty = item.calibrationQuantity !== undefined ? item.calibrationQuantity : qty;
-            
+
             if (item.calibrationOptions?.standard !== false) {
                 const itemTotal = price * qty;
                 sub += itemTotal;
@@ -916,86 +916,86 @@ const AdminEnquiries = () => {
             const year = new Date().getFullYear();
             const tempRefNo = `XXXXXX-${year}`;
             const flattenedItems = quoteItems.flatMap(i => {
-            const rows = [];
-            if (i.calibrationOptions?.standard !== false) {
-                rows.push({
-                    ...i,
-                    price: parseFloat(i.price) || 0,
-                    quantity: i.quantity || 1,
-                    gst: parseFloat(i.gst) || 18,
-                    isCalibration: false
-                });
-            }
-            if (i.calibrationOptions?.calibrated === true) {
-                rows.push({
-                    ...i,
-                    price: parseFloat(i.calibrationPrice) || 0,
-                    quantity: i.calibrationQuantity !== undefined ? i.calibrationQuantity : (i.quantity || 1),
-                    gst: parseFloat(i.calibrationGst !== undefined ? i.calibrationGst : i.gst) || 18,
-                    isCalibration: true
-                });
-            }
-            if (rows.length === 0) {
-                rows.push({
-                    ...i,
-                    price: parseFloat(i.price) || 0,
-                    quantity: i.quantity || 1,
-                    gst: parseFloat(i.gst) || 18,
-                    isCalibration: false
-                });
-            }
-            return rows;
-        });
+                const rows = [];
+                if (i.calibrationOptions?.standard !== false) {
+                    rows.push({
+                        ...i,
+                        price: parseFloat(i.price) || 0,
+                        quantity: i.quantity || 1,
+                        gst: parseFloat(i.gst) || 18,
+                        isCalibration: false
+                    });
+                }
+                if (i.calibrationOptions?.calibrated === true) {
+                    rows.push({
+                        ...i,
+                        price: parseFloat(i.calibrationPrice) || 0,
+                        quantity: i.calibrationQuantity !== undefined ? i.calibrationQuantity : (i.quantity || 1),
+                        gst: parseFloat(i.calibrationGst !== undefined ? i.calibrationGst : i.gst) || 18,
+                        isCalibration: true
+                    });
+                }
+                if (rows.length === 0) {
+                    rows.push({
+                        ...i,
+                        price: parseFloat(i.price) || 0,
+                        quantity: i.quantity || 1,
+                        gst: parseFloat(i.gst) || 18,
+                        isCalibration: false
+                    });
+                }
+                return rows;
+            });
 
-        // Calculate totals for flattened items just for HTML generation to be accurate
-        const flatTotals = {
-            subtotal: 0,
-            gst: 0,
-            total: 0,
-            packaging: quoteTotals.packaging || 0,
-            packagingGst: quoteTotals.packagingGst || 0
-        };
-        flattenedItems.forEach(item => {
-            const itemTotal = item.price * (item.quantity || 1);
-            flatTotals.subtotal += itemTotal;
-            flatTotals.gst += itemTotal * ((parseFloat(item.gst) || 0) / 100);
-        });
-        const finalDiscount = parseFloat(quoteDiscount) || 0;
-        flatTotals.total = flatTotals.subtotal + flatTotals.gst + flatTotals.packaging + flatTotals.packagingGst - finalDiscount;
+            // Calculate totals for flattened items just for HTML generation to be accurate
+            const flatTotals = {
+                subtotal: 0,
+                gst: 0,
+                total: 0,
+                packaging: quoteTotals.packaging || 0,
+                packagingGst: quoteTotals.packagingGst || 0
+            };
+            flattenedItems.forEach(item => {
+                const itemTotal = item.price * (item.quantity || 1);
+                flatTotals.subtotal += itemTotal;
+                flatTotals.gst += itemTotal * ((parseFloat(item.gst) || 0) / 100);
+            });
+            const finalDiscount = parseFloat(quoteDiscount) || 0;
+            flatTotals.total = flatTotals.subtotal + flatTotals.gst + flatTotals.packaging + flatTotals.packagingGst - finalDiscount;
 
-        const htmlContent = generateHTML(
-            selectedEnquiry, flattenedItems, flatTotals, policies, customNotes, tempRefNo, finalDiscount,
-            quotePartyName, quoteAddress, quoteMobile, quoteEmail, quoteContactPerson
-        );
+            const htmlContent = generateHTML(
+                selectedEnquiry, flattenedItems, flatTotals, policies, customNotes, tempRefNo, finalDiscount,
+                quotePartyName, quoteAddress, quoteMobile, quoteEmail, quoteContactPerson
+            );
 
-        const payload = {
-            enquiryId: selectedEnquiry._id,
-            partyName: quotePartyName,
-            contactPerson: quoteContactPerson,
-            email: quoteEmail,
-            phone: quoteMobile,
-            address: quoteAddress,
-            items: flattenedItems.map(i => {
-                const pPrice = parseFloat(i.price) || 0;
-                const pQuantity = parseFloat(i.quantity) || 0;
-                const pGst = parseFloat(i.gst) || 0;
-                return {
-                    product: i.productId._id || i.productId,
-                    quantity: pQuantity,
-                    price: pPrice,
-                    gst: pGst,
-                    amount: (pPrice * pQuantity),
-                    size: i.size || '',
-                    selectedSizes: i.selectedSizes || [],
-                    isCalibration: i.isCalibration
-                };
-            }),
-            htmlContent,
-            status: 'Sent',
-            packaging: quoteTotals.packaging || 0,
-            packagingGst: quoteTotals.packagingGst || 0,
-            discount: finalDiscount
-        };
+            const payload = {
+                enquiryId: selectedEnquiry._id,
+                partyName: quotePartyName,
+                contactPerson: quoteContactPerson,
+                email: quoteEmail,
+                phone: quoteMobile,
+                address: quoteAddress,
+                items: flattenedItems.map(i => {
+                    const pPrice = parseFloat(i.price) || 0;
+                    const pQuantity = parseFloat(i.quantity) || 0;
+                    const pGst = parseFloat(i.gst) || 0;
+                    return {
+                        product: i.productId._id || i.productId,
+                        quantity: pQuantity,
+                        price: pPrice,
+                        gst: pGst,
+                        amount: (pPrice * pQuantity),
+                        size: i.size || '',
+                        selectedSizes: i.selectedSizes || [],
+                        isCalibration: i.isCalibration
+                    };
+                }),
+                htmlContent,
+                status: 'Sent',
+                packaging: quoteTotals.packaging || 0,
+                packagingGst: quoteTotals.packagingGst || 0,
+                discount: finalDiscount
+            };
 
             const response = await api.post('/quotations', payload);
             // Now regenerate HTML with the actual ref number from backend
@@ -1025,13 +1025,13 @@ const AdminEnquiries = () => {
     const handleSendWhatsApp = async (q) => {
         const phoneNumber = q.mobile || q.enquiryId?.phone || q.enquiry?.phone;
         if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 10) {
-             return toast({ title: "No valid 10-digit phone number found", status: "warning" });
+            return toast({ title: "No valid 10-digit phone number found", status: "warning" });
         }
         setSendingWhatsappId(q._id);
         try {
             const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Client';
             const message = `Hello *${clientName}*,\n\nHere is your *Quotation* from *Uni-BC*.\n\n*Reference:* ${q.refNo || 'N/A'}\n*Date:* ${new Date(q.createdAt).toLocaleDateString('en-GB')}\n*Grand Total:* ₹${q.grandTotal || '0'}\n\nThank you!`;
-            
+
             await api.post('/whatsapp/send-quotation', {
                 quotationId: q._id,
                 phone: phoneNumber,
@@ -1288,8 +1288,8 @@ const AdminEnquiries = () => {
                                 <InputLeftElement pointerEvents="none">
                                     <FiSearch color="gray.400" />
                                 </InputLeftElement>
-                                <Input 
-                                    placeholder="Search by sender name or contact..." 
+                                <Input
+                                    placeholder="Search by sender name or contact..."
                                     borderRadius="xl"
                                     value={enquirySearch}
                                     onChange={(e) => {
@@ -1338,12 +1338,12 @@ const AdminEnquiries = () => {
                                             <Td textAlign="right">
                                                 <HStack spacing={2} justify="flex-end">
                                                     <Button size="sm" colorScheme="brand" leftIcon={<FiEye />} onClick={() => handleViewEnquiry(e)}>View Details</Button>
-                                                    <IconButton 
-                                                        aria-label="Delete" 
-                                                        icon={<FiTrash />} 
-                                                        size="sm" 
-                                                        colorScheme="red" 
-                                                        variant="ghost" 
+                                                    <IconButton
+                                                        aria-label="Delete"
+                                                        icon={<FiTrash />}
+                                                        size="sm"
+                                                        colorScheme="red"
+                                                        variant="ghost"
                                                         onClick={() => handleDeleteRequest('enquiry', e._id)}
                                                     />
                                                 </HStack>
@@ -1364,8 +1364,8 @@ const AdminEnquiries = () => {
                                 <InputLeftElement pointerEvents="none">
                                     <FiSearch color="gray.400" />
                                 </InputLeftElement>
-                                <Input 
-                                    placeholder="Search by client or Ref No..." 
+                                <Input
+                                    placeholder="Search by client or Ref No..."
                                     borderRadius="xl"
                                     value={activeSearch}
                                     onChange={(e) => {
@@ -1396,188 +1396,188 @@ const AdminEnquiries = () => {
                                     </Tr>
                                 </Thead>
                                 <Tbody>
-                                {(() => {
-                                    // Pre-calculate the latest quotation ID for each enquiry so we know which ones are active
-                                    const latestIdsMap = new Map();
-                                    quotations.forEach(q => {
-                                        const enqId = q.enquiry?._id || q.enquiryId?._id || q.enquiry || q.enquiryId;
-                                        const key = typeof enqId === 'object' ? enqId.toString() : String(enqId);
-                                        if (!latestIdsMap.has(key)) {
-                                            latestIdsMap.set(key, q);
-                                        } else {
-                                            if (new Date(q.createdAt) > new Date(latestIdsMap.get(key).createdAt)) {
+                                    {(() => {
+                                        // Pre-calculate the latest quotation ID for each enquiry so we know which ones are active
+                                        const latestIdsMap = new Map();
+                                        quotations.forEach(q => {
+                                            const enqId = q.enquiry?._id || q.enquiryId?._id || q.enquiry || q.enquiryId;
+                                            const key = typeof enqId === 'object' ? enqId.toString() : String(enqId);
+                                            if (!latestIdsMap.has(key)) {
                                                 latestIdsMap.set(key, q);
+                                            } else {
+                                                if (new Date(q.createdAt) > new Date(latestIdsMap.get(key).createdAt)) {
+                                                    latestIdsMap.set(key, q);
+                                                }
                                             }
-                                        }
-                                    });
-                                    const latestQuotationIds = new Set(Array.from(latestIdsMap.values()).map(q => q._id));
+                                        });
+                                        const latestQuotationIds = new Set(Array.from(latestIdsMap.values()).map(q => q._id));
 
-                                    return paginatedQuotations.map(q => {
-                                        let refSuffix = '';
-                                        if (q.refNo) {
-                                            const lowerRef = q.refNo.toLowerCase();
-                                            if (lowerRef.includes('(r')) {
-                                                refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
+                                        return paginatedQuotations.map(q => {
+                                            let refSuffix = '';
+                                            if (q.refNo) {
+                                                const lowerRef = q.refNo.toLowerCase();
+                                                if (lowerRef.includes('(r')) {
+                                                    refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
+                                                }
                                             }
-                                        }
-                                        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
-                                        const totalAmt = q.grandTotal || q.totalAmount || 0;
-                                        
-                                        const nextDate = q.nextFollowUp 
-                                            ? new Date(q.nextFollowUp)
-                                            : q.firstFollowUpDate
-                                            ? new Date(q.firstFollowUpDate)
-                                            : (q.status === 'Done' || q.status === 'Reject')
-                                            ? null
-                                            : new Date(new Date(q.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
-                                        
-                                        const today = new Date(); today.setHours(0,0,0,0);
-                                        const isOverdue = nextDate && nextDate <= today;
-                                        const followUpCount = q.followUps?.length || 0;
-                                        
-                                        const isAbsoluteLatest = latestQuotationIds.has(q._id);
+                                            const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
+                                            const totalAmt = q.grandTotal || q.totalAmount || 0;
 
-                                        let rowBgColor = "transparent";
-                                        let hoverBgColor = "gray.50";
-                                        if (isAbsoluteLatest) {
-                                            if (nextDate) {
-                                                const isToday = nextDate.toDateString() === new Date().toDateString();
-                                                const isPast = nextDate < today;
-                                                
-                                                if (isToday) {
-                                                    rowBgColor = "orange.50";
-                                                    hoverBgColor = "orange.100";
-                                                } else if (isPast) {
-                                                    rowBgColor = "red.50";
-                                                    hoverBgColor = "red.100";
+                                            const nextDate = q.nextFollowUp
+                                                ? new Date(q.nextFollowUp)
+                                                : q.firstFollowUpDate
+                                                    ? new Date(q.firstFollowUpDate)
+                                                    : (q.status === 'Done' || q.status === 'Reject')
+                                                        ? null
+                                                        : new Date(new Date(q.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
+
+                                            const today = new Date(); today.setHours(0, 0, 0, 0);
+                                            const isOverdue = nextDate && nextDate <= today;
+                                            const followUpCount = q.followUps?.length || 0;
+
+                                            const isAbsoluteLatest = latestQuotationIds.has(q._id);
+
+                                            let rowBgColor = "transparent";
+                                            let hoverBgColor = "gray.50";
+                                            if (isAbsoluteLatest) {
+                                                if (nextDate) {
+                                                    const isToday = nextDate.toDateString() === new Date().toDateString();
+                                                    const isPast = nextDate < today;
+
+                                                    if (isToday) {
+                                                        rowBgColor = "orange.50";
+                                                        hoverBgColor = "orange.100";
+                                                    } else if (isPast) {
+                                                        rowBgColor = "red.50";
+                                                        hoverBgColor = "red.100";
+                                                    } else {
+                                                        hoverBgColor = "orange.50";
+                                                    }
                                                 } else {
                                                     hoverBgColor = "orange.50";
                                                 }
-                                            } else {
-                                                hoverBgColor = "orange.50";
                                             }
-                                        }
 
-                                        return (
-                                            <Tr
-                                                key={q._id}
-                                                bg={rowBgColor}
-                                                cursor={isAbsoluteLatest ? "pointer" : "not-allowed"}
-                                                _hover={{ bg: hoverBgColor, boxShadow: isAbsoluteLatest ? "0 1px 4px rgba(0,0,0,0.07)" : "none" }}
-                                                transition="background 0.15s"
-                                                opacity={isAbsoluteLatest ? 1 : 0.65}
-                                                onClick={(e) => {
-                                                    // Don't open popup if user clicked a button/icon inside the row
-                                                    if (e.target.closest('button') || e.target.closest('[role="button"]')) return;
-                                                    
-                                                    if (!isAbsoluteLatest) {
-                                                        toast({
-                                                            title: "Cannot Follow-up Old Revision",
-                                                            description: "Follow-ups can only be set on the latest revised quotation for this enquiry.",
-                                                            status: "warning",
-                                                            duration: 4000,
-                                                            position: "top"
-                                                        });
-                                                        return;
-                                                    }
-                                                    handleOpenFollowUp(q);
-                                                }}
-                                                title={isAbsoluteLatest ? "Click to add follow-up" : "This is an old revision. Follow-up is disabled."}
-                                            >
-                                                <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
-                                                <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
-                                                <Td>
-                                                    <VStack align="start" spacing={0}>
-                                                        <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
-                                                        <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
-                                                    </VStack>
-                                                </Td>
-                                                <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
-                                                <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
-                                                <Td>
-                                                    <VStack align="start" spacing={0}>
-                                                        {nextDate ? (
-                                                            <Badge
-                                                                colorScheme={isOverdue ? 'red' : 'orange'}
-                                                                variant={isOverdue ? 'solid' : 'subtle'}
-                                                                borderRadius="full"
-                                                                fontSize="10px"
-                                                                px={2}
+                                            return (
+                                                <Tr
+                                                    key={q._id}
+                                                    bg={rowBgColor}
+                                                    cursor={isAbsoluteLatest ? "pointer" : "not-allowed"}
+                                                    _hover={{ bg: hoverBgColor, boxShadow: isAbsoluteLatest ? "0 1px 4px rgba(0,0,0,0.07)" : "none" }}
+                                                    transition="background 0.15s"
+                                                    opacity={isAbsoluteLatest ? 1 : 0.65}
+                                                    onClick={(e) => {
+                                                        // Don't open popup if user clicked a button/icon inside the row
+                                                        if (e.target.closest('button') || e.target.closest('[role="button"]')) return;
+
+                                                        if (!isAbsoluteLatest) {
+                                                            toast({
+                                                                title: "Cannot Follow-up Old Revision",
+                                                                description: "Follow-ups can only be set on the latest revised quotation for this enquiry.",
+                                                                status: "warning",
+                                                                duration: 4000,
+                                                                position: "top"
+                                                            });
+                                                            return;
+                                                        }
+                                                        handleOpenFollowUp(q);
+                                                    }}
+                                                    title={isAbsoluteLatest ? "Click to add follow-up" : "This is an old revision. Follow-up is disabled."}
+                                                >
+                                                    <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
+                                                    <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
+                                                    <Td>
+                                                        <VStack align="start" spacing={0}>
+                                                            <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
+                                                            <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
+                                                    <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
+                                                    <Td>
+                                                        <VStack align="start" spacing={0}>
+                                                            {nextDate ? (
+                                                                <Badge
+                                                                    colorScheme={isOverdue ? 'red' : 'orange'}
+                                                                    variant={isOverdue ? 'solid' : 'subtle'}
+                                                                    borderRadius="full"
+                                                                    fontSize="10px"
+                                                                    px={2}
+                                                                >
+                                                                    {isOverdue ? '🔴 DUE: ' : '📅 '}
+                                                                    {nextDate.toLocaleDateString('en-GB')}
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge colorScheme="gray" fontSize="10px" borderRadius="full" px={2}>Not Set</Badge>
+                                                            )}
+                                                            {followUpCount > 0 && (
+                                                                <Text fontSize="9px" color="gray.400">{followUpCount} follow-up{followUpCount > 1 ? 's' : ''} done</Text>
+                                                            )}
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td textAlign="right" onClick={(e) => e.stopPropagation()}>
+                                                        <HStack spacing={2} justify="flex-end">
+                                                            <IconButton
+                                                                aria-label="View"
+                                                                icon={<FiEye />}
+                                                                size="xs"
+                                                                variant="outline"
+                                                                onClick={() => handleViewQuotation(q)}
+                                                            />
+                                                            <IconButton
+                                                                aria-label="Edit"
+                                                                icon={<FiEdit />}
+                                                                size="xs"
+                                                                colorScheme="blue"
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    const enq = q.enquiryId || q.enquiry;
+                                                                    if (enq) {
+                                                                        setSelectedEnquiry(enq);
+                                                                        setTimeout(() => initCreateQuote(), 50);
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <Button
+                                                                size="xs"
+                                                                bg="#25D366"
+                                                                color="white"
+                                                                _hover={{ bg: "#128C7E" }}
+                                                                leftIcon={<FaWhatsapp />}
+                                                                isLoading={sendingWhatsappId === q._id}
+                                                                isDisabled={!!sendingWhatsappId}
+                                                                onClick={() => handleSendWhatsApp(q)}
                                                             >
-                                                                {isOverdue ? '🔴 DUE: ' : '📅 '}
-                                                                {nextDate.toLocaleDateString('en-GB')}
-                                                            </Badge>
-                                                        ) : (
-                                                            <Badge colorScheme="gray" fontSize="10px" borderRadius="full" px={2}>Not Set</Badge>
-                                                        )}
-                                                        {followUpCount > 0 && (
-                                                            <Text fontSize="9px" color="gray.400">{followUpCount} follow-up{followUpCount > 1 ? 's' : ''} done</Text>
-                                                        )}
-                                                    </VStack>
-                                                </Td>
-                                                <Td textAlign="right" onClick={(e) => e.stopPropagation()}>
-                                                    <HStack spacing={2} justify="flex-end">
-                                                        <IconButton 
-                                                            aria-label="View" 
-                                                            icon={<FiEye />} 
-                                                            size="xs" 
-                                                            variant="outline" 
-                                                            onClick={() => handleViewQuotation(q)} 
-                                                        />
-                                                        <IconButton 
-                                                            aria-label="Edit" 
-                                                            icon={<FiEdit />} 
-                                                            size="xs" 
-                                                            colorScheme="blue" 
-                                                            variant="outline" 
-                                                            onClick={() => {
-                                                                const enq = q.enquiryId || q.enquiry;
-                                                                if (enq) {
-                                                                    setSelectedEnquiry(enq);
-                                                                    setTimeout(() => initCreateQuote(), 50);
-                                                                }
-                                                            }}
-                                                        />
-                                                        <Button 
-                                                            size="xs" 
-                                                            bg="#25D366" 
-                                                            color="white" 
-                                                            _hover={{ bg: "#128C7E" }} 
-                                                            leftIcon={<FaWhatsapp />} 
-                                                            isLoading={sendingWhatsappId === q._id} 
-                                                            isDisabled={!!sendingWhatsappId} 
-                                                            onClick={() => handleSendWhatsApp(q)}
-                                                        >
-                                                            WhatsApp
-                                                        </Button>
-                                                        <IconButton 
-                                                            aria-label="Accept" 
-                                                            icon={<FiCheck />} 
-                                                            size="xs" 
-                                                            colorScheme="green" 
-                                                            onClick={() => handleStatusUpdate('quotation', q._id, 'Done')} 
-                                                        />
-                                                        <IconButton 
-                                                            aria-label="Reject" 
-                                                            icon={<FiX />} 
-                                                            size="xs" 
-                                                            colorScheme="red" 
-                                                            onClick={() => handleStatusUpdate('quotation', q._id, 'Reject')} 
-                                                        />
-                                                        <IconButton 
-                                                            aria-label="Delete" 
-                                                            icon={<FiTrash />} 
-                                                            size="xs" 
-                                                            colorScheme="red" 
-                                                            variant="ghost" 
-                                                            onClick={() => handleDeleteRequest('quotation', q._id)}
-                                                        />
-                                                    </HStack>
-                                                </Td>
-                                            </Tr>
-                                        );
-                                    });
-                                })()}
+                                                                WhatsApp
+                                                            </Button>
+                                                            <IconButton
+                                                                aria-label="Accept"
+                                                                icon={<FiCheck />}
+                                                                size="xs"
+                                                                colorScheme="green"
+                                                                onClick={() => handleStatusUpdate('quotation', q._id, 'Done')}
+                                                            />
+                                                            <IconButton
+                                                                aria-label="Reject"
+                                                                icon={<FiX />}
+                                                                size="xs"
+                                                                colorScheme="red"
+                                                                onClick={() => handleStatusUpdate('quotation', q._id, 'Reject')}
+                                                            />
+                                                            <IconButton
+                                                                aria-label="Delete"
+                                                                icon={<FiTrash />}
+                                                                size="xs"
+                                                                colorScheme="red"
+                                                                variant="ghost"
+                                                                onClick={() => handleDeleteRequest('quotation', q._id)}
+                                                            />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            );
+                                        });
+                                    })()}
                                 </Tbody>
                             </Table>
                         </Box>
@@ -1591,8 +1591,8 @@ const AdminEnquiries = () => {
                                 <InputLeftElement pointerEvents="none">
                                     <FiSearch color="gray.400" />
                                 </InputLeftElement>
-                                <Input 
-                                    placeholder="Search by client or Ref No..." 
+                                <Input
+                                    placeholder="Search by client or Ref No..."
                                     borderRadius="xl"
                                     value={historySearch}
                                     onChange={(e) => {
@@ -1651,12 +1651,12 @@ const AdminEnquiries = () => {
                                                         {q.status === 'Done' && (
                                                             <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
                                                         )}
-                                                        <IconButton 
-                                                            aria-label="Delete" 
-                                                            icon={<FiTrash />} 
-                                                            size="sm" 
-                                                            colorScheme="red" 
-                                                            variant="ghost" 
+                                                        <IconButton
+                                                            aria-label="Delete"
+                                                            icon={<FiTrash />}
+                                                            size="sm"
+                                                            colorScheme="red"
+                                                            variant="ghost"
                                                             onClick={() => handleDeleteRequest('quotation', q._id)}
                                                         />
                                                     </HStack>
@@ -1678,8 +1678,8 @@ const AdminEnquiries = () => {
                                 <InputLeftElement pointerEvents="none">
                                     <FiSearch color="gray.400" />
                                 </InputLeftElement>
-                                <Input 
-                                    placeholder="Search by client name or phone..." 
+                                <Input
+                                    placeholder="Search by client name or phone..."
                                     borderRadius="xl"
                                     value={whatsappSearch}
                                     onChange={(e) => {
@@ -1728,8 +1728,8 @@ const AdminEnquiries = () => {
                                                 {e.whatsappStatus === 'failed'
                                                     ? <Badge colorScheme="red" variant="solid">❌ Failed</Badge>
                                                     : e.whatsappStatus === 'partial'
-                                                    ? <Badge colorScheme="orange" variant="solid">⚠️ Partial</Badge>
-                                                    : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
+                                                        ? <Badge colorScheme="orange" variant="solid">⚠️ Partial</Badge>
+                                                        : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
                                                 }
                                                 {e.whatsappSentAt && (
                                                     <Text fontSize="10px" color="gray.400" mt={0.5}>
@@ -1742,15 +1742,15 @@ const AdminEnquiries = () => {
                                                     if (e.status === 'Done' || e.status === 'Reject') {
                                                         return <Badge colorScheme={e.status === 'Done' ? 'green' : 'red'}>{e.status}</Badge>;
                                                     }
-                                                    
-                                                    const followUpDate = e.nextFollowUp 
+
+                                                    const followUpDate = e.nextFollowUp
                                                         ? new Date(e.nextFollowUp)
                                                         : e.firstFollowUpDate
-                                                        ? new Date(e.firstFollowUpDate)
-                                                        : new Date(new Date(e.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
+                                                            ? new Date(e.firstFollowUpDate)
+                                                            : new Date(new Date(e.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
 
-                                                    const dateZero = new Date(followUpDate).setHours(0,0,0,0);
-                                                    const todayZero = new Date().setHours(0,0,0,0);
+                                                    const dateZero = new Date(followUpDate).setHours(0, 0, 0, 0);
+                                                    const todayZero = new Date().setHours(0, 0, 0, 0);
                                                     const isOverdue = dateZero < todayZero;
                                                     const isToday = dateZero === todayZero;
 
@@ -1767,41 +1767,41 @@ const AdminEnquiries = () => {
                                             </Td>
                                             <Td textAlign="right">
                                                 <HStack spacing={2} justify="flex-end">
-                                                    <IconButton 
-                                                        aria-label="View Details" 
-                                                        icon={<FiEye />} 
-                                                        size="xs" 
-                                                        variant="outline" 
-                                                        onClick={() => handleViewEnquiry(e)} 
+                                                    <IconButton
+                                                        aria-label="View Details"
+                                                        icon={<FiEye />}
+                                                        size="xs"
+                                                        variant="outline"
+                                                        onClick={() => handleViewEnquiry(e)}
                                                     />
-                                                    <Button 
-                                                        size="xs" 
-                                                        colorScheme="brand" 
+                                                    <Button
+                                                        size="xs"
+                                                        colorScheme="brand"
                                                         variant="outline"
                                                         onClick={() => handleOpenFollowUp(e, 'enquiry')}
                                                     >
                                                         Follow-up {e.followUps?.length > 0 ? `(${e.followUps.length})` : ''}
                                                     </Button>
-                                                    <IconButton 
-                                                        aria-label="Done" 
-                                                        icon={<FiCheck />} 
-                                                        size="xs" 
-                                                        colorScheme="green" 
-                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Done')} 
+                                                    <IconButton
+                                                        aria-label="Done"
+                                                        icon={<FiCheck />}
+                                                        size="xs"
+                                                        colorScheme="green"
+                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Done')}
                                                     />
-                                                    <IconButton 
-                                                        aria-label="Reject" 
-                                                        icon={<FiX />} 
-                                                        size="xs" 
-                                                        colorScheme="red" 
-                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Reject')} 
+                                                    <IconButton
+                                                        aria-label="Reject"
+                                                        icon={<FiX />}
+                                                        size="xs"
+                                                        colorScheme="red"
+                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Reject')}
                                                     />
-                                                    <IconButton 
-                                                        aria-label="Delete" 
-                                                        icon={<FiTrash />} 
-                                                        size="xs" 
-                                                        colorScheme="red" 
-                                                        variant="ghost" 
+                                                    <IconButton
+                                                        aria-label="Delete"
+                                                        icon={<FiTrash />}
+                                                        size="xs"
+                                                        colorScheme="red"
+                                                        variant="ghost"
                                                         onClick={() => handleDeleteRequest('enquiry', e._id)}
                                                     />
                                                 </HStack>
@@ -1943,8 +1943,8 @@ const AdminEnquiries = () => {
                                                             <Flex direction="column" mt={2} p={2} bg="blue.50" borderRadius="md" border="1px solid" borderColor="blue.200" w="full">
                                                                 <Text fontSize="10px" fontWeight="bold" color="blue.700" mb={2}>CALIBRATION OPTIONS:</Text>
                                                                 <HStack spacing={4}>
-                                                                    <Checkbox 
-                                                                        size="sm" 
+                                                                    <Checkbox
+                                                                        size="sm"
                                                                         colorScheme="blue"
                                                                         isChecked={item.calibrationOptions?.standard !== false}
                                                                         onChange={(e) => {
@@ -1962,8 +1962,8 @@ const AdminEnquiries = () => {
                                                                     >
                                                                         <Text fontSize="xs" fontWeight="600">No Calibration</Text>
                                                                     </Checkbox>
-                                                                    <Checkbox 
-                                                                        size="sm" 
+                                                                    <Checkbox
+                                                                        size="sm"
                                                                         colorScheme="blue"
                                                                         isChecked={item.calibrationOptions?.calibrated === true}
                                                                         onChange={(e) => {
@@ -2061,7 +2061,7 @@ const AdminEnquiries = () => {
                                                     </Button>
                                                 </HStack>
                                             </HStack>
-                                            
+
                                             {item.calibrationOptions?.standard !== false && (
                                                 <Stack direction={{ base: 'column', md: 'row' }} spacing={3} mt={2} bg="gray.50" p={2} borderRadius="md" border="1px solid" borderColor="gray.200">
                                                     <FormControl width={{ base: "full", md: "100px" }}>
@@ -2122,7 +2122,7 @@ const AdminEnquiries = () => {
                                                     </Box>
                                                 </Stack>
                                             )}
-                                            
+
                                             {item.calibrationOptions?.calibrated === true && (
                                                 <Stack direction={{ base: 'column', md: 'row' }} spacing={3} mt={2} bg="blue.50" p={2} borderRadius="md" border="1px solid" borderColor="blue.200">
                                                     <FormControl width={{ base: "full", md: "100px" }}>
@@ -2183,10 +2183,10 @@ const AdminEnquiries = () => {
                                     <Box mt={4} p={3} border="1px dashed" borderColor="brand.300" borderRadius="md" bg="orange.50">
                                         <Text fontSize="xs" fontWeight="bold" mb={2} color="orange.700">Add Another Item to this Quotation:</Text>
                                         <Stack direction={{ base: 'column', md: 'row' }} spacing={2}>
-                                            <Button 
-                                                leftIcon={<FiPlus />} 
-                                                colorScheme="orange" 
-                                                size="sm" 
+                                            <Button
+                                                leftIcon={<FiPlus />}
+                                                colorScheme="orange"
+                                                size="sm"
                                                 onClick={() => {
                                                     setPickerCategory(null);
                                                     onPickerOpen();
@@ -2194,11 +2194,11 @@ const AdminEnquiries = () => {
                                             >
                                                 Select Product from Categories
                                             </Button>
-                                            
+
                                             <FormControl flex="1">
-                                                <Select 
-                                                    size="sm" 
-                                                    placeholder="Or quick select product..." 
+                                                <Select
+                                                    size="sm"
+                                                    placeholder="Or quick select product..."
                                                     bg="white"
                                                     onChange={(e) => handleAddNewItem(e.target.value)}
                                                     value=""
@@ -2480,15 +2480,15 @@ const AdminEnquiries = () => {
                     </ModalHeader>
                     <ModalBody>
                         <Text fontSize="md">
-                            Are you sure you want to mark this quotation as <b>{statusConfirmData.status}</b>? 
+                            Are you sure you want to mark this quotation as <b>{statusConfirmData.status}</b>?
                             This will move it to the Processed tab.
                         </Text>
                     </ModalBody>
                     <ModalFooter borderTopWidth="0px" gap={3}>
                         <Button variant="ghost" onClick={onStatusConfirmClose} borderRadius="xl">Cancel</Button>
-                        <Button 
-                            colorScheme={statusConfirmData.status === 'Done' ? 'green' : 'red'} 
-                            borderRadius="xl" 
+                        <Button
+                            colorScheme={statusConfirmData.status === 'Done' ? 'green' : 'red'}
+                            borderRadius="xl"
                             px={8}
                             onClick={confirmStatusUpdate}
                         >
@@ -2506,15 +2506,15 @@ const AdminEnquiries = () => {
                     </ModalHeader>
                     <ModalBody>
                         <Text fontSize="md">
-                            Are you sure you want to delete this <b>{deleteTarget.type}</b>? 
+                            Are you sure you want to delete this <b>{deleteTarget.type}</b>?
                             This action is permanent and cannot be undone.
                         </Text>
                     </ModalBody>
                     <ModalFooter borderTopWidth="0px" gap={3}>
                         <Button variant="ghost" onClick={onDeleteConfirmClose} borderRadius="xl">Cancel</Button>
-                        <Button 
-                            colorScheme="red" 
-                            borderRadius="xl" 
+                        <Button
+                            colorScheme="red"
+                            borderRadius="xl"
                             px={8}
                             isLoading={isDeleting}
                             loadingText="Deleting..."
@@ -2545,12 +2545,12 @@ const AdminEnquiries = () => {
                         {!pickerCategory ? (
                             <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
                                 {PRODUCT_CATEGORIES.map(cat => (
-                                    <Box 
-                                        key={cat.id} 
-                                        p={6} 
-                                        border="1px solid" 
-                                        borderColor="gray.200" 
-                                        borderRadius="xl" 
+                                    <Box
+                                        key={cat.id}
+                                        p={6}
+                                        border="1px solid"
+                                        borderColor="gray.200"
+                                        borderRadius="xl"
                                         cursor="pointer"
                                         _hover={{ bg: 'brand.50', borderColor: 'brand.200', transform: 'translateY(-2px)' }}
                                         transition="all 0.2s"
@@ -2563,11 +2563,11 @@ const AdminEnquiries = () => {
                                         </Text>
                                     </Box>
                                 ))}
-                                <Box 
-                                    p={6} 
-                                    border="1px solid" 
-                                    borderColor="gray.200" 
-                                    borderRadius="xl" 
+                                <Box
+                                    p={6}
+                                    border="1px solid"
+                                    borderColor="gray.200"
+                                    borderRadius="xl"
                                     cursor="pointer"
                                     _hover={{ bg: 'gray.100' }}
                                     onClick={() => setPickerCategory('OTHER')}
@@ -2585,9 +2585,9 @@ const AdminEnquiries = () => {
                                     <InputLeftElement pointerEvents="none">
                                         <FiSearch color="gray.300" />
                                     </InputLeftElement>
-                                    <Input 
-                                        placeholder="Search products in this category..." 
-                                        bg="gray.50" 
+                                    <Input
+                                        placeholder="Search products in this category..."
+                                        bg="gray.50"
                                         value={pickerSearch}
                                         onChange={(e) => setPickerSearch(e.target.value)}
                                     />
@@ -2595,17 +2595,17 @@ const AdminEnquiries = () => {
 
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
                                     {allProducts
-                                        .filter(p => pickerCategory === 'OTHER' 
+                                        .filter(p => pickerCategory === 'OTHER'
                                             ? !PRODUCT_CATEGORIES.some(cat => cat.id === p.category)
                                             : p.category === pickerCategory
                                         )
                                         .filter(p => p.name.toLowerCase().includes(pickerSearch.toLowerCase()))
                                         .map(p => (
-                                            <Box 
-                                                key={p._id} 
-                                                p={3} 
-                                                borderWidth="1px" 
-                                                borderRadius="lg" 
+                                            <Box
+                                                key={p._id}
+                                                p={3}
+                                                borderWidth="1px"
+                                                borderRadius="lg"
                                                 _hover={{ bg: 'green.50', borderColor: 'green.200' }}
                                                 cursor="pointer"
                                                 onClick={() => {
@@ -2614,10 +2614,10 @@ const AdminEnquiries = () => {
                                                 }}
                                             >
                                                 <Flex align="center" gap={3}>
-                                                    <Image 
-                                                        src={getImageUrl(p.images?.[0] || p.photos?.[0] || p.image)} 
-                                                        boxSize="50px" 
-                                                        objectFit="contain" 
+                                                    <Image
+                                                        src={getImageUrl(p.images?.[0] || p.photos?.[0] || p.image)}
+                                                        boxSize="50px"
+                                                        objectFit="contain"
                                                         borderRadius="md"
                                                         fallbackSrc="https://via.placeholder.com/50"
                                                     />
@@ -2653,7 +2653,7 @@ const AdminEnquiries = () => {
                                 <VStack align="start" spacing={0}>
                                     <Text fontWeight="black" fontSize="lg">Follow-up</Text>
                                     <Text fontSize="xs" opacity={0.85}>
-                                        {followUpTargetType === 'quotation' 
+                                        {followUpTargetType === 'quotation'
                                             ? `${followUpTarget?.refNo} — ${followUpTarget?.enquiry?.companyName || followUpTarget?.enquiry?.Name || 'Client'}`
                                             : `WhatsApp Log — ${followUpTarget?.companyName || followUpTarget?.Name || 'Client'}`}
                                     </Text>
@@ -2709,7 +2709,7 @@ const AdminEnquiries = () => {
                                     />
                                 </FormControl>
                             </VStack>
-                            
+
                             <Button
                                 mt={5}
                                 w="full"

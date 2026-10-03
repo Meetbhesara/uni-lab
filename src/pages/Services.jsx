@@ -7,7 +7,7 @@ import {
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer, Menu, MenuButton, MenuList, MenuItem,
-    NumberInput, NumberInputField, Spinner, Textarea, Alert, AlertIcon
+    NumberInput, NumberInputField, Spinner, Textarea, Alert, AlertIcon, Tooltip
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
@@ -618,17 +618,22 @@ const VehicleMasterForm = () => {
     const [selectedUsageVehicle, setSelectedUsageVehicle] = useState(null); // vehicle object for detail popup
     const [usageDetailModalOpen, setUsageDetailModalOpen] = useState(false);
 
-    const fetchReportData = async () => {
+    const fetchReportData = async (startParam, endParam) => {
+        const sDate = startParam || reportStartDate;
+        const eDate = endParam || reportEndDate;
+        if (startParam && startParam !== reportStartDate) setReportStartDate(startParam);
+        if (endParam && endParam !== reportEndDate) setReportEndDate(endParam);
         setReportLoading(true);
         try {
+            const queryEnd = eDate.includes('T') ? eDate : `${eDate}T23:59:59.999Z`;
             const [expRes, schedRes] = await Promise.all([
-                api.get(`/employee-expense/all?startDate=${reportStartDate}&endDate=${reportEndDate}`)
+                api.get(`/employee-expense/all?startDate=${sDate}&endDate=${queryEnd}`)
                     .catch(() => ({ data: { success: false, data: [] } })),
-                api.get(`/schedule-master?startDate=${reportStartDate}&endDate=${reportEndDate}`)
+                api.get(`/schedule-master?startDate=${sDate}&endDate=${queryEnd}`)
                     .catch(() => ({ data: { success: false, data: [] } }))
             ]);
-            if (expRes.data.success) setAllExpenses(expRes.data.data);
-            if (schedRes.data.success) setAllSchedules(schedRes.data.data);
+            if (expRes.data && expRes.data.success) setAllExpenses(expRes.data.data || []);
+            if (schedRes.data && schedRes.data.success) setAllSchedules(schedRes.data.data || []);
         } catch (err) {
             console.error('Failed to fetch report data', err);
         } finally {
@@ -662,19 +667,22 @@ const VehicleMasterForm = () => {
                 if (vId) vehiclesOnDay.add(vId);
             });
 
-            // Determine fuel info
+            // Determine fuel info: check expenses.petrol, expenses.fuelType, exp.fuelType, and otherExpensesList
             const petrol = Number(exp.expenses?.petrol) || 0;
-            let fuelType = exp.fuelType || (petrol > 0 ? 'Petrol' : '');
+            let fuelType = exp.expenses?.fuelType || exp.fuelType || (petrol > 0 ? 'Petrol' : '');
             let fuelAmount = petrol;
 
-            // Also check otherExpensesList for Diesel/CNG
+            // Also check otherExpensesList for Diesel/CNG/Petrol
             if (exp.otherExpensesList && exp.otherExpensesList.length > 0) {
                 exp.otherExpensesList.forEach(o => {
                     const name = (o.expenseName || '').toLowerCase().trim();
                     const amt = Number(o.amount) || 0;
                     if (amt > 0 && (name.includes('diesel') || name.includes('cng') || name.includes('petrol') || name.includes('fuel'))) {
-                        if (!fuelType || fuelType === 'Petrol') {
-                            fuelType = name.includes('diesel') ? 'Diesel' : name.includes('cng') ? 'CNG' : 'Petrol';
+                        const matchedType = name.includes('diesel') ? 'Diesel' : name.includes('cng') ? 'CNG' : 'Petrol';
+                        if (!fuelType) {
+                            fuelType = matchedType;
+                        } else if (!fuelType.toLowerCase().includes(matchedType.toLowerCase())) {
+                            fuelType = `${fuelType}, ${matchedType}`;
                         }
                         fuelAmount += amt;
                     }
@@ -692,6 +700,11 @@ const VehicleMasterForm = () => {
 
             if (fuelAmount <= 0 && vehiclesOnDay.size === 0) return;
 
+            const empObj = exp.employeeId || exp.employee;
+            const employeeName = (typeof empObj === 'object' ? (empObj?.name || empObj?.email) : '') || 'Unknown';
+            const employeeEmail = (typeof empObj === 'object' ? empObj?.email : '') || '';
+            const employeeMobile = (typeof empObj === 'object' ? (empObj?.mobile || empObj?.phone) : '') || '';
+
             // Emit one row per vehicle found, or a generic row
             if (vehiclesOnDay.size > 0) {
                 vehiclesOnDay.forEach(vId => {
@@ -700,7 +713,9 @@ const VehicleMasterForm = () => {
                     rows.push({
                         date: expDate,
                         vehicle,
-                        employeeName: exp.employeeId?.name || exp.employee?.name || 'Unknown',
+                        employeeName,
+                        employeeEmail,
+                        employeeMobile,
                         clientName: clientNames,
                         siteName: siteNames,
                         fuelType: fuelType || '—',
@@ -715,7 +730,9 @@ const VehicleMasterForm = () => {
                 rows.push({
                     date: expDate,
                     vehicle: null,
-                    employeeName: exp.employeeId?.name || exp.employee?.name || 'Unknown',
+                    employeeName,
+                    employeeEmail,
+                    employeeMobile,
                     clientName: clientNames,
                     siteName: siteNames,
                     fuelType: fuelType || 'Petrol',
@@ -1589,6 +1606,13 @@ const VehicleMasterForm = () => {
         fetchVehicles();
     }, []);
 
+    // Auto-fetch usage report when a vehicle view modal opens
+    useEffect(() => {
+        if (viewVehicle) {
+            fetchReportData();
+        }
+    }, [viewVehicle]);
+
     const formatVehicleNumber = (val) => {
         const raw = val.replace(/\s/g, '').toUpperCase();
         let formatted = '';
@@ -2033,16 +2057,6 @@ const VehicleMasterForm = () => {
                                 </Tab>
                                 <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={{ base: 4, md: 6 }} py={2.5} _selected={{ color: 'white', bg: 'purple.600', shadow: 'md' }}>
                                     🚚 View Vehicles ({vehicles.length})
-                                </Tab>
-                                <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={{ base: 4, md: 6 }} py={2.5} _selected={{ color: 'white', bg: 'indigo.600', shadow: 'md' }}
-                                    onClick={() => { /* data already loaded via vehicles state */ }}
-                                >
-                                    📊 Vehicle Report
-                                </Tab>
-                                <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={{ base: 4, md: 6 }} py={2.5} _selected={{ color: 'white', bg: 'blue.600', shadow: 'md' }}
-                                    onClick={fetchReportData}
-                                >
-                                    ⛽ Usage Report
                                 </Tab>
                             </TabList>
 
@@ -2695,11 +2709,11 @@ const VehicleMasterForm = () => {
 
                                 <TabPanel p={0}>
                                     <Box mt={2}>
+                                        {/* Search bar */}
                                         <Flex justify="space-between" align="center" mb={4} wrap="wrap" gap={3}>
                                             <Heading size="sm" color="purple.700" display="flex" alignItems="center">
-                                                <Icon as={FaTruck} mr={2} /> Registered Fleet ({filteredVehicles.length})
+                                                <Icon as={FaTruck} mr={2} /> Registered Fleet ({vehicles.length})
                                             </Heading>
-
                                             <HStack spacing={1} bg="gray.100" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200">
                                                 <Button
                                                     size={{ base: "xs", sm: "sm" }}
@@ -2736,145 +2750,211 @@ const VehicleMasterForm = () => {
                                             </HStack>
                                         </Flex>
 
-                                        {viewMode === 'table' ? (
-                                            <Box overflow="hidden" w="full" bg="white" borderRadius="2xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
-                                                <TableContainer overflowX="auto" sx={{ WebkitOverflowScrolling: 'touch' }}>
-                                                    <Table variant="simple" size="sm">
-                                                        <Thead bg="gray.50">
-                                                            <Tr>
-                                                                <Th fontSize="10px" fontWeight="black" color="gray.600" textAlign="center">IMAGE</Th>
-                                                                <Th fontSize="10px" fontWeight="black" color="gray.600">VEHICLE ID</Th>
-                                                                <Th fontSize="10px" fontWeight="black" color="gray.600">BARCODE</Th>
-                                                                <Th fontSize="10px" fontWeight="black" color="gray.600">VEHICLE NO</Th>
-                                                                <Th fontSize="10px" fontWeight="black" color="gray.600">NAME / MODEL</Th>
-                                                                <Th fontSize="10px" fontWeight="black" color="gray.600">NEXT SERVICE</Th>
-                                                                <Th fontSize="10px" fontWeight="black" color="gray.600" textAlign="center">ACTIONS</Th>
-                                                            </Tr>
-                                                        </Thead>
-                                                        <Tbody>
-                                                            {filteredVehicles.map((v, idx) => {
-                                                                const pPhoto = getVehiclePrimaryPhoto(v);
-                                                                const vId = v.vehicleId || `V-${String(idx + 1).padStart(3, '0')}`;
-                                                                const vBarcode = v.barcode || `UE-${vId.replace(/[^a-zA-Z0-9]/g, '')}`;
-                                                                return (
-                                                                    <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: "purple.50" }} transition="background 0.2s">
-                                                                        <Td textAlign="center" py={2}>
-                                                                            {pPhoto ? (
-                                                                                <Image
-                                                                                    src={pPhoto}
-                                                                                    alt={v.vehicleNumber}
-                                                                                    w="42px"
-                                                                                    h="42px"
-                                                                                    borderRadius="lg"
-                                                                                    objectFit="cover"
-                                                                                    border="1px solid"
-                                                                                    borderColor="gray.200"
-                                                                                    mx="auto"
-                                                                                />
-                                                                            ) : (
-                                                                                <Box w="42px" h="42px" bg="purple.50" borderRadius="lg" display="flex" alignItems="center" justifyContent="center" border="1px solid" borderColor="purple.100" mx="auto">
-                                                                                    <Icon as={FaTruck} color="purple.400" />
-                                                                                </Box>
-                                                                            )}
-                                                                        </Td>
-                                                                        <Td>
-                                                                            <Badge colorScheme="purple" fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">
-                                                                                {vId}
-                                                                            </Badge>
-                                                                        </Td>
-                                                                        <Td>
-                                                                            <Badge colorScheme="teal" fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
-                                                                                {vBarcode}
-                                                                            </Badge>
-                                                                        </Td>
-                                                                        <Td fontWeight="bold" color="purple.700" fontSize="xs">{v.vehicleNumber}</Td>
-                                                                        <Td fontSize="xs" color="gray.700">{v.vehicleName || '—'}</Td>
-                                                                        <Td>
-                                                                            {v.serviceDate ? (
-                                                                                <Badge colorScheme="red" variant="subtle" borderRadius="full" px={2} fontSize="10px">
-                                                                                    {v.serviceDate.substring(0, 10)}
-                                                                                </Badge>
-                                                                            ) : <Text fontSize="10px" color="gray.400">—</Text>}
-                                                                        </Td>
-                                                                        <Td textAlign="center">
-                                                                            <HStack justify="center" spacing={1.5}>
-                                                                                <IconButton aria-label="View" size="xs" colorScheme="teal" variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }} />
-                                                                                <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
-                                                                                <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Vehicle Sticker" />
-                                                                                <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
+                                        {/* Active / Sold Out sub-tabs */}
+                                        {(() => {
+                                            const hasDoc = (val) => {
+                                                if (!val) return false;
+                                                if (typeof val === 'string') {
+                                                    const s = val.trim();
+                                                    return s.length > 0 && s !== 'null' && s !== 'undefined';
+                                                }
+                                                if (typeof val === 'object') {
+                                                    return Boolean((val.url && String(val.url).trim() !== '') || (val.path && String(val.path).trim() !== ''));
+                                                }
+                                                return false;
+                                            };
+
+                                            const getVehicleDocStatus = (v) => {
+                                                if (!v) return { pendingCount: 0, pendingList: [], uploadedCount: 0, allUploaded: true };
+                                                const pendingList = [];
+                                                let uploadedCount = 0;
+
+                                                // Vehicle Compliance Docs
+                                                if (hasDoc(v.rcBook)) uploadedCount++; else pendingList.push('RC Book');
+                                                if (hasDoc(v.insurancePhoto)) uploadedCount++; else pendingList.push('Insurance');
+                                                if (hasDoc(v.pucPhoto)) uploadedCount++; else pendingList.push('PUC');
+
+                                                // Purchase Docs
+                                                if (hasDoc(v.purchaseOldRc)) uploadedCount++; else pendingList.push('Old RC Book');
+                                                if (hasDoc(v.purchaseOldPuc)) uploadedCount++; else pendingList.push('Old PUC');
+                                                if (hasDoc(v.purchaseAadharDoc)) uploadedCount++; else pendingList.push('Owner Aadhar');
+                                                if (hasDoc(v.purchasePanDoc)) uploadedCount++; else pendingList.push('Owner PAN');
+
+                                                // Sell Docs (only when vehicle is marked as sold out)
+                                                if (v.isSold) {
+                                                    if (hasDoc(v.sellAadharDoc)) uploadedCount++; else pendingList.push('Buyer Aadhar');
+                                                    if (hasDoc(v.sellPanDoc)) uploadedCount++; else pendingList.push('Buyer PAN');
+                                                }
+
+                                                return {
+                                                    pendingCount: pendingList.length,
+                                                    pendingList,
+                                                    uploadedCount,
+                                                    allUploaded: pendingList.length === 0
+                                                };
+                                            };
+
+                                            const activeVehicles = filteredVehicles.filter(v => !v.isSold);
+                                            const soldVehicles   = filteredVehicles.filter(v => v.isSold);
+
+                                            const VehicleGrid = ({ list, accentColor }) => list.length === 0 ? (
+                                                <Center p={8} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
+                                                    <VStack spacing={2}>
+                                                        <Icon as={FaTruck} w={8} h={8} color="gray.300" />
+                                                        <Text color="gray.500" fontSize="sm">No vehicles found matching "{searchQuery}"</Text>
+                                                    </VStack>
+                                                </Center>
+                                            ) : viewMode === 'table' ? (
+                                                <Box overflow="hidden" w="full" bg="white" borderRadius="2xl" boxShadow="sm" border="1px solid" borderColor="gray.200">
+                                                    <TableContainer overflowX="auto" sx={{ WebkitOverflowScrolling: 'touch' }}>
+                                                        <Table variant="simple" size="sm">
+                                                            <Thead bg="gray.50">
+                                                                <Tr>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600" textAlign="center">IMAGE</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">VEHICLE ID</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">VEHICLE NO</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">NAME / MODEL</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">DOCUMENTS</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">NEXT SERVICE</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600" textAlign="center">ACTIONS</Th>
+                                                                </Tr>
+                                                            </Thead>
+                                                            <Tbody>
+                                                                {list.map((v, idx) => {
+                                                                    const pPhoto = getVehiclePrimaryPhoto(v);
+                                                                    const vId = v.vehicleId || `V-${String(idx + 1).padStart(3, '0')}`;
+                                                                    const vBarcode = v.barcode || `UE-${vId.replace(/[^a-zA-Z0-9]/g, '')}`;
+                                                                    const docSt = getVehicleDocStatus(v);
+                                                                    return (
+                                                                        <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: `${accentColor}.50` }} transition="background 0.2s">
+                                                                            <Td textAlign="center" py={2}>
+                                                                                {pPhoto ? (
+                                                                                    <Image src={pPhoto} alt={v.vehicleNumber} w="42px" h="42px" borderRadius="lg" objectFit="cover" border="1px solid" borderColor="gray.200" mx="auto" />
+                                                                                ) : (
+                                                                                    <Box w="42px" h="42px" bg={`${accentColor}.50`} borderRadius="lg" display="flex" alignItems="center" justifyContent="center" border="1px solid" borderColor={`${accentColor}.100`} mx="auto">
+                                                                                        <Icon as={FaTruck} color={`${accentColor}.400`} />
+                                                                                    </Box>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td><Badge colorScheme={accentColor} fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">{vId}</Badge></Td>
+                                                                            <Td fontWeight="bold" color={`${accentColor}.700`} fontSize="xs">{v.vehicleNumber}</Td>
+                                                                            <Td fontSize="xs" color="gray.700">{v.vehicleName || '—'}</Td>
+                                                                            <Td>
+                                                                                {docSt.pendingCount > 0 ? (
+                                                                                    <Badge colorScheme="red" bg="red.700" color="white" borderRadius="full" px={2} py={0.5} fontSize="10px" fontWeight="bold" title={`Pending: ${docSt.pendingList.join(', ')}`}>
+                                                                                        ⚠️ {docSt.pendingCount} Pending
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Badge colorScheme="green" variant="subtle" borderRadius="full" px={2} py={0.5} fontSize="10px" fontWeight="bold">
+                                                                                        ✓ Complete
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td>
+                                                                                {v.serviceDate ? (
+                                                                                    <Badge colorScheme="red" variant="subtle" borderRadius="full" px={2} fontSize="10px">{v.serviceDate.substring(0, 10)}</Badge>
+                                                                                ) : <Text fontSize="10px" color="gray.400">—</Text>}
+                                                                            </Td>
+                                                                            <Td textAlign="center">
+                                                                                <HStack justify="center" spacing={1.5}>
+                                                                                    <IconButton aria-label="View" size="xs" colorScheme="teal" variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }} />
+                                                                                    <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
+                                                                                    <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Vehicle Sticker" />
+                                                                                    <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
+                                                                                </HStack>
+                                                                            </Td>
+                                                                        </Tr>
+                                                                    );
+                                                                })}
+                                                            </Tbody>
+                                                        </Table>
+                                                    </TableContainer>
+                                                </Box>
+                                            ) : (
+                                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
+                                                    {list.map(v => {
+                                                        const primaryPhoto = getVehiclePrimaryPhoto(v);
+                                                        const vId = v.vehicleId || `V-${String(vehicles.findIndex(item => item._id === v._id) + 1).padStart(3, '0')}`;
+                                                        const docSt = getVehicleDocStatus(v);
+                                                        return (
+                                                            <Card key={v._id} borderRadius="2xl" border="1.5px solid" borderColor={v.isSold ? 'red.200' : 'gray.200'} bg="white" _hover={{ shadow: 'lg', borderColor: v.isSold ? 'red.400' : 'purple.400', transform: 'translateY(-2px)' }} transition="all 0.2s" overflow="hidden">
+                                                                <CardBody p={4}>
+                                                                    <HStack spacing={3} mb={3}>
+                                                                        {primaryPhoto ? (
+                                                                            <Image src={primaryPhoto} alt={v.vehicleNumber} w="50px" h="50px" borderRadius="xl" objectFit="cover" border="2px solid" borderColor={v.isSold ? 'red.400' : 'purple.400'} />
+                                                                        ) : (
+                                                                            <Avatar size="md" icon={<Icon as={FaTruck} />} borderRadius="xl" bg={v.isSold ? 'red.50' : 'purple.50'} color={v.isSold ? 'red.500' : 'purple.500'} border="2px solid" borderColor={v.isSold ? 'red.300' : 'purple.300'} />
+                                                                        )}
+                                                                        <Box flex={1} minW={0}>
+                                                                            <HStack spacing={1.5} align="center" mb={0.5} wrap="wrap">
+                                                                                <Badge colorScheme={v.isSold ? 'red' : 'purple'} fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">{vId}</Badge>
                                                                             </HStack>
-                                                                        </Td>
-                                                                    </Tr>
-                                                                );
-                                                            })}
-                                                        </Tbody>
-                                                    </Table>
-                                                </TableContainer>
-                                            </Box>
-                                        ) : (
-                                            <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
-                                                {filteredVehicles.map(v => {
-                                                    const primaryPhoto = getVehiclePrimaryPhoto(v);
-                                                    const vId = v.vehicleId || `V-${String(vehicles.findIndex(item => item._id === v._id) + 1).padStart(3, '0')}`;
-                                                    return (
-                                                        <Card key={v._id} borderRadius="2xl" border="1.5px solid" borderColor="gray.200" bg="white" _hover={{ shadow: 'lg', borderColor: 'purple.400', transform: 'translateY(-2px)' }} transition="all 0.2s" overflow="hidden">
-                                                            <CardBody p={4}>
-                                                                <HStack spacing={3} mb={3}>
-                                                                    {primaryPhoto ? (
-                                                                        <Image src={primaryPhoto} alt={v.vehicleNumber} w="50px" h="50px" borderRadius="xl" objectFit="cover" border="2px solid" borderColor="purple.400" />
-                                                                    ) : (
-                                                                        <Avatar size="md" icon={<Icon as={FaTruck} />} borderRadius="xl" bg="purple.50" color="purple.500" border="2px solid" borderColor="purple.300" />
-                                                                    )}
-                                                                    <Box flex={1} minW={0}>
-                                                                        <HStack spacing={1.5} align="center" mb={0.5} wrap="wrap">
-                                                                            <Badge colorScheme="purple" fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">
-                                                                                {vId}
-                                                                            </Badge>
-                                                                            {v.barcode && (
-                                                                                <Badge colorScheme="teal" fontFamily="monospace" fontSize="2xs" px={1.5} borderRadius="sm" fontWeight="bold">
-                                                                                    {v.barcode}
-                                                                                </Badge>
-                                                                            )}
-                                                                            <Text fontWeight="black" fontSize="sm" color="purple.800" isTruncated>{v.vehicleNumber}</Text>
-                                                                        </HStack>
-                                                                        <Text fontSize="xs" color="gray.600" isTruncated>{v.vehicleName || 'Fleet Vehicle'}</Text>
+                                                                            <Text fontWeight="black" fontSize="sm" color={v.isSold ? 'red.800' : 'purple.800'} isTruncated>{v.vehicleNumber}</Text>
+                                                                            <Text fontSize="xs" color="gray.600" isTruncated>{v.vehicleName || 'Fleet Vehicle'}</Text>
+                                                                        </Box>
+                                                                    </HStack>
+
+                                                                    <Box bg={v.isSold ? 'red.50' : 'purple.50'} p={2.5} borderRadius="xl" border="1px solid" borderColor={v.isSold ? 'red.100' : 'purple.100'} mb={3}>
+                                                                        <SimpleGrid columns={2} spacing={2} mb={2}>
+                                                                            <Box>
+                                                                                <Text fontSize="9px" color="gray.500" fontWeight="bold">NEXT SERVICE</Text>
+                                                                                <Text fontSize="xs" fontWeight="bold" color="red.600">{v.serviceDate ? v.serviceDate.substring(0, 10) : 'N/A'}</Text>
+                                                                            </Box>
+                                                                            <Box>
+                                                                                <Text fontSize="9px" color="gray.500" fontWeight="bold">INSURANCE</Text>
+                                                                                <Text fontSize="xs" fontWeight="bold" color={v.isSold ? 'red.700' : 'purple.700'}>{v.insuranceDate ? v.insuranceDate.substring(0, 10) : 'N/A'}</Text>
+                                                                            </Box>
+                                                                        </SimpleGrid>
+                                                                        <Box pt={1.5} borderTop="1px dashed" borderColor={v.isSold ? 'red.200' : 'purple.200'}>
+                                                                            <HStack justify="space-between">
+                                                                                <Text fontSize="9px" color="gray.500" fontWeight="bold">DOCUMENTS</Text>
+                                                                                {docSt.pendingCount > 0 ? (
+                                                                                    <Badge colorScheme="red" bg="red.700" color="white" fontSize="9px" px={2} py={0.5} borderRadius="md" fontWeight="black" title={`Pending: ${docSt.pendingList.join(', ')}`}>
+                                                                                        ⚠️ {docSt.pendingCount} DOCS PENDING
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Badge colorScheme="green" fontSize="9px" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                                                        ✓ COMPLETE
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </HStack>
+                                                                        </Box>
                                                                     </Box>
-                                                                </HStack>
 
-                                                                <Box bg="purple.50" p={2.5} borderRadius="xl" border="1px solid" borderColor="purple.100" mb={3}>
-                                                                    <SimpleGrid columns={2} spacing={2}>
-                                                                        <Box>
-                                                                            <Text fontSize="9px" color="gray.500" fontWeight="bold">NEXT SERVICE</Text>
-                                                                            <Text fontSize="xs" fontWeight="bold" color="red.600">{v.serviceDate ? v.serviceDate.substring(0, 10) : 'N/A'}</Text>
-                                                                        </Box>
-                                                                        <Box>
-                                                                            <Text fontSize="9px" color="gray.500" fontWeight="bold">INSURANCE</Text>
-                                                                            <Text fontSize="xs" fontWeight="bold" color="purple.700">{v.insuranceDate ? v.insuranceDate.substring(0, 10) : 'N/A'}</Text>
-                                                                        </Box>
-                                                                    </SimpleGrid>
-                                                                </Box>
+                                                                    <HStack spacing={1.5} pt={2} borderTop="1px solid" borderColor="gray.100">
+                                                                        <Button flex={1} size="xs" colorScheme="teal" variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEye} />} onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }}>View</Button>
+                                                                        <Button flex={1} size="xs" colorScheme="blue" variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)}>Edit</Button>
+                                                                        <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Sticker" />
+                                                                        <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
+                                                                    </HStack>
+                                                                </CardBody>
+                              </Card>
+                                                        );
+                                                    })}
+                                                </SimpleGrid>
+                                            );
 
-                                                                <HStack spacing={1.5} pt={2} borderTop="1px solid" borderColor="gray.100">
-                                                                    <Button flex={1} size="xs" colorScheme="teal" variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEye} />} onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }}>View</Button>
-                                                                    <Button flex={1} size="xs" colorScheme="blue" variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)}>Edit</Button>
-                                                                    <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Sticker" />
-                                                                    <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
-                                                                </HStack>
-                                                            </CardBody>
-                                                        </Card>
-                                                    );
-                                                })}
-                                            </SimpleGrid>
-                                        )}
-
-                                        {filteredVehicles.length === 0 && (
-                                            <Center p={8} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
-                                                <VStack spacing={2}>
-                                                    <Icon as={FaTruck} w={8} h={8} color="gray.300" />
-                                                    <Text color="gray.500" fontSize="sm">No vehicles found matching "{searchQuery}"</Text>
-                                                </VStack>
-                                            </Center>
-                                        )}
+                                            return (
+                                                <Tabs variant="soft-rounded" colorScheme="purple" size="sm">
+                                                    <TabList bg="gray.50" borderRadius="2xl" p={1.5} mb={4} border="1px solid" borderColor="gray.200" display="flex" gap={2}>
+                                                        <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={5} py={2.5} _selected={{ color: 'white', bg: 'green.600', shadow: 'md' }}>
+                                                            🟢 Reserved &nbsp;<Badge colorScheme="green" bg="green.700" color="white" borderRadius="full" ml={1} px={2}>{activeVehicles.length}</Badge>
+                                                        </Tab>
+                                                        <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={5} py={2.5} _selected={{ color: 'white', bg: 'red.600', shadow: 'md' }}>
+                                                            🔴 Sold Out &nbsp;<Badge colorScheme="red" bg="red.700" color="white" borderRadius="full" ml={1} px={2}>{soldVehicles.length}</Badge>
+                                                        </Tab>
+                                                    </TabList>
+                                                    <TabPanels>
+                                                        <TabPanel p={0}>
+                                                            <VehicleGrid list={activeVehicles} accentColor="purple" />
+                                                        </TabPanel>
+                                                        <TabPanel p={0}>
+                                                            <VehicleGrid list={soldVehicles} accentColor="red" />
+                                                        </TabPanel>
+                                                    </TabPanels>
+                                                </Tabs>
+                                            );
+                                        })()}
                                     </Box>
                                 </TabPanel>
 
@@ -3091,154 +3171,7 @@ const VehicleMasterForm = () => {
                                     </Box>
                                 </TabPanel>
 
-                                {/* ── TAB 3: VEHICLE USAGE REPORT (Fuel Log) ── */}
-                                <TabPanel p={0}>
-                                    <Box mt={2}>
-                                        {/* Header */}
-                                        <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
-                                            <HStack spacing={2}>
-                                                <Icon as={FaGasPump} color="blue.600" w={4} h={4} />
-                                                <Box>
-                                                    <Heading size="sm" color="blue.700">Vehicle Usage & Fuel Report</Heading>
-                                                    <Text fontSize="xs" color="gray.400">Last 10 days by default • filter as needed</Text>
-                                                </Box>
-                                            </HStack>
-                                            <HStack spacing={2} flexWrap="wrap">
-                                                <Button size="sm" colorScheme="blue" leftIcon={<Icon as={FaSyncAlt} />} borderRadius="xl" variant="outline" isLoading={reportLoading} onClick={fetchReportData}>Refresh</Button>
-                                                <Button size="sm" leftIcon={<Icon as={FaFileExcel} />} onClick={downloadUsageExcel} isLoading={reportLoading}
-                                                    bgGradient="linear(to-r, green.500, teal.500)" color="white" borderRadius="xl"
-                                                    _hover={{ bgGradient: 'linear(to-r, green.600, teal.600)', transform: 'translateY(-1px)' }} transition="all 0.2s"
-                                                >📥 Download Excel</Button>
-                                            </HStack>
-                                        </Flex>
 
-                                        {/* Filters — compact grid */}
-                                        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={2} mb={3} bg="blue.50" p={3} borderRadius="xl">
-                                            <FormControl>
-                                                <FormLabel fontSize="10px" fontWeight="bold" color="blue.700" mb={0.5}>From Date</FormLabel>
-                                                <Input type="date" size="sm" borderRadius="lg" bg="white" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
-                                            </FormControl>
-                                            <FormControl>
-                                                <FormLabel fontSize="10px" fontWeight="bold" color="blue.700" mb={0.5}>To Date</FormLabel>
-                                                <Input type="date" size="sm" borderRadius="lg" bg="white" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
-                                            </FormControl>
-                                            <FormControl>
-                                                <FormLabel fontSize="10px" fontWeight="bold" color="blue.700" mb={0.5}>Vehicle</FormLabel>
-                                                <Select size="sm" borderRadius="lg" bg="white" value={usageVehicleFilter} onChange={e => setUsageVehicleFilter(e.target.value)}>
-                                                    <option value="ALL">All Vehicles</option>
-                                                    {vehicles.map(v => <option key={v._id} value={v._id}>{v.vehicleNumber}</option>)}
-                                                </Select>
-                                            </FormControl>
-                                            <FormControl>
-                                                <FormLabel fontSize="10px" fontWeight="bold" color="blue.700" mb={0.5}>Fuel Type</FormLabel>
-                                                <Select size="sm" borderRadius="lg" bg="white" value={usageFuelFilter} onChange={e => setUsageFuelFilter(e.target.value)}>
-                                                    <option value="ALL">All Fuels</option>
-                                                    <option value="Petrol">🟠 Petrol</option>
-                                                    <option value="Diesel">🔵 Diesel</option>
-                                                    <option value="CNG">🟢 CNG</option>
-                                                    <option value="Electric">⚡ Electric</option>
-                                                </Select>
-                                            </FormControl>
-                                        </SimpleGrid>
-
-                                        {/* Summary chips */}
-                                        <Flex gap={2} mb={3} flexWrap="wrap">
-                                            <Box bg="blue.50" border="1.5px solid" borderColor="blue.200" borderRadius="xl" px={4} py={2} textAlign="center">
-                                                <Text fontSize="lg" fontWeight="black" color="blue.700">{groupedUsageByVehicle.length}</Text>
-                                                <Text fontSize="10px" color="blue.600" fontWeight="bold">Vehicles</Text>
-                                            </Box>
-                                            <Box bg="purple.50" border="1.5px solid" borderColor="purple.200" borderRadius="xl" px={4} py={2} textAlign="center">
-                                                <Text fontSize="lg" fontWeight="black" color="purple.700">{filteredUsageRows.length}</Text>
-                                                <Text fontSize="10px" color="purple.600" fontWeight="bold">Total Entries</Text>
-                                            </Box>
-                                            <Box bg="orange.50" border="1.5px solid" borderColor="orange.200" borderRadius="xl" px={4} py={2} textAlign="center">
-                                                <Text fontSize="lg" fontWeight="black" color="orange.700">₹{filteredUsageRows.reduce((s, r) => s + (r.fuelAmount || 0), 0).toLocaleString('en-IN')}</Text>
-                                                <Text fontSize="10px" color="orange.600" fontWeight="bold">Total Fuel Spend</Text>
-                                            </Box>
-                                        </Flex>
-
-                                        <Text fontSize="xs" color="gray.400" mb={2}>💡 Click any vehicle row to view all usage entries for that vehicle.</Text>
-
-                                        {/* Grouped vehicle table */}
-                                        {reportLoading ? (
-                                            <Center p={10}><Spinner size="lg" color="blue.500" /></Center>
-                                        ) : groupedUsageByVehicle.length === 0 ? (
-                                            <Center p={8} bg="white" borderRadius="2xl" border="1px dashed" borderColor="blue.200">
-                                                <VStack spacing={2}>
-                                                    <Icon as={FaGasPump} w={8} h={8} color="blue.200" />
-                                                    <Text color="gray.400" fontSize="sm">No vehicle usage data for selected filters.</Text>
-                                                    <Text color="gray.400" fontSize="xs">Try clicking Refresh or expand the date range.</Text>
-                                                </VStack>
-                                            </Center>
-                                        ) : (
-                                            <Box overflowX="auto" borderRadius="2xl" border="1.5px solid" borderColor="blue.100" boxShadow="sm">
-                                                <Table size="sm" variant="simple">
-                                                    <Thead>
-                                                        <Tr bg="#1E3A5F">
-                                                            {['#', 'Photo', 'Vehicle ID', 'Vehicle No.', 'Model / Name', 'Entries', 'Fuel Types', 'Total Fuel (₹)', ''].map(h => (
-                                                                <Th key={h} color="white" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wide" whiteSpace="nowrap" py={3} px={2}>{h}</Th>
-                                                            ))}
-                                                        </Tr>
-                                                    </Thead>
-                                                    <Tbody>
-                                                        {groupedUsageByVehicle.map((grp, i) => {
-                                                            const v = grp.vehicle;
-                                                            const primaryPhoto = getVehiclePrimaryPhoto(v);
-                                                            const fuelTypes = [...new Set(grp.rows.map(r => r.fuelType).filter(Boolean))];
-                                                            const totalFuel = grp.rows.reduce((s, r) => s + (r.fuelAmount || 0), 0);
-                                                            const fuelColorMap = { 'Diesel': 'blue', 'Petrol': 'orange', 'CNG': 'green', 'Electric': 'yellow' };
-                                                            const vId = v.vehicleId || `V-${String(i + 1).padStart(3, '0')}`;
-                                                            return (
-                                                                <Tr
-                                                                    key={v._id}
-                                                                    bg={i % 2 === 0 ? 'white' : 'blue.25'}
-                                                                    _hover={{ bg: 'blue.50', cursor: 'pointer', transform: 'scale(1.002)', boxShadow: 'md' }}
-                                                                    transition="all 0.15s"
-                                                                    onClick={() => { setSelectedUsageVehicle(v); setUsageDetailModalOpen(true); }}
-                                                                >
-                                                                    <Td fontSize="xs" fontWeight="bold" color="gray.400" textAlign="center" px={2}>{i + 1}</Td>
-                                                                    <Td px={2}>
-                                                                        {primaryPhoto
-                                                                            ? <Image src={primaryPhoto} w="52px" h="38px" objectFit="cover" borderRadius="lg" border="2px solid" borderColor="blue.300" />
-                                                                            : <Center w="52px" h="38px" bg="blue.100" borderRadius="lg" border="2px dashed" borderColor="blue.300"><Icon as={FaTruck} w={4} h={4} color="blue.400" /></Center>
-                                                                        }
-                                                                    </Td>
-                                                                    <Td px={2}>
-                                                                        <Badge colorScheme="blue" fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">{vId}</Badge>
-                                                                    </Td>
-                                                                    <Td px={2}>
-                                                                        <Text fontSize="xs" fontWeight="black" color="blue.800" fontFamily="monospace">{v.vehicleNumber}</Text>
-                                                                    </Td>
-                                                                    <Td px={2}>
-                                                                        <Text fontSize="xs" color="gray.700" noOfLines={1}>{v.vehicleName || '—'}</Text>
-                                                                    </Td>
-                                                                    <Td px={2} textAlign="center">
-                                                                        <Badge colorScheme="purple" borderRadius="full" px={2}>{grp.rows.length}</Badge>
-                                                                    </Td>
-                                                                    <Td px={2}>
-                                                                        <HStack spacing={1} flexWrap="wrap">
-                                                                            {fuelTypes.map(ft => (
-                                                                                <Badge key={ft} colorScheme={fuelColorMap[ft] || 'gray'} borderRadius="full" fontSize="9px" px={2}>
-                                                                                    <Icon as={FaGasPump} mr={0.5} />{ft}
-                                                                                </Badge>
-                                                                            ))}
-                                                                        </HStack>
-                                                                    </Td>
-                                                                    <Td px={2}>
-                                                                        <Text fontSize="xs" fontWeight="bold" color="orange.700">₹{totalFuel.toLocaleString('en-IN')}</Text>
-                                                                    </Td>
-                                                                    <Td px={2}>
-                                                                        <Badge colorScheme="blue" variant="outline" borderRadius="full" fontSize="9px" px={2} cursor="pointer">View Details →</Badge>
-                                                                    </Td>
-                                                                </Tr>
-                                                            );
-                                                        })}
-                                                    </Tbody>
-                                                </Table>
-                                            </Box>
-                                        )}
-                                    </Box>
-                                </TabPanel>
 
                             </TabPanels>
                         </Tabs>
@@ -3248,14 +3181,57 @@ const VehicleMasterForm = () => {
 
             {/* Vehicle Details Modal */}
             {/* Vehicle Details Modal */}
-            <Modal isOpen={!!viewVehicle} onClose={() => setViewVehicle(null)} size="5xl" isCentered isLazy unmountOnClose>
+            <Modal isOpen={!!viewVehicle} onClose={() => setViewVehicle(null)} size="full" isCentered isLazy unmountOnClose>
                 <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(8px)" />
-                <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl" maxW={{ base: "96vw", lg: "5xl" }} maxH="92vh" bg="gray.100">
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxW={{ base: "98vw", lg: "94vw", xl: "1400px" }} maxH="95vh" bg="gray.50">
                     {viewVehicle && (() => {
                         const vIdx = vehicles.findIndex(item => item._id === viewVehicle._id);
                         const vId = viewVehicle.vehicleId || `V-${String((vIdx >= 0 ? vIdx : 0) + 1).padStart(3, '0')}`;
                         const allPhotos = getVehicleAllPhotos(viewVehicle);
                         const activePhoto = allPhotos[viewPhotoIdx] || allPhotos[0] || null;
+                        const hasDoc = (val) => {
+                            if (!val) return false;
+                            if (typeof val === 'string') {
+                                const s = val.trim();
+                                return s.length > 0 && s !== 'null' && s !== 'undefined';
+                            }
+                            if (typeof val === 'object') {
+                                return Boolean((val.url && String(val.url).trim() !== '') || (val.path && String(val.path).trim() !== ''));
+                            }
+                            return false;
+                        };
+
+                        const getVehicleDocStatus = (v) => {
+                            if (!v) return { pendingCount: 0, pendingList: [], uploadedCount: 0, allUploaded: true };
+                            const pendingList = [];
+                            let uploadedCount = 0;
+
+                            // Vehicle Compliance Docs
+                            if (hasDoc(v.rcBook)) uploadedCount++; else pendingList.push('RC Book');
+                            if (hasDoc(v.insurancePhoto)) uploadedCount++; else pendingList.push('Insurance');
+                            if (hasDoc(v.pucPhoto)) uploadedCount++; else pendingList.push('PUC');
+
+                            // Purchase Docs
+                            if (hasDoc(v.purchaseOldRc)) uploadedCount++; else pendingList.push('Old RC Book');
+                            if (hasDoc(v.purchaseOldPuc)) uploadedCount++; else pendingList.push('Old PUC');
+                            if (hasDoc(v.purchaseAadharDoc)) uploadedCount++; else pendingList.push('Owner Aadhar');
+                            if (hasDoc(v.purchasePanDoc)) uploadedCount++; else pendingList.push('Owner PAN');
+
+                            // Sell Docs (only when vehicle is marked as sold out)
+                            if (v.isSold) {
+                                if (hasDoc(v.sellAadharDoc)) uploadedCount++; else pendingList.push('Buyer Aadhar');
+                                if (hasDoc(v.sellPanDoc)) uploadedCount++; else pendingList.push('Buyer PAN');
+                            }
+
+                            return {
+                                pendingCount: pendingList.length,
+                                pendingList,
+                                uploadedCount,
+                                allUploaded: pendingList.length === 0
+                            };
+                        };
+
+                        const docStatus = getVehicleDocStatus(viewVehicle);
 
                         return (
                             <>
@@ -3263,7 +3239,7 @@ const VehicleMasterForm = () => {
                                 <ModalBody p={0} display="flex" flexDirection={{ base: 'column', md: 'row' }} h="100%">
                                     
                                     {/* ── LEFT SIDE: Profile, Photo Gallery, Downloads ── */}
-                                    <Box w={{ base: '100%', md: '360px' }} bg="white" borderRight="1px solid" borderColor="gray.200" p={6} display="flex" flexDirection="column" alignItems="center" flexShrink={0}>
+                                    <Box w={{ base: '100%', md: '290px', lg: '310px' }} bg="white" borderRight="1px solid" borderColor="gray.200" p={{ base: 4, md: 5 }} display="flex" flexDirection="column" alignItems="center" flexShrink={0}>
                                         {/* Main large photo viewer */}
                                         <Box w="full" position="relative" borderRadius="2xl" overflow="hidden" boxShadow="lg" border="4px solid" borderColor="gray.50" bg="gray.100" mb={3} style={{ aspectRatio: '4/3' }}>
                                             {activePhoto ? (
@@ -3273,9 +3249,13 @@ const VehicleMasterForm = () => {
                                                     <Icon as={FaTruck} w={12} h={12} color="gray.300" />
                                                 </Center>
                                             )}
-                                            {viewVehicle.isSold && (
-                                                <Badge position="absolute" top={3} right={3} colorScheme="red" bg="red.500" color="white" fontSize="sm" px={3} py={1} borderRadius="xl" boxShadow="md">
-                                                    SOLD
+                                            {viewVehicle.isSold ? (
+                                                <Badge position="absolute" top={3} right={3} colorScheme="red" bg="red.600" color="white" fontSize="xs" px={3} py={1} borderRadius="xl" boxShadow="md" fontWeight="black">
+                                                    🔴 SOLD OUT
+                                                </Badge>
+                                            ) : (
+                                                <Badge position="absolute" top={3} right={3} colorScheme="green" bg="green.600" color="white" fontSize="xs" px={3} py={1} borderRadius="xl" boxShadow="md" fontWeight="black">
+                                                    🟢 RESERVED
                                                 </Badge>
                                             )}
                                             {allPhotos.length > 1 && (
@@ -3328,6 +3308,26 @@ const VehicleMasterForm = () => {
                                             <Text fontSize="sm" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wide">
                                                 {viewVehicle.vehicleName || 'Fleet Vehicle'}
                                             </Text>
+                                            <HStack spacing={2} justify="center" mt={1} wrap="wrap">
+                                                {viewVehicle.isSold ? (
+                                                    <Badge colorScheme="red" bg="red.600" color="white" fontSize="xs" px={3} py={1} borderRadius="md" fontWeight="black">
+                                                        🔴 SOLD OUT
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge colorScheme="green" bg="green.600" color="white" fontSize="xs" px={3} py={1} borderRadius="md" fontWeight="black">
+                                                        🟢 RESERVED
+                                                    </Badge>
+                                                )}
+                                                {docStatus.pendingCount > 0 ? (
+                                                    <Badge bg="red.700" color="white" fontSize="xs" px={2.5} py={1} borderRadius="md" fontWeight="black">
+                                                        ⚠️ {docStatus.pendingCount} DOCS PENDING
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge bg="green.700" color="white" fontSize="xs" px={2.5} py={1} borderRadius="md" fontWeight="black">
+                                                        ✓ DOCS OK
+                                                    </Badge>
+                                                )}
+                                            </HStack>
                                         </VStack>
 
                                         <VStack spacing={3} w="full" mt="auto">
@@ -3354,9 +3354,48 @@ const VehicleMasterForm = () => {
                                     </Box>
 
                                     {/* ── RIGHT SIDE: Details & Timeline ── */}
-                                    <Box flex={1} p={{ base: 5, md: 8 }} overflowY="auto" maxH={{ base: '60vh', md: '92vh' }}>
+                                    <Box flex={1} p={{ base: 4, md: 6 }} overflowY="auto" maxH={{ base: '60vh', md: '95vh' }}>
                                         <VStack spacing={8} align="stretch">
                                             
+                                            {/* ── Pending Documents Alert Banner (Dark Red) ── */}
+                                            {docStatus.pendingCount > 0 && (
+                                                <Box bg="red.50" border="2px solid" borderColor="red.600" borderRadius="2xl" p={4} boxShadow="sm">
+                                                    <Flex align={{ base: 'flex-start', sm: 'center' }} justify="space-between" gap={3} wrap="wrap">
+                                                        <HStack spacing={3}>
+                                                            <Center w="38px" h="38px" bg="red.100" borderRadius="xl" flexShrink={0}>
+                                                                <Icon as={FaExclamationTriangle} color="red.700" w={5} h={5} />
+                                                            </Center>
+                                                            <Box>
+                                                                <HStack spacing={2} wrap="wrap">
+                                                                    <Text fontSize="sm" fontWeight="black" color="red.900">
+                                                                        {docStatus.pendingCount} Document{docStatus.pendingCount > 1 ? 's' : ''} Pending Upload
+                                                                    </Text>
+                                                                    <Badge bg="red.700" color="white" fontSize="9px" px={2} py={0.5} borderRadius="full" fontWeight="black">
+                                                                        DARK RED PENDING
+                                                                    </Badge>
+                                                                </HStack>
+                                                                <Text fontSize="xs" color="red.800" fontWeight="bold" mt={0.5}>
+                                                                    Pending: {docStatus.pendingList.join(' • ')}
+                                                                </Text>
+                                                            </Box>
+                                                        </HStack>
+                                                        <Button
+                                                            size="xs"
+                                                            colorScheme="red"
+                                                            bg="red.700"
+                                                            color="white"
+                                                            _hover={{ bg: 'red.800' }}
+                                                            borderRadius="lg"
+                                                            fontWeight="black"
+                                                            leftIcon={<Icon as={FaEdit} />}
+                                                            onClick={() => { const veh = viewVehicle; setViewVehicle(null); handleEdit(veh); }}
+                                                        >
+                                                            Upload in Edit Form
+                                                        </Button>
+                                                    </Flex>
+                                                </Box>
+                                            )}
+
                                             {/* Status & Expirations */}
                                             <Box>
                                                 <Text fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="widest" mb={4}>Vehicle Status & Dates</Text>
@@ -3376,77 +3415,235 @@ const VehicleMasterForm = () => {
                                                 </SimpleGrid>
                                             </Box>
 
-                                            {/* Purchase Details */}
-                                            {(viewVehicle.purchaseInfo?.ownerName || viewVehicle.purchaseInfo?.purchaseDate || viewVehicle.purchaseAadharDoc || viewVehicle.purchasePanDoc || viewVehicle.purchaseOldRc || viewVehicle.purchaseOldPuc) && (
-                                                <Box bg="white" p={6} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                                                    <HStack mb={5} spacing={3}>
+                                            {/* ── Purchase Details & Documents ── */}
+                                            <Box bg="white" p={6} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm">
+                                                <HStack mb={5} spacing={3} justify="space-between" wrap="wrap">
+                                                    <HStack spacing={3}>
                                                         <Center w="36px" h="36px" bg="green.50" borderRadius="lg">
                                                             <Icon as={FaMoneyBillWave} color="green.600" w={4} h={4} />
                                                         </Center>
                                                         <Text fontSize="md" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wide">Purchase Details</Text>
                                                     </HStack>
-                                                    
-                                                    {(viewVehicle.purchaseInfo?.ownerName || viewVehicle.purchaseInfo?.purchaseDate) && (
-                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
-                                                            {viewVehicle.purchaseInfo.ownerName && (<Box><Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">OWNER NAME</Text><Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.ownerName}</Text></Box>)}
-                                                            {viewVehicle.purchaseInfo.purchaseDate && (<Box><Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PURCHASE DATE</Text><Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.purchaseDate.substring(0, 10)}</Text></Box>)}
-                                                            {viewVehicle.purchaseInfo.purchaseRate && (<Box><Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PURCHASE RATE</Text><Text fontSize="sm" fontWeight="black" color="green.600">₹{Number(viewVehicle.purchaseInfo.purchaseRate).toLocaleString('en-IN')}</Text></Box>)}
-                                                            {viewVehicle.purchaseInfo.paymentMode && (<Box><Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PAYMENT MODE</Text><Badge colorScheme="green" borderRadius="md" px={2}>{viewVehicle.purchaseInfo.paymentMode}</Badge></Box>)}
-                                                            {viewVehicle.purchaseInfo.mobileNumbers?.filter(Boolean).length > 0 && (<Box><Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">MOBILE</Text><Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.mobileNumbers.filter(Boolean)[0]}</Text></Box>)}
-                                                            {viewVehicle.purchaseInfo.aadharNumber && (<Box><Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">AADHAR</Text><Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.aadharNumber}</Text></Box>)}
-                                                        </SimpleGrid>
-                                                    )}
-
-                                                    {/* Purchase Documents */}
                                                     {(() => {
                                                         const v = viewVehicle;
-                                                        const purchaseDocs = [
-                                                            v.purchaseOldRc     && { label: 'Old RC',       url: getFileUrl(v.purchaseOldRc?.url     || v.purchaseOldRc?.path     || v.purchaseOldRc),     icon: FaFilePdf, color: 'gray'   },
-                                                            v.purchaseOldPuc    && { label: 'Old PUC',      url: getFileUrl(v.purchaseOldPuc?.url    || v.purchaseOldPuc?.path    || v.purchaseOldPuc),    icon: FaFilePdf, color: 'gray'   },
-                                                            v.purchaseAadharDoc && { label: 'Owner Aadhar', url: getFileUrl(v.purchaseAadharDoc?.url || v.purchaseAadharDoc?.path || v.purchaseAadharDoc), icon: FaIdCard,  color: 'blue'   },
-                                                            v.purchasePanDoc    && { label: 'Owner PAN',    url: getFileUrl(v.purchasePanDoc?.url    || v.purchasePanDoc?.path    || v.purchasePanDoc),    icon: FaIdBadge, color: 'orange' },
-                                                        ].filter(Boolean);
-                                                        if (!purchaseDocs.length) return null;
-                                                        return (
-                                                            <Box pt={4} borderTop="1px dashed" borderColor="gray.200">
-                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" mb={3} letterSpacing="wide">Purchase Documents ({purchaseDocs.length})</Text>
-                                                                <HStack spacing={2} flexWrap="wrap">
-                                                                    {purchaseDocs.map((doc, i) => (
-                                                                        <Button key={i} as="a" href={doc.url} target="_blank" size="sm" colorScheme={doc.color} variant="solid" leftIcon={<Icon as={doc.icon} />} borderRadius="xl" fontWeight="bold" boxShadow="sm" _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }} transition="all 0.15s">
-                                                                            {doc.label}
-                                                                        </Button>
-                                                                    ))}
-                                                                </HStack>
-                                                            </Box>
+                                                        const missingPurchase = (!hasDoc(v.purchaseOldRc) ? 1 : 0) + (!hasDoc(v.purchaseOldPuc) ? 1 : 0) + (!hasDoc(v.purchaseAadharDoc) ? 1 : 0) + (!hasDoc(v.purchasePanDoc) ? 1 : 0);
+                                                        return missingPurchase > 0 ? (
+                                                            <Badge bg="red.700" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
+                                                                {missingPurchase} DOCS PENDING
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge bg="green.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
+                                                                ALL DOCS UPLOADED
+                                                            </Badge>
                                                         );
                                                     })()}
-                                                </Box>
-                                            )}
+                                                </HStack>
+                                                
+                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
+                                                    <Box>
+                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">OWNER NAME</Text>
+                                                        <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo?.ownerName || '—'}</Text>
+                                                    </Box>
+                                                    <Box>
+                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PURCHASE DATE</Text>
+                                                        <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo?.purchaseDate ? viewVehicle.purchaseInfo.purchaseDate.substring(0, 10) : '—'}</Text>
+                                                    </Box>
+                                                    <Box>
+                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PURCHASE RATE</Text>
+                                                        <Text fontSize="sm" fontWeight="black" color="green.600">{viewVehicle.purchaseInfo?.purchaseRate ? `₹${Number(viewVehicle.purchaseInfo.purchaseRate).toLocaleString('en-IN')}` : '—'}</Text>
+                                                    </Box>
+                                                    {viewVehicle.purchaseInfo?.paymentMode && (
+                                                        <Box>
+                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PAYMENT MODE</Text>
+                                                            <Badge colorScheme="green" borderRadius="md" px={2}>{viewVehicle.purchaseInfo.paymentMode}</Badge>
+                                                        </Box>
+                                                    )}
+                                                    {viewVehicle.purchaseInfo?.mobileNumbers?.filter(Boolean).length > 0 && (
+                                                        <Box>
+                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">MOBILE</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.mobileNumbers.filter(Boolean)[0]}</Text>
+                                                        </Box>
+                                                    )}
+                                                    {viewVehicle.purchaseInfo?.aadharNumber && (
+                                                        <Box>
+                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">AADHAR</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.aadharNumber}</Text>
+                                                        </Box>
+                                                    )}
+                                                    {viewVehicle.purchaseInfo?.panNumber && (
+                                                        <Box>
+                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PAN</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.panNumber}</Text>
+                                                        </Box>
+                                                    )}
+                                                </SimpleGrid>
 
-                                            {/* Vehicle Registration & Compliance Documents */}
+                                                {/* Purchase Documents: uploaded ones clickable, not uploaded ones in dark red */}
+                                                {(() => {
+                                                    const v = viewVehicle;
+                                                    const purchaseDocConfigs = [
+                                                        { key: 'oldRc', label: 'Old RC Book', val: v.purchaseOldRc, icon: FaFilePdf, color: 'purple' },
+                                                        { key: 'oldPuc', label: 'Old PUC', val: v.purchaseOldPuc, icon: FaFilePdf, color: 'teal' },
+                                                        { key: 'ownerAadhar', label: 'Owner Aadhar', val: v.purchaseAadharDoc, icon: FaIdCard, color: 'blue' },
+                                                        { key: 'ownerPan', label: 'Owner PAN', val: v.purchasePanDoc, icon: FaIdBadge, color: 'orange' },
+                                                    ];
+                                                    const otherDocs = Array.isArray(v.purchaseOtherDocs) ? v.purchaseOtherDocs : [];
+
+                                                    return (
+                                                        <Box pt={4} borderTop="1px dashed" borderColor="gray.200">
+                                                            <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" mb={3} letterSpacing="wide">
+                                                                Purchase Documents
+                                                            </Text>
+                                                            <Wrap spacing={2.5}>
+                                                                {purchaseDocConfigs.map(doc => {
+                                                                    const uploaded = hasDoc(doc.val);
+                                                                    if (uploaded) {
+                                                                        const url = getFileUrl(doc.val?.url || doc.val?.path || doc.val);
+                                                                        return (
+                                                                            <WrapItem key={doc.key}>
+                                                                                <Button
+                                                                                    as="a"
+                                                                                    href={url}
+                                                                                    target="_blank"
+                                                                                    size="sm"
+                                                                                    colorScheme={doc.color}
+                                                                                    variant="solid"
+                                                                                    leftIcon={<Icon as={doc.icon} />}
+                                                                                    borderRadius="xl"
+                                                                                    fontWeight="bold"
+                                                                                    boxShadow="sm"
+                                                                                    _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
+                                                                                    transition="all 0.15s"
+                                                                                >
+                                                                                    {doc.label}
+                                                                                </Button>
+                                                                            </WrapItem>
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        <WrapItem key={doc.key}>
+                                                                            <HStack
+                                                                                spacing={2}
+                                                                                px={3}
+                                                                                py={1.5}
+                                                                                borderRadius="xl"
+                                                                                bg="red.50"
+                                                                                border="1.5px dashed"
+                                                                                borderColor="red.600"
+                                                                                color="red.800"
+                                                                                boxShadow="xs"
+                                                                            >
+                                                                                <Icon as={FaExclamationTriangle} color="red.600" w={3.5} h={3.5} />
+                                                                                <Text fontSize="xs" fontWeight="black" color="red.800">
+                                                                                    {doc.label} Pending
+                                                                                </Text>
+                                                                                <Badge bg="red.700" color="white" fontSize="9px" px={1.5} py={0.5} borderRadius="full" fontWeight="black">
+                                                                                    NOT UPLOADED
+                                                                                </Badge>
+                                                                            </HStack>
+                                                                        </WrapItem>
+                                                                    );
+                                                                })}
+                                                                {otherDocs.map((doc, i) => {
+                                                                    const u = getFileUrl(doc.url || doc.path || doc);
+                                                                    const l = doc.label || (typeof doc === 'string' ? doc.split('/').pop() : `Doc ${i + 1}`);
+                                                                    return (
+                                                                        <WrapItem key={`other-${i}`}>
+                                                                            <Button as="a" href={u} target="_blank" size="sm" colorScheme="gray" variant="outline" leftIcon={<Icon as={FaFileAlt} />} borderRadius="xl" fontWeight="bold">
+                                                                                {l}
+                                                                            </Button>
+                                                                        </WrapItem>
+                                                                    );
+                                                                })}
+                                                            </Wrap>
+                                                        </Box>
+                                                    );
+                                                })()}
+                                            </Box>
+
+                                            {/* ── Vehicle Registration & Compliance Documents ── */}
                                             {(() => {
                                                 const v = viewVehicle;
-                                                const complianceDocs = [
-                                                    v.rcBook         && { label: 'RC Book',      url: getFileUrl(v.rcBook?.url || v.rcBook?.path || v.rcBook),         icon: FaFilePdf,      color: 'blue'   },
-                                                    v.insurancePhoto && { label: 'Insurance',    url: getFileUrl(v.insurancePhoto?.url || v.insurancePhoto?.path || v.insurancePhoto), icon: FaFileContract, color: 'green'  },
-                                                    v.pucPhoto       && { label: 'PUC',          url: getFileUrl(v.pucPhoto?.url || v.pucPhoto?.path || v.pucPhoto),   icon: FaFileAlt,      color: 'teal'   },
-                                                ].filter(Boolean);
-                                                if (!complianceDocs.length) return null;
+                                                const complianceDocConfigs = [
+                                                    { key: 'rcBook', label: 'RC Book', val: v.rcBook, icon: FaFilePdf, color: 'blue' },
+                                                    { key: 'insurancePhoto', label: 'Insurance', val: v.insurancePhoto, icon: FaFileContract, color: 'green' },
+                                                    { key: 'pucPhoto', label: 'PUC', val: v.pucPhoto, icon: FaFileAlt, color: 'teal' },
+                                                ];
+                                                const missingCount = complianceDocConfigs.filter(d => !hasDoc(d.val)).length;
+
                                                 return (
                                                     <Box bg="blue.50" p={6} borderRadius="2xl" border="1px solid" borderColor="blue.100" boxShadow="sm">
-                                                        <HStack mb={4} spacing={3}>
-                                                            <Center w="36px" h="36px" bg="blue.100" borderRadius="lg">
-                                                                <Icon as={FaFileContract} color="blue.600" w={4} h={4} />
-                                                            </Center>
-                                                            <Text fontSize="md" fontWeight="black" color="blue.800" textTransform="uppercase" letterSpacing="wide">Vehicle Documents</Text>
+                                                        <HStack mb={4} spacing={3} justify="space-between" wrap="wrap">
+                                                            <HStack spacing={3}>
+                                                                <Center w="36px" h="36px" bg="blue.100" borderRadius="lg">
+                                                                    <Icon as={FaFileContract} color="blue.600" w={4} h={4} />
+                                                                </Center>
+                                                                <Box>
+                                                                    <Text fontSize="md" fontWeight="black" color="blue.800" textTransform="uppercase" letterSpacing="wide">Vehicle Documents</Text>
+                                                                    <Text fontSize="10px" color="blue.600" fontWeight="bold">RC Book • Insurance • PUC</Text>
+                                                                </Box>
+                                                            </HStack>
+                                                            {missingCount > 0 ? (
+                                                                <Badge bg="red.700" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
+                                                                    {missingCount} PENDING
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge bg="green.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
+                                                                    ALL UPLOADED
+                                                                </Badge>
+                                                            )}
                                                         </HStack>
-                                                        <HStack spacing={3} flexWrap="wrap">
-                                                            {complianceDocs.map((doc, i) => (
-                                                                <Button key={i} as="a" href={doc.url} target="_blank" size="sm" colorScheme={doc.color} variant="solid" leftIcon={<Icon as={doc.icon} />} borderRadius="xl" fontWeight="bold" boxShadow="sm" _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }} transition="all 0.15s">
-                                                                    {doc.label}
-                                                                </Button>
-                                                            ))}
-                                                        </HStack>
+                                                        <Wrap spacing={2.5}>
+                                                            {complianceDocConfigs.map(doc => {
+                                                                const uploaded = hasDoc(doc.val);
+                                                                if (uploaded) {
+                                                                    const url = getFileUrl(doc.val?.url || doc.val?.path || doc.val);
+                                                                    return (
+                                                                        <WrapItem key={doc.key}>
+                                                                            <Button
+                                                                                as="a"
+                                                                                href={url}
+                                                                                target="_blank"
+                                                                                size="sm"
+                                                                                colorScheme={doc.color}
+                                                                                variant="solid"
+                                                                                leftIcon={<Icon as={doc.icon} />}
+                                                                                borderRadius="xl"
+                                                                                fontWeight="bold"
+                                                                                boxShadow="sm"
+                                                                                _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
+                                                                                transition="all 0.15s"
+                                                                            >
+                                                                                {doc.label}
+                                                                            </Button>
+                                                                        </WrapItem>
+                                                                    );
+                                                                }
+                                                                return (
+                                                                    <WrapItem key={doc.key}>
+                                                                        <HStack
+                                                                            spacing={2}
+                                                                            px={3}
+                                                                            py={1.5}
+                                                                            borderRadius="xl"
+                                                                            bg="red.50"
+                                                                            border="1.5px dashed"
+                                                                            borderColor="red.600"
+                                                                            color="red.800"
+                                                                            boxShadow="xs"
+                                                                        >
+                                                                            <Icon as={FaExclamationTriangle} color="red.600" w={3.5} h={3.5} />
+                                                                            <Text fontSize="xs" fontWeight="black" color="red.800">
+                                                                                {doc.label} Pending
+                                                                            </Text>
+                                                                            <Badge bg="red.700" color="white" fontSize="9px" px={1.5} py={0.5} borderRadius="full" fontWeight="black">
+                                                                                NOT UPLOADED
+                                                                            </Badge>
+                                                                        </HStack>
+                                                                    </WrapItem>
+                                                                );
+                                                            })}
+                                                        </Wrap>
                                                     </Box>
                                                 );
                                             })()}
@@ -3479,49 +3676,752 @@ const VehicleMasterForm = () => {
                                                 );
                                             })()}
 
-                                            {/* Sell Details */}
-                                            {viewVehicle.isSold && (viewVehicle.sellInfo?.ownerName || viewVehicle.sellAadharDoc || viewVehicle.sellPanDoc) && (
-                                                <Box bg="red.50" p={6} borderRadius="2xl" border="1px solid" borderColor="red.100" boxShadow="sm">
-                                                    <HStack mb={5} spacing={3}>
-                                                        <Center w="36px" h="36px" bg="red.100" borderRadius="lg">
-                                                            <Icon as={FaHandshake} color="red.600" w={4} h={4} />
-                                                        </Center>
-                                                        <Text fontSize="md" fontWeight="black" color="red.800" textTransform="uppercase" letterSpacing="wide">Sell Details</Text>
+                                            {/* ── Sell Details (Shown when Vehicle is Sold Out) ── */}
+                                            {viewVehicle.isSold && (
+                                                <Box bg="red.50" p={6} borderRadius="2xl" border="1px solid" borderColor="red.200" boxShadow="sm">
+                                                    <HStack mb={5} spacing={3} justify="space-between" wrap="wrap">
+                                                        <HStack spacing={3}>
+                                                            <Center w="36px" h="36px" bg="red.100" borderRadius="lg">
+                                                                <Icon as={FaHandshake} color="red.600" w={4} h={4} />
+                                                            </Center>
+                                                            <Box>
+                                                                <Text fontSize="md" fontWeight="black" color="red.800" textTransform="uppercase" letterSpacing="wide">Sell Details (Sold Out)</Text>
+                                                                <Text fontSize="10px" color="red.600" fontWeight="bold">Buyer Information & Transfer Documents</Text>
+                                                            </Box>
+                                                        </HStack>
+                                                        {(() => {
+                                                            const v = viewVehicle;
+                                                            const missingSellCount = (!hasDoc(v.sellAadharDoc) ? 1 : 0) + (!hasDoc(v.sellPanDoc) ? 1 : 0);
+                                                            if (missingSellCount > 0) {
+                                                                return (
+                                                                    <Badge bg="red.700" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
+                                                                        {missingSellCount} DOCUMENTS PENDING
+                                                                    </Badge>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <Badge bg="green.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
+                                                                    DOCUMENTS COMPLETE
+                                                                </Badge>
+                                                            );
+                                                        })()}
                                                     </HStack>
 
-                                                    {viewVehicle.sellInfo?.ownerName && (
-                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
-                                                            {viewVehicle.sellInfo.ownerName && (<Box><Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">BUYER NAME</Text><Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.ownerName}</Text></Box>)}
-                                                            {viewVehicle.sellInfo.sellDate && (<Box><Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">SELL DATE</Text><Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.sellDate.substring(0, 10)}</Text></Box>)}
-                                                            {viewVehicle.sellInfo.sellRate && (<Box><Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">SELL RATE</Text><Text fontSize="sm" fontWeight="black" color="red.600">₹{Number(viewVehicle.sellInfo.sellRate).toLocaleString('en-IN')}</Text></Box>)}
-                                                            {viewVehicle.sellInfo.paymentMode && (<Box><Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">PAYMENT MODE</Text><Badge colorScheme="red" borderRadius="md" px={2}>{viewVehicle.sellInfo.paymentMode}</Badge></Box>)}
-                                                            {viewVehicle.sellInfo.mobileNumbers?.filter(Boolean).length > 0 && (<Box><Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">MOBILE</Text><Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.mobileNumbers.filter(Boolean)[0]}</Text></Box>)}
-                                                        </SimpleGrid>
-                                                    )}
+                                                    <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
+                                                        <Box>
+                                                            <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">BUYER NAME</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo?.ownerName || '—'}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">SELL DATE</Text>
+                                                            <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo?.sellDate ? viewVehicle.sellInfo.sellDate.substring(0, 10) : '—'}</Text>
+                                                        </Box>
+                                                        <Box>
+                                                            <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">SELL RATE</Text>
+                                                            <Text fontSize="sm" fontWeight="black" color="red.600">{viewVehicle.sellInfo?.sellRate ? `₹${Number(viewVehicle.sellInfo.sellRate).toLocaleString('en-IN')}` : '—'}</Text>
+                                                        </Box>
+                                                        {viewVehicle.sellInfo?.paymentMode && (
+                                                            <Box>
+                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">PAYMENT MODE</Text>
+                                                                <Badge colorScheme="red" borderRadius="md" px={2}>{viewVehicle.sellInfo.paymentMode}</Badge>
+                                                            </Box>
+                                                        )}
+                                                        {viewVehicle.sellInfo?.mobileNumbers?.filter(Boolean).length > 0 && (
+                                                            <Box>
+                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">MOBILE</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.mobileNumbers.filter(Boolean)[0]}</Text>
+                                                            </Box>
+                                                        )}
+                                                        {viewVehicle.sellInfo?.aadharNumber && (
+                                                            <Box>
+                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">BUYER AADHAR NO</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.aadharNumber}</Text>
+                                                            </Box>
+                                                        )}
+                                                        {viewVehicle.sellInfo?.panNumber && (
+                                                            <Box>
+                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">BUYER PAN NO</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.panNumber}</Text>
+                                                            </Box>
+                                                        )}
+                                                    </SimpleGrid>
 
-                                                    {/* Sell Documents */}
+                                                    {/* Sell Documents: uploaded ones clickable, not uploaded ones in dark red */}
                                                     {(() => {
                                                         const v = viewVehicle;
-                                                        const sellDocs = [
-                                                            v.sellAadharDoc && { label: 'Buyer Aadhar', url: getFileUrl(v.sellAadharDoc?.url || v.sellAadharDoc?.path || v.sellAadharDoc), icon: FaIdCard,  color: 'red' },
-                                                            v.sellPanDoc    && { label: 'Buyer PAN',    url: getFileUrl(v.sellPanDoc?.url    || v.sellPanDoc?.path    || v.sellPanDoc),    icon: FaIdBadge, color: 'red' },
-                                                        ].filter(Boolean);
-                                                        if (!sellDocs.length) return null;
+                                                        const sellDocConfigs = [
+                                                            { key: 'sellAadharDoc', label: 'Buyer Aadhar', val: v.sellAadharDoc, icon: FaIdCard, color: 'red' },
+                                                            { key: 'sellPanDoc', label: 'Buyer PAN', val: v.sellPanDoc, icon: FaIdBadge, color: 'red' },
+                                                        ];
+
                                                         return (
                                                             <Box pt={4} borderTop="1px dashed" borderColor="red.200">
-                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" textTransform="uppercase" mb={3} letterSpacing="wide">Sell Documents ({sellDocs.length})</Text>
-                                                                <HStack spacing={2} flexWrap="wrap">
-                                                                    {sellDocs.map((doc, i) => (
-                                                                        <Button key={i} as="a" href={doc.url} target="_blank" size="sm" colorScheme={doc.color} variant="solid" leftIcon={<Icon as={doc.icon} />} borderRadius="xl" fontWeight="bold" boxShadow="sm" _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }} transition="all 0.15s">
-                                                                            {doc.label}
-                                                                        </Button>
-                                                                    ))}
-                                                                </HStack>
+                                                                <Text fontSize="10px" color="red.600" fontWeight="bold" textTransform="uppercase" mb={3} letterSpacing="wide">
+                                                                    Sell Out Documents
+                                                                </Text>
+                                                                <Wrap spacing={2.5}>
+                                                                    {sellDocConfigs.map(doc => {
+                                                                        const uploaded = hasDoc(doc.val);
+                                                                        if (uploaded) {
+                                                                            const url = getFileUrl(doc.val?.url || doc.val?.path || doc.val);
+                                                                            return (
+                                                                                <WrapItem key={doc.key}>
+                                                                                    <Button
+                                                                                        as="a"
+                                                                                        href={url}
+                                                                                        target="_blank"
+                                                                                        size="sm"
+                                                                                        colorScheme={doc.color}
+                                                                                        variant="solid"
+                                                                                        leftIcon={<Icon as={doc.icon} />}
+                                                                                        borderRadius="xl"
+                                                                                        fontWeight="bold"
+                                                                                        boxShadow="sm"
+                                                                                        _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
+                                                                                        transition="all 0.15s"
+                                                                                    >
+                                                                                        {doc.label}
+                                                                                    </Button>
+                                                                                </WrapItem>
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            <WrapItem key={doc.key}>
+                                                                                <HStack
+                                                                                    spacing={2}
+                                                                                    px={3}
+                                                                                    py={1.5}
+                                                                                    borderRadius="xl"
+                                                                                    bg="red.100"
+                                                                                    border="1.5px dashed"
+                                                                                    borderColor="red.600"
+                                                                                    color="red.800"
+                                                                                    boxShadow="xs"
+                                                                                >
+                                                                                    <Icon as={FaExclamationTriangle} color="red.600" w={3.5} h={3.5} />
+                                                                                    <Text fontSize="xs" fontWeight="black" color="red.800">
+                                                                                        {doc.label} Pending
+                                                                                    </Text>
+                                                                                    <Badge bg="red.700" color="white" fontSize="9px" px={1.5} py={0.5} borderRadius="full" fontWeight="black">
+                                                                                        NOT UPLOADED
+                                                                                    </Badge>
+                                                                                </HStack>
+                                                                            </WrapItem>
+                                                                        );
+                                                                    })}
+                                                                </Wrap>
                                                             </Box>
                                                         );
                                                     })()}
                                                 </Box>
                                             )}
+                                            {/* ── Dynamic Usage Report for this vehicle (Spacious, Zero-Horizontal-Scroll, Light & Modern Design) ── */}
+                                            {(() => {
+                                                const vehicleRows = vehicleUsageRows.filter(r => r.vehicle?._id === viewVehicle._id);
+                                                const totalFuel = vehicleRows.reduce((s, r) => s + (r.fuelAmount || 0), 0);
+                                                const fuelColorMap = {
+                                                    'Diesel': 'blue',
+                                                    'Petrol': 'orange',
+                                                    'CNG': 'green',
+                                                    'Electric': 'purple',
+                                                    'Fuel': 'teal'
+                                                };
+                                                const fuelHexMap = {
+                                                    'Diesel': '#3182CE',
+                                                    'Petrol': '#DD6B20',
+                                                    'CNG': '#38A169',
+                                                    'Electric': '#805AD5',
+                                                    'Fuel': '#319795'
+                                                };
+
+                                                // Calculate fuel breakdown (handles single, multiple distinct fuel types, or no fuel logged)
+                                                const fuelTypeMap = {};
+                                                vehicleRows.forEach(r => {
+                                                    const rawFt = (r.fuelType || '').trim();
+                                                    const amt = Number(r.fuelAmount) || 0;
+                                                    let types = [];
+                                                    if (rawFt && rawFt !== '—' && rawFt !== '-') {
+                                                        types = rawFt.split(',').map(s => s.trim()).filter(Boolean);
+                                                    } else if (amt > 0) {
+                                                        types = ['Fuel'];
+                                                    }
+
+                                                    if (types.length > 0) {
+                                                        const perTypeAmt = amt / types.length;
+                                                        types.forEach(t => {
+                                                            const normType = t.toUpperCase() === 'CNG' ? 'CNG' : (t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+                                                            if (!fuelTypeMap[normType]) {
+                                                                fuelTypeMap[normType] = { count: 0, amount: 0 };
+                                                            }
+                                                            fuelTypeMap[normType].count += 1;
+                                                            fuelTypeMap[normType].amount += perTypeAmt;
+                                                        });
+                                                    }
+                                                });
+                                                const distinctFuelTypes = Object.keys(fuelTypeMap);
+
+                                                // Calculate date difference for title & preset status
+                                                const getDaysDiff = (start, end) => {
+                                                    if (!start || !end) return 10;
+                                                    const d1 = new Date(start);
+                                                    const d2 = new Date(end);
+                                                    const diffTime = Math.abs(d2 - d1);
+                                                    return Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+                                                };
+                                                const daysCount = getDaysDiff(reportStartDate, reportEndDate);
+
+                                                const getTodayStr = () => new Date().toISOString().split('T')[0];
+                                                const getDaysAgoStr = (num) => {
+                                                    const d = new Date();
+                                                    d.setDate(d.getDate() - num);
+                                                    return d.toISOString().split('T')[0];
+                                                };
+
+                                                return (
+                                                    <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm">
+                                                        {/* ── Section Header with Title, Active Range & Excel Download ── */}
+                                                        <Box mb={4}>
+                                                            <Flex justify="space-between" align={{ base: 'flex-start', sm: 'center' }} wrap="wrap" gap={3} mb={3.5}>
+                                                                <HStack spacing={3}>
+                                                                    <Center w="40px" h="40px" bgGradient="linear(to-br, blue.500, blue.600)" borderRadius="xl" boxShadow="sm" color="white">
+                                                                        <Icon as={FaGasPump} w={5} h={5} />
+                                                                    </Center>
+                                                                    <Box>
+                                                                        <HStack spacing={2.5} align="center" wrap="wrap">
+                                                                            <Text fontSize="md" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wide">
+                                                                                {daysCount === 10 ? '10-Day Usage Report' : `${daysCount}-Day Usage Report`}
+                                                                            </Text>
+                                                                            <Badge colorScheme="blue" variant="subtle" fontSize="2xs" px={2.5} py={0.5} borderRadius="full" fontWeight="bold">
+                                                                                {toExcelDate(reportStartDate)} → {toExcelDate(reportEndDate)}
+                                                                            </Badge>
+                                                                        </HStack>
+                                                                        <Text fontSize="xs" color="gray.400" mt={0.5}>
+                                                                            Loaded 10 days by default • Filter by any custom date range below
+                                                                        </Text>
+                                                                    </Box>
+                                                                </HStack>
+
+                                                                {vehicleRows.length > 0 && (
+                                                                    <Button
+                                                                        size="xs"
+                                                                        leftIcon={<Icon as={FaFileExcel} />}
+                                                                        onClick={() => downloadVehicleUsageExcel(vehicleRows, viewVehicle.vehicleNumber || 'Vehicle')}
+                                                                        bgGradient="linear(to-r, green.500, teal.500)"
+                                                                        color="white" borderRadius="lg"
+                                                                        _hover={{ bgGradient: 'linear(to-r, green.600, teal.600)', transform: 'translateY(-1px)' }}
+                                                                        transition="all 0.2s"
+                                                                        fontWeight="bold"
+                                                                        boxShadow="xs"
+                                                                        px={3}
+                                                                        py={2}
+                                                                    >
+                                                                        Export Excel
+                                                                    </Button>
+                                                                )}
+                                                            </Flex>
+
+                                                            {/* ── Interactive Date Filter Bar (Light & Clean) ── */}
+                                                            <Box bg="gray.50" p={3} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+                                                                    {/* Inputs + Filter Button */}
+                                                                    <HStack spacing={2.5} wrap="wrap" flex={1}>
+                                                                        <HStack spacing={1.5}>
+                                                                            <Text fontSize="10px" fontWeight="black" color="gray.600" textTransform="uppercase">FROM:</Text>
+                                                                            <Input
+                                                                                type="date"
+                                                                                size="xs"
+                                                                                w="130px"
+                                                                                borderRadius="md"
+                                                                                bg="white"
+                                                                                borderColor="gray.300"
+                                                                                value={reportStartDate}
+                                                                                onChange={e => setReportStartDate(e.target.value)}
+                                                                                onKeyDown={e => { if (e.key === 'Enter') fetchReportData(reportStartDate, reportEndDate); }}
+                                                                            />
+                                                                        </HStack>
+                                                                        <HStack spacing={1.5}>
+                                                                            <Text fontSize="10px" fontWeight="black" color="gray.600" textTransform="uppercase">TO:</Text>
+                                                                            <Input
+                                                                                type="date"
+                                                                                size="xs"
+                                                                                w="130px"
+                                                                                borderRadius="md"
+                                                                                bg="white"
+                                                                                borderColor="gray.300"
+                                                                                value={reportEndDate}
+                                                                                onChange={e => setReportEndDate(e.target.value)}
+                                                                                onKeyDown={e => { if (e.key === 'Enter') fetchReportData(reportStartDate, reportEndDate); }}
+                                                                            />
+                                                                        </HStack>
+                                                                        <Button
+                                                                            size="xs"
+                                                                            colorScheme="blue"
+                                                                            borderRadius="md"
+                                                                            leftIcon={<Icon as={FaFilter} />}
+                                                                            onClick={() => fetchReportData(reportStartDate, reportEndDate)}
+                                                                            isLoading={reportLoading}
+                                                                            fontWeight="bold"
+                                                                            boxShadow="xs"
+                                                                            px={3}
+                                                                        >
+                                                                            Filter
+                                                                        </Button>
+                                                                    </HStack>
+
+                                                                    {/* Quick Date Presets */}
+                                                                    <HStack spacing={1.5} wrap="wrap">
+                                                                        <Text fontSize="9px" fontWeight="bold" color="gray.400" mr={0.5}>PRESETS:</Text>
+                                                                        <Button
+                                                                            size="2xs"
+                                                                            variant={daysCount === 10 ? 'solid' : 'outline'}
+                                                                            colorScheme="blue"
+                                                                            borderRadius="full"
+                                                                            fontWeight="bold"
+                                                                            onClick={() => {
+                                                                                const s = getDaysAgoStr(10);
+                                                                                const e = getTodayStr();
+                                                                                setReportStartDate(s);
+                                                                                setReportEndDate(e);
+                                                                                fetchReportData(s, e);
+                                                                            }}
+                                                                        >
+                                                                            10 Days
+                                                                        </Button>
+                                                                        <Button
+                                                                            size="2xs"
+                                                                            variant={daysCount === 30 ? 'solid' : 'outline'}
+                                                                            colorScheme="blue"
+                                                                            borderRadius="full"
+                                                                            fontWeight="bold"
+                                                                            onClick={() => {
+                                                                                const s = getDaysAgoStr(30);
+                                                                                const e = getTodayStr();
+                                                                                setReportStartDate(s);
+                                                                                setReportEndDate(e);
+                                                                                fetchReportData(s, e);
+                                                                            }}
+                                                                        >
+                                                                            30 Days
+                                                                        </Button>
+                                                                        <Button
+                                                                            size="2xs"
+                                                                            variant="outline"
+                                                                            colorScheme="purple"
+                                                                            borderRadius="full"
+                                                                            fontWeight="bold"
+                                                                            onClick={() => {
+                                                                                const now = new Date();
+                                                                                const s = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                                                                                const e = getTodayStr();
+                                                                                setReportStartDate(s);
+                                                                                setReportEndDate(e);
+                                                                                fetchReportData(s, e);
+                                                                            }}
+                                                                        >
+                                                                            This Month
+                                                                        </Button>
+                                                                        <Button
+                                                                            size="2xs"
+                                                                            variant={daysCount === 60 ? 'solid' : 'outline'}
+                                                                            colorScheme="teal"
+                                                                            borderRadius="full"
+                                                                            fontWeight="bold"
+                                                                            onClick={() => {
+                                                                                const s = getDaysAgoStr(60);
+                                                                                const e = getTodayStr();
+                                                                                setReportStartDate(s);
+                                                                                setReportEndDate(e);
+                                                                                fetchReportData(s, e);
+                                                                            }}
+                                                                        >
+                                                                            60 Days
+                                                                        </Button>
+                                                                    </HStack>
+                                                                </Flex>
+                                                            </Box>
+                                                        </Box>
+
+                                                        {/* ── Summary Chips (Entries • Fuel Spend • Fuel Type(s)) ── */}
+                                                        <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} mb={5}>
+                                                            {/* Card 1: Entries */}
+                                                            <Box bg="gray.50" borderRadius="2xl" p={4} textAlign="center" border="1px solid" borderColor="gray.200" minH="90px" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
+                                                                <Text fontSize="2xl" fontWeight="black" color="blue.700" lineHeight="1">{vehicleRows.length}</Text>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide" mt={1}>Entries / Trips</Text>
+                                                                <Text fontSize="9px" color="gray.400" mt={0.5}>{toExcelDate(reportStartDate)} to {toExcelDate(reportEndDate)}</Text>
+                                                            </Box>
+
+                                                            {/* Card 2: Fuel Spend */}
+                                                            <Box bg="gray.50" borderRadius="2xl" p={4} textAlign="center" border="1px solid" borderColor="gray.200" minH="90px" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
+                                                                <Text fontSize="2xl" fontWeight="black" color="orange.600" lineHeight="1">₹{totalFuel.toLocaleString('en-IN')}</Text>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide" mt={1}>Total Fuel Spend</Text>
+                                                                <Text fontSize="9px" color="gray.400" mt={0.5}>
+                                                                    {vehicleRows.length > 0 ? `Avg ₹${Math.round(totalFuel / vehicleRows.length).toLocaleString('en-IN')} / trip` : '0 entries'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* Card 3: Fuel Type(s) - Handles 0, 1, or Multiple Fuel Types */}
+                                                            <Box
+                                                                bg="gray.50"
+                                                                borderRadius="2xl"
+                                                                p={3.5}
+                                                                textAlign="center"
+                                                                border="1px solid"
+                                                                borderColor="gray.200"
+                                                                minH="90px"
+                                                                display="flex"
+                                                                flexDirection="column"
+                                                                justifyContent="space-between"
+                                                                position="relative"
+                                                                overflow="hidden"
+                                                            >
+                                                                {/* Top Label */}
+                                                                <HStack justify="space-between" w="full" px={1} mb={0.5}>
+                                                                    <HStack spacing={1.5}>
+                                                                        <Icon as={FaGasPump} color={distinctFuelTypes.length > 1 ? "purple.600" : distinctFuelTypes.length === 1 ? "green.600" : "gray.400"} w={3} h={3} />
+                                                                        <Text fontSize="10px" color="gray.600" fontWeight="bold" textTransform="uppercase" letterSpacing="wide">
+                                                                            Fuel Type(s)
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    {distinctFuelTypes.length > 1 && (
+                                                                        <Badge colorScheme="purple" variant="solid" fontSize="9px" borderRadius="full" px={2} py={0.2} fontWeight="black">
+                                                                            {distinctFuelTypes.length} Types
+                                                                        </Badge>
+                                                                    )}
+                                                                </HStack>
+
+                                                                {/* Body Content */}
+                                                                <Box my="auto" py={0.5}>
+                                                                    {distinctFuelTypes.length === 0 ? (
+                                                                        <VStack spacing={0.5}>
+                                                                            <Badge colorScheme="gray" variant="subtle" fontSize="10px" borderRadius="full" px={2.5} py={0.5} fontWeight="bold">
+                                                                                No Fuel Logged
+                                                                            </Badge>
+                                                                            <Text fontSize="9px" color="gray.400">All trips logged ₹0 fuel</Text>
+                                                                        </VStack>
+                                                                    ) : distinctFuelTypes.length === 1 ? (
+                                                                        <VStack spacing={0.5}>
+                                                                            {(() => {
+                                                                                const ft = distinctFuelTypes[0];
+                                                                                const info = fuelTypeMap[ft];
+                                                                                return (
+                                                                                    <>
+                                                                                        <HStack justify="center" spacing={1.5}>
+                                                                                            <Badge colorScheme={fuelColorMap[ft] || 'teal'} fontSize="xs" px={2.5} py={0.5} borderRadius="full" fontWeight="bold">
+                                                                                                <Icon as={FaGasPump} mr={1} />{ft}
+                                                                                            </Badge>
+                                                                                            <Text fontSize="xs" fontWeight="black" color="orange.600">
+                                                                                                ₹{info.amount.toLocaleString('en-IN')}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <Text fontSize="9px" color="gray.400">
+                                                                                            {info.count} trip{info.count > 1 ? 's' : ''} logged with {ft}
+                                                                                        </Text>
+                                                                                    </>
+                                                                                );
+                                                                            })()}
+                                                                        </VStack>
+                                                                    ) : (
+                                                                        <VStack spacing={1.5} w="full">
+                                                                            {/* Wrap of all distinct fuel badges with amounts & counts */}
+                                                                            <Wrap justify="center" spacing={1.5} maxH="56px" overflowY="auto" py={0.5} w="full">
+                                                                                {distinctFuelTypes.map(ft => {
+                                                                                    const info = fuelTypeMap[ft];
+                                                                                    const col = fuelColorMap[ft] || 'teal';
+                                                                                    const pct = totalFuel > 0 ? Math.round((info.amount / totalFuel) * 100) : 0;
+                                                                                    return (
+                                                                                        <WrapItem key={ft}>
+                                                                                            <Tooltip
+                                                                                                label={`${ft}: ₹${info.amount.toLocaleString('en-IN')} (${info.count} trip${info.count > 1 ? 's' : ''}${totalFuel > 0 ? ` • ${pct}% of spend` : ''})`}
+                                                                                                hasArrow
+                                                                                                placement="top"
+                                                                                                bg="gray.900"
+                                                                                                color="white"
+                                                                                                fontSize="xs"
+                                                                                                borderRadius="md"
+                                                                                                px={2} py={1}
+                                                                                            >
+                                                                                                <Badge
+                                                                                                    colorScheme={col}
+                                                                                                    variant="subtle"
+                                                                                                    border="1px solid"
+                                                                                                    borderColor={`${col}.300`}
+                                                                                                    borderRadius="md"
+                                                                                                    px={2}
+                                                                                                    py={0.5}
+                                                                                                    fontSize="9px"
+                                                                                                    fontWeight="bold"
+                                                                                                    cursor="default"
+                                                                                                >
+                                                                                                    <HStack spacing={1}>
+                                                                                                        <Icon as={FaGasPump} w={2.5} h={2.5} />
+                                                                                                        <Text>{ft}:</Text>
+                                                                                                        <Text color="orange.700">₹{info.amount.toLocaleString('en-IN')}</Text>
+                                                                                                        <Text color="gray.500" fontSize="8px">({info.count})</Text>
+                                                                                                    </HStack>
+                                                                                                </Badge>
+                                                                                            </Tooltip>
+                                                                                        </WrapItem>
+                                                                                    );
+                                                                                })}
+                                                                            </Wrap>
+
+                                                                            {/* Segmented Color Bar showing distribution */}
+                                                                            {totalFuel > 0 && (
+                                                                                <Box w="full" bg="gray.200" h="4px" borderRadius="full" overflow="hidden" display="flex">
+                                                                                    {distinctFuelTypes.map(ft => {
+                                                                                        const info = fuelTypeMap[ft];
+                                                                                        const pct = Math.max(5, Math.round((info.amount / totalFuel) * 100));
+                                                                                        return (
+                                                                                            <Tooltip key={ft} label={`${ft}: ${pct}% (₹${info.amount.toLocaleString('en-IN')})`} hasArrow placement="top">
+                                                                                                <Box
+                                                                                                    w={`${pct}%`}
+                                                                                                    h="full"
+                                                                                                    bg={fuelHexMap[ft] || '#319795'}
+                                                                                                    title={`${ft}: ${pct}%`}
+                                                                                                    transition="all 0.3s"
+                                                                                                />
+                                                                                            </Tooltip>
+                                                                                        );
+                                                                                    })}
+                                                                                </Box>
+                                                                            )}
+                                                                        </VStack>
+                                                                    )}
+                                                                </Box>
+
+                                                                {/* Bottom helper text */}
+                                                                <Text fontSize="9px" color="gray.400" fontWeight="medium">
+                                                                    {distinctFuelTypes.length > 1
+                                                                        ? `Multi-Fuel Usage • ${distinctFuelTypes.join(' & ')}`
+                                                                        : distinctFuelTypes.length === 1
+                                                                        ? `Single Fuel Vehicle Type`
+                                                                        : `No Fuel Expenses`}
+                                                                </Text>
+                                                            </Box>
+                                                        </SimpleGrid>
+
+                                                        {/* ── Table: ZERO HORIZONTAL SCROLL • AIRY, SPACIOUS & LIGHTWEIGHT ── */}
+                                                        {reportLoading ? (
+                                                            <Center py={8}>
+                                                                <VStack spacing={2}>
+                                                                    <Spinner size="md" color="blue.500" />
+                                                                    <Text fontSize="xs" color="gray.400">Loading usage data…</Text>
+                                                                </VStack>
+                                                            </Center>
+                                                        ) : vehicleRows.length === 0 ? (
+                                                            <Center py={8} bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300">
+                                                                <VStack spacing={1.5}>
+                                                                    <Icon as={FaGasPump} w={7} h={7} color="gray.300" />
+                                                                    <Text color="gray.600" fontSize="sm" fontWeight="bold">No usage entries in selected date range</Text>
+                                                                    <Text color="gray.400" fontSize="xs">This vehicle had no recorded fuel or usage activity between {toExcelDate(reportStartDate)} and {toExcelDate(reportEndDate)}.</Text>
+                                                                </VStack>
+                                                            </Center>
+                                                        ) : (
+                                                            <Box w="full" overflow="hidden" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs" bg="white">
+                                                                <Table size="sm" variant="simple" w="full" sx={{ tableLayout: 'fixed' }}>
+                                                                    <Thead bg="gray.50" borderBottom="2px solid" borderColor="gray.200">
+                                                                        <Tr>
+                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="center" w="38px">#</Th>
+                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} w="95px">Date</Th>
+                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={3} w="30%">Employee</Th>
+                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} w="17%">Client</Th>
+                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} w="17%">Site</Th>
+                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="center" w="11%">Fuel</Th>
+                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="right" w="11%">Amount (₹)</Th>
+                                                                        </Tr>
+                                                                    </Thead>
+                                                                    <Tbody>
+                                                                        {vehicleRows.map((r, i) => (
+                                                                            <Tr key={i} bg={i % 2 === 0 ? 'white' : 'gray.50'} _hover={{ bg: 'blue.50' }} transition="background 0.15s" borderBottom="1px solid" borderColor="gray.100">
+                                                                                {/* # */}
+                                                                                <Td fontSize="xs" color="gray.400" fontWeight="bold" textAlign="center" px={2} py={3.5}>{i + 1}</Td>
+                                                                                
+                                                                                {/* Date */}
+                                                                                <Td px={2} py={3.5} whiteSpace="nowrap">
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" fontFamily="monospace">{toExcelDate(r.date)}</Text>
+                                                                                </Td>
+                                                                                
+                                                                                {/* Employee (Spacious, Single-line, Avatar, Truncation, Tooltip & Click-to-copy) */}
+                                                                                <Td px={3} py={3.5}>
+                                                                                    <Tooltip
+                                                                                        label={
+                                                                                            <Box p={2}>
+                                                                                                <HStack spacing={2} mb={1}>
+                                                                                                    <Avatar size="xs" name={r.employeeName || 'User'} bg="blue.600" color="white" />
+                                                                                                    <Box>
+                                                                                                        <Text fontWeight="black" fontSize="xs" color="white">{r.employeeName || 'Unknown Employee'}</Text>
+                                                                                                        {r.employeeEmail && r.employeeEmail !== r.employeeName && (
+                                                                                                            <Text fontSize="10px" color="blue.200">{r.employeeEmail}</Text>
+                                                                                                        )}
+                                                                                                    </Box>
+                                                                                                </HStack>
+                                                                                                {r.employeeMobile && (
+                                                                                                    <Text fontSize="10px" color="gray.300">📱 {r.employeeMobile}</Text>
+                                                                                                )}
+                                                                                                <Text fontSize="9px" color="gray.400" mt={1} fontStyle="italic">Click to copy full name</Text>
+                                                                                            </Box>
+                                                                                        }
+                                                                                        hasArrow
+                                                                                        placement="top"
+                                                                                        bg="gray.900"
+                                                                                        color="white"
+                                                                                        borderRadius="xl"
+                                                                                        p={2.5}
+                                                                                        boxShadow="2xl"
+                                                                                    >
+                                                                                        <HStack
+                                                                                            spacing={2}
+                                                                                            cursor="pointer"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                if (r.employeeName) {
+                                                                                                    navigator.clipboard?.writeText(r.employeeName);
+                                                                                                    toast({
+                                                                                                        title: 'Copied!',
+                                                                                                        description: `${r.employeeName} copied to clipboard`,
+                                                                                                        status: 'info',
+                                                                                                        duration: 1500,
+                                                                                                        isClosable: true,
+                                                                                                        size: 'sm'
+                                                                                                    });
+                                                                                                }
+                                                                                            }}
+                                                                                            _hover={{ opacity: 0.8 }}
+                                                                                            transition="opacity 0.15s"
+                                                                                            align="center"
+                                                                                        >
+                                                                                            <Avatar
+                                                                                                size="xs"
+                                                                                                name={r.employeeName || 'U'}
+                                                                                                bg="blue.600"
+                                                                                                color="white"
+                                                                                                flexShrink={0}
+                                                                                                boxShadow="xs"
+                                                                                            />
+                                                                                            <Text
+                                                                                                fontSize="xs"
+                                                                                                fontWeight="bold"
+                                                                                                color="gray.800"
+                                                                                                isTruncated
+                                                                                            >
+                                                                                                {r.employeeName || '—'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                    </Tooltip>
+                                                                                </Td>
+                                                                                
+                                                                                {/* Client (Best styling & Dark prominent text) */}
+                                                                                <Td px={2} py={3.5}>
+                                                                                    <Tooltip
+                                                                                        label={
+                                                                                            <Box p={1}>
+                                                                                                <Text fontSize="9px" color="purple.300" fontWeight="black" textTransform="uppercase">Client</Text>
+                                                                                                <Text fontSize="xs" fontWeight="bold" color="white">{r.clientName || '—'}</Text>
+                                                                                            </Box>
+                                                                                        }
+                                                                                        hasArrow
+                                                                                        placement="top"
+                                                                                        bg="gray.900"
+                                                                                        color="white"
+                                                                                        borderRadius="lg"
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        fontSize="xs"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} align="center">
+                                                                                            <Icon as={FaBuilding} color="purple.600" w={3.5} h={3.5} flexShrink={0} />
+                                                                                            <Text
+                                                                                                fontSize="xs"
+                                                                                                color="gray.900"
+                                                                                                fontWeight="bold"
+                                                                                                letterSpacing="tight"
+                                                                                                isTruncated
+                                                                                            >
+                                                                                                {r.clientName || '—'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                    </Tooltip>
+                                                                                </Td>
+                                                                                
+                                                                                {/* Site (Best styling & Dark prominent text) */}
+                                                                                <Td px={2} py={3.5}>
+                                                                                    <Tooltip
+                                                                                        label={
+                                                                                            <Box p={1}>
+                                                                                                <Text fontSize="9px" color="red.300" fontWeight="black" textTransform="uppercase">Work Site</Text>
+                                                                                                <Text fontSize="xs" fontWeight="bold" color="white">{r.siteName || '—'}</Text>
+                                                                                            </Box>
+                                                                                        }
+                                                                                        hasArrow
+                                                                                        placement="top"
+                                                                                        bg="gray.900"
+                                                                                        color="white"
+                                                                                        borderRadius="lg"
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        fontSize="xs"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} align="center">
+                                                                                            <Icon as={FaMapMarkerAlt} color="red.500" w={3.5} h={3.5} flexShrink={0} />
+                                                                                            <Text
+                                                                                                fontSize="xs"
+                                                                                                color="gray.900"
+                                                                                                fontWeight="bold"
+                                                                                                letterSpacing="tight"
+                                                                                                isTruncated
+                                                                                            >
+                                                                                                {r.siteName || '—'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                    </Tooltip>
+                                                                                </Td>
+                                                                                
+                                                                                {/* Fuel Badge */}
+                                                                                <Td px={2} py={3.5} textAlign="center">
+                                                                                    {(() => {
+                                                                                        const ft = (r.fuelType || '').trim();
+                                                                                        if (!ft || ft === '—' || ft === '-') {
+                                                                                            return (
+                                                                                                <Badge colorScheme="gray" variant="subtle" borderRadius="full" fontSize="9px" px={2} py={0.5}>
+                                                                                                    —
+                                                                                                </Badge>
+                                                                                            );
+                                                                                        }
+                                                                                        const types = ft.split(',').map(s => s.trim()).filter(Boolean);
+                                                                                        if (types.length > 1) {
+                                                                                            return (
+                                                                                                <HStack spacing={1} justify="center" wrap="wrap">
+                                                                                                    {types.map(t => (
+                                                                                                        <Badge key={t} colorScheme={fuelColorMap[t] || 'blue'} variant="subtle" border="1px solid" borderColor={`${fuelColorMap[t] || 'blue'}.200`} borderRadius="full" fontSize="9px" px={2} py={0.5} fontWeight="bold">
+                                                                                                            <Icon as={FaGasPump} mr={0.5} />{t}
+                                                                                                        </Badge>
+                                                                                                    ))}
+                                                                                                </HStack>
+                                                                                            );
+                                                                                        }
+                                                                                        return (
+                                                                                            <Badge colorScheme={fuelColorMap[ft] || 'blue'} variant="subtle" border="1px solid" borderColor={`${fuelColorMap[ft] || 'blue'}.200`} borderRadius="full" fontSize="9px" px={2.5} py={0.5} fontWeight="bold">
+                                                                                                <Icon as={FaGasPump} mr={0.5} />{ft}
+                                                                                            </Badge>
+                                                                                        );
+                                                                                    })()}
+                                                                                </Td>
+                                                                                
+                                                                                {/* Amount (₹) */}
+                                                                                <Td px={2} py={3.5} textAlign="right">
+                                                                                    <Text fontSize="xs" fontWeight="black" color={r.fuelAmount > 0 ? "orange.600" : "gray.400"}>
+                                                                                        ₹{(r.fuelAmount || 0).toLocaleString('en-IN')}
+                                                                                    </Text>
+                                                                                </Td>
+                                                                            </Tr>
+                                                                        ))}
+                                                                    </Tbody>
+                                                                </Table>
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                );
+                                            })()}
                                         </VStack>
                                     </Box>
                                 </ModalBody>
@@ -9264,6 +10164,8 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
         scheduleDate: ''
     });
     const [conflictWarning, setConflictWarning] = useState('');
+    const [uncheckReasonModal, setUncheckReasonModal] = useState(null);
+    const [uncheckHistory, setUncheckHistory] = useState(schedule?.assignmentChecklist || {});
     const [requiredToday, setRequiredToday] = useState(true);
     const [showResumeInput, setShowResumeInput] = useState(false);
     const [resumeDate, setResumeDate] = useState('');
@@ -9632,8 +10534,11 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                         </Flex>
                                     </MenuButton>
                                     <MenuList maxH="250px" overflowY="auto" borderRadius="xl" p={2} zIndex={10} shadow="lg" border="1px solid" borderColor="gray.100">
-                                        <MenuItem onClick={() => setFormData(prev => ({ ...prev, vehicle: '' }))} borderRadius="md" mb={1} _hover={{ bg: "gray.50" }}>
-                                            <Text color="gray.500">None (Clear Selection)</Text>
+                                        <MenuItem onClick={() => handleVehicleSelect('')} borderRadius="md" mb={1} _hover={{ bg: "gray.50" }}>
+                                            <HStack spacing={3}>
+                                                <Checkbox isChecked={!formData.vehicle} colorScheme="blue" pointerEvents="none" />
+                                                <Text color="gray.500" fontSize="sm">None (Uncheck / Clear Vehicle)</Text>
+                                            </HStack>
                                         </MenuItem>
                                         {vehicles.map(v => {
                                             const isSelected = formData.vehicle === v._id;
@@ -9641,13 +10546,19 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                             return (
                                                 <MenuItem 
                                                     key={v._id} 
-                                                    onClick={() => setFormData(prev => ({ ...prev, vehicle: v._id }))} 
+                                                    onClick={() => handleVehicleSelect(v._id)} 
                                                     _hover={{ bg: "blue.50" }} 
                                                     borderRadius="md" 
                                                     mb={1}
                                                     bg={isSelected ? "blue.50" : "transparent"}
                                                 >
-                                                    <HStack spacing={3}>
+                                                    <HStack spacing={3} w="100%">
+                                                        <Checkbox 
+                                                            isChecked={isSelected} 
+                                                            colorScheme="blue" 
+                                                            pointerEvents="none" 
+                                                            borderColor="gray.300" 
+                                                        />
                                                         {photoUrl ? (
                                                             <Image src={photoUrl} boxSize="40px" borderRadius="md" objectFit="cover" fallbackSrc="https://via.placeholder.com/40" />
                                                         ) : (
@@ -9655,10 +10566,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                                 <Icon as={FaCar} color="gray.400" />
                                                             </Center>
                                                         )}
-                                                        <VStack align="start" spacing={0}>
+                                                        <VStack align="start" spacing={0} flex={1}>
                                                             <Text fontSize="sm" fontWeight="bold" color={isSelected ? 'blue.800' : 'gray.700'}>{v.vehicleNumber}</Text>
                                                             <Text fontSize="xs" color="gray.500">{v.vehicleName}</Text>
                                                         </VStack>
+                                                        {isSelected && (
+                                                            <Badge colorScheme="blue" fontSize="9px">Assigned</Badge>
+                                                        )}
                                                     </HStack>
                                                 </MenuItem>
                                             );
