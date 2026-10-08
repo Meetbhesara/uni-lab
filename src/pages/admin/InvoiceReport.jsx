@@ -623,7 +623,15 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 const rawData = res.data.data;
 
                 // Map documents inline
-                const formattedSchedules = rawData.map(s => {
+                // Map documents inline (strictly filter out rejected, deactivated, and cancelled contracts)
+                const formattedSchedules = rawData
+                    .filter(s =>
+                        s.dayStatus !== 'Rejected' &&
+                        s.status !== 'Deactive' &&
+                        s.status !== 'deactive' &&
+                        s.contractCancelled !== true
+                    )
+                    .map(s => {
                     let docs = s.uploadedDocuments || [];
                     if (s.scheduleType === 'TOPOGRAPHY SURVEY') {
                         docs = (s.draftingWorkFiles?.mailFiles || []).map(f => ({ ...f, isMail: true }));
@@ -710,6 +718,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     // Filter logic based on documents: Topography Survey requires at least 1 Mail file uploaded
     const validSchedules = useMemo(() => schedules.filter(s => {
         if (s.dayStatus === 'Rejected') return false;
+        if (s.status === 'Deactive' || s.status === 'deactive') return false;
+        if (s.contractCancelled === true) return false;
 
         const isTopo = (s.scheduleType || '').toUpperCase().includes('TOPOGRAPHY');
 
@@ -719,6 +729,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         if (isTopo) return hasMailFile;
 
         if (s.scheduleType === 'MONTH' && s.endDate) {
+            if (s.contractCancelled || s.status === 'Deactive' || s.status === 'deactive' || s.dayStatus === 'Rejected') return false;
             const end = new Date(s.endDate);
             const today = new Date();
             today.setHours(0, 0, 0, 0);

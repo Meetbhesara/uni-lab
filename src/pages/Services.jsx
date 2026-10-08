@@ -24,7 +24,6 @@ import EmployeeExpensesModule from '../pages/EmployeeExpensesModule';
 import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import AdminDraftingWork from './admin/AdminDraftingWork';
 import InvoiceReport from './admin/InvoiceReport';
-import CompanyMaster from './admin/CompanyMaster';
 import AdminLoginReportView from '../components/admin/AdminLoginReportView';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
@@ -592,6 +591,7 @@ const VehicleMasterForm = () => {
     const [editId, setEditId] = useState(null);
     const [viewVehicle, setViewVehicle] = useState(null);
     const [viewPhotoIdx, setViewPhotoIdx] = useState(0);
+    const [activeDocPreview, setActiveDocPreview] = useState(null);
     const [stickerVehicle, setStickerVehicle] = useState(null);
     const [stickerColorIndex, setStickerColorIndex] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
@@ -599,6 +599,7 @@ const VehicleMasterForm = () => {
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
     const [activeTab, setActiveTab] = useState(0);
+    const [viewFromTab, setViewFromTab] = useState('reserved'); // 'reserved' | 'sold' | 'pending'
     // Section open/close for accordion feel
     const [purchaseSectionOpen, setPurchaseSectionOpen] = useState(true);
     const [sellSectionOpen, setSellSectionOpen] = useState(false);
@@ -1182,13 +1183,11 @@ const VehicleMasterForm = () => {
         const pPhoto = getVehiclePrimaryPhoto(v);
         const vIdx = vehicles.findIndex(item => item._id === v._id);
         const vId = v.vehicleId || `V-${String((vIdx >= 0 ? vIdx : 0) + 1).padStart(3, '0')}`;
-        const vBarcode = v.barcode || `UE-${vId.replace(/[^a-zA-Z0-9]/g, '')}`;
         const vNo = v.vehicleNumber || 'XX 00 XX 0000';
         const vName = v.vehicleName || 'Fleet Vehicle';
         const fullPhotoUrl = pPhoto ? (pPhoto.startsWith('http') ? pPhoto : `${window.location.origin}${pPhoto}`) : '';
-        const barcodeSvg = generateBarcodeSvgString(vBarcode, { height: 24, showText: true });
 
-        const printWindow = window.open('', '_blank', 'width=800,height=650');
+        const printWindow = window.open('', '_blank', 'width=850,height=750');
         if (!printWindow) {
             window.print();
             return;
@@ -1198,334 +1197,158 @@ const VehicleMasterForm = () => {
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Vehicle Sticker - ${vNo} (${vId}) [${vBarcode}] - Unique Engineering</title>
+    <title>Vehicle Sticker - ${vNo} (${vId}) - Unique Engineering</title>
     <style>
-        @page { size: auto; margin: 8mm; }
+        @page { size: auto; margin: 6mm; }
         body {
             margin: 0;
-            padding: 24px;
+            padding: 20px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 85vh;
+            min-height: 90vh;
             background: #f1f5f9;
         }
         * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        .sticker-card {
-            width: 440px;
-            height: 295px;
+        
+        .sticker-circle {
+            width: 520px;
+            height: 520px;
             background: #ffffff;
-            border: 3.5px solid ${theme.primary};
-            border-radius: 18px;
-            overflow: hidden;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-            display: flex;
-            flex-direction: column;
+            border: 10px solid ${theme.primary};
+            border-radius: 50%;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.2);
             position: relative;
-        }
-        .sticker-header {
-            background: ${theme.gradient};
-            color: #ffffff;
-            padding: 9px 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid rgba(255,255,255,0.2);
-        }
-        .sticker-header-left {
-            display: flex;
-            flex-direction: column;
-        }
-        .sticker-header-title {
-            font-size: 13px;
-            font-weight: 900;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            line-height: 1.1;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-        }
-        .sticker-header-sub {
-            font-size: 8.5px;
-            opacity: 0.9;
-            letter-spacing: 0.8px;
-            font-weight: 700;
-            margin-top: 2px;
-        }
-        .sticker-id-highlight {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            background: #ffffff;
-            padding: 2px 10px;
-            border-radius: 8px;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.25);
-            border: 1.5px solid rgba(0,0,0,0.08);
-        }
-        .sticker-id-tag {
-            font-size: 7px;
-            font-weight: 900;
-            letter-spacing: 1px;
-            color: #64748b;
-            line-height: 1;
-        }
-        .sticker-id-val {
-            font-family: "Courier New", Courier, monospace;
-            font-size: 19px;
-            font-weight: 900;
-            color: ${theme.text};
-            letter-spacing: 1.5px;
-            line-height: 1.1;
-        }
-        .sticker-body {
-            padding: 10px 14px;
-            display: flex;
-            gap: 12px;
-            flex: 1;
-            align-items: center;
-            background: #ffffff;
-        }
-        .sticker-photo-box {
-            width: 125px;
-            height: 168px;
-            border: 3px solid ${theme.primary};
-            border-radius: 14px;
-            overflow: hidden;
-            background: ${theme.light};
-            flex-shrink: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            position: relative;
+            overflow: hidden;
+            text-align: center;
+            padding: 24px;
         }
-        .sticker-photo {
+        
+        .company-name {
+            font-size: 20px;
+            font-weight: 900;
+            color: ${theme.primary};
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 12px;
+        }
+        
+        .photo-container {
+            width: 240px;
+            height: 240px;
+            border-radius: 50%;
+            border: 5px solid ${theme.primary};
+            overflow: hidden;
+            margin-bottom: 12px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: ${theme.light};
+        }
+        
+        .photo-img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            display: block;
         }
-        .sticker-photo-placeholder {
-            text-align: center;
-            color: ${theme.primary};
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-            line-height: 1.3;
-        }
-        .sticker-photo-tag {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(15, 23, 42, 0.85);
-            color: #ffffff;
-            text-align: center;
-            font-size: 9px;
-            font-weight: 900;
+        
+        .vehicle-id {
             font-family: "Courier New", monospace;
-            letter-spacing: 1px;
-            padding: 2px 0;
-        }
-        .sticker-details {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 168px;
-        }
-        .hsrp-plate {
-            border: 2px solid #0f172a;
-            border-radius: 7px;
-            background: #ffffff;
-            display: flex;
-            align-items: center;
-            height: 38px;
-            overflow: hidden;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.12);
-        }
-        .hsrp-ind {
-            background: #003399;
-            color: #ffffff;
-            width: 24px;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: 7px;
+            font-size: 28px;
             font-weight: 900;
-            letter-spacing: 0.5px;
-            flex-shrink: 0;
-        }
-        .hsrp-chakra {
-            width: 5px;
-            height: 5px;
-            border: 1px solid #ffffff;
-            border-radius: 50%;
-            margin-bottom: 2px;
-        }
-        .hsrp-number {
-            flex: 1;
-            text-align: center;
-            font-family: "Courier New", monospace;
-            font-size: 17px;
-            font-weight: 900;
-            color: #0f172a;
+            color: ${theme.text};
+            background: ${theme.light};
+            padding: 4px 24px;
+            border-radius: 999px;
+            border: 2.5px solid ${theme.border};
+            margin-bottom: 10px;
             letter-spacing: 2px;
         }
-        .sticker-hero-info {
-            background: ${theme.light};
-            border: 1.5px solid ${theme.border};
-            border-radius: 8px;
-            padding: 5px 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-        .sticker-model-name {
-            font-size: 12px;
-            font-weight: 800;
-            color: ${theme.text};
+        
+        .vehicle-name {
+            font-size: 24px;
+            font-weight: 900;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 10px;
+            max-width: 400px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .sticker-meta-row {
+        
+        .hsrp-plate {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-        }
-        .sticker-meta-item {
-            font-size: 9.5px;
-            color: #475569;
-        }
-        .meta-lbl {
-            font-size: 8.5px;
-            font-weight: 700;
-            color: #64748b;
-            margin-right: 4px;
-        }
-        .highlight-id {
-            font-family: "Courier New", monospace;
-            font-size: 14px;
-            font-weight: 900;
-            color: ${theme.text};
-            letter-spacing: 1px;
-        }
-        .sticker-status-badge {
-            font-size: 8px;
-            font-weight: 900;
-            padding: 2px 6px;
-            border-radius: 5px;
-            letter-spacing: 0.5px;
-        }
-        .status-active {
-            background: #dcfce7;
-            color: #15803d;
-            border: 1px solid #86efac;
-        }
-        .status-sold {
-            background: #fee2e2;
-            color: #b91c1c;
-            border: 1px solid #fca5a5;
-        }
-        .sticker-barcode-box {
+            border: 2.5px solid #0f172a;
+            border-radius: 8px;
             background: #ffffff;
-            border: 1px solid #cbd5e1;
-            border-radius: 7px;
-            padding: 3px 6px;
+            height: 44px;
+            overflow: hidden;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+        }
+        
+        .hsrp-ind {
+            background: #003399;
+            color: #ffffff;
+            width: 28px;
+            height: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            font-size: 8px;
+            font-weight: 900;
         }
-        .sticker-sec-bar {
-            display: flex;
-            justify-content: space-between;
-            font-size: 7px;
-            font-weight: 800;
-            letter-spacing: 0.8px;
-            color: #94a3b8;
-            padding: 0 2px;
-            text-transform: uppercase;
+        
+        .hsrp-number {
+            padding: 0 18px;
+            font-family: "Courier New", monospace;
+            font-size: 26px;
+            font-weight: 900;
+            color: #0f172a;
+            letter-spacing: 2.5px;
         }
-        .sticker-footer {
-            background: ${theme.light};
-            border-top: 1.5px dashed ${theme.border};
-            padding: 5px 14px;
-            text-align: center;
-            font-size: 7.5px;
-            font-weight: 800;
-            color: ${theme.primary};
-            letter-spacing: 0.7px;
-        }
+        
         @media print {
             body { background: #ffffff !important; padding: 0 !important; min-height: auto !important; }
-            .no-print { display: none !important; }
         }
     </style>
 </head>
 <body>
-    <div class="sticker-card">
-        <div class="sticker-header">
-            <div class="sticker-header-left">
-                <div class="sticker-header-title">UNIQUE ENGINEERING</div>
-                <div class="sticker-header-sub">OFFICIAL FLEET IDENTIFIER</div>
-            </div>
-            <div class="sticker-id-highlight">
-                <span class="sticker-id-tag">VEHICLE ID</span>
-                <span class="sticker-id-val">${vId}</span>
-            </div>
+    <div class="sticker-circle">
+        <div class="company-name">UNIQUE ENGINEERING</div>
+        
+        <div class="photo-container">
+            ${fullPhotoUrl 
+                ? '<img class="photo-img" src="' + fullPhotoUrl + '" alt="Vehicle" />'
+                : '<div style="font-size:65px;">🚛</div>'
+            }
         </div>
-        <div class="sticker-body">
-            <div class="sticker-photo-box">
-                ${fullPhotoUrl 
-                    ? '<img class="sticker-photo" src="' + fullPhotoUrl + '" alt="Vehicle" />'
-                    : '<div class="sticker-photo-placeholder"><div style="font-size:32px;margin-bottom:4px;">🚛</div><span>FLEET PHOTO</span></div>'
-                }
-                <div class="sticker-photo-tag">${vId}</div>
+        
+        <div class="vehicle-id">${vId}</div>
+        <div class="vehicle-name">${vName}</div>
+        
+        <div class="hsrp-plate">
+            <div class="hsrp-ind">
+                <span>IND</span>
             </div>
-            <div class="sticker-details">
-                <div class="hsrp-plate">
-                    <div class="hsrp-ind">
-                        <div class="hsrp-chakra"></div>
-                        <span>IND</span>
-                    </div>
-                    <div class="hsrp-number">${vNo}</div>
-                </div>
-                <div class="sticker-hero-info">
-                    <div class="sticker-model-name">${vName}</div>
-                    <div class="sticker-meta-row">
-                        <span class="sticker-meta-item">
-                            <span class="meta-lbl">UNIT NO:</span>
-                            <strong class="meta-val highlight-id">${vId}</strong>
-                        </span>
-                        <span class="sticker-status-badge ${v.isSold ? 'status-sold' : 'status-active'}">
-                            ${v.isSold ? 'SOLD' : 'ACTIVE'}
-                        </span>
-                    </div>
-                </div>
-                <div class="sticker-barcode-box">
-                    ${barcodeSvg}
-                </div>
-                <div class="sticker-sec-bar">
-                    <span>SECURE FLEET PASS</span>
-                    <span>UNIQUE FLEET</span>
-                </div>
-            </div>
-        </div>
-        <div class="sticker-footer">
-            PROPERTY OF UNIQUE ENGINEERING • KEEP DISPLAYED ON VEHICLE
+            <div class="hsrp-number">${vNo}</div>
         </div>
     </div>
     <script>
         window.onload = function() {
-            window.print();
-            setTimeout(function() { window.close(); }, 500);
+            setTimeout(function() {
+                window.print();
+            }, 300);
         };
     </script>
 </body>
@@ -1894,7 +1717,6 @@ const VehicleMasterForm = () => {
     const executeSave = confirmSubmit;
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this vehicle record?')) return;
         try {
             const res = await api.delete(`/vehicle-master/${id}`);
             if (res.data.success) {
@@ -2796,8 +2618,9 @@ const VehicleMasterForm = () => {
 
                                             const activeVehicles = filteredVehicles.filter(v => !v.isSold);
                                             const soldVehicles   = filteredVehicles.filter(v => v.isSold);
+                                            const pendingVehicles = filteredVehicles.filter(v => getVehicleDocStatus(v).pendingCount > 0);
 
-                                            const VehicleGrid = ({ list, accentColor }) => list.length === 0 ? (
+                                            const VehicleGrid = ({ list, accentColor, tabKey }) => list.length === 0 ? (
                                                 <Center p={8} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
                                                     <VStack spacing={2}>
                                                         <Icon as={FaTruck} w={8} h={8} color="gray.300" />
@@ -2814,8 +2637,7 @@ const VehicleMasterForm = () => {
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">VEHICLE ID</Th>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">VEHICLE NO</Th>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">NAME / MODEL</Th>
-                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">DOCUMENTS</Th>
-                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">NEXT SERVICE</Th>
+                                                                    
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600" textAlign="center">ACTIONS</Th>
                                                                 </Tr>
                                                             </Thead>
@@ -2823,10 +2645,9 @@ const VehicleMasterForm = () => {
                                                                 {list.map((v, idx) => {
                                                                     const pPhoto = getVehiclePrimaryPhoto(v);
                                                                     const vId = v.vehicleId || `V-${String(idx + 1).padStart(3, '0')}`;
-                                                                    const vBarcode = v.barcode || `UE-${vId.replace(/[^a-zA-Z0-9]/g, '')}`;
                                                                     const docSt = getVehicleDocStatus(v);
                                                                     return (
-                                                                        <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: `${accentColor}.50` }} transition="background 0.2s">
+                                                                        <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: `${accentColor}.50`, cursor: 'pointer' }} transition="background 0.2s" onClick={() => { setViewFromTab(tabKey); setViewVehicle(v); setViewPhotoIdx(0); }}>
                                                                             <Td textAlign="center" py={2}>
                                                                                 {pPhoto ? (
                                                                                     <Image src={pPhoto} alt={v.vehicleNumber} w="42px" h="42px" borderRadius="lg" objectFit="cover" border="1px solid" borderColor="gray.200" mx="auto" />
@@ -2839,30 +2660,34 @@ const VehicleMasterForm = () => {
                                                                             <Td><Badge colorScheme={accentColor} fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">{vId}</Badge></Td>
                                                                             <Td fontWeight="bold" color={`${accentColor}.700`} fontSize="xs">{v.vehicleNumber}</Td>
                                                                             <Td fontSize="xs" color="gray.700">{v.vehicleName || '—'}</Td>
-                                                                            <Td>
-                                                                                {docSt.pendingCount > 0 ? (
-                                                                                    <Badge colorScheme="red" bg="red.700" color="white" borderRadius="full" px={2} py={0.5} fontSize="10px" fontWeight="bold" title={`Pending: ${docSt.pendingList.join(', ')}`}>
-                                                                                        ⚠️ {docSt.pendingCount} Pending
-                                                                                    </Badge>
-                                                                                ) : (
-                                                                                    <Badge colorScheme="green" variant="subtle" borderRadius="full" px={2} py={0.5} fontSize="10px" fontWeight="bold">
-                                                                                        ✓ Complete
-                                                                                    </Badge>
-                                                                                )}
-                                                                            </Td>
-                                                                            <Td>
-                                                                                {v.serviceDate ? (
-                                                                                    <Badge colorScheme="red" variant="subtle" borderRadius="full" px={2} fontSize="10px">{v.serviceDate.substring(0, 10)}</Badge>
-                                                                                ) : <Text fontSize="10px" color="gray.400">—</Text>}
-                                                                            </Td>
-                                                                            <Td textAlign="center">
-                                                                                <HStack justify="center" spacing={1.5}>
-                                                                                    <IconButton aria-label="View" size="xs" colorScheme="teal" variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }} />
-                                                                                    <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
-                                                                                    <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Vehicle Sticker" />
-                                                                                    <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
-                                                                                </HStack>
-                                                                            </Td>
+                                                                            
+                                                                            <Td textAlign="center" onClick={e => e.stopPropagation()}>
+<HStack justify="center" spacing={1.5}>
+<IconButton aria-label="View" size="xs" colorScheme={tabKey === 'pending' ? 'orange' : 'teal'} variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => { setViewFromTab(tabKey); setViewVehicle(v); setViewPhotoIdx(0); }} title={tabKey === 'pending' ? 'View Pending Documents' : 'View Details'} />
+                                                                                        {tabKey !== 'pending' && (
+                                                                                            <>
+                                                                                                <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
+                                                                                                <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Vehicle Sticker" />
+                                                                                                <Popover placement="top" isLazy>
+                                                                                                <PopoverTrigger>
+                                                                                                    <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={(e) => e.stopPropagation()} />
+                                                                                                </PopoverTrigger>
+                                                                                                <Portal>
+                                                                                                    <PopoverContent w="auto" onClick={(e) => e.stopPropagation()} zIndex={9999}>
+                                                                                                        <PopoverArrow />
+                                                                                                        <PopoverBody>
+                                                                                                            <VStack p={2}>
+                                                                                                                <Text fontSize="sm" fontWeight="bold">Are you sure you want to delete?</Text>
+                                                                                                                <Button size="xs" colorScheme="red" onClick={() => handleDelete(v._id)}>Yes, Delete</Button>
+                                                                                                            </VStack>
+                                                                                                        </PopoverBody>
+                                                                                                    </PopoverContent>
+                                                                                                </Portal>
+                                                                                            </Popover>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </HStack>
+</Td>
                                                                         </Tr>
                                                                     );
                                                                 })}
@@ -2877,24 +2702,24 @@ const VehicleMasterForm = () => {
                                                         const vId = v.vehicleId || `V-${String(vehicles.findIndex(item => item._id === v._id) + 1).padStart(3, '0')}`;
                                                         const docSt = getVehicleDocStatus(v);
                                                         return (
-                                                            <Card key={v._id} borderRadius="2xl" border="1.5px solid" borderColor={v.isSold ? 'red.200' : 'gray.200'} bg="white" _hover={{ shadow: 'lg', borderColor: v.isSold ? 'red.400' : 'purple.400', transform: 'translateY(-2px)' }} transition="all 0.2s" overflow="hidden">
+                                                            <Card key={v._id} borderRadius="2xl" border="1.5px solid" borderColor={v.isSold ? 'red.200' : tabKey === 'pending' ? 'orange.200' : 'gray.200'} bg="white" _hover={{ shadow: 'lg', borderColor: v.isSold ? 'red.400' : tabKey === 'pending' ? 'orange.400' : 'purple.400', transform: 'translateY(-2px)' }} transition="all 0.2s" overflow="hidden">
                                                                 <CardBody p={4}>
                                                                     <HStack spacing={3} mb={3}>
                                                                         {primaryPhoto ? (
-                                                                            <Image src={primaryPhoto} alt={v.vehicleNumber} w="50px" h="50px" borderRadius="xl" objectFit="cover" border="2px solid" borderColor={v.isSold ? 'red.400' : 'purple.400'} />
+                                                                            <Image src={primaryPhoto} alt={v.vehicleNumber} w="50px" h="50px" borderRadius="xl" objectFit="cover" border="2px solid" borderColor={v.isSold ? 'red.400' : tabKey === 'pending' ? 'orange.400' : 'purple.400'} />
                                                                         ) : (
-                                                                            <Avatar size="md" icon={<Icon as={FaTruck} />} borderRadius="xl" bg={v.isSold ? 'red.50' : 'purple.50'} color={v.isSold ? 'red.500' : 'purple.500'} border="2px solid" borderColor={v.isSold ? 'red.300' : 'purple.300'} />
+                                                                            <Avatar size="md" icon={<Icon as={FaTruck} />} borderRadius="xl" bg={v.isSold ? 'red.50' : tabKey === 'pending' ? 'orange.50' : 'purple.50'} color={v.isSold ? 'red.500' : tabKey === 'pending' ? 'orange.500' : 'purple.500'} border="2px solid" borderColor={v.isSold ? 'red.300' : tabKey === 'pending' ? 'orange.300' : 'purple.300'} />
                                                                         )}
                                                                         <Box flex={1} minW={0}>
                                                                             <HStack spacing={1.5} align="center" mb={0.5} wrap="wrap">
-                                                                                <Badge colorScheme={v.isSold ? 'red' : 'purple'} fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">{vId}</Badge>
+                                                                                <Badge colorScheme={v.isSold ? 'red' : tabKey === 'pending' ? 'orange' : 'purple'} fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">{vId}</Badge>
                                                                             </HStack>
-                                                                            <Text fontWeight="black" fontSize="sm" color={v.isSold ? 'red.800' : 'purple.800'} isTruncated>{v.vehicleNumber}</Text>
+                                                                            <Text fontWeight="black" fontSize="sm" color={v.isSold ? 'red.800' : tabKey === 'pending' ? 'orange.800' : 'purple.800'} isTruncated>{v.vehicleNumber}</Text>
                                                                             <Text fontSize="xs" color="gray.600" isTruncated>{v.vehicleName || 'Fleet Vehicle'}</Text>
                                                                         </Box>
                                                                     </HStack>
 
-                                                                    <Box bg={v.isSold ? 'red.50' : 'purple.50'} p={2.5} borderRadius="xl" border="1px solid" borderColor={v.isSold ? 'red.100' : 'purple.100'} mb={3}>
+                                                                    <Box bg={v.isSold ? 'red.50' : tabKey === 'pending' ? 'orange.50' : 'purple.50'} p={2.5} borderRadius="xl" border="1px solid" borderColor={v.isSold ? 'red.100' : tabKey === 'pending' ? 'orange.100' : 'purple.100'} mb={3}>
                                                                         <SimpleGrid columns={2} spacing={2} mb={2}>
                                                                             <Box>
                                                                                 <Text fontSize="9px" color="gray.500" fontWeight="bold">NEXT SERVICE</Text>
@@ -2902,10 +2727,10 @@ const VehicleMasterForm = () => {
                                                                             </Box>
                                                                             <Box>
                                                                                 <Text fontSize="9px" color="gray.500" fontWeight="bold">INSURANCE</Text>
-                                                                                <Text fontSize="xs" fontWeight="bold" color={v.isSold ? 'red.700' : 'purple.700'}>{v.insuranceDate ? v.insuranceDate.substring(0, 10) : 'N/A'}</Text>
+                                                                                <Text fontSize="xs" fontWeight="bold" color={v.isSold ? 'red.700' : tabKey === 'pending' ? 'orange.700' : 'purple.700'}>{v.insuranceDate ? v.insuranceDate.substring(0, 10) : 'N/A'}</Text>
                                                                             </Box>
                                                                         </SimpleGrid>
-                                                                        <Box pt={1.5} borderTop="1px dashed" borderColor={v.isSold ? 'red.200' : 'purple.200'}>
+                                                                        <Box pt={1.5} borderTop="1px dashed" borderColor={v.isSold ? 'red.200' : tabKey === 'pending' ? 'orange.200' : 'purple.200'}>
                                                                             <HStack justify="space-between">
                                                                                 <Text fontSize="9px" color="gray.500" fontWeight="bold">DOCUMENTS</Text>
                                                                                 {docSt.pendingCount > 0 ? (
@@ -2922,10 +2747,33 @@ const VehicleMasterForm = () => {
                                                                     </Box>
 
                                                                     <HStack spacing={1.5} pt={2} borderTop="1px solid" borderColor="gray.100">
-                                                                        <Button flex={1} size="xs" colorScheme="teal" variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEye} />} onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }}>View</Button>
-                                                                        <Button flex={1} size="xs" colorScheme="blue" variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)}>Edit</Button>
-                                                                        <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Sticker" />
-                                                                        <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(v._id)} />
+                                                                        <Button flex={1} size="xs" colorScheme={tabKey === 'pending' ? 'orange' : 'teal'} variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEye} />} onClick={() => { setViewFromTab(tabKey); setViewVehicle(v); setViewPhotoIdx(0); }}>
+                                                                            {tabKey === 'pending' ? 'View Pending Docs' : 'View'}
+                                                                        </Button>
+                                                                        {tabKey !== 'pending' && (
+                                                                            <Button flex={1} size="xs" colorScheme="blue" variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)}>Edit</Button>
+                                                                        )}
+                                                                        {tabKey !== 'pending' && (
+                                                                            <IconButton aria-label="Print Sticker" size="xs" colorScheme="purple" variant="solid" borderRadius="lg" icon={<Icon as={FaPrint} />} onClick={() => openStickerModal(v)} title="Print Sticker" />
+                                                                        )}
+                                                                        {tabKey !== 'pending' && (
+                                                                            <Popover placement="top" isLazy>
+                                                                                                <PopoverTrigger>
+                                                                                                    <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={(e) => e.stopPropagation()} />
+                                                                                                </PopoverTrigger>
+                                                                                                <Portal>
+                                                                                                    <PopoverContent w="auto" onClick={(e) => e.stopPropagation()} zIndex={9999}>
+                                                                                                        <PopoverArrow />
+                                                                                                        <PopoverBody>
+                                                                                                            <VStack p={2}>
+                                                                                                                <Text fontSize="sm" fontWeight="bold">Are you sure you want to delete?</Text>
+                                                                                                                <Button size="xs" colorScheme="red" onClick={() => handleDelete(v._id)}>Yes, Delete</Button>
+                                                                                                            </VStack>
+                                                                                                        </PopoverBody>
+                                                                                                    </PopoverContent>
+                                                                                                </Portal>
+                                                                                            </Popover>
+                                                                        )}
                                                                     </HStack>
                                                                 </CardBody>
                               </Card>
@@ -2940,16 +2788,32 @@ const VehicleMasterForm = () => {
                                                         <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={5} py={2.5} _selected={{ color: 'white', bg: 'green.600', shadow: 'md' }}>
                                                             🟢 Reserved &nbsp;<Badge colorScheme="green" bg="green.700" color="white" borderRadius="full" ml={1} px={2}>{activeVehicles.length}</Badge>
                                                         </Tab>
+                                                        {pendingVehicles.length > 0 && (
+                                                            <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={5} py={2.5} _selected={{ color: 'white', bg: 'orange.500', shadow: 'md' }}>
+                                                                ⏳ Pending &nbsp;<Badge bg="orange.600" color="white" borderRadius="full" ml={1} px={2}>{pendingVehicles.length}</Badge>
+                                                            </Tab>
+                                                        )}
                                                         <Tab fontWeight="bold" fontSize="sm" borderRadius="xl" px={5} py={2.5} _selected={{ color: 'white', bg: 'red.600', shadow: 'md' }}>
                                                             🔴 Sold Out &nbsp;<Badge colorScheme="red" bg="red.700" color="white" borderRadius="full" ml={1} px={2}>{soldVehicles.length}</Badge>
                                                         </Tab>
                                                     </TabList>
                                                     <TabPanels>
                                                         <TabPanel p={0}>
-                                                            <VehicleGrid list={activeVehicles} accentColor="purple" />
+                                                            <VehicleGrid list={activeVehicles} accentColor="purple" tabKey="reserved" />
                                                         </TabPanel>
+                                                        {pendingVehicles.length > 0 && (
+                                                            <TabPanel p={0}>
+                                                                <Box mb={3} p={3} bg="orange.50" borderRadius="xl" border="1px solid" borderColor="orange.200">
+                                                                    <HStack spacing={2}>
+                                                                        <Icon as={FaExclamationTriangle} color="orange.500" w={4} h={4} />
+                                                                        <Text fontSize="xs" fontWeight="bold" color="orange.800">These vehicles have one or more documents not yet uploaded. Click any row to view pending document details.</Text>
+                                                                    </HStack>
+                                                                </Box>
+                                                                <VehicleGrid list={pendingVehicles} accentColor="orange" tabKey="pending" />
+                                                            </TabPanel>
+                                                        )}
                                                         <TabPanel p={0}>
-                                                            <VehicleGrid list={soldVehicles} accentColor="red" />
+                                                            <VehicleGrid list={soldVehicles} accentColor="red" tabKey="sold" />
                                                         </TabPanel>
                                                     </TabPanels>
                                                 </Tabs>
@@ -3181,12 +3045,113 @@ const VehicleMasterForm = () => {
 
             {/* Vehicle Details Modal */}
             {/* Vehicle Details Modal */}
-            <Modal isOpen={!!viewVehicle} onClose={() => setViewVehicle(null)} size="full" isCentered isLazy unmountOnClose>
+            <Modal isOpen={!!viewVehicle} onClose={() => { setViewVehicle(null); setActiveDocPreview(null); }} size={viewFromTab === 'pending' ? 'md' : 'full'} isCentered isLazy unmountOnClose>
                 <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(8px)" />
-                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxW={{ base: "98vw", lg: "94vw", xl: "1400px" }} maxH="95vh" bg="gray.50">
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxW={viewFromTab === 'pending' ? { base: "94vw", sm: "480px", md: "520px" } : { base: "98vw", lg: "94vw", xl: "1400px" }} maxH={viewFromTab === 'pending' ? "85vh" : "95vh"} bg={viewFromTab === 'pending' ? "white" : "gray.50"}>
                     {viewVehicle && (() => {
                         const vIdx = vehicles.findIndex(item => item._id === viewVehicle._id);
                         const vId = viewVehicle.vehicleId || `V-${String((vIdx >= 0 ? vIdx : 0) + 1).padStart(3, '0')}`;
+
+                        const handleToggleDocPreview = (url, label, section) => {
+                            if (!url) return;
+                            setActiveDocPreview(prev => {
+                                if (prev && prev.url === url) return null;
+                                const cleanUrl = String(url).split('?')[0].toLowerCase();
+                                const isPdf = cleanUrl.endsWith('.pdf') || cleanUrl.includes('/pdf') || cleanUrl.startsWith('data:application/pdf');
+                                return { url, label, section, isPdf };
+                            });
+                        };
+
+                        const renderInlineDocPreview = (preview) => {
+                            if (!preview || !preview.url) return null;
+                            return (
+                                <Box
+                                    mt={4}
+                                    p={{ base: 3, sm: 4 }}
+                                    bg="white"
+                                    borderRadius="2xl"
+                                    boxShadow="xl"
+                                    border="2px solid"
+                                    borderColor="teal.400"
+                                    position="relative"
+                                    transition="all 0.25s ease-in-out"
+                                >
+                                    <Flex justify="space-between" align="center" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100" wrap="wrap" gap={2}>
+                                        <HStack spacing={2.5}>
+                                            <Badge colorScheme={preview.isPdf ? 'red' : 'purple'} px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black" textTransform="uppercase">
+                                                {preview.isPdf ? '📄 PDF Document' : '🖼️ Image Document'}
+                                            </Badge>
+                                            <Text fontWeight="black" color="gray.800" fontSize="sm" noOfLines={1}>
+                                                {preview.label}
+                                            </Text>
+                                        </HStack>
+                                        <HStack spacing={2}>
+                                            <Button
+                                                as="a"
+                                                href={preview.url}
+                                                target="_blank"
+                                                size="xs"
+                                                colorScheme="teal"
+                                                variant="outline"
+                                                leftIcon={<Icon as={FaExternalLinkAlt} />}
+                                                borderRadius="lg"
+                                                fontWeight="bold"
+                                            >
+                                                Open in New Tab
+                                            </Button>
+                                            <IconButton
+                                                size="xs"
+                                                icon={<Icon as={FaTimes} />}
+                                                colorScheme="red"
+                                                variant="solid"
+                                                borderRadius="lg"
+                                                aria-label="Close Preview"
+                                                onClick={() => setActiveDocPreview(null)}
+                                                title="Close Preview"
+                                            />
+                                        </HStack>
+                                    </Flex>
+
+                                    <Box
+                                        borderRadius="xl"
+                                        overflow="hidden"
+                                        bg="gray.50"
+                                        border="1px solid"
+                                        borderColor="gray.200"
+                                        minH={{ base: '320px', md: '520px' }}
+                                        display="flex"
+                                        alignItems="center"
+                                        justifyContent="center"
+                                        position="relative"
+                                    >
+                                        {preview.isPdf ? (
+                                            <iframe
+                                                src={preview.url}
+                                                title={preview.label}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '560px',
+                                                    border: 'none',
+                                                    borderRadius: '12px'
+                                                }}
+                                            />
+                                        ) : (
+                                            <Box p={3} w="full" display="flex" justifyContent="center">
+                                                <Image
+                                                    src={preview.url}
+                                                    alt={preview.label}
+                                                    maxH={{ base: '350px', md: '560px' }}
+                                                    w="auto"
+                                                    objectFit="contain"
+                                                    borderRadius="lg"
+                                                    boxShadow="md"
+                                                />
+                                            </Box>
+                                        )}
+                                    </Box>
+                                </Box>
+                            );
+                        };
                         const allPhotos = getVehicleAllPhotos(viewVehicle);
                         const activePhoto = allPhotos[viewPhotoIdx] || allPhotos[0] || null;
                         const hasDoc = (val) => {
@@ -3233,15 +3198,144 @@ const VehicleMasterForm = () => {
 
                         const docStatus = getVehicleDocStatus(viewVehicle);
 
+                        if (viewFromTab === 'pending') {
+                            return (
+                                <Box position="relative" display="flex" flexDirection="column" maxH="85vh" bg="white">
+                                    <ModalCloseButton color="gray.500" zIndex={10} bg="white" borderRadius="full" boxShadow="sm" top={3} right={3} _hover={{ bg: 'gray.100' }} />
+                                    
+                                    {/* Header / Hero */}
+                                    <Box bgGradient="linear(to-br, orange.50, amber.50, red.50)" p={{ base: 4, sm: 5 }} borderBottom="1px solid" borderColor="orange.100">
+                                        <HStack spacing={3.5} align="center">
+                                            {activePhoto ? (
+                                                <Image 
+                                                    src={activePhoto} 
+                                                    alt={viewVehicle.vehicleNumber} 
+                                                    w="60px" 
+                                                    h="60px" 
+                                                    borderRadius="2xl" 
+                                                    objectFit="cover" 
+                                                    border="2.5px solid white" 
+                                                    boxShadow="md" 
+                                                    cursor="pointer" 
+                                                    onClick={() => window.open(activePhoto, '_blank')} 
+                                                    title="Click to view full image"
+                                                />
+                                            ) : (
+                                                <Center w="60px" h="60px" borderRadius="2xl" bg="orange.100" border="2px solid" borderColor="orange.200" flexShrink={0} boxShadow="sm">
+                                                    <Icon as={FaExclamationTriangle} color="orange.600" w={6} h={6} />
+                                                </Center>
+                                            )}
+                                            <Box flex={1} minW={0}>
+                                                <HStack spacing={2} mb={1} wrap="wrap">
+                                                    <Badge colorScheme="purple" bg="purple.50" color="purple.700" fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black" border="1px solid" borderColor="purple.200">
+                                                        {vId}
+                                                    </Badge>
+                                                    {viewVehicle.isSold ? (
+                                                        <Badge colorScheme="red" bg="red.600" color="white" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">
+                                                            🔴 SOLD OUT
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge colorScheme="green" bg="green.600" color="white" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">
+                                                            🟢 RESERVED
+                                                        </Badge>
+                                                    )}
+                                                </HStack>
+                                                <Text fontSize="xl" fontWeight="black" color="gray.900" fontFamily="monospace" letterSpacing="wider" lineHeight="1.2">
+                                                    {viewVehicle.vehicleNumber}
+                                                </Text>
+                                                <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wide" noOfLines={1}>
+                                                    {viewVehicle.vehicleName || 'Fleet Vehicle'}
+                                                </Text>
+                                            </Box>
+                                        </HStack>
+
+                                        {/* Alert Tag */}
+                                        <Box mt={3} p={2.5} bg="red.100" borderRadius="xl" border="1px solid" borderColor="red.200">
+                                            <HStack justify="space-between" align="center">
+                                                <HStack spacing={2}>
+                                                    <Icon as={FaExclamationTriangle} color="red.700" w={4} h={4} flexShrink={0} />
+                                                    <Text fontSize="xs" fontWeight="black" color="red.800">
+                                                        {docStatus.pendingCount} Document{docStatus.pendingCount > 1 ? 's' : ''} Pending
+                                                    </Text>
+                                                </HStack>
+                                                <Badge bg="red.600" color="white" fontSize="9px" px={2} py={0.5} borderRadius="full" fontWeight="black">
+                                                    ACTION NEEDED
+                                                </Badge>
+                                            </HStack>
+                                        </Box>
+                                    </Box>
+
+                                    {/* Body - Pending documents list */}
+                                    <Box p={{ base: 4, sm: 5 }} overflowY="auto" flex={1}>
+                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="widest" mb={3}>
+                                            Missing Documents List ({docStatus.pendingCount})
+                                        </Text>
+                                        {docStatus.pendingCount === 0 ? (
+                                            <Center p={6} bg="green.50" borderRadius="2xl" border="1.5px solid" borderColor="green.200">
+                                                <VStack spacing={2}>
+                                                    <Icon as={FaCheckCircle} color="green.500" w={8} h={8} />
+                                                    <Text fontSize="sm" fontWeight="bold" color="green.800">All required documents are uploaded!</Text>
+                                                </VStack>
+                                            </Center>
+                                        ) : (
+                                            <VStack spacing={2.5} align="stretch">
+                                                {docStatus.pendingList.map((docName, i) => (
+                                                    <HStack
+                                                        key={i}
+                                                        spacing={3}
+                                                        p={3.5}
+                                                        bg="red.50"
+                                                        border="1.5px dashed"
+                                                        borderColor="red.300"
+                                                        borderRadius="xl"
+                                                        transition="all 0.2s"
+                                                        _hover={{ bg: 'red.100', borderColor: 'red.400', transform: 'translateX(2px)' }}
+                                                    >
+                                                        <Center w="32px" h="32px" bg="white" borderRadius="lg" flexShrink={0} boxShadow="xs" border="1px solid" borderColor="red.200">
+                                                            <Icon as={FaFileAlt} color="red.500" w={3.5} h={3.5} />
+                                                        </Center>
+                                                        <Box flex={1} minW={0}>
+                                                            <Text fontSize="xs" fontWeight="black" color="gray.800" noOfLines={1}>{docName}</Text>
+                                                            <Text fontSize="10px" color="red.600" fontWeight="bold">Not uploaded yet</Text>
+                                                        </Box>
+                                                        <Badge bg="red.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black" flexShrink={0} boxShadow="xs">
+                                                            NOT UPLOADED
+                                                        </Badge>
+                                                    </HStack>
+                                                ))}
+                                            </VStack>
+                                        )}
+                                    </Box>
+
+                                    {/* Footer - Close Button Only (NO Edit button, NO Download Sticker button) */}
+                                    <Box p={{ base: 4, sm: 5 }} pt={2.5} borderTop="1px solid" borderColor="gray.100" bg="white">
+                                        <Button
+                                            w="full"
+                                            size="md"
+                                            variant="solid"
+                                            bg="gray.100"
+                                            color="gray.700"
+                                            _hover={{ bg: 'gray.200' }}
+                                            borderRadius="xl"
+                                            fontWeight="bold"
+                                            onClick={() => { setViewVehicle(null); setActiveDocPreview(null); }}
+                                        >
+                                            Close
+                                        </Button>
+                                    </Box>
+                                </Box>
+                            );
+                        }
+
                         return (
                             <>
                                 <ModalCloseButton color="gray.500" zIndex={10} bg="white" borderRadius="full" boxShadow="md" m={2} _hover={{ bg: 'gray.200' }} />
                                 <ModalBody p={0} display="flex" flexDirection={{ base: 'column', md: 'row' }} h="100%">
                                     
                                     {/* ── LEFT SIDE: Profile, Photo Gallery, Downloads ── */}
-                                    <Box w={{ base: '100%', md: '290px', lg: '310px' }} bg="white" borderRight="1px solid" borderColor="gray.200" p={{ base: 4, md: 5 }} display="flex" flexDirection="column" alignItems="center" flexShrink={0}>
+                                    <Box w={{ base: '100%', md: '360px', lg: '400px' }} bg="white" borderRight="1px solid" borderColor="gray.200" p={{ base: 4, md: 5 }} display="flex" flexDirection="column" alignItems="center" flexShrink={0}>
                                         {/* Main large photo viewer */}
-                                        <Box w="full" position="relative" borderRadius="2xl" overflow="hidden" boxShadow="lg" border="4px solid" borderColor="gray.50" bg="gray.100" mb={3} style={{ aspectRatio: '4/3' }}>
+                                        <Box w="full" position="relative" borderRadius="2xl" overflow="hidden" boxShadow="lg" border="4px solid" borderColor="gray.50" bg="gray.100" mb={3} minH={{ base: '240px', md: '280px' }} style={{ aspectRatio: '4/3' }}>
                                             {activePhoto ? (
                                                 <Image src={activePhoto} w="full" h="full" objectFit="cover" transition="transform 0.3s" _hover={{ transform: 'scale(1.05)' }} cursor="pointer" onClick={() => window.open(activePhoto, '_blank')} />
                                             ) : (
@@ -3318,37 +3412,19 @@ const VehicleMasterForm = () => {
                                                         🟢 RESERVED
                                                     </Badge>
                                                 )}
-                                                {docStatus.pendingCount > 0 ? (
-                                                    <Badge bg="red.700" color="white" fontSize="xs" px={2.5} py={1} borderRadius="md" fontWeight="black">
-                                                        ⚠️ {docStatus.pendingCount} DOCS PENDING
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge bg="green.700" color="white" fontSize="xs" px={2.5} py={1} borderRadius="md" fontWeight="black">
-                                                        ✓ DOCS OK
-                                                    </Badge>
-                                                )}
                                             </HStack>
                                         </VStack>
 
                                         <VStack spacing={3} w="full" mt="auto">
-                                            <Button 
-                                                w="full" 
-                                                size="lg" 
-                                                colorScheme="purple" 
-                                                bgGradient="linear(to-r, purple.500, blue.500)" 
-                                                leftIcon={<Icon as={FaDownload} />} 
-                                                onClick={() => { const v = viewVehicle; setViewVehicle(null); openStickerModal(v); }}
-                                                boxShadow="lg"
-                                                _hover={{ transform: 'translateY(-2px)', boxShadow: 'xl', bgGradient: 'linear(to-r, purple.600, blue.600)' }}
-                                                transition="all 0.2s"
-                                                borderRadius="xl"
-                                                fontWeight="black"
-                                            >
-                                                Download Sticker
-                                            </Button>
+                                            
 
-                                            <Button w="full" size="md" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaEdit} />} onClick={() => { const v = viewVehicle; setViewVehicle(null); handleEdit(v); }} borderRadius="xl" fontWeight="bold">
-                                                Edit Details
+                                            {viewFromTab !== 'reserved' && (
+                                                <Button w="full" size="md" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaEdit} />} onClick={() => { const v = viewVehicle; setViewVehicle(null); handleEdit(v); }} borderRadius="xl" fontWeight="bold">
+                                                    Edit Details
+                                                </Button>
+                                            )}
+                                        <Button w="full" size="md" variant="solid" bg="gray.100" color="gray.700" _hover={{ bg: 'gray.200' }} borderRadius="xl" fontWeight="bold" onClick={() => { setViewVehicle(null); setActiveDocPreview(null); }}>
+                                                Close
                                             </Button>
                                         </VStack>
                                     </Box>
@@ -3356,46 +3432,6 @@ const VehicleMasterForm = () => {
                                     {/* ── RIGHT SIDE: Details & Timeline ── */}
                                     <Box flex={1} p={{ base: 4, md: 6 }} overflowY="auto" maxH={{ base: '60vh', md: '95vh' }}>
                                         <VStack spacing={8} align="stretch">
-                                            
-                                            {/* ── Pending Documents Alert Banner (Dark Red) ── */}
-                                            {docStatus.pendingCount > 0 && (
-                                                <Box bg="red.50" border="2px solid" borderColor="red.600" borderRadius="2xl" p={4} boxShadow="sm">
-                                                    <Flex align={{ base: 'flex-start', sm: 'center' }} justify="space-between" gap={3} wrap="wrap">
-                                                        <HStack spacing={3}>
-                                                            <Center w="38px" h="38px" bg="red.100" borderRadius="xl" flexShrink={0}>
-                                                                <Icon as={FaExclamationTriangle} color="red.700" w={5} h={5} />
-                                                            </Center>
-                                                            <Box>
-                                                                <HStack spacing={2} wrap="wrap">
-                                                                    <Text fontSize="sm" fontWeight="black" color="red.900">
-                                                                        {docStatus.pendingCount} Document{docStatus.pendingCount > 1 ? 's' : ''} Pending Upload
-                                                                    </Text>
-                                                                    <Badge bg="red.700" color="white" fontSize="9px" px={2} py={0.5} borderRadius="full" fontWeight="black">
-                                                                        DARK RED PENDING
-                                                                    </Badge>
-                                                                </HStack>
-                                                                <Text fontSize="xs" color="red.800" fontWeight="bold" mt={0.5}>
-                                                                    Pending: {docStatus.pendingList.join(' • ')}
-                                                                </Text>
-                                                            </Box>
-                                                        </HStack>
-                                                        <Button
-                                                            size="xs"
-                                                            colorScheme="red"
-                                                            bg="red.700"
-                                                            color="white"
-                                                            _hover={{ bg: 'red.800' }}
-                                                            borderRadius="lg"
-                                                            fontWeight="black"
-                                                            leftIcon={<Icon as={FaEdit} />}
-                                                            onClick={() => { const veh = viewVehicle; setViewVehicle(null); handleEdit(veh); }}
-                                                        >
-                                                            Upload in Edit Form
-                                                        </Button>
-                                                    </Flex>
-                                                </Box>
-                                            )}
-
                                             {/* Status & Expirations */}
                                             <Box>
                                                 <Text fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="widest" mb={4}>Vehicle Status & Dates</Text>
@@ -3424,19 +3460,7 @@ const VehicleMasterForm = () => {
                                                         </Center>
                                                         <Text fontSize="md" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wide">Purchase Details</Text>
                                                     </HStack>
-                                                    {(() => {
-                                                        const v = viewVehicle;
-                                                        const missingPurchase = (!hasDoc(v.purchaseOldRc) ? 1 : 0) + (!hasDoc(v.purchaseOldPuc) ? 1 : 0) + (!hasDoc(v.purchaseAadharDoc) ? 1 : 0) + (!hasDoc(v.purchasePanDoc) ? 1 : 0);
-                                                        return missingPurchase > 0 ? (
-                                                            <Badge bg="red.700" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
-                                                                {missingPurchase} DOCS PENDING
-                                                            </Badge>
-                                                        ) : (
-                                                            <Badge bg="green.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
-                                                                ALL DOCS UPLOADED
-                                                            </Badge>
-                                                        );
-                                                    })()}
+                                                    
                                                 </HStack>
                                                 
                                                 <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
@@ -3502,24 +3526,24 @@ const VehicleMasterForm = () => {
                                                                         return (
                                                                             <WrapItem key={doc.key}>
                                                                                 <Button
-                                                                                    as="a"
-                                                                                    href={url}
-                                                                                    target="_blank"
-                                                                                    size="sm"
-                                                                                    colorScheme={doc.color}
-                                                                                    variant="solid"
-                                                                                    leftIcon={<Icon as={doc.icon} />}
-                                                                                    borderRadius="xl"
-                                                                                    fontWeight="bold"
-                                                                                    boxShadow="sm"
-                                                                                    _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
-                                                                                    transition="all 0.15s"
-                                                                                >
-                                                                                    {doc.label}
-                                                                                </Button>
+                                                                                        size="sm"
+                                                                                        colorScheme={activeDocPreview?.url === url ? 'teal' : doc.color}
+                                                                                        variant="solid"
+                                                                                        leftIcon={<Icon as={activeDocPreview?.url === url ? FaEye : doc.icon} />}
+                                                                                        borderRadius="xl"
+                                                                                        fontWeight="bold"
+                                                                                        boxShadow={activeDocPreview?.url === url ? '0 0 0 3px #319795' : 'sm'}
+                                                                                        _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
+                                                                                        transition="all 0.15s"
+                                                                                        onClick={() => handleToggleDocPreview(url, doc.label, 'purchase')}
+                                                                                    >
+                                                                                        {doc.label}
+                                                                                    </Button>
                                                                             </WrapItem>
                                                                         );
                                                                     }
+                                                                    // In Reserved view: skip showing pending/not-uploaded items
+                                                                    return null;
                                                                     return (
                                                                         <WrapItem key={doc.key}>
                                                                             <HStack
@@ -3549,19 +3573,29 @@ const VehicleMasterForm = () => {
                                                                     const l = doc.label || (typeof doc === 'string' ? doc.split('/').pop() : `Doc ${i + 1}`);
                                                                     return (
                                                                         <WrapItem key={`other-${i}`}>
-                                                                            <Button as="a" href={u} target="_blank" size="sm" colorScheme="gray" variant="outline" leftIcon={<Icon as={FaFileAlt} />} borderRadius="xl" fontWeight="bold">
-                                                                                {l}
-                                                                            </Button>
+                                                                            <Button
+                                                                                        size="sm"
+                                                                                        colorScheme={activeDocPreview?.url === u ? 'teal' : 'gray'}
+                                                                                        variant={activeDocPreview?.url === u ? 'solid' : 'outline'}
+                                                                                        leftIcon={<Icon as={activeDocPreview?.url === u ? FaEye : FaFileAlt} />}
+                                                                                        borderRadius="xl"
+                                                                                        fontWeight="bold"
+                                                                                        boxShadow={activeDocPreview?.url === u ? '0 0 0 3px #319795' : 'sm'}
+                                                                                        onClick={() => handleToggleDocPreview(u, l, 'purchase')}
+                                                                                    >
+                                                                                        {l}
+                                                                                    </Button>
                                                                         </WrapItem>
                                                                     );
                                                                 })}
                                                             </Wrap>
-                                                        </Box>
-                                                    );
-                                                })()}
-                                            </Box>
+                                                                {activeDocPreview && activeDocPreview.section === 'purchase' && renderInlineDocPreview(activeDocPreview)}
+                                                            </Box>
+                                                        );
+                                                    })()}
+                                                </Box>
 
-                                            {/* ── Vehicle Registration & Compliance Documents ── */}
+                                                {/* ── Vehicle Registration & Compliance Documents ── */}
                                             {(() => {
                                                 const v = viewVehicle;
                                                 const complianceDocConfigs = [
@@ -3583,15 +3617,7 @@ const VehicleMasterForm = () => {
                                                                     <Text fontSize="10px" color="blue.600" fontWeight="bold">RC Book • Insurance • PUC</Text>
                                                                 </Box>
                                                             </HStack>
-                                                            {missingCount > 0 ? (
-                                                                <Badge bg="red.700" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
-                                                                    {missingCount} PENDING
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge bg="green.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
-                                                                    ALL UPLOADED
-                                                                </Badge>
-                                                            )}
+                                                            
                                                         </HStack>
                                                         <Wrap spacing={2.5}>
                                                             {complianceDocConfigs.map(doc => {
@@ -3601,24 +3627,24 @@ const VehicleMasterForm = () => {
                                                                     return (
                                                                         <WrapItem key={doc.key}>
                                                                             <Button
-                                                                                as="a"
-                                                                                href={url}
-                                                                                target="_blank"
-                                                                                size="sm"
-                                                                                colorScheme={doc.color}
-                                                                                variant="solid"
-                                                                                leftIcon={<Icon as={doc.icon} />}
-                                                                                borderRadius="xl"
-                                                                                fontWeight="bold"
-                                                                                boxShadow="sm"
-                                                                                _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
-                                                                                transition="all 0.15s"
-                                                                            >
-                                                                                {doc.label}
-                                                                            </Button>
+                                                                                    size="sm"
+                                                                                    colorScheme={activeDocPreview?.url === url ? 'teal' : doc.color}
+                                                                                    variant="solid"
+                                                                                    leftIcon={<Icon as={activeDocPreview?.url === url ? FaEye : doc.icon} />}
+                                                                                    borderRadius="xl"
+                                                                                    fontWeight="bold"
+                                                                                    boxShadow={activeDocPreview?.url === url ? '0 0 0 3px #319795' : 'sm'}
+                                                                                    _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
+                                                                                    transition="all 0.15s"
+                                                                                    onClick={() => handleToggleDocPreview(url, doc.label, 'compliance')}
+                                                                                >
+                                                                                    {doc.label}
+                                                                                </Button>
                                                                         </WrapItem>
                                                                     );
                                                                 }
+                                                                // In Reserved view: skip pending items
+                                                                return null;
                                                                 return (
                                                                     <WrapItem key={doc.key}>
                                                                         <HStack
@@ -3644,11 +3670,12 @@ const VehicleMasterForm = () => {
                                                                 );
                                                             })}
                                                         </Wrap>
-                                                    </Box>
-                                                );
-                                            })()}
+                                                            {activeDocPreview && activeDocPreview.section === 'compliance' && renderInlineDocPreview(activeDocPreview)}
+                                                        </Box>
+                                                    );
+                                                })()}
 
-                                            {/* General / Extra Documents */}
+                                                {/* General / Extra Documents */}
                                             {(() => {
                                                 const v = viewVehicle;
                                                 const extraDocs = Array.isArray(v.documents) ? v.documents.filter(d => d && (d.url || d.path)) : [];
@@ -3666,17 +3693,28 @@ const VehicleMasterForm = () => {
                                                                 const ext = (doc.name || doc.url || '').split('.').pop().toLowerCase();
                                                                 const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
                                                                 return (
-                                                                    <Button key={i} as="a" href={getFileUrl(doc.url || doc.path)} target="_blank" size="xs" colorScheme="purple" variant="outline" leftIcon={<Icon as={isImg ? FaFileImage : FaFileAlt} />} borderRadius="lg" fontWeight="bold">
-                                                                        {doc.name || doc.type || `File ${i + 1}`}
-                                                                    </Button>
+                                                                    <Button
+                                                                            key={i}
+                                                                            size="xs"
+                                                                            colorScheme={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? 'teal' : 'purple'}
+                                                                            variant={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? 'solid' : 'outline'}
+                                                                            leftIcon={<Icon as={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? FaEye : isImg ? FaFileImage : FaFileAlt} />}
+                                                                            borderRadius="lg"
+                                                                            fontWeight="bold"
+                                                                            boxShadow={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? '0 0 0 2px #319795' : 'none'}
+                                                                            onClick={() => handleToggleDocPreview(getFileUrl(doc.url || doc.path), doc.name || doc.type || `File ${i + 1}`, 'extra')}
+                                                                        >
+                                                                            {doc.name || doc.type || `File ${i + 1}`}
+                                                                        </Button>
                                                                 );
                                                             })}
                                                         </HStack>
-                                                    </Box>
-                                                );
-                                            })()}
+                                                            {activeDocPreview && activeDocPreview.section === 'extra' && renderInlineDocPreview(activeDocPreview)}
+                                                        </Box>
+                                                    );
+                                                })()}
 
-                                            {/* ── Sell Details (Shown when Vehicle is Sold Out) ── */}
+                                                {/* ── Sell Details (Shown when Vehicle is Sold Out) ── */}
                                             {viewVehicle.isSold && (
                                                 <Box bg="red.50" p={6} borderRadius="2xl" border="1px solid" borderColor="red.200" boxShadow="sm">
                                                     <HStack mb={5} spacing={3} justify="space-between" wrap="wrap">
@@ -3689,22 +3727,7 @@ const VehicleMasterForm = () => {
                                                                 <Text fontSize="10px" color="red.600" fontWeight="bold">Buyer Information & Transfer Documents</Text>
                                                             </Box>
                                                         </HStack>
-                                                        {(() => {
-                                                            const v = viewVehicle;
-                                                            const missingSellCount = (!hasDoc(v.sellAadharDoc) ? 1 : 0) + (!hasDoc(v.sellPanDoc) ? 1 : 0);
-                                                            if (missingSellCount > 0) {
-                                                                return (
-                                                                    <Badge bg="red.700" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
-                                                                        {missingSellCount} DOCUMENTS PENDING
-                                                                    </Badge>
-                                                                );
-                                                            }
-                                                            return (
-                                                                <Badge bg="green.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black">
-                                                                    DOCUMENTS COMPLETE
-                                                                </Badge>
-                                                            );
-                                                        })()}
+                                                        
                                                     </HStack>
 
                                                     <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
@@ -3767,24 +3790,24 @@ const VehicleMasterForm = () => {
                                                                             return (
                                                                                 <WrapItem key={doc.key}>
                                                                                     <Button
-                                                                                        as="a"
-                                                                                        href={url}
-                                                                                        target="_blank"
                                                                                         size="sm"
-                                                                                        colorScheme={doc.color}
+                                                                                        colorScheme={activeDocPreview?.url === url ? 'teal' : doc.color}
                                                                                         variant="solid"
-                                                                                        leftIcon={<Icon as={doc.icon} />}
+                                                                                        leftIcon={<Icon as={activeDocPreview?.url === url ? FaEye : doc.icon} />}
                                                                                         borderRadius="xl"
                                                                                         fontWeight="bold"
-                                                                                        boxShadow="sm"
+                                                                                        boxShadow={activeDocPreview?.url === url ? '0 0 0 3px #319795' : 'sm'}
                                                                                         _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
                                                                                         transition="all 0.15s"
+                                                                                        onClick={() => handleToggleDocPreview(url, doc.label, 'sell')}
                                                                                     >
                                                                                         {doc.label}
                                                                                     </Button>
                                                                                 </WrapItem>
                                                                             );
                                                                         }
+                                                                        // In Reserved view: skip pending items
+                                                                        return null;
                                                                         return (
                                                                             <WrapItem key={doc.key}>
                                                                                 <HStack
@@ -3810,6 +3833,7 @@ const VehicleMasterForm = () => {
                                                                         );
                                                                     })}
                                                                 </Wrap>
+                                                                {activeDocPreview && activeDocPreview.section === 'sell' && renderInlineDocPreview(activeDocPreview)}
                                                             </Box>
                                                         );
                                                     })()}
@@ -4432,9 +4456,9 @@ const VehicleMasterForm = () => {
             </Modal>
 
             {/* Printable Vehicle Sticker Modal */}
-            <Modal isOpen={!!stickerVehicle} onClose={() => setStickerVehicle(null)} size="md" isCentered isLazy>
+            <Modal isOpen={!!stickerVehicle} onClose={() => setStickerVehicle(null)} size="xl" isCentered isLazy>
                 <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(3px)" />
-                <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl" maxW="500px">
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxW={{ base: '96vw', sm: '580px', md: '640px' }}>
                     {stickerVehicle && (() => {
                         const theme = STICKER_COLORS[stickerColorIndex] || STICKER_COLORS[0];
                         const pPhoto = getVehiclePrimaryPhoto(stickerVehicle);
@@ -4484,201 +4508,132 @@ const VehicleMasterForm = () => {
                                             </HStack>
                                         </Box>
 
-                                        {/* Live Sticker Card */}
+                                        {/* Live Circle Sticker Preview */}
                                         <Box
-                                            w="440px"
-                                            h="295px"
+                                            w={{ base: '340px', sm: '460px', md: '500px' }}
+                                            h={{ base: '340px', sm: '460px', md: '500px' }}
                                             bg="white"
-                                            border="3.5px solid"
+                                            border="10px solid"
                                             borderColor={theme.primary}
-                                            borderRadius="18px"
-                                            overflow="hidden"
-                                            boxShadow="0 8px 25px rgba(0,0,0,0.15)"
+                                            borderRadius="full"
+                                            boxShadow="0 12px 35px rgba(0,0,0,0.2)"
+                                            position="relative"
                                             display="flex"
                                             flexDirection="column"
+                                            alignItems="center"
+                                            justifyContent="center"
+                                            overflow="hidden"
+                                            textAlign="center"
+                                            p={{ base: 3, sm: 6 }}
                                             transition="all 0.2s"
+                                            mx="auto"
                                         >
-                                            {/* Sticker Header */}
-                                            <Flex
-                                                bg={theme.gradient}
-                                                color="white"
-                                                px={4}
-                                                py={2}
-                                                justify="space-between"
-                                                align="center"
-                                                borderBottom="2px solid rgba(255,255,255,0.2)"
+                                            {/* Company Name */}
+                                            <Text
+                                                fontSize={{ base: '14px', sm: '18px', md: '20px' }}
+                                                fontWeight="900"
+                                                color={theme.primary}
+                                                letterSpacing={{ base: '2px', sm: '3px' }}
+                                                textTransform="uppercase"
+                                                mb={{ base: '4px', sm: '8px' }}
                                             >
-                                                <Box>
-                                                    <Text fontSize="13px" fontWeight="black" letterSpacing="1.5px" textTransform="uppercase" lineHeight="1.1">
-                                                        UNIQUE ENGINEERING
-                                                    </Text>
-                                                    <Text fontSize="8.5px" opacity={0.9} letterSpacing="0.8px" fontWeight="bold" mt="1px">
-                                                        OFFICIAL FLEET IDENTIFIER
-                                                    </Text>
-                                                </Box>
-                                                <Flex
-                                                    direction="column"
-                                                    align="flex-end"
-                                                    bg="white"
-                                                    px={2.5}
-                                                    py={0.5}
-                                                    borderRadius="lg"
-                                                    boxShadow="0 3px 8px rgba(0,0,0,0.2)"
-                                                    border="1.5px solid rgba(0,0,0,0.08)"
-                                                >
-                                                    <Text fontSize="7px" fontWeight="black" letterSpacing="1px" color="gray.500" lineHeight="1">
-                                                        VEHICLE ID
-                                                    </Text>
-                                                    <Text
-                                                        fontFamily="monospace"
-                                                        fontSize="19px"
-                                                        fontWeight="black"
-                                                        color={theme.text}
-                                                        letterSpacing="1.5px"
-                                                        lineHeight="1.1"
-                                                    >
-                                                        {vId}
-                                                    </Text>
-                                                </Flex>
-                                            </Flex>
+                                                UNIQUE ENGINEERING
+                                            </Text>
 
-                                            {/* Sticker Body */}
-                                            <Flex p={3} gap={3} flex={1} align="center" bg="white">
-                                                {/* Passport-size photo */}
-                                                <Box
-                                                    w="125px"
-                                                    h="168px"
-                                                    border="3px solid"
-                                                    borderColor={theme.primary}
-                                                    borderRadius="xl"
-                                                    overflow="hidden"
-                                                    bg={theme.light}
-                                                    flexShrink={0}
-                                                    display="flex"
-                                                    flexDirection="column"
-                                                    alignItems="center"
-                                                    justifyContent="center"
-                                                    boxShadow="0 4px 10px rgba(0,0,0,0.1)"
-                                                    position="relative"
-                                                >
-                                                    {pPhoto ? (
-                                                        <Image src={pPhoto} alt="Vehicle Photo" w="full" h="full" objectFit="cover" />
-                                                    ) : (
-                                                        <VStack spacing={1} color={theme.primary} textAlign="center">
-                                                            <Icon as={FaTruck} w={8} h={8} />
-                                                            <Text fontSize="9px" fontWeight="black" letterSpacing="0.5px">FLEET PHOTO</Text>
-                                                        </VStack>
-                                                    )}
-                                                    <Box
-                                                        position="absolute"
-                                                        bottom={0}
-                                                        left={0}
-                                                        right={0}
-                                                        bg="blackAlpha.800"
-                                                        color="white"
-                                                        textAlign="center"
-                                                        fontSize="9px"
-                                                        fontWeight="black"
-                                                        fontFamily="monospace"
-                                                        letterSpacing="1px"
-                                                        py="2px"
-                                                    >
-                                                        {vId}
-                                                    </Box>
-                                                </Box>
-
-                                                {/* Vehicle Details */}
-                                                <VStack flex={1} align="stretch" justify="space-between" h="168px" spacing={1.5}>
-                                                    {/* HSRP Number Plate */}
-                                                    <Flex
-                                                        border="2px solid"
-                                                        borderColor="gray.800"
-                                                        borderRadius="md"
-                                                        bg="white"
-                                                        h="38px"
-                                                        overflow="hidden"
-                                                        align="center"
-                                                        boxShadow="0 2px 5px rgba(0,0,0,0.12)"
-                                                    >
-                                                        <Flex
-                                                            bg="#003399"
-                                                            color="white"
-                                                            w="24px"
-                                                            h="full"
-                                                            direction="column"
-                                                            align="center"
-                                                            justify="center"
-                                                            fontSize="7px"
-                                                            fontWeight="black"
-                                                            letterSpacing="0.5px"
-                                                            flexShrink={0}
-                                                        >
-                                                            <Box w="5px" h="5px" borderRadius="full" border="1px solid white" mb="2px" />
-                                                            IND
-                                                        </Flex>
-                                                        <Text
-                                                            flex={1}
-                                                            textAlign="center"
-                                                            fontFamily="monospace"
-                                                            fontSize="17px"
-                                                            fontWeight="black"
-                                                            color="gray.900"
-                                                            letterSpacing="2px"
-                                                        >
-                                                            {vNo}
-                                                        </Text>
-                                                    </Flex>
-
-                                                    {/* Vehicle Model & ID Info Box */}
-                                                    <Box
-                                                        bg={theme.light}
-                                                        border="1.5px solid"
-                                                        borderColor={theme.border}
-                                                        borderRadius="md"
-                                                        p={1.5}
-                                                    >
-                                                        <Text fontSize="12px" fontWeight="black" color={theme.text} noOfLines={1} mb={0.5}>
-                                                            {vName}
-                                                        </Text>
-                                                        <Flex justify="space-between" align="center">
-                                                            <HStack spacing={1.5}>
-                                                                <Text fontSize="8.5px" fontWeight="bold" color="gray.500">UNIT NO:</Text>
-                                                                <Text fontFamily="monospace" fontSize="14px" fontWeight="black" color={theme.text} letterSpacing="1px">
-                                                                    {vId}
-                                                                </Text>
-                                                            </HStack>
-                                                            <Badge colorScheme={stickerVehicle.isSold ? 'red' : 'green'} fontSize="8px" px={1.5} py={0.5} borderRadius="sm" fontWeight="black">
-                                                                {stickerVehicle.isSold ? 'SOLD' : 'ACTIVE'}
-                                                            </Badge>
-                                                        </Flex>
-                                                    </Box>
-
-                                                    {/* Live Scannable Barcode Box */}
-                                                    <Box
-                                                        bg="white"
-                                                        border="1px solid"
-                                                        borderColor="gray.300"
-                                                        borderRadius="md"
-                                                        py={1}
-                                                        px={2}
-                                                        boxShadow="xs"
-                                                        dangerouslySetInnerHTML={{ __html: generateBarcodeSvgString(vBarcode, { height: 24, showText: true }) }}
-                                                    />
-
-                                                    {/* Security Bar */}
-                                                    <Flex justify="space-between" px={1} fontSize="7px" fontWeight="black" letterSpacing="0.8px" color="gray.400" textTransform="uppercase">
-                                                        <Text>SECURE FLEET PASS</Text>
-                                                        <Text>UNIQUE FLEET</Text>
-                                                    </Flex>
-                                                </VStack>
-                                            </Flex>
-
-                                            {/* Sticker Footer */}
-                                            <Box bg={theme.light} borderTop="1.5px dashed" borderColor={theme.border} py={1} px={3} textAlign="center">
-                                                <Text fontSize="7.5px" fontWeight="black" color={theme.primary} letterSpacing="0.7px">
-                                                    PROPERTY OF UNIQUE ENGINEERING • KEEP DISPLAYED ON VEHICLE
-                                                </Text>
+                                            {/* Big Rounded Vehicle Photo */}
+                                            <Box
+                                                w={{ base: '160px', sm: '215px', md: '235px' }}
+                                                h={{ base: '160px', sm: '215px', md: '235px' }}
+                                                borderRadius="full"
+                                                border="5px solid"
+                                                borderColor={theme.primary}
+                                                overflow="hidden"
+                                                my={{ base: 1.5, sm: 2.5 }}
+                                                boxShadow="0 6px 18px rgba(0,0,0,0.18)"
+                                                display="flex"
+                                                alignItems="center"
+                                                justifyContent="center"
+                                                bg={theme.light}
+                                                flexShrink={0}
+                                            >
+                                                {pPhoto ? (
+                                                    <Image src={pPhoto} alt={vNo} w="full" h="full" objectFit="cover" />
+                                                ) : (
+                                                    <VStack spacing={1} color={theme.primary}>
+                                                        <Icon as={FaTruck} w={{ base: 10, sm: 14 }} h={{ base: 10, sm: 14 }} />
+                                                        <Text fontSize="10px" fontWeight="bold">NO PHOTO</Text>
+                                                    </VStack>
+                                                )}
                                             </Box>
+
+                                            {/* Big Vehicle ID */}
+                                            <Box
+                                                fontFamily="monospace"
+                                                fontSize={{ base: '20px', sm: '26px', md: '28px' }}
+                                                fontWeight="900"
+                                                color={theme.text}
+                                                bg={theme.light}
+                                                border="2.5px solid"
+                                                borderColor={theme.border}
+                                                px={{ base: 4, sm: 6 }}
+                                                py={{ base: 0.5, sm: 1 }}
+                                                borderRadius="full"
+                                                letterSpacing="2px"
+                                                mb={{ base: '4px', sm: '8px' }}
+                                                boxShadow="xs"
+                                            >
+                                                {vId}
+                                            </Box>
+
+                                            {/* Big Vehicle Name */}
+                                            <Text
+                                                fontSize={{ base: '16px', sm: '21px', md: '23px' }}
+                                                fontWeight="900"
+                                                color="gray.800"
+                                                textTransform="uppercase"
+                                                letterSpacing="1px"
+                                                maxW={{ base: '280px', sm: '380px' }}
+                                                isTruncated
+                                                mb={{ base: '6px', sm: '10px' }}
+                                            >
+                                                {vName}
+                                            </Text>
+
+                                            {/* Big Vehicle Number / HSRP Plate */}
+                                            <Flex
+                                                border="2.5px solid #0f172a"
+                                                borderRadius="lg"
+                                                bg="white"
+                                                h={{ base: '34px', sm: '42px', md: '44px' }}
+                                                overflow="hidden"
+                                                align="center"
+                                                boxShadow="md"
+                                            >
+                                                <Flex
+                                                    bg="#003399"
+                                                    color="white"
+                                                    w={{ base: '24px', sm: '28px' }}
+                                                    h="full"
+                                                    direction="column"
+                                                    align="center"
+                                                    justify="center"
+                                                    fontSize={{ base: '7px', sm: '8px' }}
+                                                    fontWeight="black"
+                                                    flexShrink={0}
+                                                >
+                                                    IND
+                                                </Flex>
+                                                <Text
+                                                    fontFamily="monospace"
+                                                    fontSize={{ base: '18px', sm: '23px', md: '25px' }}
+                                                    fontWeight="900"
+                                                    color="#0f172a"
+                                                    px={{ base: 3, sm: 4 }}
+                                                    letterSpacing={{ base: '2px', sm: '2.5px' }}
+                                                >
+                                                    {vNo}
+                                                </Text>
+                                            </Flex>
                                         </Box>
                                     </VStack>
                                 </ModalBody>
@@ -9099,8 +9054,16 @@ const ScheduleMasterForm = () => {
     const { isOpen: isRejectOpen, onOpen: onRejectOpen, onClose: onRejectClose } = useDisclosure();
     const cancelRejectRef = React.useRef();
     const [rejectTargetId, setRejectTargetId] = useState(null);
+    const [rejectTargetSchedule, setRejectTargetSchedule] = useState(null);
+    const [rejectScope, setRejectScope] = useState('today'); // 'today' | 'entire'
+    const [rejectPassword, setRejectPassword] = useState('');
     const [rejectReason, setRejectReason] = useState('');
     const [isRejectLoading, setIsRejectLoading] = useState(false);
+    // Restore Modal state (Super Admin only: Rejected -> Scheduled)
+    const { isOpen: isRestoreOpen, onOpen: onRestoreOpen, onClose: onRestoreClose } = useDisclosure();
+    const [restoreTargetSchedule, setRestoreTargetSchedule] = useState(null);
+    const [restoreScope, setRestoreScope] = useState('day'); // 'day' | 'contract'
+    const [isRestoreLoading, setIsRestoreLoading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -9294,29 +9257,103 @@ const ScheduleMasterForm = () => {
         }
     };
 
-    const handleRejectClick = (id) => {
+    const handleRejectClick = (scheduleOrId) => {
+        const id = typeof scheduleOrId === 'object' && scheduleOrId !== null ? scheduleOrId._id : scheduleOrId;
+        const found = schedules.find(s => s._id === id) || (typeof scheduleOrId === 'object' ? scheduleOrId : null);
         setRejectTargetId(id);
-        setRejectReason(''); // Always reset reason on open
+        setRejectTargetSchedule(found || null);
+        setRejectReason('');
+        setRejectScope('today');
+        setRejectPassword('');
         onRejectOpen();
     };
 
     const handleRejectConfirm = async () => {
         if (!rejectTargetId) return;
-        if (!rejectReason.trim()) return;
+        if (!rejectReason.trim()) {
+            toast({ title: 'Reason required', description: 'Please enter a rejection reason or remark.', status: 'warning', duration: 3000 });
+            return;
+        }
+
+        const isMonth = rejectTargetSchedule?.scheduleType === 'MONTH';
+        if (isMonth && rejectScope === 'entire') {
+            if (!rejectPassword) {
+                toast({ title: 'Password required', description: 'Security password is required to cancel the entire contract.', status: 'error', duration: 3000 });
+                return;
+            }
+            if (rejectPassword !== 'Dskanak@1966') {
+                toast({ title: 'Incorrect Password', description: 'The authorization password entered is incorrect.', status: 'error', duration: 3000 });
+                return;
+            }
+        }
+
         setIsRejectLoading(true);
         try {
-            const res = await api.put(`/schedule-master/reject/${rejectTargetId}`, { rejectReason: rejectReason.trim() });
+            const payload = {
+                rejectReason: rejectReason.trim(),
+                rejectScope: isMonth ? rejectScope : 'today',
+                password: rejectPassword
+            };
+            const res = await api.put(`/schedule-master/reject/${rejectTargetId}`, payload);
             if (res.data.success) {
-                toast({ title: 'Schedule Rejected', description: `Reason: ${rejectReason.trim()}`, status: 'info' });
+                toast({
+                    title: isMonth && rejectScope === 'entire' ? 'Monthly Contract Cancelled' : 'Schedule Rejected',
+                    description: isMonth && rejectScope === 'entire'
+                        ? 'Entire contract has been cancelled and excluded from invoices.'
+                        : `Reason: ${rejectReason.trim()}`,
+                    status: isMonth && rejectScope === 'entire' ? 'warning' : 'info',
+                    duration: 4000
+                });
                 onRejectClose();
                 setRejectReason('');
+                setRejectPassword('');
+                setRejectScope('today');
+                setRejectTargetSchedule(null);
                 const sRes = await api.get(`/schedule-master?date=${viewDate}`);
                 if (sRes.data.success) setSchedules(sRes.data.data);
             }
         } catch (error) {
-            toast({ title: 'Reject Failed', description: error.response?.data?.message, status: 'error' });
+            toast({ title: 'Reject Failed', description: error.response?.data?.message || 'Failed to reject schedule', status: 'error', duration: 4000 });
         } finally {
             setIsRejectLoading(false);
+        }
+    };
+
+    const handleRestoreClick = (schedule) => {
+        setRestoreTargetSchedule(schedule);
+        setRestoreScope(schedule.scheduleType === 'MONTH' ? 'contract' : 'day');
+        onRestoreOpen();
+    };
+
+    const handleRestoreConfirm = async () => {
+        if (!restoreTargetSchedule?._id) return;
+        setIsRestoreLoading(true);
+        try {
+            const payload = {
+                restoreScope: restoreTargetSchedule.scheduleType === 'MONTH' ? restoreScope : 'day'
+            };
+            const res = await api.put(`/schedule-master/restore-rejected/${restoreTargetSchedule._id}`, payload);
+            if (res.data.success) {
+                toast({
+                    title: 'Schedule Restored',
+                    description: 'Status changed from Rejected to Scheduled and remark cleared.',
+                    status: 'success',
+                    duration: 4000
+                });
+                onRestoreClose();
+                setRestoreTargetSchedule(null);
+                const sRes = await api.get(`/schedule-master?date=${viewDate}`);
+                if (sRes.data.success) setSchedules(sRes.data.data);
+            }
+        } catch (error) {
+            toast({
+                title: 'Restore Failed',
+                description: error.response?.data?.message || 'Failed to restore schedule',
+                status: 'error',
+                duration: 4000
+            });
+        } finally {
+            setIsRestoreLoading(false);
         }
     };
 
@@ -9717,6 +9754,11 @@ const ScheduleMasterForm = () => {
                                                                         Reject
                                                                     </Button>
                                                                 )}
+                                                                {s.dayStatus === 'Rejected' && user?.isSuperAdmin && (
+                                                                    <Button size="xs" colorScheme="green" variant="solid" leftIcon={<Icon as={FaUndo} />} onClick={() => handleRestoreClick(s)}>
+                                                                        Revert to Scheduled
+                                                                    </Button>
+                                                                )}
                                                             </Flex>
                                                         </VStack>
                                                     </CardBody>
@@ -9859,6 +9901,11 @@ const ScheduleMasterForm = () => {
                                                                 {s.dayStatus === 'Scheduled' && !s.hasExpenses && (
                                                                     <Button size="xs" colorScheme="red" leftIcon={<Icon as={FaTimes} />} onClick={() => handleRejectClick(s._id)}>Reject</Button>
                                                                 )}
+                                                                {s.dayStatus === 'Rejected' && user?.isSuperAdmin && (
+                                                                    <Button size="xs" colorScheme="green" variant="solid" leftIcon={<Icon as={FaUndo} />} onClick={() => handleRestoreClick(s)}>
+                                                                        Revert to Scheduled
+                                                                    </Button>
+                                                                )}
                                                             </HStack>
                                                         </Td>
                                                     </Tr>
@@ -9881,6 +9928,8 @@ const ScheduleMasterForm = () => {
     </Container>
 
             <ResourceAssignmentModal
+                isSuperAdmin={Boolean(user?.isSuperAdmin)}
+                onRestore={handleRestoreClick}
                 isOpen={isAssignOpen}
                 onClose={onAssignClose}
                 schedule={assignTarget}
@@ -10063,13 +10112,19 @@ const ScheduleMasterForm = () => {
                 </ModalContent>
             </Modal>
 
-            {/* ── Reject Schedule Modal (with mandatory reason) ── */}
+            {/* ── Reject Schedule Modal (with mandatory reason & entire contract cancellation) ── */}
             <Modal
                 isOpen={isRejectOpen}
-                onClose={() => { onRejectClose(); setRejectReason(''); }}
+                onClose={() => {
+                    onRejectClose();
+                    setRejectReason('');
+                    setRejectPassword('');
+                    setRejectScope('today');
+                    setRejectTargetSchedule(null);
+                }}
                 isCentered
                 motionPreset="slideInBottom"
-                size="md"
+                size={rejectTargetSchedule?.scheduleType === 'MONTH' ? 'lg' : 'md'}
             >
                 <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
                 <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
@@ -10077,44 +10132,204 @@ const ScheduleMasterForm = () => {
                         <Box bgGradient="linear(to-r, red.500, red.700)" px={7} py={6} color="white">
                             <HStack spacing={4}>
                                 <Box bg="whiteAlpha.200" p={3} borderRadius="2xl">
-                                    <Icon as={FaTimes} w={6} h={6} />
+                                    <Icon as={rejectScope === 'entire' ? FaShieldAlt : FaTimes} w={6} h={6} />
                                 </Box>
                                 <VStack align="start" spacing={0}>
-                                    <Heading size="md">Reject Schedule</Heading>
-                                    <Text fontSize="sm" opacity={0.85}>This action cannot be undone</Text>
+                                    <Heading size="md">
+                                        {rejectTargetSchedule?.scheduleType === 'MONTH' && rejectScope === 'entire'
+                                            ? 'Cancel Entire Monthly Contract'
+                                            : 'Reject Schedule'}
+                                    </Heading>
+                                    <Text fontSize="sm" opacity={0.85}>
+                                        {rejectTargetSchedule?.scheduleType === 'MONTH'
+                                            ? `Client: ${rejectTargetSchedule.client?.clientName || 'N/A'} • Site: ${rejectTargetSchedule.site?.siteName || 'N/A'}`
+                                            : 'This action cannot be undone'}
+                                    </Text>
                                 </VStack>
                             </HStack>
                         </Box>
                     </ModalHeader>
-                    <ModalCloseButton color="white" top={5} right={5} borderRadius="full" onClick={() => setRejectReason('')} />
+                    <ModalCloseButton
+                        color="white"
+                        top={5}
+                        right={5}
+                        borderRadius="full"
+                        onClick={() => {
+                            setRejectReason('');
+                            setRejectPassword('');
+                            setRejectScope('today');
+                            setRejectTargetSchedule(null);
+                        }}
+                    />
                     <ModalBody px={7} py={6}>
                         <VStack spacing={4} align="stretch">
-                            <Box p={4} bg="red.50" borderRadius="2xl" border="1px solid" borderColor="red.100">
-                                <HStack spacing={2} mb={1}>
-                                    <Icon as={FaTimes} color="red.400" w={3} h={3} />
-                                    <Text fontSize="xs" fontWeight="black" color="red.600" textTransform="uppercase">Warning</Text>
-                                </HStack>
-                                <Text fontSize="sm" color="gray.700">
-                                    This will mark the schedule as <strong>Rejected</strong> and remove it from the active pipeline. All associated data checks will be run before rejection.
-                                </Text>
-                            </Box>
+                            {/* Monthly Contract Scope Switcher */}
+                            {rejectTargetSchedule?.scheduleType === 'MONTH' && (
+                                <Box p={4} bg="orange.50" borderRadius="2xl" border="1px solid" borderColor="orange.200">
+                                    <HStack justify="space-between" mb={2}>
+                                        <HStack spacing={2}>
+                                            <Icon as={FaExclamationTriangle} color="orange.600" />
+                                            <Text fontSize="xs" fontWeight="black" color="orange.800" textTransform="uppercase">
+                                                Monthly Recurring Contract
+                                            </Text>
+                                        </HStack>
+                                        <Badge colorScheme="purple" borderRadius="full" px={2.5} py={0.5} fontSize="11px">
+                                            GROUP #{rejectTargetSchedule.monthGroupId || 'N/A'}
+                                        </Badge>
+                                    </HStack>
+                                    <Text fontSize="xs" color="gray.600" mb={3}>
+                                        Choose whether to reject only today's scheduled entry or terminate this entire monthly contract:
+                                    </Text>
+
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                                        {/* Option 1: Reject Today Only */}
+                                        <Box
+                                            as="button"
+                                            type="button"
+                                            textAlign="left"
+                                            p={3.5}
+                                            borderRadius="xl"
+                                            border="2px solid"
+                                            borderColor={rejectScope === 'today' ? 'blue.500' : 'gray.200'}
+                                            bg={rejectScope === 'today' ? 'white' : 'gray.50'}
+                                            boxShadow={rejectScope === 'today' ? 'md' : 'none'}
+                                            transition="all 0.2s"
+                                            onClick={() => setRejectScope('today')}
+                                        >
+                                            <HStack justify="space-between" mb={1}>
+                                                <HStack spacing={2}>
+                                                    <Box
+                                                        w={4}
+                                                        h={4}
+                                                        borderRadius="full"
+                                                        border="2px solid"
+                                                        borderColor={rejectScope === 'today' ? 'blue.500' : 'gray.400'}
+                                                        p="2px"
+                                                    >
+                                                        {rejectScope === 'today' && <Box w="full" h="full" borderRadius="full" bg="blue.500" />}
+                                                    </Box>
+                                                    <Text fontWeight="bold" fontSize="sm" color="gray.800">Reject Today Only</Text>
+                                                </HStack>
+                                            </HStack>
+                                            <Text fontSize="xs" color="gray.500" mt={1}>
+                                                Only today's entry rejected. Tomorrow's entry will continue generating as scheduled.
+                                            </Text>
+                                        </Box>
+
+                                        {/* Option 2: Cancel Entire Contract */}
+                                        <Box
+                                            as="button"
+                                            type="button"
+                                            textAlign="left"
+                                            p={3.5}
+                                            borderRadius="xl"
+                                            border="2px solid"
+                                            borderColor={rejectScope === 'entire' ? 'red.600' : 'gray.200'}
+                                            bg={rejectScope === 'entire' ? 'red.50' : 'gray.50'}
+                                            boxShadow={rejectScope === 'entire' ? 'md' : 'none'}
+                                            transition="all 0.2s"
+                                            onClick={() => setRejectScope('entire')}
+                                        >
+                                            <HStack justify="space-between" mb={1}>
+                                                <HStack spacing={2}>
+                                                    <Box
+                                                        w={4}
+                                                        h={4}
+                                                        borderRadius="full"
+                                                        border="2px solid"
+                                                        borderColor={rejectScope === 'entire' ? 'red.600' : 'gray.400'}
+                                                        p="2px"
+                                                    >
+                                                        {rejectScope === 'entire' && <Box w="full" h="full" borderRadius="full" bg="red.600" />}
+                                                    </Box>
+                                                    <Text fontWeight="bold" fontSize="sm" color="red.700">Cancel Entire Contract</Text>
+                                                </HStack>
+                                            </HStack>
+                                            <Text fontSize="xs" color="red.600" mt={1}>
+                                                Permanently stops daily generation and completely excludes all entries from all Invoices.
+                                            </Text>
+                                        </Box>
+                                    </SimpleGrid>
+                                </Box>
+                            )}
+
+                            {/* Standard Warning for non-MONTH or Today Only */}
+                            {(!rejectTargetSchedule || rejectTargetSchedule.scheduleType !== 'MONTH' || rejectScope === 'today') && (
+                                <Box p={4} bg="red.50" borderRadius="2xl" border="1px solid" borderColor="red.100">
+                                    <HStack spacing={2} mb={1}>
+                                        <Icon as={FaTimes} color="red.400" w={3} h={3} />
+                                        <Text fontSize="xs" fontWeight="black" color="red.600" textTransform="uppercase">Warning</Text>
+                                    </HStack>
+                                    <Text fontSize="sm" color="gray.700">
+                                        This will mark the schedule as <strong>Rejected</strong> and remove it from the active pipeline. All associated data checks will be run before rejection.
+                                    </Text>
+                                </Box>
+                            )}
+
+                            {/* Password input strictly required for Cancel Entire Monthly Contract */}
+                            {rejectTargetSchedule?.scheduleType === 'MONTH' && rejectScope === 'entire' && (
+                                <Box p={4} bg="red.50" borderRadius="2xl" border="1px solid" borderColor="red.200">
+                                    <HStack justify="space-between" mb={2}>
+                                        <HStack spacing={2}>
+                                            <Icon as={FaShieldAlt} color="red.600" />
+                                            <Text fontWeight="bold" fontSize="sm" color="red.800">
+                                                Security Password Authorization <Text as="span" color="red.500">*</Text>
+                                            </Text>
+                                        </HStack>
+                                        {rejectPassword === 'Dskanak@1966' && (
+                                            <Badge colorScheme="green" variant="solid" borderRadius="full" px={2.5} py={0.5} fontSize="11px">
+                                                ✓ Password Verified
+                                            </Badge>
+                                        )}
+                                    </HStack>
+                                    <Input
+                                        type="password"
+                                        placeholder="Enter security password..."
+                                        value={rejectPassword}
+                                        onChange={(e) => setRejectPassword(e.target.value)}
+                                        borderRadius="xl"
+                                        bg="white"
+                                        focusBorderColor="red.500"
+                                        size="md"
+                                        borderColor={rejectPassword.length > 0 && rejectPassword !== 'Dskanak@1966' ? 'red.400' : 'gray.300'}
+                                    />
+                                    {rejectPassword.length > 0 && rejectPassword !== 'Dskanak@1966' && (
+                                        <Text fontSize="xs" color="red.600" mt={1.5} fontWeight="medium">
+                                            ⚠ Incorrect security password. Please enter the correct password.
+                                        </Text>
+                                    )}
+                                    {rejectPassword.length === 0 && (
+                                        <Text fontSize="xs" color="gray.500" mt={1.5}>
+                                            Authorization password is required to terminate this entire monthly contract.
+                                        </Text>
+                                    )}
+                                </Box>
+                            )}
+
+                            {/* Rejection / Cancellation Remark / Reason */}
                             <Box>
                                 <Text fontWeight="bold" fontSize="sm" color="gray.700" mb={2}>
-                                    Rejection Reason <Text as="span" color="red.500">*</Text>
+                                    {rejectTargetSchedule?.scheduleType === 'MONTH' && rejectScope === 'entire'
+                                        ? 'Cancellation Remark / Reason'
+                                        : 'Rejection Reason'} <Text as="span" color="red.500">*</Text>
                                 </Text>
                                 <Textarea
-                                    placeholder="Enter the reason for rejecting this schedule (required)..."
+                                    placeholder={
+                                        rejectTargetSchedule?.scheduleType === 'MONTH' && rejectScope === 'entire'
+                                            ? 'Enter mandatory remark for cancelling this entire contract...'
+                                            : 'Enter the reason for rejecting this schedule (required)...'
+                                    }
                                     value={rejectReason}
                                     onChange={(e) => setRejectReason(e.target.value)}
                                     borderRadius="xl"
                                     bg="gray.50"
-                                    rows={4}
+                                    rows={3}
                                     resize="none"
                                     focusBorderColor="red.400"
                                     _placeholder={{ color: 'gray.400', fontSize: 'sm' }}
                                 />
                                 {rejectReason.trim().length === 0 && (
-                                    <Text fontSize="xs" color="red.400" mt={1}>⚠ Reason is required to proceed</Text>
+                                    <Text fontSize="xs" color="red.400" mt={1}>⚠ Remark / Reason is required to proceed</Text>
                                 )}
                                 {rejectReason.trim().length > 0 && (
                                     <Text fontSize="xs" color="green.500" mt={1}>✓ {rejectReason.trim().length} characters entered</Text>
@@ -10128,7 +10343,13 @@ const ScheduleMasterForm = () => {
                                 ref={cancelRejectRef}
                                 variant="ghost"
                                 borderRadius="full"
-                                onClick={() => { onRejectClose(); setRejectReason(''); }}
+                                onClick={() => {
+                                    onRejectClose();
+                                    setRejectReason('');
+                                    setRejectPassword('');
+                                    setRejectScope('today');
+                                    setRejectTargetSchedule(null);
+                                }}
                                 flex={1}
                             >
                                 Cancel
@@ -10139,11 +10360,148 @@ const ScheduleMasterForm = () => {
                                 shadow="md"
                                 onClick={handleRejectConfirm}
                                 isLoading={isRejectLoading}
-                                isDisabled={!rejectReason.trim()}
-                                leftIcon={<Icon as={FaTimes} />}
+                                isDisabled={
+                                    !rejectReason.trim() ||
+                                    (rejectTargetSchedule?.scheduleType === 'MONTH' && rejectScope === 'entire' && rejectPassword !== 'Dskanak@1966')
+                                }
+                                leftIcon={<Icon as={rejectTargetSchedule?.scheduleType === 'MONTH' && rejectScope === 'entire' ? FaShieldAlt : FaTimes} />}
                                 flex={1}
                             >
-                                Confirm Reject
+                                {rejectTargetSchedule?.scheduleType === 'MONTH' && rejectScope === 'entire'
+                                    ? 'Cancel Entire Contract'
+                                    : 'Confirm Reject'}
+                            </Button>
+                        </HStack>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── Super Admin Restore Schedule Modal (Rejected -> Scheduled) ── */}
+            <Modal
+                isOpen={isRestoreOpen}
+                onClose={() => {
+                    onRestoreClose();
+                    setRestoreTargetSchedule(null);
+                }}
+                isCentered
+                motionPreset="slideInBottom"
+                size="md"
+            >
+                <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.700" />
+                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader p={0}>
+                        <Box bgGradient="linear(to-r, green.600, teal.700)" px={7} py={6} color="white">
+                            <HStack spacing={4}>
+                                <Box bg="whiteAlpha.200" p={3} borderRadius="2xl">
+                                    <Icon as={FaUndo} w={6} h={6} />
+                                </Box>
+                                <VStack align="start" spacing={0}>
+                                    <HStack spacing={2}>
+                                        <Heading size="md">Revert to Scheduled</Heading>
+                                        <Badge colorScheme="yellow" variant="solid" borderRadius="full" px={2} fontSize="10px">
+                                            SUPER ADMIN
+                                        </Badge>
+                                    </HStack>
+                                    <Text fontSize="sm" opacity={0.85}>
+                                        Restore status and clear rejection remark
+                                    </Text>
+                                </VStack>
+                            </HStack>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" top={5} right={5} borderRadius="full" />
+                    <ModalBody px={7} py={6}>
+                        <VStack spacing={4} align="stretch">
+                            <Box p={4} bg="green.50" borderRadius="2xl" border="1px solid" borderColor="green.200">
+                                <Text fontSize="sm" color="gray.800">
+                                    Are you sure you want to change the status of this schedule from <strong>Rejected</strong> back to <strong>Scheduled</strong>?
+                                </Text>
+                                <VStack align="start" spacing={1} mt={3} fontSize="xs" color="gray.600">
+                                    <HStack spacing={1.5}>
+                                        <Text color="green.600" fontWeight="bold">✓</Text>
+                                        <Text>Rejection remark will be completely emptied / cleared.</Text>
+                                    </HStack>
+                                    <HStack spacing={1.5}>
+                                        <Text color="green.600" fontWeight="bold">✓</Text>
+                                        <Text>Schedule returns to active pipeline for resource assignment.</Text>
+                                    </HStack>
+                                </VStack>
+                            </Box>
+
+                            {restoreTargetSchedule?.scheduleType === 'MONTH' && restoreTargetSchedule?.monthGroupId && (
+                                <Box p={4} bg="blue.50" borderRadius="2xl" border="1px solid" borderColor="blue.200">
+                                    <Text fontWeight="bold" fontSize="xs" color="blue.800" textTransform="uppercase" mb={2}>
+                                        Monthly Recurring Contract Options (Group #{restoreTargetSchedule.monthGroupId})
+                                    </Text>
+                                    <VStack spacing={2} align="stretch">
+                                        <Box
+                                            as="button"
+                                            type="button"
+                                            textAlign="left"
+                                            p={3}
+                                            borderRadius="xl"
+                                            border="2px solid"
+                                            borderColor={restoreScope === 'contract' ? 'green.500' : 'gray.200'}
+                                            bg={restoreScope === 'contract' ? 'white' : 'gray.50'}
+                                            transition="all 0.2s"
+                                            onClick={() => setRestoreScope('contract')}
+                                        >
+                                            <HStack justify="space-between">
+                                                <Text fontWeight="bold" fontSize="sm" color="gray.800">Restore Entire Monthly Contract</Text>
+                                                <Badge colorScheme="green" fontSize="10px">Reactivate Contract</Badge>
+                                            </HStack>
+                                            <Text fontSize="xs" color="gray.500" mt={1}>
+                                                Reverts all rejected entries for this contract back to Scheduled and restores active status.
+                                            </Text>
+                                        </Box>
+                                        <Box
+                                            as="button"
+                                            type="button"
+                                            textAlign="left"
+                                            p={3}
+                                            borderRadius="xl"
+                                            border="2px solid"
+                                            borderColor={restoreScope === 'day' ? 'green.500' : 'gray.200'}
+                                            bg={restoreScope === 'day' ? 'white' : 'gray.50'}
+                                            transition="all 0.2s"
+                                            onClick={() => setRestoreScope('day')}
+                                        >
+                                            <HStack justify="space-between">
+                                                <Text fontWeight="bold" fontSize="sm" color="gray.800">Restore This Day Only</Text>
+                                                <Badge colorScheme="blue" fontSize="10px">Single Entry</Badge>
+                                            </HStack>
+                                            <Text fontSize="xs" color="gray.500" mt={1}>
+                                                Only reverts this specific day's entry from Rejected to Scheduled.
+                                            </Text>
+                                        </Box>
+                                    </VStack>
+                                </Box>
+                            )}
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" px={7} py={4}>
+                        <HStack w="full" spacing={3}>
+                            <Button
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => {
+                                    onRestoreClose();
+                                    setRestoreTargetSchedule(null);
+                                }}
+                                flex={1}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                colorScheme="green"
+                                borderRadius="full"
+                                shadow="md"
+                                onClick={handleRestoreConfirm}
+                                isLoading={isRestoreLoading}
+                                leftIcon={<Icon as={FaUndo} />}
+                                flex={1}
+                            >
+                                Confirm Restore
                             </Button>
                         </HStack>
                     </ModalFooter>
@@ -10153,7 +10511,7 @@ const ScheduleMasterForm = () => {
     );
 };
 
-const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], employees, vehicles, instruments, instrumentGroups = [], onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth, onDeleteSchedule }) => {
+const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], employees, vehicles, instruments, instrumentGroups = [], onUpdate, isLoading, onPauseMonth, onResumeMonth, onCompleteMonth, onDeleteSchedule, isSuperAdmin, onRestore }) => {
     const [formData, setFormData] = useState({
         operative: '',
         helpers: [],
@@ -10282,15 +10640,30 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                     <VStack spacing={8} align="stretch">
                         {isRejected && (
                             <Box p={4} bg="red.50" borderRadius="2xl" border="1px solid" borderColor="red.200">
-                                <HStack spacing={3}>
-                                    <Icon as={FaTimes} color="red.500" w={5} h={5} />
-                                    <VStack align="start" spacing={0}>
-                                        <Text fontWeight="black" color="red.800" fontSize="sm">Schedule Marked as REJECTED</Text>
-                                        <Text fontSize="xs" color="red.600">
-                                            Reason: <strong>{schedule.rejectReason || 'No reason specified'}</strong>. Operative assignment is disabled for rejected schedules.
-                                        </Text>
-                                    </VStack>
-                                </HStack>
+                                <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+                                    <HStack spacing={3}>
+                                        <Icon as={FaTimes} color="red.500" w={5} h={5} />
+                                        <VStack align="start" spacing={0}>
+                                            <Text fontWeight="black" color="red.800" fontSize="sm">Schedule Marked as REJECTED</Text>
+                                            <Text fontSize="xs" color="red.600">
+                                                Reason: <strong>{schedule.rejectReason || 'No reason specified'}</strong>.
+                                            </Text>
+                                        </VStack>
+                                    </HStack>
+                                    {isSuperAdmin && onRestore && (
+                                        <Button
+                                            size="sm"
+                                            colorScheme="green"
+                                            leftIcon={<Icon as={FaUndo} />}
+                                            onClick={() => {
+                                                onClose();
+                                                onRestore(schedule);
+                                            }}
+                                        >
+                                            Revert to Scheduled
+                                        </Button>
+                                    )}
+                                </Flex>
                             </Box>
                         )}
                         {/* ── Schedule Date Picker ── */}
@@ -13926,7 +14299,6 @@ const Services = () => {
         { key: 'employeeExpense', groupKey: 'employeeExpenseGroup', label: 'Employee Ledger', icon: FaMoneyBillWave, colorScheme: 'blue', Component: WrappedEmployeeExpensesModule },
         { key: 'draftingWork', groupKey: 'otherServicesGroup', subFilter: 'draftingWork', label: 'Drafting Work', icon: FaFolderOpen, colorScheme: 'purple', Component: WrappedAdminDraftingWork },
         { key: 'invoiceReport', groupKey: 'otherServicesGroup', subFilter: 'invoiceReport', label: 'Invoice Report', icon: FaFileInvoiceDollar, colorScheme: 'blue', Component: WrappedInvoiceReport },
-        { key: 'companyMaster', groupKey: 'otherServicesGroup', subFilter: 'companyMaster', label: 'Our Companies', icon: FaBuilding, colorScheme: 'teal', Component: CompanyMaster },
     ].filter(t => hasPermission(user, t.key, 'read')), [user]);
 
     // Store tab KEY ('siteMaster', 'clientMaster', etc.) to avoid race conditions with permission loading
@@ -13984,7 +14356,7 @@ const Services = () => {
                                     fontWeight="bold"
                                     px={{ base: 3, sm: 4 }}
                                 >
-                                    Unique Lab Survey
+                                    Unique Survey
                                 </Button>
                                 <Button
                                     size={{ base: "xs", sm: "sm" }}

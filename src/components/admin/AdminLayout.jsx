@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
     Box, Flex, VStack, Text, IconButton, useColorModeValue, Drawer, DrawerContent,
-    useDisclosure, Icon, Link
+    useDisclosure, Icon, Link, Collapse
 } from '@chakra-ui/react';
 import {
     FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut,
-    FiGlobe, FiArrowLeft, FiFileText, FiLock, FiSettings, FiLayers, FiBriefcase
+    FiGlobe, FiArrowLeft, FiFileText, FiLock, FiSettings, FiLayers, FiBriefcase,
+    FiChevronDown, FiChevronRight
 } from 'react-icons/fi';
+import { FaBuilding } from 'react-icons/fa';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
@@ -14,19 +16,27 @@ import { useRealtimeSync } from '../../utils/useRealtimeSync';
 
 const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: 'dashboard' },
-    { name: 'Unique Lab Survey', icon: FiLayers, path: '/services?view=masters', permissionKey: null },
+    { name: 'Unique Survey', icon: FiLayers, path: '/services?view=masters', permissionKey: null },
+    { 
+        name: 'Unique Lab Instruments', 
+        icon: FiBox, 
+        path: '/unique-lab-instruments', 
+        permissionCheck: (user) => hasPermission(user, 'products', 'read') || hasPermission(user, 'enquiries', 'read')
+    },
     { name: 'Login Report', icon: FiFileText, path: '/admin/login-report', permissionKey: null },
-    { name: 'Products', icon: FiBox, path: '/admin/products', permissionKey: 'products' },
-    { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries', permissionKey: 'enquiries' },
     { name: 'WhatsApp', icon: FiSettings, path: '/admin/whatsapp-settings', permissionKey: null },
 ];
 
 /* ── Bottom tabs shown on mobile only ──────────────────────── */
 const MobileBottomTabs = [
     { name: 'Home', icon: FiHome, path: '/admin/dashboard' },
-    { name: 'Unique Lab Survey', icon: FiLayers, path: '/services?view=masters' },
-    { name: 'Products', icon: FiBox, path: '/admin/products' },
-    { name: 'Enquiries', icon: FiMessageSquare, path: '/admin/enquiries' },
+    { name: 'Survey', icon: FiLayers, path: '/services?view=masters' },
+    { 
+        name: 'Instruments', 
+        icon: FiBox, 
+        path: '/unique-lab-instruments',
+        permissionCheck: (user) => hasPermission(user, 'products', 'read') || hasPermission(user, 'enquiries', 'read')
+    },
     { name: 'Public', icon: FiGlobe, path: '/' },
 ];
 
@@ -68,7 +78,13 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
 
             <Box flex="1" overflowY="auto" py="2">
                 {LinkItems.map((link) => {
+                    if (link.permissionCheck && !link.permissionCheck(user)) return null;
                     if (link.permissionKey && !hasPermission(user, link.permissionKey, 'read')) return null;
+                    if (link.isGroup) {
+                        return (
+                            <NavGroup key={link.name} item={link} user={user} onClose={onClose} />
+                        );
+                    }
                     return (
                         <NavItem key={link.name} icon={link.icon} path={link.path} onClose={onClose}>
                             {link.name}
@@ -78,6 +94,11 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                 {user?.isSuperAdmin && (
                     <NavItem icon={FiLock} path="/admin/permissions" onClose={onClose}>
                         Permissions
+                    </NavItem>
+                )}
+                {(!user?.permissions || user?.permissions?.companyMaster?.read !== false || user?.isSuperAdmin) && (
+                    <NavItem icon={FaBuilding} path="/admin/our-company" onClose={onClose}>
+                        Our Company
                     </NavItem>
                 )}
             </Box>
@@ -116,6 +137,96 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                     <Text fontWeight="bold" fontSize="sm">Logout</Text>
                 </Flex>
             </Box>
+        </Box>
+    );
+};
+
+const NavGroup = ({ item, user, onClose }) => {
+    const location = useLocation();
+    const isChildActive = (item.subItems || []).some(sub => 
+        location.pathname === sub.path || location.pathname.startsWith(sub.path)
+    );
+    const [isOpen, setIsOpen] = useState(isChildActive);
+
+    useEffect(() => {
+        if (isChildActive) {
+            setIsOpen(true);
+        }
+    }, [isChildActive]);
+
+    const permittedSubItems = (item.subItems || []).filter(sub => 
+        !sub.permissionKey || hasPermission(user, sub.permissionKey, 'read')
+    );
+
+    if (permittedSubItems.length === 0) return null;
+
+    return (
+        <Box mb={1}>
+            <Flex
+                align="center"
+                justify="space-between"
+                p="3"
+                mx="3"
+                borderRadius="lg"
+                role="group"
+                cursor="pointer"
+                bg={isChildActive ? 'brand.50' : 'transparent'}
+                color={isChildActive ? 'brand.600' : 'gray.700'}
+                _hover={{ bg: isChildActive ? 'brand.100' : 'gray.100', color: 'brand.600' }}
+                onClick={() => setIsOpen(!isOpen)}
+                transition="all 0.15s"
+            >
+                <Flex align="center">
+                    <Icon mr="3" fontSize="16" as={item.icon} color={isChildActive ? 'brand.600' : 'gray.500'} />
+                    <Text fontSize="sm" fontWeight={isChildActive ? '700' : '600'}>
+                        {item.name}
+                    </Text>
+                </Flex>
+                <Icon
+                    as={FiChevronDown}
+                    transition="transform 0.2s"
+                    transform={isOpen ? 'rotate(0deg)' : 'rotate(-90deg)'}
+                    fontSize="14px"
+                    color={isChildActive ? 'brand.600' : 'gray.400'}
+                />
+            </Flex>
+
+            <Collapse in={isOpen} animateOpacity>
+                <VStack align="stretch" spacing={1} mt={1} pl={4} pr={1}>
+                    {permittedSubItems.map((sub) => {
+                        const isSubActive = location.pathname === sub.path || location.pathname.startsWith(sub.path);
+                        return (
+                            <Link
+                                key={sub.name}
+                                as={RouterLink}
+                                to={sub.path}
+                                style={{ textDecoration: 'none' }}
+                                _focus={{ boxShadow: 'none' }}
+                                onClick={onClose}
+                            >
+                                <Flex
+                                    align="center"
+                                    py="2.5"
+                                    px="3"
+                                    mx="3"
+                                    borderRadius="lg"
+                                    role="group"
+                                    cursor="pointer"
+                                    bg={isSubActive ? 'brand.500' : 'transparent'}
+                                    color={isSubActive ? 'white' : 'gray.600'}
+                                    _hover={{ bg: isSubActive ? 'brand.600' : 'gray.100', color: isSubActive ? 'white' : 'brand.600' }}
+                                    transition="all 0.15s"
+                                >
+                                    <Icon mr="2.5" fontSize="14" as={sub.icon} color={isSubActive ? 'white' : 'gray.400'} />
+                                    <Text fontSize="xs" fontWeight={isSubActive ? '700' : '500'}>
+                                        {sub.name}
+                                    </Text>
+                                </Flex>
+                            </Link>
+                        );
+                    })}
+                </VStack>
+            </Collapse>
         </Box>
     );
 };
@@ -209,6 +320,7 @@ const MobileBottomNav = ({ user }) => {
             py={1}
         >
             {tabs.map((tab) => {
+                if (tab.permissionCheck && !tab.permissionCheck(user)) return null;
                 const isActive =
                     tab.path === '/'
                         ? location.pathname === '/'

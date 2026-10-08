@@ -2,25 +2,30 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText,
     Icon, Spinner, Text, FormControl, FormLabel, Input, Button, Flex,
-    useToast, Table, Thead, Tbody, Tr, Th, Td, Badge, Avatar, Stack,
+    useToast, Table, Thead, Tbody, Tr, Th, Td, Badge, Avatar, Stack, HStack,
     InputGroup, InputLeftElement, Tooltip, Tag, TagLabel, Tabs, TabList,
     TabPanels, Tab, TabPanel, AlertDialog, AlertDialogBody, AlertDialogFooter,
     AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, IconButton,
-    Skeleton, SkeletonText
+    Skeleton, SkeletonText, Switch, Modal, ModalOverlay, ModalContent,
+    ModalHeader, ModalBody, ModalFooter, ModalCloseButton
 } from '@chakra-ui/react';
-import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar, FiTrash2, FiShield, FiUser, FiActivity } from 'react-icons/fi';
+import { FiBox, FiMessageSquare, FiClock, FiUserPlus, FiUsers, FiSearch, FiPhone, FiMail, FiBriefcase, FiCalendar, FiTrash2, FiShield, FiUser, FiActivity, FiEdit2 } from 'react-icons/fi';
+import { RiVipCrownFill } from 'react-icons/ri';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import { DEMO_PRODUCTS, DEMO_ENQUIRIES } from '../../data/mockData';
 import { hasPermission } from '../../utils/permissions';
 import HealthModal from '../../components/HealthModal';
+import AdminPersonalLoginReport from '../../components/admin/AdminPersonalLoginReport';
 
 
 const MotionBox = motion(Box);
 
 const AdminDashboard = () => {
     const { user, createAdmin } = useAuth();
+    const navigate = useNavigate();
     const toast = useToast();
 
     const canReadDashboard = hasPermission(user, 'dashboard', 'read');
@@ -35,7 +40,8 @@ const AdminDashboard = () => {
         pendingEnquiries: 0,
         doneQuotations: 0,
         rejectedQuotations: 0,
-        totalUsers: 0
+        totalUsers: 0,
+        companies: 0
     });
     // statsLoading tracks individual stat cards (not full page block)
     const [statsLoading, setStatsLoading] = useState(true);
@@ -91,8 +97,13 @@ const AdminDashboard = () => {
         draftingWork: { read: true, write: true },
         invoiceReport: { read: true, write: true }
     };
-    const [adminForm, setAdminForm] = useState({ name: '', email: '', phone: '', permissions: defaultPermissions });
+    const [adminForm, setAdminForm] = useState({ name: '', email: '', phone: '', isSuperAdmin: false, permissions: defaultPermissions });
     const [adminLoading, setAdminLoading] = useState(false);
+
+    // Edit Admin Modal state
+    const [editAdminModal, setEditAdminModal] = useState({ isOpen: false, admin: null });
+    const [editForm, setEditForm] = useState({ _id: '', name: '', email: '', phone: '', isSuperAdmin: false });
+    const [editLoading, setEditLoading] = useState(false);
 
     // ─── SINGLE PARALLEL FETCH: All 5 endpoints fire at once ───────────────────
     const fetchAllDashboardData = useCallback(async () => {
@@ -100,13 +111,14 @@ const AdminDashboard = () => {
         setUsersLoading(true);
         setAdminsLoading(true);
 
-        // Fire all 5 requests simultaneously — no waiting between rounds
-        const [prodRes, quoteRes, enqRes, usersRes, adminsRes] = await Promise.allSettled([
+        // Fire requests simultaneously — no waiting between rounds
+        const [prodRes, quoteRes, enqRes, usersRes, adminsRes, compRes] = await Promise.allSettled([
             api.get('/products/count'),          // returns { count: N } — tiny payload
             api.get('/quotations/stats'),         // returns { total, done, rejected } — tiny payload
             api.get('/enquiries/stats'),          // returns { total, unseen } — tiny payload
             api.get('/auth/users'),               // full list needed for table display
-            api.get('/auth/admins')               // full list needed for table display
+            api.get('/auth/admins'),              // full list needed for table display
+            api.get('/company-master')            // internal company master list
         ]);
 
         // ── Stats ──────────────────────────────────────────────────────────────
@@ -122,6 +134,10 @@ const AdminDashboard = () => {
             ? enqRes.value.data
             : { total: DEMO_ENQUIRIES.length, unseen: 0 };
 
+        const companyCount = compRes.status === 'fulfilled' && compRes.value.data?.success && Array.isArray(compRes.value.data.data)
+            ? compRes.value.data.data.length
+            : 0;
+
         // ── Users & Admins ─────────────────────────────────────────────────────
         let totalUsers = 0;
         if (usersRes.status === 'fulfilled') {
@@ -133,8 +149,7 @@ const AdminDashboard = () => {
 
         if (adminsRes.status === 'fulfilled') {
             const aData = adminsRes.value.data.admins || adminsRes.value.data || [];
-            const cleanAdmins = (Array.isArray(aData) ? aData : []).filter(a => !a.isSuperAdmin);
-            setAdmins(cleanAdmins);
+            setAdmins(Array.isArray(aData) ? aData : []);
         }
 
         // ── Commit all stats in one setState call ──────────────────────────────
@@ -144,7 +159,8 @@ const AdminDashboard = () => {
             pendingEnquiries: eStats.unseen ?? 0,
             doneQuotations: qStats.done ?? 0,
             rejectedQuotations: qStats.rejected ?? 0,
-            totalUsers
+            totalUsers,
+            companies: companyCount
         });
 
         setStatsLoading(false);
@@ -183,14 +199,69 @@ const AdminDashboard = () => {
             return toast({ title: 'Enter a valid 10-digit phone number', status: 'error', duration: 2500 });
         }
         setAdminLoading(true);
-        const res = await createAdmin(adminForm.name, adminForm.email, adminForm.phone, adminForm.permissions);
+        const res = await createAdmin(adminForm.name, adminForm.email, adminForm.phone, adminForm.permissions, adminForm.isSuperAdmin);
         setAdminLoading(false);
         if (res.success) {
-            toast({ title: '✅ Admin Created!', description: res.msg, status: 'success' });
-            setAdminForm({ name: '', email: '', phone: '', permissions: defaultPermissions });
+            toast({ title: '✅ Admin Created!', description: res.msg || 'Admin account created successfully', status: 'success' });
+            setAdminForm({ name: '', email: '', phone: '', isSuperAdmin: false, permissions: defaultPermissions });
             fetchAllDashboardData();
         } else {
-            toast({ title: 'Failed', description: res.message, status: 'error' });
+            toast({ title: 'Failed', description: res.message || res.msg, status: 'error' });
+        }
+    };
+
+    const handleOpenEditAdmin = (admin) => {
+        setEditForm({
+            _id: admin._id,
+            name: admin.name || '',
+            email: admin.email || '',
+            phone: admin.phone || '',
+            isSuperAdmin: !!admin.isSuperAdmin
+        });
+        setEditAdminModal({ isOpen: true, admin });
+    };
+
+    const handleUpdateAdmin = async () => {
+        if (!editForm.name || !editForm.email || !editForm.phone) {
+            return toast({ title: 'Please fill all fields', status: 'error', duration: 2500 });
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email)) {
+            return toast({ title: 'Enter a valid email', status: 'error', duration: 2500 });
+        }
+        if (editForm.phone.length < 10) {
+            return toast({ title: 'Enter a valid 10-digit phone number', status: 'error', duration: 2500 });
+        }
+        setEditLoading(true);
+        try {
+            const res = await api.put(`/auth/admins/${editForm._id}`, {
+                name: editForm.name,
+                email: editForm.email,
+                phone: editForm.phone,
+                isSuperAdmin: editForm.isSuperAdmin
+            });
+            if (res.data?.success || res.status === 200) {
+                toast({
+                    title: '✅ Admin Updated!',
+                    description: res.data?.msg || 'Admin account updated successfully',
+                    status: 'success'
+                });
+                setEditAdminModal({ isOpen: false, admin: null });
+                fetchAllDashboardData();
+            } else {
+                toast({
+                    title: 'Update Failed',
+                    description: res.data?.msg || res.data?.message || 'Could not update admin',
+                    status: 'error'
+                });
+            }
+        } catch (err) {
+            toast({
+                title: 'Update Failed',
+                description: err.response?.data?.msg || err.response?.data?.message || err.message,
+                status: 'error'
+            });
+        } finally {
+            setEditLoading(false);
         }
     };
 
@@ -292,11 +363,11 @@ const AdminDashboard = () => {
             {/* Stats Grid — renders immediately, numbers fill in as data arrives */}
             <SimpleGrid columns={{ base: 2, md: 3, lg: 6 }} spacing={5} mb={10}>
                 {[
-                    { label: 'Products', value: stats.products, icon: FiBox, color: 'brand.500', help: 'Active catalog', bg: 'brand.50' },
-                    { label: 'Total Enquiries', value: stats.totalEnquiries, icon: FiMessageSquare, color: 'blue.500', help: 'All time', bg: 'blue.50' },
-                    { label: 'New Enquiries', value: stats.pendingEnquiries, icon: FiMessageSquare, color: 'orange.500', help: 'Action needed', bg: 'orange.50' },
-                    { label: 'Success (Done)', value: stats.doneQuotations, icon: FiClock, color: 'green.500', help: 'Closed deals', bg: 'green.50' },
-                    { label: 'Rejected', value: stats.rejectedQuotations, icon: FiClock, color: 'red.500', help: 'Lost deals', bg: 'red.50' },
+                    { label: 'Products', value: stats.products, icon: FiBox, color: 'brand.500', help: 'Active catalog', bg: 'brand.50', path: '/admin/products' },
+                    { label: 'Total Enquiries', value: stats.totalEnquiries, icon: FiMessageSquare, color: 'blue.500', help: 'All time', bg: 'blue.50', path: '/admin/enquiries' },
+                    { label: 'New Enquiries', value: stats.pendingEnquiries, icon: FiMessageSquare, color: 'orange.500', help: 'Action needed', bg: 'orange.50', path: '/admin/enquiries' },
+                    { label: 'Success (Done)', value: stats.doneQuotations, icon: FiClock, color: 'green.500', help: 'Closed deals', bg: 'green.50', path: '/admin/enquiries' },
+                    { label: 'Rejected', value: stats.rejectedQuotations, icon: FiClock, color: 'red.500', help: 'Lost deals', bg: 'red.50', path: '/admin/enquiries' },
                     { label: 'Registered Users', value: stats.totalUsers, icon: FiUsers, color: 'purple.500', help: 'Website clients', bg: 'purple.50' },
                 ].map((s, i) => (
                     <MotionBox
@@ -310,6 +381,8 @@ const AdminDashboard = () => {
                         boxShadow="sm"
                         border="1px solid"
                         borderColor="gray.100"
+                        cursor={s.path ? 'pointer' : 'default'}
+                        onClick={() => s.path && navigate(s.path)}
                         _hover={{ boxShadow: 'md', transform: 'translateY(-2px)' }}
                         style={{ transition: 'all 0.2s' }}
                     >
@@ -348,7 +421,7 @@ const AdminDashboard = () => {
                         </Box>
                     </Flex>
 
-                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+                    <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={4} alignItems="flex-end">
                         <FormControl isRequired>
                             <FormLabel fontSize="sm" fontWeight="700">Full Name</FormLabel>
                             <Input
@@ -377,6 +450,32 @@ const AdminDashboard = () => {
                                 maxLength={10}
                                 borderRadius="lg"
                             />
+                        </FormControl>
+                        <FormControl display="flex" flexDirection="column" justifyContent="flex-end">
+                            <FormLabel fontSize="sm" fontWeight="700" mb={1} display="flex" alignItems="center" gap={1.5}>
+                                <Icon as={RiVipCrownFill} color={adminForm.isSuperAdmin ? "orange.500" : "gray.400"} />
+                                Super Admin Role
+                            </FormLabel>
+                            <Flex
+                                align="center"
+                                justify="space-between"
+                                h="40px"
+                                px={3}
+                                bg={adminForm.isSuperAdmin ? "purple.50" : "gray.50"}
+                                borderRadius="lg"
+                                border="1px solid"
+                                borderColor={adminForm.isSuperAdmin ? "purple.300" : "gray.200"}
+                                transition="all 0.2s"
+                            >
+                                <Text fontSize="xs" fontWeight="700" color={adminForm.isSuperAdmin ? "purple.700" : "gray.600"}>
+                                    {adminForm.isSuperAdmin ? "Super Admin (ON)" : "Sub-Admin (OFF)"}
+                                </Text>
+                                <Switch
+                                    colorScheme="purple"
+                                    isChecked={!!adminForm.isSuperAdmin}
+                                    onChange={(e) => setAdminForm(p => ({ ...p, isSuperAdmin: e.target.checked }))}
+                                />
+                            </Flex>
                         </FormControl>
                     </SimpleGrid>
 
@@ -483,7 +582,7 @@ const AdminDashboard = () => {
                                 <>
                             <Flex px={6} py={3} bg="purple.50" align="center" justify="space-between" wrap="wrap" gap={3} borderBottom="1px solid" borderColor="purple.100">
                                 <Text fontSize="xs" fontWeight="700" color="purple.800">
-                                    {filteredAdmins.length} {filteredAdmins.length === 1 ? 'Admin User' : 'Admin Users'} (Excluding Super Admin)
+                                    {filteredAdmins.length} {filteredAdmins.length === 1 ? 'Admin User' : 'Admin Users'}
                                 </Text>
                                 <InputGroup size="sm" maxW="240px" bg="white" borderRadius="lg" boxShadow="xs">
                                     <InputLeftElement pointerEvents="none">
@@ -568,9 +667,30 @@ const AdminDashboard = () => {
                                                         </Stack>
                                                     </Td>
                                                     <Td py={3}>
-                                                        <Badge colorScheme="purple" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="800">
-                                                            SUB-ADMIN
-                                                        </Badge>
+                                                        {a.isSuperAdmin ? (
+                                                            <Badge
+                                                                colorScheme="yellow"
+                                                                bg="orange.100"
+                                                                color="orange.800"
+                                                                borderRadius="full"
+                                                                px={2.5}
+                                                                py={0.5}
+                                                                fontSize="10px"
+                                                                fontWeight="800"
+                                                                display="inline-flex"
+                                                                alignItems="center"
+                                                                gap={1}
+                                                                border="1px solid"
+                                                                borderColor="orange.300"
+                                                            >
+                                                                <Icon as={RiVipCrownFill} color="orange.500" />
+                                                                SUPER ADMIN
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge colorScheme="purple" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="800">
+                                                                SUB-ADMIN
+                                                            </Badge>
+                                                        )}
                                                     </Td>
                                                     <Td py={3}>
                                                         <Flex align="center" gap={1}>
@@ -580,18 +700,32 @@ const AdminDashboard = () => {
                                                     </Td>
                                                     {user?.isSuperAdmin && (
                                                         <Td py={3} textAlign="center">
-                                                            <Tooltip label="Remove Admin Account" placement="top">
-                                                                <IconButton
-                                                                    icon={<Icon as={FiTrash2} />}
-                                                                    size="sm"
-                                                                    colorScheme="red"
-                                                                    variant="ghost"
-                                                                    borderRadius="lg"
-                                                                    _hover={{ bg: 'red.50', color: 'red.600' }}
-                                                                    onClick={() => confirmDeleteAccount(a, 'admins')}
-                                                                    aria-label="Delete Admin"
-                                                                />
-                                                            </Tooltip>
+                                                            <HStack spacing={1} justify="center">
+                                                                <Tooltip label="Edit Admin Details" placement="top">
+                                                                    <IconButton
+                                                                        icon={<Icon as={FiEdit2} />}
+                                                                        size="sm"
+                                                                        colorScheme="purple"
+                                                                        variant="ghost"
+                                                                        borderRadius="lg"
+                                                                        _hover={{ bg: 'purple.50', color: 'purple.600' }}
+                                                                        onClick={() => handleOpenEditAdmin(a)}
+                                                                        aria-label="Edit Admin"
+                                                                    />
+                                                                </Tooltip>
+                                                                <Tooltip label="Remove Admin Account" placement="top">
+                                                                    <IconButton
+                                                                        icon={<Icon as={FiTrash2} />}
+                                                                        size="sm"
+                                                                        colorScheme="red"
+                                                                        variant="ghost"
+                                                                        borderRadius="lg"
+                                                                        _hover={{ bg: 'red.50', color: 'red.600' }}
+                                                                        onClick={() => confirmDeleteAccount(a, 'admins')}
+                                                                        aria-label="Delete Admin"
+                                                                    />
+                                                                </Tooltip>
+                                                            </HStack>
                                                         </Td>
                                                     )}
                                                 </Tr>
@@ -755,6 +889,11 @@ const AdminDashboard = () => {
                 </Tabs>
             </MotionBox>
 
+            {/* Personal Login & Attendance Report (Rendered below inside Dashboard at last) */}
+            {user?.isAdmin && (
+                <AdminPersonalLoginReport user={user} />
+            )}
+
             {/* Delete Account Pop-up Confirmation (AlertDialog) */}
             <AlertDialog
                 isOpen={deleteAccountModal.isOpen}
@@ -800,6 +939,122 @@ const AdminDashboard = () => {
                     </AlertDialogContent>
                 </AlertDialogOverlay>
             </AlertDialog>
+
+            {/* Edit Admin Modal */}
+            <Modal
+                isOpen={editAdminModal.isOpen}
+                onClose={() => setEditAdminModal({ isOpen: false, admin: null })}
+                isCentered
+                size="md"
+            >
+                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" p={2} boxShadow="2xl">
+                    <ModalHeader display="flex" alignItems="center" gap={3} pb={2}>
+                        <Box p={2.5} bg="purple.100" borderRadius="xl">
+                            <Icon as={FiEdit2} color="purple.600" w={5} h={5} />
+                        </Box>
+                        <Box>
+                            <Heading fontSize="lg" fontWeight="800" color="purple.700">Update Admin User</Heading>
+                            <Text fontSize="xs" color="gray.500" fontWeight="normal">Edit details and role privileges for this administrator.</Text>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton mt={3} mr={3} borderRadius="full" />
+
+                    <ModalBody py={4}>
+                        <Stack spacing={4}>
+                            <FormControl isRequired>
+                                <FormLabel fontSize="sm" fontWeight="700">Full Name</FormLabel>
+                                <Input
+                                    placeholder="Full Name"
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm(p => ({ ...p, name: e.target.value }))}
+                                    borderRadius="lg"
+                                    focusBorderColor="purple.500"
+                                />
+                            </FormControl>
+
+                            <FormControl isRequired>
+                                <FormLabel fontSize="sm" fontWeight="700">Email Address</FormLabel>
+                                <Input
+                                    type="email"
+                                    placeholder="admin@company.com"
+                                    value={editForm.email}
+                                    onChange={(e) => setEditForm(p => ({ ...p, email: e.target.value }))}
+                                    borderRadius="lg"
+                                    focusBorderColor="purple.500"
+                                />
+                            </FormControl>
+
+                            <FormControl isRequired>
+                                <FormLabel fontSize="sm" fontWeight="700">Phone Number</FormLabel>
+                                <Input
+                                    placeholder="9876543210"
+                                    value={editForm.phone}
+                                    onChange={(e) => setEditForm(p => ({ ...p, phone: e.target.value.replace(/\D/g, '') }))}
+                                    maxLength={10}
+                                    borderRadius="lg"
+                                    focusBorderColor="purple.500"
+                                />
+                            </FormControl>
+
+                            <FormControl
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="space-between"
+                                p={3.5}
+                                bg={editForm.isSuperAdmin ? "purple.50" : "gray.50"}
+                                borderRadius="xl"
+                                border="1px solid"
+                                borderColor={editForm.isSuperAdmin ? "purple.200" : "gray.200"}
+                                transition="all 0.2s"
+                            >
+                                <Box>
+                                    <FormLabel htmlFor="edit-superadmin-toggle" mb="0" fontSize="sm" fontWeight="700" color={editForm.isSuperAdmin ? "purple.800" : "gray.700"} display="flex" alignItems="center" gap={1.5} cursor="pointer">
+                                        <Icon as={RiVipCrownFill} color={editForm.isSuperAdmin ? "orange.500" : "gray.400"} />
+                                        Super Admin Privileges
+                                    </FormLabel>
+                                    <Text fontSize="xs" color="gray.500">
+                                        {editForm.isSuperAdmin ? 'Full administrative rights and account management.' : 'Standard sub-admin rights.'}
+                                    </Text>
+                                </Box>
+                                <Switch
+                                    id="edit-superadmin-toggle"
+                                    colorScheme="purple"
+                                    size="lg"
+                                    isChecked={!!editForm.isSuperAdmin}
+                                    onChange={(e) => setEditForm(p => ({ ...p, isSuperAdmin: e.target.checked }))}
+                                />
+                            </FormControl>
+                        </Stack>
+                    </ModalBody>
+
+                    <ModalFooter gap={3} pt={2}>
+                        <Button
+                            variant="outline"
+                            borderRadius="xl"
+                            size="md"
+                            px={5}
+                            fontWeight="600"
+                            onClick={() => setEditAdminModal({ isOpen: false, admin: null })}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            colorScheme="purple"
+                            borderRadius="xl"
+                            size="md"
+                            px={6}
+                            fontWeight="700"
+                            isLoading={editLoading}
+                            loadingText="Updating..."
+                            onClick={handleUpdateAdmin}
+                            boxShadow="md"
+                        >
+                            Save Changes
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
 
             {/* Health & AI Diagnostics Modal */}
             <HealthModal isOpen={isHealthOpen} onClose={() => setIsHealthOpen(false)} />

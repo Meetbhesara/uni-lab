@@ -19,18 +19,30 @@ import InvoiceReport from "./pages/admin/InvoiceReport";
 import EmployeeExpensesModule from "./pages/EmployeeExpensesModule";
 import AdminWhatsappSettings from "./pages/admin/AdminWhatsappSettings";
 import AdminLoginReport from "./pages/admin/AdminLoginReport";
+import CompanyMaster from "./pages/admin/CompanyMaster";
+import UniqueLabInstrumentsPage from "./pages/UniqueLabInstrumentsPage";
 import Login from "./pages/Login";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Dedicated Standalone Unique Lab Instruments Console */}
+        <Route path="/unique-lab-instruments" element={<UniqueLabInstrumentsPage />} />
+        <Route path="/unique-lab-instrument" element={<Navigate to="/unique-lab-instruments" replace />} />
+        <Route path="/lab-instruments" element={<Navigate to="/unique-lab-instruments" replace />} />
+
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="dashboard" />} />
           <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="products" element={<AdminProducts />} />
-          <Route path="enquiries" element={<AdminEnquiries />} />
+          <Route path="our-company" element={<CompanyMaster />} />
+          <Route path="company-master" element={<CompanyMaster />} />
+          <Route path="unique-lab-instruments" element={<Navigate to="/unique-lab-instruments" replace />} />
+          <Route path="unique-lab-instrument" element={<Navigate to="/unique-lab-instruments" replace />} />
+          <Route path="lab-instruments" element={<Navigate to="/unique-lab-instruments" replace />} />
+          <Route path="products" element={<Navigate to="/unique-lab-instruments?tab=products" replace />} />
+          <Route path="enquiries" element={<Navigate to="/unique-lab-instruments?tab=enquiries" replace />} />
           <Route path="permissions" element={<AdminPermissions />} />
           <Route path="employee-expenses" element={<EmployeeExpensesModule />} />
           <Route path="drafting-work" element={<AdminDraftingWork />} />

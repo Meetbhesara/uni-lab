@@ -169,9 +169,9 @@ const CompanyMaster = () => {
     };
 
     return (
-        <Box py={10} bg="gray.100" minH="100vh">
-            <Container maxW="container.md">
-                <Card variant="elevated" borderRadius="2xl" boxShadow="2xl" bg="white" overflow="hidden">
+        <Box py={{ base: 2, md: 4 }} w="full">
+            <Container maxW={{ base: "full", xl: "7xl" }} px={{ base: 0, md: 4 }}>
+                <Card variant="elevated" borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden" border="1px solid" borderColor="gray.100">
                     <Box bg="teal.600" p={{ base: 5, md: 8 }} color="white">
                         <Stack direction={{ base: "column", md: "row" }} justify="space-between" align="center" spacing={4}>
                             <Box>

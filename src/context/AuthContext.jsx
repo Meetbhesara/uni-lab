@@ -122,29 +122,14 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
+    // Periodic heartbeat every 60 seconds while admin tab is active
     useEffect(() => {
         if (!user?.isAdmin) return;
-        const handleBeforeUnload = () => {
-            const currentToken = sessionStorage.getItem('token');
-            if (currentToken) {
-                const baseUrl = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : 'http://localhost:5001/api';
-                try {
-                    fetch(`${baseUrl}/auth/logout`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-                        keepalive: true
-                    }).catch(() => {});
-                } catch (e) {}
-            }
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        window.addEventListener('unload', handleBeforeUnload);
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-            window.removeEventListener('unload', handleBeforeUnload);
-        };
-    }, [user]);
+        const heartbeatInterval = setInterval(() => {
+            api.get('/auth/me').catch(() => {});
+        }, 60 * 1000);
+        return () => clearInterval(heartbeatInterval);
+    }, [user?.isAdmin]);
 
     const refreshUser = async () => {
         const token = sessionStorage.getItem('token') || localStorage.getItem('token');
@@ -320,9 +305,9 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const createAdmin = async (name, email, phone, permissions) => {
+    const createAdmin = async (name, email, phone, permissions, isSuperAdmin = false) => {
         try {
-            const response = await api.post('/auth/create-admin', { name, email, phone, permissions });
+            const response = await api.post('/auth/create-admin', { name, email, phone, permissions, isSuperAdmin });
             return { success: true, ...response.data };
         } catch (error) {
             return { success: false, message: error.response?.data?.msg || 'Failed to create admin' };

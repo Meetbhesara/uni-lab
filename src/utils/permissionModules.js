@@ -11,7 +11,7 @@ export const PERMISSION_MODULES = [
     },
     {
         key: 'productsGroup',
-        label: 'Products Module',
+        label: 'Unique Lab Instruments - Products Module',
         mainTabKey: 'products',
         subTabs: [
             { key: 'products', label: 'Main Tab Access' },
@@ -23,7 +23,7 @@ export const PERMISSION_MODULES = [
     },
     {
         key: 'enquiriesGroup',
-        label: 'Enquiries Module',
+        label: 'Unique Lab Instruments - Enquiries Module',
         mainTabKey: 'enquiries',
         subTabs: [
             { key: 'enquiries', label: 'Main Tab Access' },
