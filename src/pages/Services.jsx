@@ -10600,11 +10600,40 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
         });
     };
 
+    const handleVehicleSelect = (id) => {
+        if (!formData.operative || isCompleted || isRejected) return;
+        setFormData(prev => ({
+            ...prev,
+            vehicle: id || ''
+        }));
+    };
+
+    const getVehiclePhoto = (v) => {
+        if (!v) return null;
+        if (v.primaryPhotoUrl) return getFileUrl(v.primaryPhotoUrl);
+        if (v.primaryPhoto) return getFileUrl(v.primaryPhoto);
+        if (Array.isArray(v.vehiclePhotos) && v.vehiclePhotos.length > 0) {
+            const primaryItem = v.vehiclePhotos.find(p => p && (p.isPrimary === true || p.primary === true));
+            if (primaryItem) {
+                const u = typeof primaryItem === 'string' ? primaryItem : (primaryItem.url || primaryItem.path || primaryItem);
+                if (u) return getFileUrl(u);
+            }
+            const first = v.vehiclePhotos[0];
+            const u = typeof first === 'string' ? first : (first?.url || first?.path || first);
+            if (u) return getFileUrl(u);
+        }
+        return null;
+    };
+
     const isCompleted = schedule?.dayStatus === 'Completed';
     const isPaused = schedule?.dayStatus === 'Paused';
     const isRejected = schedule?.dayStatus === 'Rejected';
     const isMonthType = schedule?.scheduleType === 'MONTH';
     const isResourceDisabled = isCompleted || isRejected || !formData.operative;
+
+    const currentVehicleId = formData.vehicle?._id || formData.vehicle || '';
+    const selectedVehicle = (vehicles || []).find(v => String(v._id) === String(currentVehicleId));
+    const selectedVehiclePhoto = selectedVehicle ? getVehiclePhoto(selectedVehicle) : null;
 
     return (
         <>
@@ -10748,12 +10777,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                     const availableVehicle = vehicle && !busyVehicles.has(vehicle._id || vehicle) ? vehicle : null;
                                                     const lastInstruments = instruments || [];
                                                     const availableInstruments = lastInstruments.filter(i => !busyInstruments.has(i._id || i));
+                                                    const availableVehicleId = availableVehicle ? (availableVehicle._id || availableVehicle) : '';
 
                                                     setFormData(prev => ({
                                                         ...prev,
-                                                        helpers: availableHelpers.length > 0 ? availableHelpers : prev.helpers,
-                                                        vehicle: availableVehicle || prev.vehicle,
-                                                        instruments: availableInstruments.length > 0 ? availableInstruments : prev.instruments
+                                                        helpers: availableHelpers.length > 0 ? availableHelpers.map(h => h._id || h) : prev.helpers,
+                                                        vehicle: availableVehicleId || prev.vehicle,
+                                                        instruments: availableInstruments.length > 0 ? availableInstruments.map(i => i._id || i) : prev.instruments
                                                     }));
                                                 }
                                             } catch (err) {
@@ -10866,13 +10896,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                             <FormControl isDisabled={isResourceDisabled}>
                                 <FormLabel fontWeight="black" fontSize="xs" color="blue.600" textTransform="uppercase" mb={3} letterSpacing="wider" display="flex" flexWrap="wrap" alignItems="center">
                                     <Icon as={FaCar} mr={2} color="red.500" /> Assigned Vehicle
-                                    {formData.vehicle && (
-                                        <Text as="span" ml={1} color="gray.500" fontWeight="bold" textTransform="none" fontSize="10px">
-                                            - {vehicles.find(v => v._id === formData.vehicle)?.vehicleNumber}
-                                        </Text>
+                                    {selectedVehicle && (
+                                        <Badge colorScheme="blue" fontSize="10px" textTransform="none" ml={2}>
+                                            {selectedVehicle.vehicleNumber}
+                                        </Badge>
                                     )}
                                 </FormLabel>
-                                <Menu matchWidth placement="bottom-start">
+                                <Menu matchWidth placement="bottom-start" closeOnSelect={true}>
                                     <MenuButton 
                                         as={Button} 
                                         w="100%" 
@@ -10890,39 +10920,38 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                     >
                                         <Flex justify="space-between" align="center" w="100%">
                                             <HStack spacing={3} overflow="hidden">
-                                                {formData.vehicle && vehicles.find(v => v._id === formData.vehicle)?.vehiclePhotos?.length > 0 && (
+                                                {selectedVehiclePhoto ? (
                                                     <Image 
-                                                        src={API_BASE_URL.replace('/api', '') + vehicles.find(v => v._id === formData.vehicle).vehiclePhotos[0].url} 
+                                                        src={selectedVehiclePhoto} 
                                                         boxSize="30px" 
                                                         borderRadius="md" 
                                                         objectFit="cover" 
+                                                        fallback={<Center boxSize="30px" borderRadius="md" bg="gray.100"><Icon as={FaCar} color="gray.400" w={3.5} h={3.5} /></Center>}
                                                     />
-                                                )}
-                                                <Text fontWeight={formData.vehicle ? "bold" : "normal"} color={formData.vehicle ? "gray.800" : "gray.500"} isTruncated>
-                                                    {formData.vehicle 
-                                                        ? `${vehicles.find(v => v._id === formData.vehicle)?.vehicleNumber} - ${vehicles.find(v => v._id === formData.vehicle)?.vehicleName}` 
+                                                ) : selectedVehicle ? (
+                                                    <Center boxSize="30px" borderRadius="md" bg="gray.100">
+                                                        <Icon as={FaCar} color="gray.400" w={3.5} h={3.5} />
+                                                    </Center>
+                                                ) : null}
+                                                <Text fontWeight={selectedVehicle ? "bold" : "normal"} color={selectedVehicle ? "gray.800" : "gray.500"} isTruncated>
+                                                    {selectedVehicle 
+                                                        ? `${selectedVehicle.vehicleNumber}${selectedVehicle.vehicleName ? ` - ${selectedVehicle.vehicleName}` : ''}` 
                                                         : (formData.operative ? "Select Vehicle" : "Select Operative First")}
                                                 </Text>
                                             </HStack>
                                         </Flex>
                                     </MenuButton>
                                     <MenuList maxH="250px" overflowY="auto" borderRadius="xl" p={2} zIndex={10} shadow="lg" border="1px solid" borderColor="gray.100">
-                                        <MenuItem onClick={() => handleVehicleSelect('')} borderRadius="md" mb={1} _hover={{ bg: "gray.50" }}>
-                                            <HStack spacing={3}>
-                                                <Checkbox isChecked={!formData.vehicle} colorScheme="blue" pointerEvents="none" />
-                                                <Text color="gray.500" fontSize="sm">None (Uncheck / Clear Vehicle)</Text>
-                                            </HStack>
-                                        </MenuItem>
                                         {vehicles.map(v => {
-                                            const isSelected = formData.vehicle === v._id;
-                                            const photoUrl = v.vehiclePhotos && v.vehiclePhotos.length > 0 ? API_BASE_URL.replace('/api', '') + v.vehiclePhotos[0].url : null;
+                                            const isSelected = String(currentVehicleId) === String(v._id);
+                                            const photoUrl = getVehiclePhoto(v);
                                             return (
                                                 <MenuItem 
                                                     key={v._id} 
                                                     onClick={() => handleVehicleSelect(v._id)} 
                                                     _hover={{ bg: "blue.50" }} 
                                                     borderRadius="md" 
-                                                    mb={1}
+                                                    mb={1} 
                                                     bg={isSelected ? "blue.50" : "transparent"}
                                                 >
                                                     <HStack spacing={3} w="100%">
@@ -10933,7 +10962,13 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                             borderColor="gray.300" 
                                                         />
                                                         {photoUrl ? (
-                                                            <Image src={photoUrl} boxSize="40px" borderRadius="md" objectFit="cover" fallbackSrc="https://via.placeholder.com/40" />
+                                                            <Image 
+                                                                src={photoUrl} 
+                                                                boxSize="40px" 
+                                                                borderRadius="md" 
+                                                                objectFit="cover" 
+                                                                fallback={<Center boxSize="40px" borderRadius="md" bg="gray.100"><Icon as={FaCar} color="gray.400" /></Center>}
+                                                            />
                                                         ) : (
                                                             <Center boxSize="40px" borderRadius="md" bg="gray.100">
                                                                 <Icon as={FaCar} color="gray.400" />
@@ -10941,7 +10976,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                                         )}
                                                         <VStack align="start" spacing={0} flex={1}>
                                                             <Text fontSize="sm" fontWeight="bold" color={isSelected ? 'blue.800' : 'gray.700'}>{v.vehicleNumber}</Text>
-                                                            <Text fontSize="xs" color="gray.500">{v.vehicleName}</Text>
+                                                            {v.vehicleName && <Text fontSize="xs" color="gray.500">{v.vehicleName}</Text>}
                                                         </VStack>
                                                         {isSelected && (
                                                             <Badge colorScheme="blue" fontSize="9px">Assigned</Badge>
@@ -11132,6 +11167,7 @@ const ResourceAssignmentModal = ({ isOpen, onClose, schedule, schedules = [], em
                                     onClick={() => {
                                         const payload = {
                                             ...formData,
+                                            vehicle: formData.vehicle || null,
                                             dayStatus: (schedule.dayStatus === 'Rejected' && formData.operative) ? 'Scheduled' : schedule.dayStatus,
                                             skipToday: !requiredToday,
                                             scheduleDate: formData.scheduleDate
