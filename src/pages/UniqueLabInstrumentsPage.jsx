@@ -68,6 +68,7 @@ const UniqueLabInstrumentsPage = () => {
     const bgSidebar = useColorModeValue('white', 'gray.900');
     const borderColor = useColorModeValue('gray.200', 'gray.700');
     const pageBg = useColorModeValue('gray.100', 'gray.900');
+    const scrollbarThumbColor = useColorModeValue('gray.200', 'gray.700');
 
     // Vertical navigation tabs definitions
     const verticalTabs = [
@@ -103,9 +104,23 @@ const UniqueLabInstrumentsPage = () => {
             bg={bgSidebar}
             borderRight={isDrawer ? 'none' : '1px solid'}
             borderColor={borderColor}
+            overflowY="auto"
+            overflowX="hidden"
+            sx={{
+                '&::-webkit-scrollbar': {
+                    width: '4px',
+                },
+                '&::-webkit-scrollbar-track': {
+                    background: 'transparent',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                    background: scrollbarThumbColor,
+                    borderRadius: 'full',
+                },
+            }}
         >
             {/* Brand Logo & Header */}
-            <Box pb={4} mb={4} borderBottom="1px solid" borderColor="gray.100">
+            <Box pb={4} mb={4} borderBottom="1px solid" borderColor="gray.100" flexShrink={0}>
                 <HStack spacing={2.5} align="center" mb={1}>
                     <Box
                         p={2}
@@ -145,6 +160,7 @@ const UniqueLabInstrumentsPage = () => {
                 letterSpacing="wider"
                 px={2}
                 mb={2}
+                flexShrink={0}
             >
                 Vertical Navigation
             </Text>
@@ -333,7 +349,7 @@ const UniqueLabInstrumentsPage = () => {
             </VStack>
 
             {/* Bottom Footer Info in Sidebar */}
-            <Box pt={4} mt="auto" borderTop="1px solid" borderColor="gray.100">
+            <Box pt={4} mt="auto" borderTop="1px solid" borderColor="gray.100" flexShrink={0}>
                 <HStack justify="space-between" align="center">
                     <Box minW={0}>
                         <Text fontSize="10px" color="gray.400" fontWeight="bold">Logged in as</Text>
@@ -394,14 +410,15 @@ const UniqueLabInstrumentsPage = () => {
     }
 
     return (
-        <Flex minH="100vh" bg={pageBg}>
+        <Box minH="100vh" bg={pageBg} position="relative">
             {/* ── DESKTOP VERTICAL BAR (Left Side - Fixed 250px) ── */}
             <Box
                 display={{ base: 'none', md: 'block' }}
                 w="250px"
-                minW="250px"
-                position="sticky"
+                position="fixed"
                 top="0"
+                left="0"
+                bottom="0"
                 h="100vh"
                 zIndex="20"
                 boxShadow="sm"
@@ -421,7 +438,12 @@ const UniqueLabInstrumentsPage = () => {
             </Drawer>
 
             {/* ── MAIN CONTENT (Right Side - Full Width Table / Manager) ── */}
-            <Box flex="1" minW="0" overflowX="hidden">
+            <Box
+                ml={{ base: 0, md: '250px' }}
+                w={{ base: 'full', md: 'calc(100% - 250px)' }}
+                minW="0"
+                overflowX="hidden"
+            >
                 {/* Mobile Top Navbar with Hamburger Toggle */}
                 <Flex
                     display={{ base: 'flex', md: 'none' }}
@@ -532,7 +554,7 @@ const UniqueLabInstrumentsPage = () => {
                     </Box>
                 </Box>
             </Box>
-        </Flex>
+        </Box>
     );
 };
 

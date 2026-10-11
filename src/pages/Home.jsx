@@ -5,7 +5,8 @@ import {
 } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
 import { Link as RouterLink } from 'react-router-dom';
-import { FiArrowRight, FiBox, FiMap, FiAward, FiShield, FiEye } from 'react-icons/fi';
+import { FiArrowRight, FiBox, FiMap, FiAward, FiShield, FiEye, FiLayers, FiCompass, FiTarget } from 'react-icons/fi';
+import SEO from '../components/SEO';
 
 const MotionBox = motion.create(Box);
 
@@ -20,6 +21,14 @@ const Home = () => {
 
     return (
         <Box bg="gray.50" minH="100vh">
+            {/* Dynamic SEO Tags for Homepage */}
+            <SEO
+                title="Unique Engineering | Civil Lab Instruments & Survey Solutions Ahmedabad"
+                description="Unique Engineering (uecivil.com) — Premier Civil Engineering Instruments and Land Topography Surveys in Ahmedabad, Gujarat. Specialists in Contour Survey, Point Marking, DGPS & Lab Testing Equipment."
+                keywords="uecivil, uecivil.com, Unique Engineering, Unique Survey, contour survey, counter survey, topography survey, point marking, civil lab instruments gujarat, compression testing machine ahmedabad"
+                canonical="https://uecivil.com/"
+            />
+
             {/* Hero Section */}
             <Box
                 bg="brand.900"
@@ -206,6 +215,93 @@ const Home = () => {
                     </MotionBox>
                 </SimpleGrid>
             </Container>
+
+            {/* Specialized Survey Services Showcase (SEO Optimization) */}
+            <Box bg="gray.100" py={20} borderTop="1px" borderColor="gray.200">
+                <Container maxW="6xl">
+                    <Flex direction="column" align="center" textAlign="center" mb={12}>
+                        <Badge colorScheme="blue" px={3} py={1} borderRadius="full" mb={3} textTransform="uppercase" fontWeight="bold">
+                            Land Surveying Expertise
+                        </Badge>
+                        <Heading size="xl" fontWeight="900" color="gray.800" mb={4}>
+                            Specialized Survey Solutions in Gujarat
+                        </Heading>
+                        <Text color="gray.600" maxW="2xl" fontSize="md">
+                            From contour intervals and topography mapping to exact boundary point marking and DGPS georeferencing, Unique Survey provides certified accuracy.
+                        </Text>
+                    </Flex>
+
+                    <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={6}>
+                        {[
+                            {
+                                title: "Contour Survey",
+                                subtitle: "(Counter Survey)",
+                                desc: "Precision elevation grid, slope analysis, and cut-fill earthwork calculations.",
+                                slug: "contour-survey",
+                                color: "orange.500",
+                                icon: FiLayers
+                            },
+                            {
+                                title: "Topography Survey",
+                                subtitle: "Land Feature Mapping",
+                                desc: "Complete physical, structural, and natural ground mapping with Total Station.",
+                                slug: "topography-survey",
+                                color: "blue.500",
+                                icon: FiMap
+                            },
+                            {
+                                title: "Point Marking",
+                                subtitle: "Boundary Demarcation",
+                                desc: "Physical boundary pegging, stone marking, and revenue survey boundary verification.",
+                                slug: "point-marking",
+                                color: "teal.500",
+                                icon: FiTarget
+                            },
+                            {
+                                title: "DGPS & Drone Survey",
+                                subtitle: "Satellite Georeferencing",
+                                desc: "Sub-centimeter RTK satellite positioning and high-resolution aerial mapping.",
+                                slug: "dgps-survey",
+                                color: "purple.500",
+                                icon: FiCompass
+                            }
+                        ].map((item, idx) => (
+                            <Card
+                                key={idx}
+                                borderRadius="2xl"
+                                bg="white"
+                                shadow="sm"
+                                _hover={{ shadow: 'lg', transform: 'translateY(-4px)' }}
+                                transition="all 0.2s"
+                                borderTop="3px solid"
+                                borderColor={item.color}
+                            >
+                                <CardBody p={6} display="flex" flexDirection="column" justifyContent="space-between">
+                                    <Box>
+                                        <Flex w={12} h={12} rounded="xl" bg="gray.50" color={item.color} align="center" justify="center" mb={4}>
+                                            <Icon as={item.icon} boxSize={6} />
+                                        </Flex>
+                                        <Heading size="sm" color="gray.800" mb={1}>{item.title}</Heading>
+                                        <Text fontSize="xs" color="gray.400" fontWeight="600" mb={3}>{item.subtitle}</Text>
+                                        <Text fontSize="xs" color="gray.600" lineHeight={1.6} mb={6}>{item.desc}</Text>
+                                    </Box>
+                                    <Button
+                                        as={RouterLink}
+                                        to={`/services?survey=${item.slug}`}
+                                        size="sm"
+                                        variant="outline"
+                                        colorScheme="blue"
+                                        borderRadius="xl"
+                                        rightIcon={<Icon as={FiArrowRight} />}
+                                    >
+                                        Explore Details
+                                    </Button>
+                                </CardBody>
+                            </Card>
+                        ))}
+                    </SimpleGrid>
+                </Container>
+            </Box>
 
             {/* Certifications Section */}
             <Box bg="white" py={20} borderTop="1px" borderColor="gray.200">

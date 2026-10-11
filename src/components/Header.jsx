@@ -87,14 +87,14 @@ const Header = () => {
                 <Flex align="center" gap={{ base: 2, md: 4 }} as={RouterLink} to="/">
                     <Image 
                         src="/uni-logo.svg" 
-                        alt="UNI Logo" 
+                        alt="Unique Engineering Logo" 
                         w={{ base: "40px", md: "50px" }} 
                         h={{ base: "40px", md: "50px" }} 
                         flexShrink={0} 
                     />
                     <Box>
-                        <Text fontSize={{ base: 'xl', sm: '2xl', md: '3xl' }} fontWeight="900" color="#0D3F66" lineHeight="1.0" noOfLines={1} letterSpacing="2px">
-                            UNI
+                        <Text fontSize={{ base: 'xl', sm: '2xl', md: '3xl' }} fontWeight="900" color="#0D3F66" lineHeight="1.0" noOfLines={1} letterSpacing="1px">
+                            UNIQUE
                         </Text>
                         <Text fontSize={{ base: '8px', md: 'xs' }} color="#6B7C87" letterSpacing="3px" fontWeight="700">
                             ENGINEERING

@@ -28,9 +28,9 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/app/, /\.(pdf|jpg|jpeg|png|gif|svg|dta|doc|docx|xls|xlsx)$/i]
       },
       manifest: {
-        name: 'UNI Engineering',
-        short_name: 'UNI Eng',
-        description: 'UNI Engineering — Civil Instruments & Survey Solutions',
+        name: 'Unique Engineering',
+        short_name: 'Unique Eng',
+        description: 'Unique Engineering — Civil Instruments & Survey Solutions',
         id: '/',
         theme_color: '#0066cc',
         background_color: '#ffffff',

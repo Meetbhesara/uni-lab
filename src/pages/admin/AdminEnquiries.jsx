@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner, Heading, Tooltip, Tag, TagLabel, TagLeftIcon, Avatar, AvatarBadge } from '@chakra-ui/react';
 import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, FiEdit, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { FaWhatsapp, FaChevronLeft, FaClock, FaBell, FaHistory, FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
@@ -21,10 +21,22 @@ const AdminEnquiries = () => {
 
     // ── Per-tab loading flags ─────────────────────────────────────────────────
     const [loadingEnquiries, setLoadingEnquiries] = useState(true);
-    const [loadingQuotations, setLoadingQuotations] = useState(true);
-    const [loadingHistory, setLoadingHistory] = useState(true);
-    const [loadingWhatsapp, setLoadingWhatsapp] = useState(true);
+    const [loadingQuotations, setLoadingQuotations] = useState(false);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [loadingWhatsapp, setLoadingWhatsapp] = useState(false);
     const [loadingProducts, setLoadingProducts] = useState(true);
+
+    // ── Request tracking & debounce refs to avoid race conditions ─────────────
+    const enquiryReqIdRef = useRef(0);
+    const quotationReqIdRef = useRef(0);
+    const historyReqIdRef = useRef(0);
+    const whatsappReqIdRef = useRef(0);
+    const searchDebounceRef = useRef({
+        enquiry: null,
+        active: null,
+        history: null,
+        whatsapp: null
+    });
 
     // ── Server-side totals (for pagination controls) ──────────────────────────
     const [enquiriesTotal, setEnquiriesTotal] = useState(0);
@@ -160,79 +172,103 @@ const AdminEnquiries = () => {
 
     // ── 1. Incoming Enquiries — type=enquiry ──────────────────────────────────
     const fetchEnquiries = async (page = 1, search = '') => {
+        const reqId = ++enquiryReqIdRef.current;
         try {
             setLoadingEnquiries(true);
             const res = await api.get('/enquiries', {
                 params: { type: 'enquiry', page, limit: ITEMS_PER_PAGE, search: search || undefined }
             });
-            const { data, total } = normalisePaged(res.data);
+            if (reqId !== enquiryReqIdRef.current) return;
+            const { data, total, page: serverPage } = normalisePaged(res.data);
             setEnquiries(data);
             setEnquiriesTotal(total);
+            if (serverPage) setEnquiryPage(serverPage);
         } catch (error) {
+            if (reqId !== enquiryReqIdRef.current) return;
             console.error('fetchEnquiries failed', error);
             setEnquiries(DEMO_ENQUIRIES.filter(e => e.type !== 'whatsapp'));
             setEnquiriesTotal(DEMO_ENQUIRIES.filter(e => e.type !== 'whatsapp').length);
             toast({ title: 'Enquiries: Backend Unavailable', description: 'Showing demo data.', status: 'info', duration: 4000, isClosable: true });
         } finally {
-            setLoadingEnquiries(false);
+            if (reqId === enquiryReqIdRef.current) {
+                setLoadingEnquiries(false);
+            }
         }
     };
 
     // ── 2. WhatsApp Logs — type=whatsapp ──────────────────────────────────────
     const fetchWhatsapp = async (page = 1, search = '') => {
+        const reqId = ++whatsappReqIdRef.current;
         try {
             setLoadingWhatsapp(true);
             const res = await api.get('/enquiries', {
                 params: { type: 'whatsapp', page, limit: ITEMS_PER_PAGE, search: search || undefined }
             });
-            const { data, total } = normalisePaged(res.data);
+            if (reqId !== whatsappReqIdRef.current) return;
+            const { data, total, page: serverPage } = normalisePaged(res.data);
             setWhatsappLogs(data);
             setWhatsappTotal(total);
+            if (serverPage) setWhatsappPage(serverPage);
         } catch (error) {
+            if (reqId !== whatsappReqIdRef.current) return;
             console.error('fetchWhatsapp failed', error);
             setWhatsappLogs([]);
             setWhatsappTotal(0);
         } finally {
-            setLoadingWhatsapp(false);
+            if (reqId === whatsappReqIdRef.current) {
+                setLoadingWhatsapp(false);
+            }
         }
     };
 
     // ── 3. Outgoing Quotations — status=Sent ─────────────────────────────────
     const fetchQuotations = async (page = 1, search = '') => {
+        const reqId = ++quotationReqIdRef.current;
         try {
             setLoadingQuotations(true);
             const res = await api.get('/quotations', {
                 params: { status: 'Sent', page, limit: ITEMS_PER_PAGE, search: search || undefined }
             });
-            const { data, total } = normalisePaged(res.data);
+            if (reqId !== quotationReqIdRef.current) return;
+            const { data, total, page: serverPage } = normalisePaged(res.data);
             setQuotations(data);
             setQuotationsTotal(total);
+            if (serverPage) setActivePage(serverPage);
         } catch (error) {
+            if (reqId !== quotationReqIdRef.current) return;
             console.error('fetchQuotations failed', error);
             setQuotations(DEMO_QUOTATIONS);
             setQuotationsTotal(DEMO_QUOTATIONS.length);
             toast({ title: 'Quotations: Backend Unavailable', description: 'Showing demo data.', status: 'info', duration: 4000, isClosable: true });
         } finally {
-            setLoadingQuotations(false);
+            if (reqId === quotationReqIdRef.current) {
+                setLoadingQuotations(false);
+            }
         }
     };
 
     // ── 4. Processed History — status=Done or status=Reject ───────────────────
     const fetchHistory = async (page = 1, search = '') => {
+        const reqId = ++historyReqIdRef.current;
         try {
             setLoadingHistory(true);
             const res = await api.get('/quotations', {
                 params: { status: 'Done,Reject', page, limit: ITEMS_PER_PAGE, search: search || undefined }
             });
-            const { data, total } = normalisePaged(res.data);
+            if (reqId !== historyReqIdRef.current) return;
+            const { data, total, page: serverPage } = normalisePaged(res.data);
             setProcessedQuotations(data);
             setHistoryTotal(total);
+            if (serverPage) setHistoryPage(serverPage);
         } catch (error) {
+            if (reqId !== historyReqIdRef.current) return;
             console.error('fetchHistory failed', error);
             setProcessedQuotations([]);
             setHistoryTotal(0);
         } finally {
-            setLoadingHistory(false);
+            if (reqId === historyReqIdRef.current) {
+                setLoadingHistory(false);
+            }
         }
     };
 
@@ -275,6 +311,27 @@ const AdminEnquiries = () => {
         if (activeTabIndex === 1) fetchQuotations(activePage, activeSearch);
         if (activeTabIndex === 2) fetchHistory(historyPage, historySearch);
         if (activeTabIndex === 3) fetchWhatsapp(whatsappPage, whatsappSearch);
+    };
+
+    // ── Pagination Change Handlers ───────────────────────────────────────────
+    const handleEnquiryPageChange = (newPage) => {
+        setEnquiryPage(newPage);
+        fetchEnquiries(newPage, enquirySearch);
+    };
+
+    const handleActivePageChange = (newPage) => {
+        setActivePage(newPage);
+        fetchQuotations(newPage, activeSearch);
+    };
+
+    const handleHistoryPageChange = (newPage) => {
+        setHistoryPage(newPage);
+        fetchHistory(newPage, historySearch);
+    };
+
+    const handleWhatsappPageChange = (newPage) => {
+        setWhatsappPage(newPage);
+        fetchWhatsapp(newPage, whatsappSearch);
     };
 
 
@@ -1161,13 +1218,14 @@ const AdminEnquiries = () => {
         const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
         if (totalPages <= 1) return null;
 
-        const startItem = (currentPage - 1) * ITEMS_PER_PAGE + 1;
-        const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+        const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+        const startItem = totalItems === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1;
+        const endItem = Math.min(safeCurrentPage * ITEMS_PER_PAGE, totalItems);
 
         const getPageNumbers = () => {
             const pages = [];
             const maxPagesToShow = 5;
-            let startPage = Math.max(1, currentPage - 2);
+            let startPage = Math.max(1, safeCurrentPage - 2);
             let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
 
             if (endPage - startPage < maxPagesToShow - 1) {
@@ -1189,8 +1247,10 @@ const AdminEnquiries = () => {
                     <Button
                         size="xs"
                         variant="outline"
-                        isDisabled={currentPage === 1}
-                        onClick={() => onPageChange(currentPage - 1)}
+                        isDisabled={safeCurrentPage <= 1}
+                        onClick={() => {
+                            if (safeCurrentPage > 1) onPageChange(safeCurrentPage - 1);
+                        }}
                         borderRadius="md"
                         px={2}
                     >
@@ -1200,12 +1260,14 @@ const AdminEnquiries = () => {
                         <Button
                             key={p}
                             size="xs"
-                            colorScheme={p === currentPage ? 'brand' : 'gray'}
-                            variant={p === currentPage ? 'solid' : 'ghost'}
-                            onClick={() => onPageChange(p)}
+                            colorScheme={p === safeCurrentPage ? 'brand' : 'gray'}
+                            variant={p === safeCurrentPage ? 'solid' : 'ghost'}
+                            onClick={() => {
+                                if (p !== safeCurrentPage) onPageChange(p);
+                            }}
                             borderRadius="md"
                             minW="28px"
-                            fontWeight={p === currentPage ? 'bold' : 'normal'}
+                            fontWeight={p === safeCurrentPage ? 'bold' : 'normal'}
                         >
                             {p}
                         </Button>
@@ -1213,8 +1275,10 @@ const AdminEnquiries = () => {
                     <Button
                         size="xs"
                         variant="outline"
-                        isDisabled={currentPage === totalPages}
-                        onClick={() => onPageChange(currentPage + 1)}
+                        isDisabled={safeCurrentPage >= totalPages}
+                        onClick={() => {
+                            if (safeCurrentPage < totalPages) onPageChange(safeCurrentPage + 1);
+                        }}
                         borderRadius="md"
                         px={2}
                     >
@@ -1296,65 +1360,71 @@ const AdminEnquiries = () => {
                                         const val = e.target.value;
                                         setEnquirySearch(val);
                                         setEnquiryPage(1);
-                                        fetchEnquiries(1, val);
+                                        if (searchDebounceRef.current.enquiry) clearTimeout(searchDebounceRef.current.enquiry);
+                                        searchDebounceRef.current.enquiry = setTimeout(() => {
+                                            fetchEnquiries(1, val);
+                                        }, 300);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
-                        {loadingEnquiries && (
+                        {loadingEnquiries ? (
                             <Flex justify="center" align="center" py={16}>
                                 <Spinner size="xl" color="brand.500" thickness="4px" speed="0.65s" />
                             </Flex>
+                        ) : (
+                            <>
+                                <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
+                                    <Table variant="simple" minW="500px">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th>Date</Th>
+                                                <Th>Sender</Th>
+                                                <Th>Requested Items</Th>
+                                                <Th textAlign="right">Action</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {paginatedEnquiries.map(e => (
+                                                <Tr key={e._id} _hover={{ bg: "gray.50" }}>
+                                                    <Td fontSize="sm">
+                                                        <HStack>
+                                                            {!e.isSeen && <Box w="8px" h="8px" bg="red.500" borderRadius="full" />}
+                                                            <Text>{new Date(e.createdAt).toLocaleDateString('en-GB')}</Text>
+                                                        </HStack>
+                                                    </Td>
+                                                    <Td>
+                                                        <VStack align="start" spacing={0}>
+                                                            <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
+                                                            <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
+                                                            <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
+                                                        </VStack>
+                                                    </Td>
+                                                    <Td>
+                                                        <Badge colorScheme="purple">{(e.products || []).length} items requested</Badge>
+                                                    </Td>
+                                                    <Td textAlign="right">
+                                                        <HStack spacing={2} justify="flex-end">
+                                                            <Button size="sm" colorScheme="brand" leftIcon={<FiEye />} onClick={() => handleViewEnquiry(e)}>View Details</Button>
+                                                            <IconButton
+                                                                aria-label="Delete"
+                                                                icon={<FiTrash />}
+                                                                size="sm"
+                                                                colorScheme="red"
+                                                                variant="ghost"
+                                                                onClick={() => handleDeleteRequest('enquiry', e._id)}
+                                                            />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                            {filteredEnquiries.length === 0 && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No enquiries found.</Td></Tr>}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                                <PaginationControls currentPage={enquiryPage} totalItems={enquiriesTotal} onPageChange={handleEnquiryPageChange} />
+                            </>
                         )}
-                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
-                            <Table variant="simple" minW="500px">
-                                <Thead bg="gray.50">
-                                    <Tr>
-                                        <Th>Date</Th>
-                                        <Th>Sender</Th>
-                                        <Th>Requested Items</Th>
-                                        <Th textAlign="right">Action</Th>
-                                    </Tr>
-                                </Thead>
-                                <Tbody>
-                                    {paginatedEnquiries.map(e => (
-                                        <Tr key={e._id} _hover={{ bg: "gray.50" }}>
-                                            <Td fontSize="sm">
-                                                <HStack>
-                                                    {!e.isSeen && <Box w="8px" h="8px" bg="red.500" borderRadius="full" />}
-                                                    <Text>{new Date(e.createdAt).toLocaleDateString('en-GB')}</Text>
-                                                </HStack>
-                                            </Td>
-                                            <Td>
-                                                <VStack align="start" spacing={0}>
-                                                    <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
-                                                    <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
-                                                    <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
-                                                </VStack>
-                                            </Td>
-                                            <Td>
-                                                <Badge colorScheme="purple">{(e.products || []).length} items requested</Badge>
-                                            </Td>
-                                            <Td textAlign="right">
-                                                <HStack spacing={2} justify="flex-end">
-                                                    <Button size="sm" colorScheme="brand" leftIcon={<FiEye />} onClick={() => handleViewEnquiry(e)}>View Details</Button>
-                                                    <IconButton
-                                                        aria-label="Delete"
-                                                        icon={<FiTrash />}
-                                                        size="sm"
-                                                        colorScheme="red"
-                                                        variant="ghost"
-                                                        onClick={() => handleDeleteRequest('enquiry', e._id)}
-                                                    />
-                                                </HStack>
-                                            </Td>
-                                        </Tr>
-                                    ))}
-                                    {filteredEnquiries.length === 0 && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No enquiries found.</Td></Tr>}
-                                </Tbody>
-                            </Table>
-                        </Box>
-                        <PaginationControls currentPage={enquiryPage} totalItems={enquiriesTotal} onPageChange={setEnquiryPage} />
                     </TabPanel>
 
                     {/* ── Tab 2: Outgoing Quotations (status=Sent) ─────────── */}
@@ -1372,17 +1442,21 @@ const AdminEnquiries = () => {
                                         const val = e.target.value;
                                         setActiveSearch(val);
                                         setActivePage(1);
-                                        fetchQuotations(1, val);
+                                        if (searchDebounceRef.current.active) clearTimeout(searchDebounceRef.current.active);
+                                        searchDebounceRef.current.active = setTimeout(() => {
+                                            fetchQuotations(1, val);
+                                        }, 300);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
-                        {loadingQuotations && (
+                        {loadingQuotations ? (
                             <Flex justify="center" align="center" py={16}>
                                 <Spinner size="xl" color="orange.400" thickness="4px" speed="0.65s" />
                             </Flex>
-                        )}
-                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
+                        ) : (
+                            <>
+                                <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
                             <Table variant="simple" minW="560px">
                                 <Thead bg="gray.50">
                                     <Tr>
@@ -1578,10 +1652,19 @@ const AdminEnquiries = () => {
                                             );
                                         });
                                     })()}
+                                    {filteredQuotations.length === 0 && (
+                                        <Tr>
+                                            <Td colSpan={7} textAlign="center" py={4} color="gray.500">
+                                                No outbound quotations found.
+                                            </Td>
+                                        </Tr>
+                                    )}
                                 </Tbody>
                             </Table>
                         </Box>
-                        <PaginationControls currentPage={activePage} totalItems={quotationsTotal} onPageChange={setActivePage} />
+                        <PaginationControls currentPage={activePage} totalItems={quotationsTotal} onPageChange={handleActivePageChange} />
+                            </>
+                        )}
                     </TabPanel>
 
                     {/* ── Tab 3: SS History (status=Done or Reject) ────────── */}
@@ -1599,76 +1682,82 @@ const AdminEnquiries = () => {
                                         const val = e.target.value;
                                         setHistorySearch(val);
                                         setHistoryPage(1);
-                                        fetchHistory(1, val);
+                                        if (searchDebounceRef.current.history) clearTimeout(searchDebounceRef.current.history);
+                                        searchDebounceRef.current.history = setTimeout(() => {
+                                            fetchHistory(1, val);
+                                        }, 300);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
-                        {loadingHistory && (
+                        {loadingHistory ? (
                             <Flex justify="center" align="center" py={16}>
                                 <Spinner size="xl" color="purple.400" thickness="4px" speed="0.65s" />
                             </Flex>
-                        )}
-                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
-                            <Table variant="simple" minW="560px">
-                                <Thead bg="gray.50">
-                                    <Tr>
-                                        <Th>Date</Th>
-                                        <Th>Ref No.</Th>
-                                        <Th>Client</Th>
-                                        <Th>Total Value</Th>
-                                        <Th>Status</Th>
-                                        <Th textAlign="right">Action</Th>
-                                    </Tr>
-                                </Thead>
-                                <Tbody>
-                                    {paginatedHistory.map(q => {
-                                        let refSuffix = '';
-                                        if (q.refNo) {
-                                            const lowerRef = q.refNo.toLowerCase();
-                                            if (lowerRef.includes('(r')) {
-                                                refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
-                                            }
-                                        }
-                                        const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
-                                        const totalAmt = q.grandTotal || q.totalAmount || 0;
-
-                                        return (
-                                            <Tr key={q._id} _hover={{ bg: "gray.50" }}>
-                                                <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
-                                                <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
-                                                <Td>
-                                                    <VStack align="start" spacing={0}>
-                                                        <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
-                                                        <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
-                                                    </VStack>
-                                                </Td>
-                                                <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
-                                                <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status === 'Done' ? 'Accepted' : 'Rejected'}</Badge></Td>
-                                                <Td textAlign="right">
-                                                    <HStack spacing={2} justify="flex-end">
-                                                        <Button size="sm" variant="outline" leftIcon={<FiEye />} onClick={() => handleViewQuotation(q)}>View Quote</Button>
-                                                        {q.status === 'Done' && (
-                                                            <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
-                                                        )}
-                                                        <IconButton
-                                                            aria-label="Delete"
-                                                            icon={<FiTrash />}
-                                                            size="sm"
-                                                            colorScheme="red"
-                                                            variant="ghost"
-                                                            onClick={() => handleDeleteRequest('quotation', q._id)}
-                                                        />
-                                                    </HStack>
-                                                </Td>
+                        ) : (
+                            <>
+                                <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
+                                    <Table variant="simple" minW="560px">
+                                        <Thead bg="gray.50">
+                                            <Tr>
+                                                <Th>Date</Th>
+                                                <Th>Ref No.</Th>
+                                                <Th>Client</Th>
+                                                <Th>Total Value</Th>
+                                                <Th>Status</Th>
+                                                <Th textAlign="right">Action</Th>
                                             </Tr>
-                                        );
-                                    })}
-                                    {filteredHistory.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No processed quotations found.</Td></Tr>}
-                                </Tbody>
-                            </Table>
-                        </Box>
-                        <PaginationControls currentPage={historyPage} totalItems={historyTotal} onPageChange={setHistoryPage} />
+                                        </Thead>
+                                        <Tbody>
+                                            {paginatedHistory.map(q => {
+                                                let refSuffix = '';
+                                                if (q.refNo) {
+                                                    const lowerRef = q.refNo.toLowerCase();
+                                                    if (lowerRef.includes('(r')) {
+                                                        refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
+                                                    }
+                                                }
+                                                const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
+                                                const totalAmt = q.grandTotal || q.totalAmount || 0;
+
+                                                return (
+                                                    <Tr key={q._id} _hover={{ bg: "gray.50" }}>
+                                                        <Td fontSize="sm">{new Date(q.createdAt).toLocaleDateString('en-GB')}</Td>
+                                                        <Td fontSize="xs" fontWeight="bold" color="gray.600">{q.refNo || 'N/A'}</Td>
+                                                        <Td>
+                                                            <VStack align="start" spacing={0}>
+                                                                <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
+                                                                <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
+                                                            </VStack>
+                                                        </Td>
+                                                        <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
+                                                        <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status === 'Done' ? 'Accepted' : 'Rejected'}</Badge></Td>
+                                                        <Td textAlign="right">
+                                                            <HStack spacing={2} justify="flex-end">
+                                                                <Button size="sm" variant="outline" leftIcon={<FiEye />} onClick={() => handleViewQuotation(q)}>View Quote</Button>
+                                                                {q.status === 'Done' && (
+                                                                    <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
+                                                                )}
+                                                                <IconButton
+                                                                    aria-label="Delete"
+                                                                    icon={<FiTrash />}
+                                                                    size="sm"
+                                                                    colorScheme="red"
+                                                                    variant="ghost"
+                                                                    onClick={() => handleDeleteRequest('quotation', q._id)}
+                                                                />
+                                                            </HStack>
+                                                        </Td>
+                                                    </Tr>
+                                                );
+                                            })}
+                                            {filteredHistory.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No processed quotations found.</Td></Tr>}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                                <PaginationControls currentPage={historyPage} totalItems={historyTotal} onPageChange={handleHistoryPageChange} />
+                            </>
+                        )}
                     </TabPanel>
 
                     {/* ── Tab 4: WhatsApp Logs (type=whatsapp) ─────────────── */}
@@ -1686,133 +1775,139 @@ const AdminEnquiries = () => {
                                         const val = e.target.value;
                                         setWhatsappSearch(val);
                                         setWhatsappPage(1);
-                                        fetchWhatsapp(1, val);
+                                        if (searchDebounceRef.current.whatsapp) clearTimeout(searchDebounceRef.current.whatsapp);
+                                        searchDebounceRef.current.whatsapp = setTimeout(() => {
+                                            fetchWhatsapp(1, val);
+                                        }, 300);
                                     }}
                                 />
                             </InputGroup>
                         </Flex>
-                        {loadingWhatsapp && (
+                        {loadingWhatsapp ? (
                             <Flex justify="center" align="center" py={16}>
                                 <Spinner size="xl" color="green.400" thickness="4px" speed="0.65s" />
                             </Flex>
-                        )}
-                        <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
-                            <Table variant="simple" minW="500px">
-                                <Thead bg="green.50">
-                                    <Tr>
-                                        <Th>Date</Th>
-                                        <Th>Client Name & Contact</Th>
-                                        <Th>Products Sent</Th>
-                                        <Th>WA Status</Th>
-                                        <Th>Next Follow-Up</Th>
-                                        <Th textAlign="right">Action</Th>
-                                    </Tr>
-                                </Thead>
-                                <Tbody>
-                                    {paginatedWhatsappLogs.map(e => (
-                                        <Tr key={e._id} _hover={{ bg: "gray.50" }}>
-                                            <Td fontSize="sm">
-                                                {new Date(e.createdAt).toLocaleDateString('en-GB')}
-                                            </Td>
-                                            <Td>
-                                                <VStack align="start" spacing={0}>
-                                                    <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
-                                                    <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
-                                                    <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
-                                                </VStack>
-                                            </Td>
-                                            <Td>
-                                                <Badge colorScheme="green">{(e.products || []).length} products sent</Badge>
-                                            </Td>
-                                            <Td>
-                                                {e.whatsappStatus === 'failed'
-                                                    ? <Badge colorScheme="red" variant="solid">❌ Failed</Badge>
-                                                    : e.whatsappStatus === 'partial'
-                                                        ? <Badge colorScheme="orange" variant="solid">⚠️ Partial</Badge>
-                                                        : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
-                                                }
-                                                {e.whatsappSentAt && (
-                                                    <Text fontSize="10px" color="gray.400" mt={0.5}>
-                                                        {new Date(e.whatsappSentAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                                                    </Text>
-                                                )}
-                                            </Td>
-                                            <Td>
-                                                {(() => {
-                                                    if (e.status === 'Done' || e.status === 'Reject') {
-                                                        return <Badge colorScheme={e.status === 'Done' ? 'green' : 'red'}>{e.status}</Badge>;
-                                                    }
-
-                                                    const followUpDate = e.nextFollowUp
-                                                        ? new Date(e.nextFollowUp)
-                                                        : e.firstFollowUpDate
-                                                            ? new Date(e.firstFollowUpDate)
-                                                            : new Date(new Date(e.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
-
-                                                    const dateZero = new Date(followUpDate).setHours(0, 0, 0, 0);
-                                                    const todayZero = new Date().setHours(0, 0, 0, 0);
-                                                    const isOverdue = dateZero < todayZero;
-                                                    const isToday = dateZero === todayZero;
-
-                                                    return (
-                                                        <VStack align="start" spacing={1}>
-                                                            <Text fontSize="sm" fontWeight="bold">
-                                                                {followUpDate.toLocaleDateString('en-GB')}
-                                                            </Text>
-                                                            {isOverdue && <Badge colorScheme="red" variant="solid" fontSize="10px">OVERDUE</Badge>}
-                                                            {isToday && <Badge colorScheme="orange" variant="solid" fontSize="10px">TODAY</Badge>}
+                        ) : (
+                            <>
+                                <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
+                                    <Table variant="simple" minW="500px">
+                                        <Thead bg="green.50">
+                                            <Tr>
+                                                <Th>Date</Th>
+                                                <Th>Client Name & Contact</Th>
+                                                <Th>Products Sent</Th>
+                                                <Th>WA Status</Th>
+                                                <Th>Next Follow-Up</Th>
+                                                <Th textAlign="right">Action</Th>
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {paginatedWhatsappLogs.map(e => (
+                                                <Tr key={e._id} _hover={{ bg: "gray.50" }}>
+                                                    <Td fontSize="sm">
+                                                        {new Date(e.createdAt).toLocaleDateString('en-GB')}
+                                                    </Td>
+                                                    <Td>
+                                                        <VStack align="start" spacing={0}>
+                                                            <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
+                                                            <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
+                                                            <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
                                                         </VStack>
-                                                    );
-                                                })()}
-                                            </Td>
-                                            <Td textAlign="right">
-                                                <HStack spacing={2} justify="flex-end">
-                                                    <IconButton
-                                                        aria-label="View Details"
-                                                        icon={<FiEye />}
-                                                        size="xs"
-                                                        variant="outline"
-                                                        onClick={() => handleViewEnquiry(e)}
-                                                    />
-                                                    <Button
-                                                        size="xs"
-                                                        colorScheme="brand"
-                                                        variant="outline"
-                                                        onClick={() => handleOpenFollowUp(e, 'enquiry')}
-                                                    >
-                                                        Follow-up {e.followUps?.length > 0 ? `(${e.followUps.length})` : ''}
-                                                    </Button>
-                                                    <IconButton
-                                                        aria-label="Done"
-                                                        icon={<FiCheck />}
-                                                        size="xs"
-                                                        colorScheme="green"
-                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Done')}
-                                                    />
-                                                    <IconButton
-                                                        aria-label="Reject"
-                                                        icon={<FiX />}
-                                                        size="xs"
-                                                        colorScheme="red"
-                                                        onClick={() => handleStatusUpdate('enquiry', e._id, 'Reject')}
-                                                    />
-                                                    <IconButton
-                                                        aria-label="Delete"
-                                                        icon={<FiTrash />}
-                                                        size="xs"
-                                                        colorScheme="red"
-                                                        variant="ghost"
-                                                        onClick={() => handleDeleteRequest('enquiry', e._id)}
-                                                    />
-                                                </HStack>
-                                            </Td>
-                                        </Tr>
-                                    ))}
-                                    {filteredWhatsappLogs.length === 0 && !loadingWhatsapp && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
-                                </Tbody>
-                            </Table>
-                        </Box>
-                        <PaginationControls currentPage={whatsappPage} totalItems={whatsappTotal} onPageChange={setWhatsappPage} />
+                                                    </Td>
+                                                    <Td>
+                                                        <Badge colorScheme="green">{(e.products || []).length} products sent</Badge>
+                                                    </Td>
+                                                    <Td>
+                                                        {e.whatsappStatus === 'failed'
+                                                            ? <Badge colorScheme="red" variant="solid">❌ Failed</Badge>
+                                                            : e.whatsappStatus === 'partial'
+                                                                ? <Badge colorScheme="orange" variant="solid">⚠️ Partial</Badge>
+                                                                : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
+                                                        }
+                                                        {e.whatsappSentAt && (
+                                                            <Text fontSize="10px" color="gray.400" mt={0.5}>
+                                                                {new Date(e.whatsappSentAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                            </Text>
+                                                        )}
+                                                    </Td>
+                                                    <Td>
+                                                        {(() => {
+                                                            if (e.status === 'Done' || e.status === 'Reject') {
+                                                                return <Badge colorScheme={e.status === 'Done' ? 'green' : 'red'}>{e.status}</Badge>;
+                                                            }
+
+                                                            const followUpDate = e.nextFollowUp
+                                                                ? new Date(e.nextFollowUp)
+                                                                : e.firstFollowUpDate
+                                                                    ? new Date(e.firstFollowUpDate)
+                                                                    : new Date(new Date(e.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
+
+                                                            const dateZero = new Date(followUpDate).setHours(0, 0, 0, 0);
+                                                            const todayZero = new Date().setHours(0, 0, 0, 0);
+                                                            const isOverdue = dateZero < todayZero;
+                                                            const isToday = dateZero === todayZero;
+
+                                                            return (
+                                                                <VStack align="start" spacing={1}>
+                                                                    <Text fontSize="sm" fontWeight="bold">
+                                                                        {followUpDate.toLocaleDateString('en-GB')}
+                                                                    </Text>
+                                                                    {isOverdue && <Badge colorScheme="red" variant="solid" fontSize="10px">OVERDUE</Badge>}
+                                                                    {isToday && <Badge colorScheme="orange" variant="solid" fontSize="10px">TODAY</Badge>}
+                                                                </VStack>
+                                                            );
+                                                        })()}
+                                                    </Td>
+                                                    <Td textAlign="right">
+                                                        <HStack spacing={2} justify="flex-end">
+                                                            <IconButton
+                                                                aria-label="View Details"
+                                                                icon={<FiEye />}
+                                                                size="xs"
+                                                                variant="outline"
+                                                                onClick={() => handleViewEnquiry(e)}
+                                                            />
+                                                            <Button
+                                                                size="xs"
+                                                                colorScheme="brand"
+                                                                variant="outline"
+                                                                onClick={() => handleOpenFollowUp(e, 'enquiry')}
+                                                            >
+                                                                Follow-up {e.followUps?.length > 0 ? `(${e.followUps.length})` : ''}
+                                                            </Button>
+                                                            <IconButton
+                                                                aria-label="Done"
+                                                                icon={<FiCheck />}
+                                                                size="xs"
+                                                                colorScheme="green"
+                                                                onClick={() => handleStatusUpdate('enquiry', e._id, 'Done')}
+                                                            />
+                                                            <IconButton
+                                                                aria-label="Reject"
+                                                                icon={<FiX />}
+                                                                size="xs"
+                                                                colorScheme="red"
+                                                                onClick={() => handleStatusUpdate('enquiry', e._id, 'Reject')}
+                                                            />
+                                                            <IconButton
+                                                                aria-label="Delete"
+                                                                icon={<FiTrash />}
+                                                                size="xs"
+                                                                colorScheme="red"
+                                                                variant="ghost"
+                                                                onClick={() => handleDeleteRequest('enquiry', e._id)}
+                                                            />
+                                                        </HStack>
+                                                    </Td>
+                                                </Tr>
+                                            ))}
+                                            {filteredWhatsappLogs.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
+                                        </Tbody>
+                                    </Table>
+                                </Box>
+                                <PaginationControls currentPage={whatsappPage} totalItems={whatsappTotal} onPageChange={handleWhatsappPageChange} />
+                            </>
+                        )}
                     </TabPanel>
                 </TabPanels>
             </Tabs>

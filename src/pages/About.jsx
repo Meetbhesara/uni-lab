@@ -20,12 +20,19 @@ import {
 import { FiPhone, FiUser, FiShield, FiCpu, FiCheckSquare, FiCheckCircle, FiShoppingCart } from 'react-icons/fi';
 import { Link as RouterLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import SEO from '../components/SEO';
 
 const MotionBox = motion.create(Box);
 
 const About = () => {
     return (
         <Box bg="gray.50" minH="100vh">
+            <SEO
+                title="About Unique Engineering | Civil Lab Instruments & Survey Solutions"
+                description="Learn about Unique Engineering and Unique Survey (uecivil.com). Founded in Ahmedabad, Gujarat, providing high-precision civil engineering lab testing equipment and certified land surveying services."
+                keywords="about unique engineering, unique survey ahmedabad, civil engineering company gujarat, uecivil"
+                canonical="https://uecivil.com/about"
+            />
             {/* Hero Banner */}
             <Box 
                 bgGradient="linear(to-r, brand.800, brand.900)" 

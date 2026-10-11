@@ -25,13 +25,15 @@ import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import AdminDraftingWork from './admin/AdminDraftingWork';
 import InvoiceReport from './admin/InvoiceReport';
 import AdminLoginReportView from '../components/admin/AdminLoginReportView';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import api from '../api/axios';
 import { hasPermission } from '../utils/permissions';
 import ModulePermissionBar from '../components/admin/ModulePermissionBar';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import SEO from '../components/SEO';
+
 
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '') : '';
@@ -54,13 +56,174 @@ export const getFileUrl = (docOrPath) => {
     return cleanPath;
 };
 
+const SURVEY_SOLUTIONS = [
+    {
+        id: 'contour-survey',
+        slug: 'contour-survey',
+        title: 'Contour Survey (Counter Survey)',
+        tagline: 'High-Accuracy Elevation Contours, Slope Analysis & Cut-Fill Earthwork Volumes',
+        badge: 'Topographic Contours',
+        badgeColor: 'orange',
+        color: 'orange.500',
+        borderColor: 'orange.300',
+        icon: FaLayerGroup,
+        summary: 'Detailed topographical elevation mapping showing ground contours at 0.25m, 0.5m, or 1.0m intervals. Crucial for earthwork volume estimation (Cut & Fill), rainwater drainage gradients, architectural grading, and hill terrain infrastructure projects.',
+        instruments: ['Electronic Total Station (1" / 2" High Accuracy)', 'Auto Level & Digital Level with Barcode Staff', 'Dual-Frequency RTK DGPS GNSS'],
+        deliverables: [
+            'AutoCAD (.DWG / .DXF) Contour Plan with Reduced Levels (RL)',
+            '3D Surface Elevation Grid & Triangulated Irregular Network (TIN)',
+            'Cut & Fill Earthwork Volume Estimation Report',
+            'Benchmark (TBM) Transfer & Spot Level Grid Sheet'
+        ],
+        faqQuestion: 'What is a Contour Survey (Counter Survey) and why is it needed?',
+        faqAnswer: 'A contour survey connects points of equal elevation (Reduced Levels / RL) on the ground surface. It helps civil engineers, architects, and contractors assess ground slope, plan foundations, design drainage channels, and calculate exact earthwork cutting and filling quantities before starting construction.'
+    },
+    {
+        id: 'topography-survey',
+        slug: 'topography-survey',
+        title: 'Land Topography Survey',
+        tagline: 'Complete Physical, Natural & Structural Ground Feature Mapping',
+        badge: 'Premier Service',
+        badgeColor: 'blue',
+        color: 'blue.500',
+        borderColor: 'blue.300',
+        icon: FaMapMarkedAlt,
+        summary: 'Comprehensive site survey documenting all boundaries, existing buildings, roads, electric poles, trees, storm drainage lines, canal networks, and natural contours. The foundational drawing required for all architectural design, TP Scheme planning, and industrial developments.',
+        instruments: ['Reflectorless Total Station (1000m EDM)', 'High-Precision DGPS RTK Base & Rover', 'Electronic Theodolite'],
+        deliverables: [
+            'Comprehensive AutoCAD Topographical Land Map',
+            'Spot Reduced Levels (RL) Grid across entire site',
+            'Georeferenced Coordinate Sheet (Northing, Easting, Elevation)',
+            'Google Earth KMZ / KML Digital Overlay'
+        ],
+        faqQuestion: 'What is included in a Topographical Land Survey?',
+        faqAnswer: 'Our land topography survey maps every physical feature including boundary limits, existing structures, trees, electric poles, utilities, water channels, and elevation levels referenced to standard Mean Sea Level (MSL) or local benchmarks.'
+    },
+    {
+        id: 'point-marking',
+        slug: 'point-marking',
+        title: 'Point Marking & Boundary Demarcation',
+        tagline: 'Precision Boundary Pegging, Corner Coordinate Staking & Revenue Demarcation',
+        badge: 'Site Demarcation',
+        badgeColor: 'teal',
+        color: 'teal.500',
+        borderColor: 'teal.300',
+        icon: FaMapMarkerAlt,
+        summary: 'Exact physical on-ground pegging and stone fixing for property boundaries, plot corners, and government revenue survey numbers. Completely eliminates boundary confusion, ensures compliance with municipal zoning / TP schemes, and secures legitimate possession.',
+        instruments: ['Sub-Centimeter RTK GNSS Receiver', 'High-Precision Total Station', 'Survey Prisms & Steel Peg Markers'],
+        deliverables: [
+            'Physical Survey Boundary Pillars / Pegs Placed On Site',
+            'Boundary Demarcation Certificate & Detailed Sketch',
+            'Corner Point Coordinate Table (UTM WGS84 & Local Grid)',
+            'Government Revenue Map vs. Actual Possession Overlay'
+        ],
+        faqQuestion: 'How does Point Marking & Boundary Demarcation prevent property disputes?',
+        faqAnswer: 'Point marking uses high-precision DGPS and Total Station instruments to correlate revenue department record maps (Village Form No. 7/12, TP schemes, CTS) with actual satellite coordinates, fixing physical stone markers at exact mathematical corners.'
+    },
+    {
+        id: 'dgps-survey',
+        slug: 'dgps-survey',
+        title: 'DGPS & RTK Geodetic Survey',
+        tagline: 'Multi-Constellation Satellite Millimeter Georeferencing & Benchmark Fixing',
+        badge: 'Satellite GNSS',
+        badgeColor: 'purple',
+        color: 'purple.500',
+        borderColor: 'purple.300',
+        icon: FaGlobe,
+        summary: 'Dual-frequency Differential GPS (DGPS) survey delivering ultra-precise geographic coordinates tied to the national reference datum. Ideal for large land acreage, solar power parks, infrastructure corridors, and establishing permanent benchmark control networks.',
+        instruments: ['Multi-Constellation GNSS RTK Receivers (GPS, GLONASS, Galileo, BeiDou)', 'Dual-Frequency Geodetic Antennas'],
+        deliverables: [
+            'Permanent Temporary Benchmark (TBM) Concrete Pillars Fixing',
+            'Geodetic Baseline & Baseline Vector Processing Report',
+            'WGS-84 / UTM Coordinate Transformation Table',
+            'GIS-Ready Shapefiles (.SHP) and CAD Integration'
+        ],
+        faqQuestion: 'When is a DGPS survey preferred over a conventional Total Station?',
+        faqAnswer: 'DGPS is ideal for large land areas (above 5 to 100+ acres), solar parks, expressway corridors, and forested/open land where clear line of sight for total stations is difficult. It ties the land directly to global satellite coordinates with sub-centimeter accuracy.'
+    },
+    {
+        id: 'drone-survey',
+        slug: 'drone-survey',
+        title: 'Drone / UAV Aerial Mapping',
+        tagline: 'High-Resolution Orthomosaic Aerial Photography & 3D Point Cloud Modeling',
+        badge: 'Aerial Survey',
+        badgeColor: 'cyan',
+        color: 'cyan.500',
+        borderColor: 'cyan.300',
+        icon: FaRoute,
+        summary: 'Rapid, centimeter-grade aerial mapping for massive land parcels, mining reserves, expressway corridors, and flood catchment zones. Generates ultra-high-resolution orthomosaics, Digital Surface Models (DSM), and Digital Terrain Models (DTM) tied to ground control points (GCPs).',
+        instruments: ['Professional Mapping Drone / UAV with High-Res Sensors', 'RTK Base Station for Ground Control Points (GCP)'],
+        deliverables: [
+            'High-Resolution Orthomosaic GeoTIFF Aerial Map (2–3 cm GSD)',
+            'Digital Elevation Models (DEM, DSM, DTM)',
+            'Dense 3D Point Cloud (.LAS) & 3D Mesh',
+            'Topographic Contours and Volumetric Stockpile Measurements'
+        ],
+        faqQuestion: 'What is the accuracy of a Drone Land Survey?',
+        faqAnswer: 'By using surveyed Ground Control Points (GCPs) marked with DGPS on the ground, our drone surveys achieve vertical and horizontal accuracies within 3 to 5 centimeters, making it suitable for large-scale engineering planning.'
+    },
+    {
+        id: 'layout-demarcation',
+        slug: 'layout-demarcation',
+        title: 'Plot Layout Setting Out & Subdivision',
+        tagline: 'Master Plan Staking, Road Grid Alignment & Infrastructure Setting Out',
+        badge: 'Town Planning',
+        badgeColor: 'green',
+        color: 'green.500',
+        borderColor: 'green.300',
+        icon: FaBuilding,
+        summary: 'Transferring proposed architectural master plans, plotting layouts, and industrial schemes from CAD drawings directly onto the actual ground. Setting out internal road centerlines, individual plot corners, utility easements, and green spaces with precision.',
+        instruments: ['High-Precision Total Station', 'Digital Theodolite', 'Optical Plummet', 'Auto Level'],
+        deliverables: [
+            'Plot Layout Setting Out CAD As-Staked Drawing',
+            'Road Centerline, Curve & Edge Pegging',
+            'Individual Plot Dimension & Corner Verification Sheet',
+            'Layout Demarcation Handover Report'
+        ],
+        faqQuestion: 'What is Plot Layout Setting Out?',
+        faqAnswer: 'Setting out is the process of translating digital AutoCAD architectural or layout drawings into real physical ground positions, pegging each plot corner, internal road axis, and boundary exactly according to approved development plans.'
+    },
+    {
+        id: 'road-alignment',
+        slug: 'road-alignment',
+        title: 'Road, Highway & Pipeline Alignment',
+        tagline: 'Longitudinal Profiles (L-Section), Cross Sections (X-Section) & ROW Corridors',
+        badge: 'Infrastructure',
+        badgeColor: 'red',
+        color: 'red.500',
+        borderColor: 'red.300',
+        icon: FaRoad,
+        summary: 'Route corridor alignment survey for national highways, state roads, industrial access corridors, water supply pipelines, and sewer trunks. Features horizontal curve staking, vertical curve profiling, and Right-of-Way (ROW) encroachment verification.',
+        instruments: ['Precision Total Station', 'DGPS RTK Rovers', 'Precision Digital Leveling Equipment'],
+        deliverables: [
+            'Longitudinal Sections (L-Section Profile Drawings)',
+            'Cross Sections (X-Section Drawings at 10m/20m Intervals)',
+            'Right-Of-Way (ROW) Boundary & Encroachment Plan',
+            'Mass Haul Earthwork Calculation Sheet'
+        ],
+        faqQuestion: 'Why are L-Section and X-Section surveys needed for roads?',
+        faqAnswer: 'L-Section (Longitudinal) shows the elevation profile along the centerline of the road or pipeline, while X-Section (Cross) shows ground elevation across the width at regular intervals. These drawings are mandatory for calculating earthwork, pavement thickness, and hydraulic slopes.'
+    }
+];
+
 const CivilEngineeringServices = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const toast = useToast();
     const { isOpen: isDocModalOpen, onOpen: onDocModalOpen, onClose: onDocModalClose } = useDisclosure();
     const [selectedDoc, setSelectedDoc] = useState('udyam'); // 'udyam' | 'pan'
     const [panSide, setPanSide] = useState('front'); // 'front' | 'back'
     const [copiedKey, setCopiedKey] = useState('');
+
+    const initialSurvey = searchParams.get('survey') || 'all';
+    const [activeSurveyFilter, setActiveSurveyFilter] = useState(initialSurvey);
+
+    useEffect(() => {
+        const param = searchParams.get('survey');
+        if (param) {
+            setActiveSurveyFilter(param);
+        }
+    }, [searchParams]);
 
     const handleCopy = (text, key) => {
         if (navigator.clipboard) {
@@ -84,19 +247,27 @@ const CivilEngineeringServices = () => {
         onDocModalOpen();
     };
 
-    const handlePrint = () => {
-        window.print();
-    };
-
     const services = [
-        { title: "Road Infrastructure", description: "Expert design and construction of national highways and state roads.", icon: FaRoad, color: "blue.500" },
-        { title: "Industrial Construction", description: "Turnkey solutions for industrial complexes and manufacturing units.", icon: FaBuilding, color: "orange.500" },
-        { title: "Structural Engineering", description: "Advanced structural analysis and earthquake-resistant design.", icon: FaHardHat, color: "red.500" },
-        { title: "Specialized Surveys", description: "Precision site surveying and geotechnical investigation.", icon: FaRoute, color: "cyan.500" }
+        { title: "Contour & Topography Survey", description: "Precision site surveying, elevation contours, and land demarcation.", icon: FaMapMarkedAlt, color: "orange.500" },
+        { title: "Road & Highway Infrastructure", description: "Expert route alignment, L-section, X-section design and construction.", icon: FaRoad, color: "blue.500" },
+        { title: "Industrial Construction", description: "Turnkey layout setting out, foundation grid marking and industrial units.", icon: FaBuilding, color: "teal.500" },
+        { title: "DGPS & Drone Aerial Mapping", description: "Millimeter-accuracy satellite georeferencing and drone photogrammetry.", icon: FaGlobe, color: "purple.500" }
     ];
+
+    const displayedSurveys = activeSurveyFilter === 'all'
+        ? SURVEY_SOLUTIONS
+        : SURVEY_SOLUTIONS.filter(s => s.slug === activeSurveyFilter || s.id === activeSurveyFilter);
 
     return (
         <Box py={{ base: 10, md: 16 }} bg="gray.50">
+            {/* Dynamic SEO Tags for Services Page */}
+            <SEO
+                title="Specialized Land Survey Services Ahmedabad | Contour, Topography, Point Marking & DGPS"
+                description="Unique Survey (uecivil.com) — Premier land surveying solutions in Ahmedabad & Gujarat. High-precision Contour Survey, Land Topography, Point Marking Demarcation, DGPS & Drone Surveys."
+                keywords="contour survey ahmedabad, counter survey, topography survey gujarat, point marking survey, boundary demarcation survey, land survey ahmedabad, dgps survey gujarat, drone survey ahmedabad, layout marking, unique survey, uecivil"
+                canonical="https://uecivil.com/services"
+            />
+
             <Container maxW="container.xl">
                 {/* Hero / Header */}
                 <Stack spacing={4} as={Container} maxW={'3xl'} textAlign={'center'} mb={12}>
@@ -107,7 +278,7 @@ const CivilEngineeringServices = () => {
                         Our Civil Engineering & Survey Services
                     </Heading>
                     <Text color={'gray.600'} fontSize={{ base: 'sm', sm: 'lg' }}>
-                        Providing world-class infrastructure solutions, topographical land surveys, and precision civil engineering.
+                        Providing world-class infrastructure solutions, topographical land surveys, and precision civil engineering across Gujarat and India.
                     </Text>
                 </Stack>
 
@@ -125,6 +296,171 @@ const CivilEngineeringServices = () => {
                         </Card>
                     ))}
                 </SimpleGrid>
+
+                {/* ════════ SPECIALIZED SURVEYING SOLUTIONS SECTION (SEO OPTIMIZED) ════════ */}
+                <Box mb={20} id="survey-solutions">
+                    <Box textAlign="center" mb={10}>
+                        <Badge colorScheme="orange" px={3.5} py={1} borderRadius="full" textTransform="uppercase" fontWeight="extrabold" fontSize="xs" mb={3}>
+                            Comprehensive Land Surveying Catalog
+                        </Badge>
+                        <Heading size="xl" color="gray.800" fontWeight="900" mb={3}>
+                            Specialized Land Survey Services
+                        </Heading>
+                        <Text color="gray.600" fontSize="md" maxW="3xl" mx="auto">
+                            Equipped with high-precision Electronic Total Stations, RTK Dual-Frequency DGPS, and Survey UAV Drones, Unique Survey delivers certified survey drawings and boundary demarcation across Ahmedabad and Gujarat.
+                        </Text>
+                    </Box>
+
+                    {/* Filter Pills */}
+                    <Flex justify="center" wrap="wrap" gap={2} mb={10}>
+                        <Button
+                            size="sm"
+                            borderRadius="full"
+                            colorScheme={activeSurveyFilter === 'all' ? 'blue' : 'gray'}
+                            variant={activeSurveyFilter === 'all' ? 'solid' : 'outline'}
+                            onClick={() => setActiveSurveyFilter('all')}
+                        >
+                            All Surveys ({SURVEY_SOLUTIONS.length})
+                        </Button>
+                        {SURVEY_SOLUTIONS.map(s => (
+                            <Button
+                                key={s.id}
+                                size="sm"
+                                borderRadius="full"
+                                colorScheme={activeSurveyFilter === s.slug ? 'blue' : 'gray'}
+                                variant={activeSurveyFilter === s.slug ? 'solid' : 'outline'}
+                                onClick={() => setActiveSurveyFilter(s.slug)}
+                            >
+                                {s.title.split(' ')[0]} {s.title.includes('Contour') ? 'Contour' : s.title.includes('Topography') ? 'Topography' : s.title.includes('Demarcation') ? 'Demarcation' : ''}
+                            </Button>
+                        ))}
+                    </Flex>
+
+                    {/* Survey Cards Grid */}
+                    <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={8} mb={12}>
+                        {displayedSurveys.map((survey) => (
+                            <Card
+                                key={survey.id}
+                                id={survey.slug}
+                                borderRadius="3xl"
+                                bg="white"
+                                border="1px solid"
+                                borderColor="gray.200"
+                                shadow="md"
+                                _hover={{ shadow: 'xl', transform: 'translateY(-3px)', borderColor: survey.borderColor }}
+                                transition="all 0.25s ease"
+                                overflow="hidden"
+                            >
+                                <CardBody p={{ base: 6, md: 8 }}>
+                                    <Flex justify="space-between" align="start" mb={4}>
+                                        <HStack spacing={4}>
+                                            <Flex w={14} h={14} bg={`${survey.badgeColor}.50`} color={survey.color} rounded="2xl" align="center" justify="center" shadow="xs">
+                                                <Icon as={survey.icon} boxSize={7} />
+                                            </Flex>
+                                            <Box>
+                                                <Heading size="md" color="gray.800">
+                                                    {survey.title}
+                                                </Heading>
+                                                <Text fontSize="xs" fontWeight="600" color="gray.500">
+                                                    {survey.tagline}
+                                                </Text>
+                                            </Box>
+                                        </HStack>
+                                        <Badge colorScheme={survey.badgeColor} px={3} py={1} borderRadius="full" fontSize="2xs">
+                                            {survey.badge}
+                                        </Badge>
+                                    </Flex>
+
+                                    <Text color="gray.600" fontSize="sm" lineHeight={1.7} mb={6}>
+                                        {survey.summary}
+                                    </Text>
+
+                                    {/* Instruments Used */}
+                                    <Box mb={4} p={3.5} bg="gray.50" borderRadius="xl">
+                                        <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={2} textTransform="uppercase" letterSpacing="wider">
+                                            Instruments Deployed:
+                                        </Text>
+                                        <Wrap spacing={2}>
+                                            {survey.instruments.map((inst, i) => (
+                                                <WrapItem key={i}>
+                                                    <Tag size="sm" colorScheme="blue" borderRadius="md" fontWeight="medium">
+                                                        {inst}
+                                                    </Tag>
+                                                </WrapItem>
+                                            ))}
+                                        </Wrap>
+                                    </Box>
+
+                                    {/* Client Deliverables */}
+                                    <Box mb={6} p={3.5} bg="gray.50" borderRadius="xl">
+                                        <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={2} textTransform="uppercase" letterSpacing="wider">
+                                            Client Deliverables:
+                                        </Text>
+                                        <VStack align="start" spacing={1.5}>
+                                            {survey.deliverables.map((deliv, i) => (
+                                                <HStack key={i} align="start" spacing={2}>
+                                                    <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} mt={0.5} />
+                                                    <Text fontSize="xs" color="gray.700" fontWeight="500">{deliv}</Text>
+                                                </HStack>
+                                            ))}
+                                        </VStack>
+                                    </Box>
+
+                                    {/* Action Buttons */}
+                                    <Flex gap={3} pt={2} borderTop="1px solid" borderColor="gray.100">
+                                        <Button
+                                            as="a"
+                                            href={`https://wa.me/919099160391?text=${encodeURIComponent(`Hi Unique Survey, I would like to inquire about ${survey.title} services for my project in Gujarat. (via uecivil.com)`)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            colorScheme="green"
+                                            size="sm"
+                                            borderRadius="xl"
+                                            flex={1}
+                                            h={10}
+                                            fontWeight="bold"
+                                        >
+                                            Inquire on WhatsApp
+                                        </Button>
+                                        <Button
+                                            as={RouterLink}
+                                            to="/contact"
+                                            colorScheme="blue"
+                                            variant="outline"
+                                            size="sm"
+                                            borderRadius="xl"
+                                            h={10}
+                                        >
+                                            Book Site Visit
+                                        </Button>
+                                    </Flex>
+                                </CardBody>
+                            </Card>
+                        ))}
+                    </SimpleGrid>
+
+                    {/* ════════ SEO FAQ SECTION (GOOGLE SNIPPETS & RICH CARDS) ════════ */}
+                    <Box bg="white" p={{ base: 6, md: 10 }} borderRadius="3xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                        <Box textAlign="center" mb={8}>
+                            <Badge colorScheme="purple" px={3} py={1} borderRadius="full" mb={2}>Frequently Asked Questions</Badge>
+                            <Heading size="lg" color="gray.800">Frequently Asked Survey Questions</Heading>
+                            <Text color="gray.500" fontSize="sm" mt={1}>Direct answers regarding survey methodologies, instruments, and timelines in Ahmedabad, Gujarat.</Text>
+                        </Box>
+
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                            {SURVEY_SOLUTIONS.map((s, idx) => (
+                                <Box key={idx} p={5} borderRadius="2xl" bg="gray.50" border="1px solid" borderColor="gray.200">
+                                    <Heading size="xs" color="brand.800" mb={2} fontWeight="bold">
+                                        Q: {s.faqQuestion}
+                                    </Heading>
+                                    <Text fontSize="xs" color="gray.600" lineHeight={1.6}>
+                                        {s.faqAnswer}
+                                    </Text>
+                                </Box>
+                            ))}
+                        </SimpleGrid>
+                    </Box>
+                </Box>
 
                 {/* Precision Engineering Banner */}
                 <Box mb={16} p={{ base: 8, md: 12 }} bg="white" borderRadius="3xl" boxShadow="2xl">
@@ -14303,18 +14639,20 @@ const Services = () => {
     const urlView = searchParams.get('view'); // 'masters' | 'public'
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+    const hasSurveyParam = !!searchParams.get('survey');
+
     const [adminViewMode, setAdminViewMode] = useState(() => {
-        if (urlView === 'public') return 'public';
+        if (urlView === 'public' || hasSurveyParam) return 'public';
         return 'masters';
     });
 
     useEffect(() => {
-        if (urlView === 'public') {
+        if (urlView === 'public' || searchParams.get('survey')) {
             setAdminViewMode('public');
         } else if (urlView === 'masters') {
             setAdminViewMode('masters');
         }
-    }, [urlView]);
+    }, [urlView, searchParams]);
 
     const handleSwitchView = (mode) => {
         setAdminViewMode(mode);

@@ -22,10 +22,12 @@ import AdminLoginReport from "./pages/admin/AdminLoginReport";
 import CompanyMaster from "./pages/admin/CompanyMaster";
 import UniqueLabInstrumentsPage from "./pages/UniqueLabInstrumentsPage";
 import Login from "./pages/Login";
+import ScrollToTop from "./components/ScrollToTop";
 
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         {/* Dedicated Standalone Unique Lab Instruments Console */}
         <Route path="/unique-lab-instruments" element={<UniqueLabInstrumentsPage />} />

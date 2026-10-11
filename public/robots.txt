@@ -1,0 +1,21 @@
+# robots.txt for uecivil.com
+# Unique Engineering & Unique Survey Solutions
+
+User-agent: *
+Allow: /
+Allow: /products
+Allow: /services
+Allow: /about
+Allow: /contact
+Allow: /unique-lab-instruments
+
+# Disallow private operational portals
+Disallow: /admin/
+Disallow: /employee/
+Disallow: /api/
+
+# Host
+Host: https://uecivil.com
+
+# Sitemap Index
+Sitemap: https://uecivil.com/sitemap.xml

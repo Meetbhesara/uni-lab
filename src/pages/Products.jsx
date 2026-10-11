@@ -7,43 +7,57 @@ import { FaShoppingCart, FaChevronLeft, FaChevronRight, FaTrash } from 'react-ic
 import { FiSettings, FiSearch, FiPlay } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
+import SEO from '../components/SEO';
 
 import { getImageUrl } from '../utils/imageUrl';
 
 const PAGE_SIZE = 10;
 
-const PRODUCT_CATEGORIES = [
+export const PRODUCT_CATEGORIES = [
     {
         id: "CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT",
+        slug: "cement-concrete",
         title: "Cement, Concrete & Aggregate",
-        image: "/api/uploads/products/images/cat_cement.jpg"
+        image: "/api/uploads/products/images/cat_cement.jpg",
+        seoKeywords: "cement testing equipment, compression testing machine, concrete cube mould, slump cone, aggregate testing apparatus ahmedabad"
     },
     {
         id: "SOIL TESTING EQUIPMENT",
+        slug: "soil-testing",
         title: "Soil Testing Equipment",
-        image: "/api/uploads/products/images/cat_soil.jpg"
+        image: "/api/uploads/products/images/cat_soil.jpg",
+        seoKeywords: "soil testing equipment gujarat, direct shear apparatus, core cutter, cbr test machine, casagrande liquid limit device"
     },
     {
         id: "BITUMIN TESTING EQUPMENT",
+        slug: "bitumen-testing",
         title: "Bitumen Testing Equipment",
-        image: "/api/uploads/products/images/cat_bitumin.jpg"
+        image: "/api/uploads/products/images/cat_bitumin.jpg",
+        seoKeywords: "bitumen testing equipment, ductility machine, bitumen penetrometer, softening point apparatus, marshall stability tester"
     },
     {
         id: "Construction Machinery",
+        slug: "construction-machinery",
         title: "Construction Machinery",
-        image: "/api/uploads/products/images/cat_construction.jpg"
+        image: "/api/uploads/products/images/cat_construction.jpg",
+        seoKeywords: "construction machinery, laboratory concrete mixer, cube curing tank, sieve shaker machine, core cutting machine"
     },
     {
         id: "SURVEY & MEASURING INSTRUMENT",
+        slug: "survey-instruments",
         title: "Survey & Measuring Instruments",
-        image: "/api/uploads/products/images/cat_survey.jpg"
+        image: "/api/uploads/products/images/cat_survey.jpg",
+        seoKeywords: "survey measuring instruments, total station ahmedabad, dgps rtk receiver, digital theodolite, auto level, leica sokkia topcon survey equipment"
     },
     {
         id: "SAFETY PRODUCTS",
+        slug: "safety-products",
         title: "Safety Products",
-        image: "/api/uploads/products/images/cat_safety.jpg"
+        image: "/api/uploads/products/images/cat_safety.jpg",
+        seoKeywords: "construction safety products, safety helmets, reflective jacket, safety shoes, site safety ppe"
     }
 ];
+
 
 // Inject marquee keyframe once
 const MARQUEE_STYLE_ID = 'product-marquee-style';
@@ -370,10 +384,11 @@ const Products = () => {
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const loadMoreTriggerRef = useRef(null);
 
-    // If URL has a category param (from slider click), auto-select it
+    // If URL has a category param (from slider click or sitemap slug), auto-select it
     useEffect(() => {
         if (urlCategory) {
-            setActiveCategory(urlCategory);
+            const found = PRODUCT_CATEGORIES.find(c => c.slug === urlCategory || c.id === urlCategory || c.title.toLowerCase() === urlCategory.toLowerCase());
+            setActiveCategory(found ? found.id : urlCategory);
         }
     }, [urlCategory]);
 
@@ -491,8 +506,32 @@ const Products = () => {
         if (enquiryBtn) enquiryBtn.click();
     };
 
+    // Compute dynamic SEO metadata for category or search
+    const currentCategoryObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory || c.slug === activeCategory);
+    const seoTitle = currentCategoryObj
+        ? `${currentCategoryObj.title} | Civil Lab Equipment Ahmedabad`
+        : searchQuery
+        ? `Search: "${searchQuery}" | Civil Lab Equipment`
+        : `Civil Lab Testing Instruments & Survey Equipment Catalog`;
+    const seoDescription = currentCategoryObj
+        ? `Explore high-precision ${currentCategoryObj.title} by Unique Engineering (uecivil.com). Certified civil laboratory testing instruments, brochures & quotations in Gujarat.`
+        : `Complete catalog of civil engineering testing instruments in Ahmedabad: Concrete, Soil, Bitumen, Construction Machinery, Survey Total Stations & PPE safety equipment.`;
+    const seoKeywords = currentCategoryObj
+        ? `${currentCategoryObj.seoKeywords}, uecivil, unique lab instruments`
+        : `civil lab instruments ahmedabad, concrete testing equipment, soil testing apparatus, bitumen testing machine, total station gujarat, uecivil`;
+    const seoCanonical = currentCategoryObj
+        ? `https://uecivil.com/products?category=${currentCategoryObj.slug}`
+        : `https://uecivil.com/products`;
+
     return (
         <Container maxW={hasCartItems ? '7xl' : '6xl'} py={10}>
+            {/* Dynamic Category SEO */}
+            <SEO
+                title={seoTitle}
+                description={seoDescription}
+                keywords={seoKeywords}
+                canonical={seoCanonical}
+            />
 
             <Flex gap={6} align="flex-start">
                 {/* Main Content */}

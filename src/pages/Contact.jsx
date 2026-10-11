@@ -8,6 +8,7 @@ import {
     FiUser, FiNavigation
 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
+import SEO from '../components/SEO';
 
 const MotionBox = motion.create(Box);
 
@@ -17,7 +18,7 @@ const CONTACT = {
     title: 'Founder & Principal Consultant',
     phone: '9099160391',
     phoneDisplay: '+91 90991 60391',
-    email: 'atulkanak@uniquelabservices.com',
+    email: 'info@uecivil.com',
     whatsapp: '919099160391',
 };
 
@@ -219,6 +220,12 @@ const LocationCard = ({ loc, index }) => {
 const Contact = () => {
     return (
         <Box bg="gray.50" minH="100vh">
+            <SEO
+                title="Contact & Office Location Ahmedabad | Unique Engineering & Survey"
+                description="Get in touch with Unique Engineering and Unique Survey at Shyamal Cross Road, Satellite, Ahmedabad, Gujarat. Phone: +91 90991 60391. Inquire for civil lab instruments and land surveying quotes."
+                keywords="contact unique engineering, land survey office ahmedabad, unique lab services contact, uecivil phone number"
+                canonical="https://uecivil.com/contact"
+            />
 
             {/* ── Hero Banner ── */}
             <Box
