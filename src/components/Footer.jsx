@@ -47,7 +47,7 @@ const Footer = () => {
                             Land Survey Services
                         </Text>
                         <Link as={RouterLink} to="/services?view=public&survey=contour-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
-                            Contour Survey (Counter Survey)
+                            Counter Survey (Contour Survey)
                         </Link>
                         <Link as={RouterLink} to="/services?view=public&survey=topography-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Land Topography Survey

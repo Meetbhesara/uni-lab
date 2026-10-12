@@ -7,31 +7,31 @@
     <!-- 1. Primary Pages -->
     <url>
         <loc>https://uecivil.com/</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>1.00</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.95</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.95</priority>
     </url>
     <url>
         <loc>https://uecivil.com/about</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.80</priority>
     </url>
     <url>
         <loc>https://uecivil.com/contact</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.85</priority>
     </url>
@@ -39,43 +39,43 @@
     <!-- 2. Survey Solutions (Contour, Topography, Point Marking, DGPS, Drone, Layout) -->
     <url>
         <loc>https://uecivil.com/services?survey=contour-survey</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=topography-survey</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=point-marking</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=dgps-survey</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=drone-survey</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=layout-demarcation</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=road-alignment</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
@@ -83,37 +83,37 @@
     <!-- 3. Product Categories -->
     <url>
         <loc>https://uecivil.com/products?category=cement-concrete</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=soil-testing</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=bitumen-testing</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=survey-instruments</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=construction-machinery</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.80</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=safety-products</loc>
-        <lastmod>2025-05-01</lastmod>
+        <lastmod>2026-10-12</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.80</priority>
     </url>

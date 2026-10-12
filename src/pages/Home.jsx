@@ -24,8 +24,8 @@ const Home = () => {
             {/* Dynamic SEO Tags for Homepage */}
             <SEO
                 title="Unique Engineering | Civil Lab Instruments & Survey Solutions Ahmedabad"
-                description="Unique Engineering (uecivil.com) — Premier Civil Engineering Instruments and Land Topography Surveys in Ahmedabad, Gujarat. Specialists in Contour Survey, Point Marking, DGPS & Lab Testing Equipment."
-                keywords="uecivil, uecivil.com, Unique Engineering, Unique Survey, contour survey, counter survey, topography survey, point marking, civil lab instruments gujarat, compression testing machine ahmedabad"
+                description="Unique Engineering (uecivil.com) — Premier Civil Engineering Instruments and Land Topography Surveys in Ahmedabad, Gujarat. Specialists in Counter Survey (Contour), Point Marking, DGPS & Lab Testing Equipment."
+                keywords="uecivil, uecivil.com, Unique Engineering, Unique Survey, counter survey, contour survey, counter survey ahmedabad, topography survey, point marking, civil lab instruments gujarat, compression testing machine ahmedabad"
                 canonical="https://uecivil.com/"
             />
 
@@ -227,15 +227,15 @@ const Home = () => {
                             Specialized Survey Solutions in Gujarat
                         </Heading>
                         <Text color="gray.600" maxW="2xl" fontSize="md">
-                            From contour intervals and topography mapping to exact boundary point marking and DGPS georeferencing, Unique Survey provides certified accuracy.
+                            From counter elevation levels and topography mapping to exact boundary point marking and DGPS georeferencing, Unique Survey provides certified accuracy.
                         </Text>
                     </Flex>
 
                     <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={6}>
                         {[
                             {
-                                title: "Contour Survey",
-                                subtitle: "(Counter Survey)",
+                                title: "Counter Survey",
+                                subtitle: "(Contour Survey)",
                                 desc: "Precision elevation grid, slope analysis, and cut-fill earthwork calculations.",
                                 slug: "contour-survey",
                                 color: "orange.500",

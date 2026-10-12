@@ -18,42 +18,44 @@ const SEO = ({
 
   useEffect(() => {
     // 1. Update Title
-    const baseTitle = 'Unique Engineering | uecivil.com';
-    const finalTitle = title ? `${title} | uecivil.com` : 'Unique Engineering | Civil Lab Instruments & Survey Solutions Ahmedabad — uecivil.com';
+    const finalTitle = title
+      ? (title.toLowerCase().includes('uecivil') ? title : `${title} | uecivil.com`)
+      : 'Unique Engineering | Civil Lab Instruments & Survey Solutions Ahmedabad — uecivil.com';
     document.title = finalTitle;
 
-    // Helper to set or create meta tag
-    const setMeta = (selector, attribute, value) => {
-      if (!value) return;
-      let el = document.querySelector(selector);
+    // Helper to safely set or create meta tag
+    const setMeta = (attr, key, content) => {
+      if (!content) return;
+      let el = document.querySelector(`meta[${attr}="${key}"]`);
       if (!el) {
         el = document.createElement('meta');
-        const [attrName] = selector.replace(/[\[\]']/g, '').split('=');
-        if (selector.startsWith('meta[name=')) {
-          el.setAttribute('name', attrName.replace('meta', ''));
-        } else if (selector.startsWith('meta[property=')) {
-          el.setAttribute('property', attrName.replace('meta', ''));
-        }
+        el.setAttribute(attr, key);
         document.head.appendChild(el);
       }
-      el.setAttribute(attribute, value);
+      el.setAttribute('content', content);
     };
 
     // 2. Set Meta Description
     if (description) {
-      setMeta('meta[name="description"]', 'content', description);
-      setMeta('meta[property="og:description"]', 'content', ogDescription || description);
-      setMeta('meta[name="twitter:description"]', 'content', ogDescription || description);
+      setMeta('name', 'description', description);
+      setMeta('property', 'og:description', ogDescription || description);
+      setMeta('name', 'twitter:description', ogDescription || description);
     }
 
     // 3. Set Meta Keywords
     if (keywords) {
-      setMeta('meta[name="keywords"]', 'content', keywords);
+      setMeta('name', 'keywords', keywords);
     }
 
-    // 4. Set Open Graph & Twitter Titles
-    setMeta('meta[property="og:title"]', 'content', ogTitle || finalTitle);
-    setMeta('meta[name="twitter:title"]', 'content', ogTitle || finalTitle);
+    // 4. Set Open Graph & Twitter Titles and Images
+    setMeta('name', 'title', finalTitle);
+    setMeta('property', 'og:title', ogTitle || finalTitle);
+    setMeta('name', 'twitter:title', ogTitle || finalTitle);
+
+    if (ogImage) {
+      setMeta('property', 'og:image', ogImage);
+      setMeta('name', 'twitter:image', ogImage);
+    }
 
     // 5. Canonical URL
     const finalCanonical = canonical || `https://uecivil.com${location.pathname}`;
@@ -64,7 +66,8 @@ const SEO = ({
       document.head.appendChild(canonicalLink);
     }
     canonicalLink.setAttribute('href', finalCanonical);
-    setMeta('meta[property="og:url"]', 'content', finalCanonical);
+    setMeta('property', 'og:url', finalCanonical);
+    setMeta('name', 'twitter:url', finalCanonical);
 
     // 6. Optional Dynamic JSON-LD Schema
     let scriptTag = document.getElementById('dynamic-page-schema');

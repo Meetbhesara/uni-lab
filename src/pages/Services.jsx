@@ -60,23 +60,23 @@ const SURVEY_SOLUTIONS = [
     {
         id: 'contour-survey',
         slug: 'contour-survey',
-        title: 'Contour Survey (Counter Survey)',
-        tagline: 'High-Accuracy Elevation Contours, Slope Analysis & Cut-Fill Earthwork Volumes',
-        badge: 'Topographic Contours',
+        title: 'Counter Survey (Contour Survey)',
+        tagline: 'High-Accuracy Elevation Counter Levels, Slope Analysis & Cut-Fill Earthwork Volumes',
+        badge: 'Topographic Counter Survey',
         badgeColor: 'orange',
         color: 'orange.500',
         borderColor: 'orange.300',
         icon: FaLayerGroup,
-        summary: 'Detailed topographical elevation mapping showing ground contours at 0.25m, 0.5m, or 1.0m intervals. Crucial for earthwork volume estimation (Cut & Fill), rainwater drainage gradients, architectural grading, and hill terrain infrastructure projects.',
+        summary: 'Detailed topographical elevation mapping showing ground counter levels (contours) at 0.25m, 0.5m, or 1.0m intervals. Crucial for earthwork volume estimation (Cut & Fill), rainwater drainage gradients, architectural grading, and hill terrain infrastructure projects.',
         instruments: ['Electronic Total Station (1" / 2" High Accuracy)', 'Auto Level & Digital Level with Barcode Staff', 'Dual-Frequency RTK DGPS GNSS'],
         deliverables: [
-            'AutoCAD (.DWG / .DXF) Contour Plan with Reduced Levels (RL)',
+            'AutoCAD (.DWG / .DXF) Counter / Contour Plan with Reduced Levels (RL)',
             '3D Surface Elevation Grid & Triangulated Irregular Network (TIN)',
             'Cut & Fill Earthwork Volume Estimation Report',
             'Benchmark (TBM) Transfer & Spot Level Grid Sheet'
         ],
-        faqQuestion: 'What is a Contour Survey (Counter Survey) and why is it needed?',
-        faqAnswer: 'A contour survey connects points of equal elevation (Reduced Levels / RL) on the ground surface. It helps civil engineers, architects, and contractors assess ground slope, plan foundations, design drainage channels, and calculate exact earthwork cutting and filling quantities before starting construction.'
+        faqQuestion: 'What is a Counter Survey (Contour Survey) and why is it needed?',
+        faqAnswer: 'A counter survey (contour survey) connects points of equal elevation (Reduced Levels / RL) on the ground surface. It helps civil engineers, architects, and contractors assess ground slope, plan foundations, design drainage channels, and calculate exact earthwork cutting and filling quantities before starting construction.'
     },
     {
         id: 'topography-survey',
@@ -88,7 +88,7 @@ const SURVEY_SOLUTIONS = [
         color: 'blue.500',
         borderColor: 'blue.300',
         icon: FaMapMarkedAlt,
-        summary: 'Comprehensive site survey documenting all boundaries, existing buildings, roads, electric poles, trees, storm drainage lines, canal networks, and natural contours. The foundational drawing required for all architectural design, TP Scheme planning, and industrial developments.',
+        summary: 'Comprehensive site survey documenting all boundaries, existing buildings, roads, electric poles, trees, storm drainage lines, canal networks, and natural counter levels. The foundational drawing required for all architectural design, TP Scheme planning, and industrial developments.',
         instruments: ['Reflectorless Total Station (1000m EDM)', 'High-Precision DGPS RTK Base & Rover', 'Electronic Theodolite'],
         deliverables: [
             'Comprehensive AutoCAD Topographical Land Map',
@@ -157,7 +157,7 @@ const SURVEY_SOLUTIONS = [
             'High-Resolution Orthomosaic GeoTIFF Aerial Map (2–3 cm GSD)',
             'Digital Elevation Models (DEM, DSM, DTM)',
             'Dense 3D Point Cloud (.LAS) & 3D Mesh',
-            'Topographic Contours and Volumetric Stockpile Measurements'
+            'Topographic Counter Levels (Contours) and Volumetric Stockpile Measurements'
         ],
         faqQuestion: 'What is the accuracy of a Drone Land Survey?',
         faqAnswer: 'By using surveyed Ground Control Points (GCPs) marked with DGPS on the ground, our drone surveys achieve vertical and horizontal accuracies within 3 to 5 centimeters, making it suitable for large-scale engineering planning.'
@@ -248,7 +248,7 @@ const CivilEngineeringServices = () => {
     };
 
     const services = [
-        { title: "Contour & Topography Survey", description: "Precision site surveying, elevation contours, and land demarcation.", icon: FaMapMarkedAlt, color: "orange.500" },
+        { title: "Counter & Topography Survey", description: "Precision site surveying, elevation counter levels (contours), and land demarcation.", icon: FaMapMarkedAlt, color: "orange.500" },
         { title: "Road & Highway Infrastructure", description: "Expert route alignment, L-section, X-section design and construction.", icon: FaRoad, color: "blue.500" },
         { title: "Industrial Construction", description: "Turnkey layout setting out, foundation grid marking and industrial units.", icon: FaBuilding, color: "teal.500" },
         { title: "DGPS & Drone Aerial Mapping", description: "Millimeter-accuracy satellite georeferencing and drone photogrammetry.", icon: FaGlobe, color: "purple.500" }
@@ -258,14 +258,31 @@ const CivilEngineeringServices = () => {
         ? SURVEY_SOLUTIONS
         : SURVEY_SOLUTIONS.filter(s => s.slug === activeSurveyFilter || s.id === activeSurveyFilter);
 
+    const currentSurveyObj = activeSurveyFilter !== 'all'
+        ? SURVEY_SOLUTIONS.find(s => s.slug === activeSurveyFilter || s.id === activeSurveyFilter)
+        : null;
+
+    const serviceTitle = currentSurveyObj
+        ? `${currentSurveyObj.title} Ahmedabad | Land Survey & Mapping`
+        : "Specialized Land Survey Services Ahmedabad | Counter Survey, Topography, Point Marking & DGPS";
+    const serviceDescription = currentSurveyObj
+        ? `${currentSurveyObj.summary} Professional survey solutions in Gujarat by Unique Survey (uecivil.com).`
+        : "Unique Survey (uecivil.com) — Premier land surveying solutions in Ahmedabad & Gujarat. High-precision Counter Survey (Contour), Land Topography, Point Marking Demarcation, DGPS & Drone Surveys.";
+    const serviceCanonical = currentSurveyObj
+        ? `https://uecivil.com/services?survey=${currentSurveyObj.slug}`
+        : "https://uecivil.com/services";
+    const serviceKeywords = currentSurveyObj
+        ? `${currentSurveyObj.title.toLowerCase()}, counter survey, contour survey, counter survey ahmedabad, ${currentSurveyObj.slug.replace(/-/g, ' ')}, land survey ahmedabad, gujarat, uecivil`
+        : "counter survey ahmedabad, contour survey, counter survey gujarat, topography survey gujarat, point marking survey, boundary demarcation survey, land survey ahmedabad, dgps survey gujarat, drone survey ahmedabad, layout marking, unique survey, uecivil";
+
     return (
         <Box py={{ base: 10, md: 16 }} bg="gray.50">
             {/* Dynamic SEO Tags for Services Page */}
             <SEO
-                title="Specialized Land Survey Services Ahmedabad | Contour, Topography, Point Marking & DGPS"
-                description="Unique Survey (uecivil.com) — Premier land surveying solutions in Ahmedabad & Gujarat. High-precision Contour Survey, Land Topography, Point Marking Demarcation, DGPS & Drone Surveys."
-                keywords="contour survey ahmedabad, counter survey, topography survey gujarat, point marking survey, boundary demarcation survey, land survey ahmedabad, dgps survey gujarat, drone survey ahmedabad, layout marking, unique survey, uecivil"
-                canonical="https://uecivil.com/services"
+                title={serviceTitle}
+                description={serviceDescription}
+                keywords={serviceKeywords}
+                canonical={serviceCanonical}
             />
 
             <Container maxW="container.xl">
@@ -331,7 +348,7 @@ const CivilEngineeringServices = () => {
                                 variant={activeSurveyFilter === s.slug ? 'solid' : 'outline'}
                                 onClick={() => setActiveSurveyFilter(s.slug)}
                             >
-                                {s.title.split(' ')[0]} {s.title.includes('Contour') ? 'Contour' : s.title.includes('Topography') ? 'Topography' : s.title.includes('Demarcation') ? 'Demarcation' : ''}
+                                {s.title.includes('Counter') ? 'Counter Survey' : s.title.includes('Topography') ? 'Topography' : s.title.includes('Demarcation') ? 'Demarcation' : s.title.split(' ')[0]}
                             </Button>
                         ))}
                     </Flex>
