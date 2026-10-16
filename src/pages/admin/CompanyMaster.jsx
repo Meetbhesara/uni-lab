@@ -20,6 +20,8 @@ const CompanyMaster = () => {
     const [gstFile, setGstFile] = useState(null);
     const [cancelledChequeFile, setCancelledChequeFile] = useState(null);
     const [stampFile, setStampFile] = useState(null);
+    const [otherDocFile, setOtherDocFile] = useState(null);
+    const [existingOtherDocs, setExistingOtherDocs] = useState([]);
 
     const [companies, setCompanies] = useState([]);
     const [editId, setEditId] = useState(null);
@@ -28,10 +30,10 @@ const CompanyMaster = () => {
     const [activeTab, setActiveTab] = useState(0);
 
     const [existingDocs, setExistingDocs] = useState({
-        logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', companyStamp: ''
+        logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', companyStamp: '', otherDoc: ''
     });
     const [removeFlags, setRemoveFlags] = useState({
-        logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false
+        logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false, otherDoc: false
     });
 
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
@@ -44,11 +46,13 @@ const CompanyMaster = () => {
         setGstFile(null);
         setCancelledChequeFile(null);
         setStampFile(null);
+        setOtherDocFile(null);
+        setExistingOtherDocs([]);
         setExistingDocs({
-            logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', companyStamp: ''
+            logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', companyStamp: '', otherDoc: ''
         });
         setRemoveFlags({
-            logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false
+            logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false, otherDoc: false
         });
     };
 
@@ -63,6 +67,7 @@ const CompanyMaster = () => {
         email: '',
         panCardNumber: '',
         invoicePrefix: '',
+        otherDocTitle: '',
         bankDetails: {
             accountHolderName: '',
             bankName: '',
@@ -124,6 +129,8 @@ const CompanyMaster = () => {
             if (gstFile) uploadData.append('gstDoc', gstFile);
             if (cancelledChequeFile) uploadData.append('cancelledChequeDoc', cancelledChequeFile);
             if (stampFile) uploadData.append('companyStamp', stampFile);
+            if (otherDocFile) uploadData.append('otherDoc', otherDocFile);
+            uploadData.append('existingOtherDocs', JSON.stringify(existingOtherDocs));
 
             Object.keys(removeFlags).forEach(key => {
                 if (removeFlags[key]) {
@@ -142,7 +149,7 @@ const CompanyMaster = () => {
                 toast({ title: "Success", description: "Company record saved successfully", status: "success", duration: 3000 });
                 setFormData({
                     companyName: '', address: '', state: '', pincode: '', udyamNumber: '',
-                    gstin: '', contactNo: '', email: '', panCardNumber: '', invoicePrefix: '',
+                    gstin: '', contactNo: '', email: '', panCardNumber: '', invoicePrefix: '', otherDocTitle: '',
                     bankDetails: { accountHolderName: '', bankName: '', accountNumber: '', ifscCode: '' }
                 });
                 resetFiles();
@@ -416,6 +423,52 @@ const CompanyMaster = () => {
                                                             </Box>
                                                         )}
                                                     </FormControl>
+
+                                                    {/* 7. Other Documents (Multiple Allowed) */}
+                                                    <FormControl>
+                                                        <FormLabel fontWeight="bold" fontSize="xs">7. Other Documents (Multiple Allowed: ISO, Trade License, Incorporation, MSME)</FormLabel>
+                                                        
+                                                        {/* List of existing other documents */}
+                                                        {existingOtherDocs.length > 0 && (
+                                                            <VStack align="stretch" spacing={2} mb={3}>
+                                                                {existingOtherDocs.map((od, idx) => (
+                                                                    <HStack key={od._id || idx} p={2.5} border="1px solid" borderColor="purple.200" borderRadius="lg" bg="purple.50" justify="space-between">
+                                                                        <HStack spacing={2}>
+                                                                            <Badge colorScheme="purple">{od.title || `Doc #${idx + 1}`}</Badge>
+                                                                            <Button size="xs" colorScheme="purple" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${od.url}`, '_blank')}>View</Button>
+                                                                        </HStack>
+                                                                        <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove this document" onClick={() => setExistingOtherDocs(prev => prev.filter((_, i) => i !== idx))} />
+                                                                    </HStack>
+                                                                ))}
+                                                            </VStack>
+                                                        )}
+
+                                                        {/* Single legacy otherDoc if any */}
+                                                        {existingDocs.otherDoc && !removeFlags.otherDoc && !existingOtherDocs.some(od => od.url === existingDocs.otherDoc) && (
+                                                            <HStack p={2.5} mb={3} border="1px solid" borderColor="purple.200" borderRadius="lg" bg="purple.50" justify="space-between">
+                                                                <HStack spacing={2}>
+                                                                    <Badge colorScheme="purple">{formData.otherDocTitle || 'Saved Other Doc'}</Badge>
+                                                                    <Button size="xs" colorScheme="purple" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${existingDocs.otherDoc}`, '_blank')}>View</Button>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove Other Doc" onClick={() => setRemoveFlags(prev => ({ ...prev, otherDoc: true }))} />
+                                                            </HStack>
+                                                        )}
+
+                                                        <Input
+                                                            mb={2}
+                                                            size="sm"
+                                                            borderRadius="lg"
+                                                            placeholder="New Document Title (e.g. ISO 9001 Certificate, MSME, Trade License)"
+                                                            name="otherDocTitle"
+                                                            value={formData.otherDocTitle || ''}
+                                                            onChange={handleChange}
+                                                        />
+                                                        <Box p={3} border="2px dashed" borderColor="purple.200" borderRadius="xl" bg="purple.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('other-doc-upload').click()} _hover={{ bg: "purple.100" }}>
+                                                            <input type="file" id="other-doc-upload" hidden onChange={(e) => setOtherDocFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                            <Icon as={FaCloudUploadAlt} w={5} h={5} color="purple.500" mb={1} />
+                                                            <Text fontSize="xs" fontWeight="bold" color="purple.700">{otherDocFile ? `Selected: ${otherDocFile.name}` : "+ Upload Another Document"}</Text>
+                                                        </Box>
+                                                    </FormControl>
                                                 </SimpleGrid>
                                             </Box>
 
@@ -498,6 +551,16 @@ const CompanyMaster = () => {
                                                                         Stamp
                                                                     </Button>
                                                                 )}
+                                                                {(c.otherDocs || []).map((od, idx) => (
+                                                                    <Button key={od._id || idx} size="xs" colorScheme="teal" variant="subtle" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${od.url}`, '_blank')}>
+                                                                        {od.title || `Other Doc #${idx + 1}`}
+                                                                    </Button>
+                                                                ))}
+                                                                {c.otherDoc && !(c.otherDocs || []).some(od => od.url === c.otherDoc) && (
+                                                                    <Button size="xs" colorScheme="teal" variant="subtle" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${c.otherDoc}`, '_blank')}>
+                                                                        {c.otherDocTitle || 'Other Doc'}
+                                                                    </Button>
+                                                                )}
                                                             </Wrap>
                                                         </Td>
                                                         <Td textAlign="center">
@@ -505,16 +568,18 @@ const CompanyMaster = () => {
                                                                 <IconButton size="sm" colorScheme="teal" variant="ghost" icon={<Icon as={FaEye} />} title="View Company Details" onClick={() => setViewCompanyModal(c)} />
                                                                 <IconButton size="sm" colorScheme="blue" variant="ghost" icon={<Icon as={FaEdit} />} onClick={() => {
                                                                     setEditId(c._id);
+                                                                    setExistingOtherDocs(Array.isArray(c.otherDocs) ? c.otherDocs : []);
                                                                     setExistingDocs({
                                                                         logo: c.logo || '',
                                                                         udyamDoc: c.udyamDoc || '',
                                                                         panCardDoc: c.panCardDoc || '',
                                                                         gstDoc: c.gstDoc || '',
                                                                         cancelledChequeDoc: c.cancelledChequeDoc || '',
-                                                                        companyStamp: c.companyStamp || ''
+                                                                        companyStamp: c.companyStamp || '',
+                                                                        otherDoc: c.otherDoc || ''
                                                                     });
                                                                     setRemoveFlags({
-                                                                        logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false
+                                                                        logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false, otherDoc: false
                                                                     });
                                                                     setFormData({
                                                                         companyName: c.companyName || '',
@@ -527,6 +592,7 @@ const CompanyMaster = () => {
                                                                         email: c.email || '',
                                                                         panCardNumber: c.panCardNumber || '',
                                                                         invoicePrefix: c.invoicePrefix || '',
+                                                                        otherDocTitle: c.otherDocTitle || '',
                                                                         bankDetails: {
                                                                             accountHolderName: c.bankDetails?.accountHolderName || '',
                                                                             bankName: c.bankDetails?.bankName || '',
@@ -636,6 +702,16 @@ const CompanyMaster = () => {
                                         {viewCompanyModal.cancelledChequeDoc && (
                                             <Button size="sm" colorScheme="red" variant="solid" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${viewCompanyModal.cancelledChequeDoc}`, '_blank')}>
                                                 View Cancelled Cheque
+                                            </Button>
+                                        )}
+                                        {(viewCompanyModal.otherDocs || []).map((od, idx) => (
+                                            <Button key={od._id || idx} size="sm" colorScheme="teal" variant="solid" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${od.url}`, '_blank')}>
+                                                View {od.title || `Other Document #${idx + 1}`}
+                                            </Button>
+                                        ))}
+                                        {viewCompanyModal.otherDoc && !(viewCompanyModal.otherDocs || []).some(od => od.url === viewCompanyModal.otherDoc) && (
+                                            <Button size="sm" colorScheme="teal" variant="solid" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${viewCompanyModal.otherDoc}`, '_blank')}>
+                                                View {viewCompanyModal.otherDocTitle || 'Other Document'}
                                             </Button>
                                         )}
                                     </Wrap>

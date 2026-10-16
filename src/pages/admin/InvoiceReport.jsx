@@ -246,6 +246,15 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     });
 
     // WhatsApp Send Modal State
+    const [invoiceAckModal, setInvoiceAckModal] = useState({
+        isOpen: false,
+        phone: '',
+        clientName: '',
+        invoiceId: '',
+        invoiceType: '',
+        time: ''
+    });
+
     const [whatsappModal, setWhatsappModal] = useState({
         isOpen: false,
         phone: '',
@@ -4957,6 +4966,19 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                     </VStack>
                                 </Box>
                             )}
+                            <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <HStack spacing={2.5} align="start">
+                                    <Icon as={FaCheckCircle} color="green.600" w={4} h={4} mt={0.5} />
+                                    <Box>
+                                        <Text fontSize="xs" color="green.800" fontWeight="700">
+                                            Safe Google Contacts Sync (Duplicate Protection)
+                                        </Text>
+                                        <Text fontSize="2xs" color="green.700" mt={0.5}>
+                                            If this client already exists in Google Contacts, their details are safely updated — NO duplicate contact will ever be created.
+                                        </Text>
+                                    </Box>
+                                </HStack>
+                            </Box>
                         </VStack>
                     </ModalBody>
                     <ModalFooter borderTop="1px solid" borderColor="gray.100" p={{ base: 3, md: 4 }}>
@@ -4981,6 +5003,78 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                 </ModalContent>
             </Modal>
 
+        
+            {/* ── INVOICE WHATSAPP SEND ACKNOWLEDGEMENT MODAL ── */}
+            <Modal isOpen={invoiceAckModal.isOpen} onClose={() => setInvoiceAckModal(p => ({ ...p, isOpen: false }))} isCentered size="md">
+                <ModalOverlay backdropFilter="blur(5px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" p={2} boxShadow="2xl">
+                    <ModalHeader display="flex" alignItems="center" gap={3} pb={2}>
+                        <Box p={2.5} bg="green.100" borderRadius="xl">
+                            <Icon as={FaCheckCircle} color="green.600" w={6} h={6} />
+                        </Box>
+                        <Box>
+                            <Heading fontSize="lg" fontWeight="800" color="green.700">Invoice Sent on WhatsApp!</Heading>
+                            <Text fontSize="xs" color="gray.500" fontWeight="normal">Dispatched via WhatsApp & synced to Google Contacts.</Text>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton mt={3} mr={3} borderRadius="full" />
+
+                    <ModalBody py={4}>
+                        <Stack spacing={3}>
+                            <Box p={3.5} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                <SimpleGrid columns={2} spacing={2} fontSize="xs">
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Client Phone:</Text>
+                                        <Text fontWeight="800" color="gray.800" fontSize="sm">+91 {invoiceAckModal.phone}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Dispatched At:</Text>
+                                        <Text fontWeight="700" color="gray.700">{invoiceAckModal.time}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Client Name:</Text>
+                                        <Text fontWeight="700" color="gray.800">{invoiceAckModal.clientName}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Invoice Ref:</Text>
+                                        <Text fontWeight="800" color="green.700">{invoiceAckModal.invoiceId || 'Invoice'}</Text>
+                                    </Box>
+                                </SimpleGrid>
+                            </Box>
+
+                            <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <HStack spacing={2} align="start">
+                                    <Icon as={FaCheckCircle} color="green.600" mt={0.5} />
+                                    <Box fontSize="xs">
+                                        <Text fontWeight="700" color="green.800">Live Delivery & Verification:</Text>
+                                        <Text color="green.700" fontSize="2xs" mt={0.5}>
+                                            • Invoice PDF & documents dispatched via your active WhatsApp session.
+                                        </Text>
+                                        <Text color="green.700" fontSize="2xs">
+                                            • You can open WhatsApp on your phone to check delivery ticks (✓✓).
+                                        </Text>
+                                        <Text color="green.700" fontSize="2xs">
+                                            • Client details safely updated in Google Contacts without duplicate entries.
+                                        </Text>
+                                    </Box>
+                                </HStack>
+                            </Box>
+                        </Stack>
+                    </ModalBody>
+
+                    <ModalFooter pt={2}>
+                        <Button
+                            w="full"
+                            colorScheme="green"
+                            borderRadius="xl"
+                            onClick={() => setInvoiceAckModal(p => ({ ...p, isOpen: false }))}
+                            fontWeight="700"
+                        >
+                            Understood & Done
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </Box>
     );
 };

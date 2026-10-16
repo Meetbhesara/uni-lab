@@ -3,7 +3,7 @@ import {
     Box, Flex, Text, Button, Stack, useDisclosure,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton,
     Drawer, DrawerBody, DrawerFooter, DrawerHeader, DrawerOverlay, DrawerContent, DrawerCloseButton,
-    FormControl, FormLabel, Input, useToast, Image, IconButton, Divider, VStack
+    FormControl, FormLabel, Input, useToast, Image, IconButton, Divider, VStack, Textarea
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -650,7 +650,8 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
         companyName: '',
         contactPersonName: '',
         email: '',
-        gstNumber: ''
+        gstNumber: '',
+        address: ''
     });
 
     // Reset flow when drawer is opened
@@ -683,7 +684,8 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                             companyName: userData.companyName || '',
                             contactPersonName: userData.contactPersonName || userData.name || '',
                             email: userData.email || '',
-                            gstNumber: userData.gstNumber || ''
+                            gstNumber: userData.gstNumber || '',
+                            address: userData.address || userData.clientAddress || ''
                         });
                         setAdminClientStatus('found');
                         // Force show form if critical details like email are missing
@@ -715,7 +717,8 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                             companyName: '', 
                             contactPersonName: '', 
                             email: `${cleanPhone}@gmail.com`, 
-                            gstNumber: '' 
+                            gstNumber: '',
+                            address: '' 
                         });
                     }
                 } finally {
@@ -741,6 +744,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             const finalPhone = isAdm ? phoneInput : (caller.phone || phoneInput || 'N/A');
             const finalEmail = isAdm ? formData.email : (caller.email || 'N/A');
             const finalGst = isAdm ? formData.gstNumber : (caller.gstNumber || '');
+            const finalAddress = isAdm ? formData.address : (caller.address || formData.address || '');
 
             const enquiryData = {
                 companyName: finalCompanyName,
@@ -748,6 +752,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                 phone: finalPhone,
                 email: finalEmail,
                 gstNumber: finalGst,
+                address: finalAddress,
                 products: safeCart.map(item => {
                     const product = item.productId || item.product || {};
                     return {
@@ -769,7 +774,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             // Reset localized states
             setAuthStep('phone');
             setPhoneInput('');
-            setFormData({ companyName: '', contactPersonName: '', email: '', gstNumber: '' });
+            setFormData({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
 
             navigate('/products');
         } catch (error) {
@@ -998,6 +1003,10 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                                     <FormLabel fontSize="sm" mb={1}>Client GST Number (Optional)</FormLabel>
                                                     <Input size="sm" name="gstNumber" placeholder="22AAAAA0000A1Z5" value={formData.gstNumber} onChange={handleChange} />
                                                 </FormControl>
+                                                <FormControl>
+                                                    <FormLabel fontSize="sm" mb={1}>Client Address (Optional)</FormLabel>
+                                                    <Textarea size="sm" rows={2} name="address" placeholder="e.g. 123 Industrial Area, City, State" value={formData.address || ''} onChange={handleChange} />
+                                                </FormControl>
                                             </Stack>
                                         )}
                                     </Stack>
@@ -1065,6 +1074,10 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                         <FormControl>
                                             <FormLabel fontSize="sm" mb={1}>GST Number (Optional)</FormLabel>
                                             <Input size="sm" name="gstNumber" placeholder="22AAAAA0000A1Z5" value={formData.gstNumber} onChange={handleChange} />
+                                        </FormControl>
+                                        <FormControl>
+                                            <FormLabel fontSize="sm" mb={1}>Address (Optional)</FormLabel>
+                                            <Textarea size="sm" rows={2} name="address" placeholder="e.g. 123 Industrial Area, City, State" value={formData.address || ''} onChange={handleChange} />
                                         </FormControl>
                                     </Stack>
                                 )}

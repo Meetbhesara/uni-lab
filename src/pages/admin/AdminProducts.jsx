@@ -4,11 +4,11 @@ import {
     Box, Button, Table, Thead, Tbody, Tr, Th, Td, IconButton, useDisclosure,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, ModalFooter,
     FormControl, FormLabel, FormErrorMessage, Input, Textarea, Checkbox, Stack, useToast, Flex,
-    Image, Badge, SimpleGrid, Text, InputGroup, InputLeftElement, InputRightElement, Select, Spinner,
+    Image, Badge, SimpleGrid, Text, Heading, InputGroup, InputLeftElement, InputRightElement, Select, Spinner,
     HStack, VStack, Tag, TagLabel, TagCloseButton, Divider, CheckboxGroup, Switch
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit2, FiTrash2, FiUpload, FiSettings, FiImage, FiInfo, FiDollarSign, FiPackage, FiSearch, FiPlay, FiLayers, FiX } from 'react-icons/fi';
-import { FaWhatsapp, FaSortAlphaDown, FaSortAlphaUp, FaLayerGroup } from 'react-icons/fa';
+import { FaWhatsapp, FaCheckCircle, FaSortAlphaDown, FaSortAlphaUp, FaLayerGroup } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
 import { hasPermission } from '../../utils/permissions';
@@ -157,11 +157,72 @@ const AdminProducts = () => {
     const [whatsappProduct, setWhatsappProduct] = useState(null);
     const [whatsappPhone, setWhatsappPhone] = useState('');
     const [isWhatsappSending, setIsWhatsappSending] = useState(false);
+    const [gcAckData, setGcAckData] = useState(null); // Google Contact acknowledgement data
+    const [isFetchingSingleUser, setIsFetchingSingleUser] = useState(false);
+    const [productAckModal, setProductAckModal] = useState({
+        isOpen: false,
+        phone: '',
+        clientName: '',
+        products: [],
+        time: ''
+    });
+
+    const [singleWhatsappForm, setSingleWhatsappForm] = useState({
+        companyName: '',
+        contactPersonName: '',
+        email: '',
+        gstNumber: '',
+        address: ''
+    });
+    const [singleClientAutoFilled, setSingleClientAutoFilled] = useState(false);
 
     const handleWhatsappOpen = (product) => {
         setWhatsappProduct(product);
         setWhatsappPhone('');
+        setSingleWhatsappForm({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
+        setSingleClientAutoFilled(false);
         onWhatsappOpen();
+    };
+
+    const handleSinglePhoneChange = async (e) => {
+        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        setWhatsappPhone(val);
+        if (singleClientAutoFilled) {
+            setSingleWhatsappForm({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
+            setSingleClientAutoFilled(false);
+        }
+        if (val.length === 10) {
+            setIsFetchingSingleUser(true);
+            try {
+                const res = await api.get(`/auth/phone/${val}`);
+                const u = res.data?.user || res.data;
+                if (u && (u._id || u.phone)) {
+                    setSingleWhatsappForm({
+                        companyName: u.companyName || '',
+                        contactPersonName: u.name || u.contactPersonName || '',
+                        email: (u.email && !u.email.includes('noemail')) ? u.email : '',
+                        gstNumber: u.gstNumber || '',
+                        address: u.address || u.clientAddress || ''
+                    });
+                    setSingleClientAutoFilled(true);
+                    toast({
+                        title: '✓ Client Found!',
+                        description: `Auto-filled details for ${u.contactPersonName || u.companyName || u.name || 'Client'}.`,
+                        status: 'info',
+                        duration: 2500,
+                        isClosable: true
+                    });
+                } else {
+                    setSingleWhatsappForm({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
+                    setSingleClientAutoFilled(false);
+                }
+            } catch (_) {
+                setSingleWhatsappForm({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
+                setSingleClientAutoFilled(false);
+            } finally {
+                setIsFetchingSingleUser(false);
+            }
+        }
     };
 
     // Global WhatsApp Multiple Product Sending
@@ -169,11 +230,14 @@ const AdminProducts = () => {
     const [isGlobalWhatsappOpen, setIsGlobalWhatsappOpen] = useState(false);
     const [isGlobalWhatsappSending, setIsGlobalWhatsappSending] = useState(false);
     const [isFetchingUser, setIsFetchingUser] = useState(false);
+    const [globalClientAutoFilled, setGlobalClientAutoFilled] = useState(false);
     const [globalWhatsappForm, setGlobalWhatsappForm] = useState({
         phone: '',
         companyName: '',
         contactPersonName: '',
-        email: ''
+        email: '',
+        gstNumber: '',
+        address: ''
     });
 
     const toggleProductSelection = (productId) => {
@@ -190,7 +254,8 @@ const AdminProducts = () => {
             toast({ title: 'Select products first', status: 'warning' });
             return;
         }
-        setGlobalWhatsappForm({ phone: '', companyName: '', contactPersonName: '', email: '' });
+        setGlobalWhatsappForm({ phone: '', companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
+        setGlobalClientAutoFilled(false);
         setIsGlobalWhatsappOpen(true);
     };
 
@@ -208,13 +273,43 @@ const AdminProducts = () => {
                 if (u && (u._id || u.phone)) {
                     setGlobalWhatsappForm(prev => ({
                         ...prev,
-                        companyName: u.companyName || prev.companyName,
-                        contactPersonName: u.name || u.contactPersonName || prev.contactPersonName,
-                        email: u.email || prev.email
+                        phone,
+                        companyName: u.companyName || '',
+                        contactPersonName: u.name || u.contactPersonName || '',
+                        email: (u.email && !u.email.includes('noemail')) ? u.email : '',
+                        gstNumber: u.gstNumber || '',
+                        address: u.address || u.clientAddress || ''
                     }));
+                    setGlobalClientAutoFilled(true);
+                    toast({
+                        title: '✓ Client Found!',
+                        description: `Auto-filled details for ${u.contactPersonName || u.companyName || u.name || 'Client'}.`,
+                        status: 'info',
+                        duration: 2500,
+                        isClosable: true
+                    });
+                } else {
+                    setGlobalWhatsappForm(prev => ({
+                        phone: prev.phone,
+                        companyName: '',
+                        contactPersonName: '',
+                        email: '',
+                        gstNumber: '',
+                        address: ''
+                    }));
+                    setGlobalClientAutoFilled(false);
                 }
             } catch (_) {
-                // Silent catch
+                // Not in DB (e.g. 404); clear all fields so old client data is completely removed
+                setGlobalWhatsappForm(prev => ({
+                    phone: prev.phone,
+                    companyName: '',
+                    contactPersonName: '',
+                    email: '',
+                    gstNumber: '',
+                    address: ''
+                }));
+                setGlobalClientAutoFilled(false);
             } finally {
                 setIsFetchingUser(false);
             }
@@ -223,7 +318,21 @@ const AdminProducts = () => {
 
     const handlePhoneChange = (e) => {
         const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-        setGlobalWhatsappForm(prev => ({ ...prev, phone: val }));
+        // If the form was previously auto-filled and user changes the phone, clear fields immediately
+        setGlobalWhatsappForm(prev => {
+            if (globalClientAutoFilled) {
+                return {
+                    phone: val,
+                    companyName: '',
+                    contactPersonName: '',
+                    email: '',
+                    gstNumber: '',
+                    address: ''
+                };
+            }
+            return { ...prev, phone: val };
+        });
+        setGlobalClientAutoFilled(false);
         if (val.length === 10) {
             fetchUserDetails(val);
         }
@@ -238,11 +347,21 @@ const AdminProducts = () => {
         setIsGlobalWhatsappSending(true);
         try {
             const selectedProducts = products.filter(p => selectedProductIds.has(p._id || p.id));
-            await api.post('/whatsapp/send-multiple-products', {
+            const mpRes = await api.post('/whatsapp/send-multiple-products', {
                 ...globalWhatsappForm,
                 products: selectedProducts
             });
-            toast({ title: "Products sent successfully on WhatsApp!", status: "success" });
+            if (mpRes.data?.whatsappSent === false) {
+                toast({
+                    title: "Products Processed (WhatsApp Not Sent)",
+                    description: mpRes.data?.whatsappError || "Message failed, but contact synced to Google Contacts",
+                    status: "warning",
+                    duration: 5000,
+                    isClosable: true
+                });
+            } else {
+                toast({ title: "Products sent successfully on WhatsApp!", status: "success" });
+            }
             setIsGlobalWhatsappOpen(false);
             setSelectedProductIds(new Set());
         } catch (err) {
@@ -686,13 +805,30 @@ const AdminProducts = () => {
                             `📝 *Description:*\n${whatsappProduct?.description || 'No description provided'}\n\n` +
                             `✅ *Quality Assured by Unique Lab Instrument*`;
             
-            await api.post('/whatsapp/send-product', {
+            const spRes = await api.post('/whatsapp/send-product', {
                 phone: whatsappPhone,
                 imageUrl: imgUrl,
-                caption: caption
+                caption: caption,
+                product: whatsappProduct,
+                productId: whatsappProduct?._id,
+                companyName: singleWhatsappForm.companyName,
+                contactPersonName: singleWhatsappForm.contactPersonName,
+                email: singleWhatsappForm.email,
+                gstNumber: singleWhatsappForm.gstNumber,
+                address: singleWhatsappForm.address
             });
             
-            toast({ title: "Product sent on WhatsApp!", status: "success" });
+            if (spRes.data?.whatsappSent === false) {
+                toast({
+                    title: "Product Processed (WhatsApp Not Sent)",
+                    description: spRes.data?.whatsappError || "Message failed, but contact synced to Google Contacts",
+                    status: "warning",
+                    duration: 5000,
+                    isClosable: true
+                });
+            } else {
+                toast({ title: "Product sent on WhatsApp!", status: "success" });
+            }
             onWhatsappClose();
         } catch (e) {
             console.error(e);
@@ -1946,15 +2082,77 @@ const AdminProducts = () => {
                     <ModalHeader>Send Product To WhatsApp</ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
-                        <FormControl>
-                            <FormLabel fontWeight="600">Enter 10-Digit Mobile Number</FormLabel>
-                            <Input 
-                                placeholder="9876543210" 
-                                value={whatsappPhone} 
-                                onChange={(e) => setWhatsappPhone(e.target.value)} 
-                            />
-                            <Text fontSize="xs" color="gray.500" mt={1}>Example: 9876543210 (Country code '91' is added automatically)</Text>
-                        </FormControl>
+                        <VStack spacing={3} align="stretch">
+                            <FormControl isRequired>
+                                <FormLabel fontWeight="600" fontSize="sm">Enter 10-Digit Mobile Number</FormLabel>
+                                <InputGroup>
+                                    <Input 
+                                        placeholder="9876543210" 
+                                        value={whatsappPhone} 
+                                        maxLength={10}
+                                        onChange={handleSinglePhoneChange} 
+                                    />
+                                    {isFetchingSingleUser && (
+                                        <InputRightElement>
+                                            <Spinner size="sm" color="green.500" />
+                                        </InputRightElement>
+                                    )}
+                                    {singleClientAutoFilled && (
+                                        <InputRightElement>
+                                            <FaCheckCircle color="#25D366" size={18} />
+                                        </InputRightElement>
+                                    )}
+                                </InputGroup>
+                                {singleClientAutoFilled && (
+                                    <Text fontSize="2xs" color="green.600" fontWeight="600" mt={1}>
+                                        ✓ Existing client found! Details have been automatically populated.
+                                    </Text>
+                                )}
+                                <Text fontSize="xs" color="gray.500" mt={1}>Example: 9876543210 (Country code '91' is added automatically)</Text>
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Company Name (optional)</FormLabel>
+                                <Input 
+                                    placeholder="Company Name" 
+                                    value={singleWhatsappForm.companyName} 
+                                    onChange={e => setSingleWhatsappForm({ ...singleWhatsappForm, companyName: e.target.value })} 
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Contact Person (optional)</FormLabel>
+                                <Input 
+                                    placeholder="Person Name" 
+                                    value={singleWhatsappForm.contactPersonName} 
+                                    onChange={e => setSingleWhatsappForm({ ...singleWhatsappForm, contactPersonName: e.target.value })} 
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Email (optional)</FormLabel>
+                                <Input 
+                                    type="email" 
+                                    placeholder="Email" 
+                                    value={singleWhatsappForm.email} 
+                                    onChange={e => setSingleWhatsappForm({ ...singleWhatsappForm, email: e.target.value })} 
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">GST Number (optional)</FormLabel>
+                                <Input 
+                                    placeholder="22AAAAA0000A1Z5" 
+                                    value={singleWhatsappForm.gstNumber} 
+                                    onChange={e => setSingleWhatsappForm({ ...singleWhatsappForm, gstNumber: e.target.value })} 
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Client Address (optional)</FormLabel>
+                                <Textarea 
+                                    rows={2} 
+                                    placeholder="Client Address" 
+                                    value={singleWhatsappForm.address} 
+                                    onChange={e => setSingleWhatsappForm({ ...singleWhatsappForm, address: e.target.value })} 
+                                />
+                            </FormControl>
+                        </VStack>
                     </ModalBody>
                     <ModalFooter>
                         <Button variant="ghost" mr={3} onClick={onWhatsappClose}>Cancel</Button>
@@ -2362,7 +2560,17 @@ const AdminProducts = () => {
                                             <Spinner size="sm" color="green.500" />
                                         </InputRightElement>
                                     )}
+                                    {globalClientAutoFilled && (
+                                        <InputRightElement>
+                                            <FaCheckCircle color="#25D366" size={18} />
+                                        </InputRightElement>
+                                    )}
                                 </InputGroup>
+                                {globalClientAutoFilled && (
+                                    <Text fontSize="2xs" color="green.600" fontWeight="600" mt={1}>
+                                        ✓ Existing client found! Details have been automatically populated.
+                                    </Text>
+                                )}
                             </FormControl>
                             <FormControl>
                                 <FormLabel fontSize="xs" fontWeight="bold">Company Name</FormLabel>
@@ -2387,6 +2595,23 @@ const AdminProducts = () => {
                                     placeholder="Email"
                                     value={globalWhatsappForm.email}
                                     onChange={e => setGlobalWhatsappForm({...globalWhatsappForm, email: e.target.value})}
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">GST Number (optional)</FormLabel>
+                                <Input 
+                                    placeholder="22AAAAA0000A1Z5"
+                                    value={globalWhatsappForm.gstNumber || ''}
+                                    onChange={e => setGlobalWhatsappForm({...globalWhatsappForm, gstNumber: e.target.value})}
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Client Address (optional)</FormLabel>
+                                <Textarea 
+                                    rows={2}
+                                    placeholder="Client Address"
+                                    value={globalWhatsappForm.address || ''}
+                                    onChange={e => setGlobalWhatsappForm({...globalWhatsappForm, address: e.target.value})}
                                 />
                             </FormControl>
                         </VStack>
@@ -2437,7 +2662,85 @@ const AdminProducts = () => {
                         >
                             Send ({selectedProductIds.size}) to WhatsApp
                         </Button>
-                    </Box>
+                    
+            {/* Google Contact Acknowledgement Modal */}
+            {gcAckData && (
+                <Modal isOpen={!!gcAckData} onClose={() => setGcAckData(null)} isCentered size="md">
+                    <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
+                    <ModalContent borderRadius="2xl" overflow="hidden">
+                        <ModalHeader
+                            bg={gcAckData.success ? (gcAckData.added ? 'green.500' : 'blue.500') : 'orange.400'}
+                            color="white"
+                            display="flex"
+                            alignItems="center"
+                            gap={2}
+                            fontSize="lg"
+                        >
+                            {gcAckData.success
+                                ? (gcAckData.added ? '✅ Google Contact Created' : '📝 Google Contact Updated')
+                                : '⚠️ Google Contact Sync Info'}
+                            <ModalCloseButton color="white" />
+                        </ModalHeader>
+                        <ModalBody py={4}>
+                            {gcAckData.contactName && (
+                                <Text fontSize="md" fontWeight="700" mb={2} color="gray.700">
+                                    Contact: {gcAckData.contactName}
+                                </Text>
+                            )}
+                            {gcAckData.source && (
+                                <Text fontSize="xs" color="gray.400" mb={3}>Source: {gcAckData.source}</Text>
+                            )}
+                            {!gcAckData.success && gcAckData.error && (
+                                <Text color="orange.500" fontSize="sm">⚠️ {gcAckData.error}</Text>
+                            )}
+                            {!gcAckData.success && gcAckData.reason && (
+                                <Text color="gray.500" fontSize="sm">Reason: {gcAckData.reason}</Text>
+                            )}
+                            {gcAckData.fieldChanges && (
+                                <>
+                                    {gcAckData.fieldChanges.addedFields && gcAckData.fieldChanges.addedFields.length > 0 && (
+                                        <Box mb={3}>
+                                            <Text fontWeight="700" color="green.600" fontSize="sm" mb={1}>🆕 Newly Added Fields:</Text>
+                                            {gcAckData.fieldChanges.addedFields.map((f, i) => (
+                                                <HStack key={i} spacing={2} mb={1} pl={2}>
+                                                    <Badge colorScheme="green" fontSize="xs">{f.field}</Badge>
+                                                    <Text fontSize="xs" color="gray.600">{f.value}</Text>
+                                                </HStack>
+                                            ))}
+                                        </Box>
+                                    )}
+                                    {gcAckData.fieldChanges.updatedFields && gcAckData.fieldChanges.updatedFields.length > 0 && (
+                                        <Box mb={3}>
+                                            <Text fontWeight="700" color="blue.600" fontSize="sm" mb={1}>✏️ Updated Fields:</Text>
+                                            {gcAckData.fieldChanges.updatedFields.map((f, i) => (
+                                                <Box key={i} mb={2} pl={2}>
+                                                    <Badge colorScheme="blue" fontSize="xs" mb={1}>{f.field}</Badge>
+                                                    <HStack spacing={1} fontSize="xs">
+                                                        <Text color="red.400" textDecoration="line-through">{f.before}</Text>
+                                                        <Text color="gray.500">→</Text>
+                                                        <Text color="green.500" fontWeight="600">{f.after}</Text>
+                                                    </HStack>
+                                                </Box>
+                                            ))}
+                                        </Box>
+                                    )}
+                                    {(!gcAckData.fieldChanges.addedFields || gcAckData.fieldChanges.addedFields.length === 0) &&
+                                     (!gcAckData.fieldChanges.updatedFields || gcAckData.fieldChanges.updatedFields.length === 0) &&
+                                     gcAckData.success && (
+                                        <Text color="gray.500" fontSize="sm">✅ All fields already up to date.</Text>
+                                    )}
+                                </>
+                            )}
+                        </ModalBody>
+                        <ModalFooter>
+                            <Button colorScheme={gcAckData.success ? (gcAckData.added ? 'green' : 'blue') : 'orange'} onClick={() => setGcAckData(null)} size="sm" borderRadius="lg">
+                                OK
+                            </Button>
+                        </ModalFooter>
+                    </ModalContent>
+                </Modal>
+            )}
+</Box>
                 )}
             </AnimatePresence>
         </Box >

@@ -9402,6 +9402,18 @@ const ScheduleMasterForm = () => {
     const [compTarget, setCompTarget] = useState(null);
     const [isCompLoading, setIsCompLoading] = useState(false);
     const [isAssignLoading, setIsAssignLoading] = useState(false);
+    const [siteAssignAckModal, setSiteAssignAckModal] = useState({
+        isOpen: false,
+        clientName: '',
+        siteName: '',
+        date: '',
+        scheduleType: '',
+        operativeName: '',
+        helperNames: [],
+        vehicleName: '',
+        instrumentNames: [],
+        time: ''
+    });
     
     // Reject Modal state
     const { isOpen: isRejectOpen, onOpen: onRejectOpen, onClose: onRejectClose } = useDisclosure();
@@ -9735,11 +9747,39 @@ const ScheduleMasterForm = () => {
                 response = await api.post('/schedule-master', payload);
             }
             if (response.data.success) {
+                const isActuallySent = response.data.whatsappSent === true;
+
+                if (isActuallySent) {
+                    const clientObj = clients.find(c => c._id === formData.client);
+                    const siteObj = sites.find(s => s._id === formData.site);
+                    const opObj = employees.find(e => e._id === formData.operative);
+                    const helpersArr = (formData.helpers || []).map(hId => employees.find(e => e._id === hId)?.name).filter(Boolean);
+                    const vehObj = vehicles.find(v => v._id === formData.vehicle);
+                    const instArr = (formData.instruments || []).map(iId => instrList.find(i => i._id === iId)?.instrumentName || iId).filter(Boolean);
+
+                    setSiteAssignAckModal({
+                        isOpen: true,
+                        clientName: clientObj?.clientName || selectedClientName || 'Client',
+                        siteName: siteObj?.siteName || selectedSiteName || 'Site',
+                        date: formData.scheduleDate ? new Date(formData.scheduleDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today',
+                        scheduleType: formData.scheduleType || 'Daily Visit',
+                        operativeName: opObj?.name || 'Not assigned yet',
+                        helperNames: helpersArr,
+                        vehicleName: vehObj ? `${vehObj.vehicleNumber || ''} ${vehObj.vehicleName || ''}`.trim() : 'None',
+                        instrumentNames: instArr,
+                        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                    });
+                }
+
                 toast({
                     title: editId ? 'Updated!' : 'Scheduled!',
-                    description: response.data.message,
-                    status: 'success',
-                    duration: 3000
+                    description: isActuallySent 
+                        ? `${response.data.message} & WhatsApp sent successfully.`
+                        : response.data.whatsappFailedCount > 0 
+                            ? `${response.data.message} (Note: WhatsApp could not be sent: ${response.data.whatsappErrors?.[0] || 'Session not ready'})`
+                            : response.data.message,
+                    status: (response.data.whatsappFailedCount > 0 && !isActuallySent) ? 'warning' : 'success',
+                    duration: 4000
                 });
                 const targetViewDate = formData.scheduleDate;
                 handleClear();
@@ -10296,7 +10336,36 @@ const ScheduleMasterForm = () => {
                     try {
                         const res = await api.put(`/schedule-master/${assignTarget._id}`, payload);
                         if (res.data.success) {
-                            toast({ title: 'Resources Updated', status: 'success' });
+                            const isActuallySent = res.data.whatsappSent === true;
+
+                            if (isActuallySent) {
+                                const clientName = assignTarget.client?.clientName || 'Client';
+                                const siteName = assignTarget.site?.siteName || 'Site';
+                                const opObj = employees.find(e => e._id === payload.operative);
+                                const helpersArr = (payload.helpers || []).map(hId => employees.find(e => e._id === hId)?.name).filter(Boolean);
+                                const vehObj = vehicles.find(v => v._id === payload.vehicle);
+                                const instArr = (payload.instruments || []).map(iId => instrList.find(i => i._id === iId)?.instrumentName || iId).filter(Boolean);
+
+                                setSiteAssignAckModal({
+                                    isOpen: true,
+                                    clientName,
+                                    siteName,
+                                    date: assignTarget.scheduleDate ? new Date(assignTarget.scheduleDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today',
+                                    scheduleType: assignTarget.scheduleType || 'Daily Visit',
+                                    operativeName: opObj?.name || assignTarget.operative?.name || 'Assigned',
+                                    helperNames: helpersArr.length > 0 ? helpersArr : (assignTarget.helpers || []).map(h => h.name).filter(Boolean),
+                                    vehicleName: vehObj ? `${vehObj.vehicleNumber || ''} ${vehObj.vehicleName || ''}`.trim() : 'None',
+                                    instrumentNames: instArr,
+                                    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                                });
+                            }
+
+                            toast({ 
+                                title: 'Resources Updated', 
+                                description: isActuallySent ? 'WhatsApp assignment dispatched successfully.' : (res.data.whatsappFailedCount > 0 ? `WhatsApp dispatch failed: ${res.data.whatsappErrors?.[0] || 'Session not ready'}` : undefined),
+                                status: (res.data.whatsappFailedCount > 0 && !isActuallySent) ? 'warning' : 'success',
+                                duration: 4000
+                            });
                             onAssignClose();
                             const sRes = await api.get(`/schedule-master?date=${viewDate}`);
                             if (sRes.data.success) setSchedules(sRes.data.data);
@@ -10857,6 +10926,101 @@ const ScheduleMasterForm = () => {
                                 Confirm Restore
                             </Button>
                         </HStack>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── SITE ASSIGNMENT ACKNOWLEDGEMENT MODAL ── */}
+            <Modal isOpen={siteAssignAckModal.isOpen} onClose={() => setSiteAssignAckModal(p => ({ ...p, isOpen: false }))} isCentered size="md">
+                <ModalOverlay backdropFilter="blur(5px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" p={2} boxShadow="2xl">
+                    <ModalHeader display="flex" alignItems="center" gap={3} pb={2}>
+                        <Box p={2.5} bg="blue.100" borderRadius="xl">
+                            <Icon as={FaCheckCircle} color="blue.600" w={6} h={6} />
+                        </Box>
+                        <Box>
+                            <Heading fontSize="lg" fontWeight="800" color="blue.700">Site Assigned &amp; Scheduled!</Heading>
+                            <Text fontSize="xs" color="gray.500" fontWeight="normal">Resources allocated &amp; team notified via WhatsApp.</Text>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton mt={3} mr={3} borderRadius="full" />
+
+                    <ModalBody py={4}>
+                        <Stack spacing={3}>
+                            <Box p={3.5} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                <SimpleGrid columns={2} spacing={2} fontSize="xs">
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Site Name:</Text>
+                                        <Text fontWeight="800" color="blue.800" fontSize="sm">{siteAssignAckModal.siteName}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Client:</Text>
+                                        <Text fontWeight="700" color="gray.800">{siteAssignAckModal.clientName}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Schedule Date:</Text>
+                                        <Text fontWeight="700" color="gray.700">📅 {siteAssignAckModal.date}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Type / Shift:</Text>
+                                        <Badge colorScheme="purple" fontSize="2xs" px={2} py={0.5} borderRadius="md">{siteAssignAckModal.scheduleType}</Badge>
+                                    </Box>
+                                </SimpleGrid>
+                            </Box>
+
+                            <Box p={3} bg="blue.50/60" borderRadius="xl" border="1px solid" borderColor="blue.100" fontSize="xs">
+                                <Text fontWeight="700" color="blue.900" mb={1.5}>Assigned Resources:</Text>
+                                <SimpleGrid columns={2} spacing={1.5}>
+                                    <Box>
+                                        <Text color="gray.500" fontSize="2xs">Operator:</Text>
+                                        <Text fontWeight="700" color="gray.800">👷 {siteAssignAckModal.operativeName}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontSize="2xs">Vehicle:</Text>
+                                        <Text fontWeight="700" color="gray.800">🚗 {siteAssignAckModal.vehicleName}</Text>
+                                    </Box>
+                                    {siteAssignAckModal.helperNames.length > 0 && (
+                                        <Box gridColumn="span 2">
+                                            <Text color="gray.500" fontSize="2xs">Helpers ({siteAssignAckModal.helperNames.length}):</Text>
+                                            <Text fontWeight="600" color="gray.800">🤝 {siteAssignAckModal.helperNames.join(', ')}</Text>
+                                        </Box>
+                                    )}
+                                    {siteAssignAckModal.instrumentNames.length > 0 && (
+                                        <Box gridColumn="span 2">
+                                            <Text color="gray.500" fontSize="2xs">Instruments ({siteAssignAckModal.instrumentNames.length}):</Text>
+                                            <Text fontWeight="600" color="gray.800">📐 {siteAssignAckModal.instrumentNames.join(', ')}</Text>
+                                        </Box>
+                                    )}
+                                </SimpleGrid>
+                            </Box>
+
+                            <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <HStack spacing={2} align="start">
+                                    <Icon as={FaCheckCircle} color="green.600" mt={0.5} />
+                                    <Box fontSize="xs">
+                                        <Text fontWeight="700" color="green.800">WhatsApp Dispatch &amp; Schedule Active:</Text>
+                                        <Text color="green.700" fontSize="2xs" mt={0.5}>
+                                            • Assignment message with location link sent to Operator and Helper(s).
+                                        </Text>
+                                        <Text color="green.700" fontSize="2xs">
+                                            • Visit reflected on the master calendar &amp; daily tracking schedule.
+                                        </Text>
+                                    </Box>
+                                </HStack>
+                            </Box>
+                        </Stack>
+                    </ModalBody>
+
+                    <ModalFooter pt={2}>
+                        <Button
+                            w="full"
+                            colorScheme="blue"
+                            borderRadius="xl"
+                            onClick={() => setSiteAssignAckModal(p => ({ ...p, isOpen: false }))}
+                            fontWeight="700"
+                        >
+                            Understood &amp; Done
+                        </Button>
                     </ModalFooter>
                 </ModalContent>
             </Modal>

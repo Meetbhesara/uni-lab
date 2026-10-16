@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
     Box, Stack, Heading, Text, Button, FormControl, FormLabel, Input, 
     Select, SimpleGrid, Card, CardBody, HStack, VStack, Icon, useToast, 
-    Divider, IconButton, Flex, Badge, Tag, InputGroup, InputLeftElement
+    Divider, IconButton, Flex, Badge, Tag, InputGroup, InputLeftElement,
+    Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton
 } from '@chakra-ui/react';
-import { FaPlus, FaTrash, FaSave, FaRupeeSign, FaCalendarAlt, FaBuilding } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaSave, FaRupeeSign, FaCalendarAlt, FaBuilding, FaCheckCircle } from 'react-icons/fa';
 import api from '../api/axios';
 
 const EmployeeExpenses = () => {
@@ -19,6 +20,24 @@ const EmployeeExpenses = () => {
 
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+
+    const [expenseAckModal, setExpenseAckModal] = useState({
+        isOpen: false,
+        date: '',
+        attendance: '',
+        attendanceRemark: '',
+        breakdown: {
+            breakfast: 0,
+            lunch: 0,
+            dinner: 0,
+            fuel: 0,
+            foodTotal: 0,
+            otherList: [],
+            otherTotal: 0,
+            grandTotal: 0
+        },
+        sites: []
+    });
 
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
@@ -196,14 +215,58 @@ const EmployeeExpenses = () => {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.post('/employee-expense', formData, {
+            const res = await api.post('/employee-expense', formData, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            toast({
-                title: "Saved Successfully",
-                status: "success",
-                duration: 2000
-            });
+
+            const isActuallySent = res.data?.whatsappSent === true;
+
+            if (isActuallySent) {
+                const bf = Number(formData.expenses?.breakfast) || 0;
+                const lun = Number(formData.expenses?.lunch) || 0;
+                const din = Number(formData.expenses?.dinner) || 0;
+                const fuel = Number(formData.expenses?.petrol) || 0;
+                const foodTotal = bf + lun + din;
+                const otherList = (formData.otherExpensesList || []).map(o => ({ name: o.expenseName || 'Other', amount: Number(o.amount) || 0 }));
+                const otherTotal = otherList.reduce((acc, curr) => acc + curr.amount, 0);
+                const grandTotal = foodTotal + fuel + otherTotal;
+
+                const siteNames = (formData.siteIds || []).map(sId => {
+                    const sObj = sites.find(s => s._id === sId);
+                    return sObj?.siteName || 'Site';
+                });
+
+                setExpenseAckModal({
+                    isOpen: true,
+                    date: formData.date ? new Date(formData.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today',
+                    attendance: formData.attendance || 'Present',
+                    attendanceRemark: formData.attendanceRemark || '',
+                    breakdown: {
+                        breakfast: bf,
+                        lunch: lun,
+                        dinner: din,
+                        fuel: fuel,
+                        foodTotal,
+                        otherList,
+                        otherTotal,
+                        grandTotal
+                    },
+                    sites: siteNames
+                });
+
+                toast({
+                    title: "Saved Successfully & WhatsApp Sent",
+                    status: "success",
+                    duration: 3000
+                });
+            } else {
+                toast({
+                    title: "Saved Successfully",
+                    description: res.data?.whatsappError ? `WhatsApp notification not sent: ${res.data.whatsappError}` : undefined,
+                    status: "info",
+                    duration: 3000
+                });
+            }
             fetchMyExpenses();
             // Reset form partly
             setFormData({
@@ -502,6 +565,127 @@ const EmployeeExpenses = () => {
                     </CardBody>
                 </Card>
             </SimpleGrid>
+
+            {/* ── EXPENSE APPLIED ACKNOWLEDGEMENT MODAL ── */}
+            <Modal isOpen={expenseAckModal.isOpen} onClose={() => setExpenseAckModal(p => ({ ...p, isOpen: false }))} isCentered size="md">
+                <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" p={2} boxShadow="2xl">
+                    <ModalHeader display="flex" alignItems="center" gap={3} pb={2}>
+                        <Box p={2.5} bg="green.100" borderRadius="xl">
+                            <Icon as={FaCheckCircle} color="green.600" w={6} h={6} />
+                        </Box>
+                        <Box>
+                            <Heading fontSize="lg" fontWeight="800" color="green.800">Expense Applied &amp; Submitted!</Heading>
+                            <Text fontSize="xs" color="gray.500" fontWeight="normal">Daily expenses recorded &amp; ledger updated.</Text>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton mt={3} mr={3} borderRadius="full" />
+
+                    <ModalBody py={3}>
+                        <VStack spacing={3} align="stretch">
+                            {/* Date & Attendance Card */}
+                            <Box p={3} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                <SimpleGrid columns={2} spacing={2} fontSize="xs">
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Expense Date:</Text>
+                                        <Text fontWeight="700" color="gray.700">📅 {expenseAckModal.date}</Text>
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Attendance:</Text>
+                                        <Badge colorScheme={expenseAckModal.attendance === 'Present' ? 'green' : expenseAckModal.attendance === 'Half Day' ? 'orange' : 'red'} fontSize="2xs">
+                                            {expenseAckModal.attendance}
+                                        </Badge>
+                                    </Box>
+                                </SimpleGrid>
+                            </Box>
+
+                            {/* Expense Breakdown Card */}
+                            <Box p={3} bg="green.50/40" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <Flex justify="space-between" align="center" mb={2}>
+                                    <Text fontWeight="800" fontSize="xs" color="green.900">Applied Breakdown</Text>
+                                    <Badge colorScheme="green" fontSize="xs" px={2} py={0.5} borderRadius="full">
+                                        Total: ₹{expenseAckModal.breakdown.grandTotal.toLocaleString('en-IN')}
+                                    </Badge>
+                                </Flex>
+
+                                <SimpleGrid columns={2} spacing={1.5} fontSize="xs">
+                                    {expenseAckModal.breakdown.foodTotal > 0 && (
+                                        <Box bg="white" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                            <Text color="gray.500" fontSize="2xs">Food Total:</Text>
+                                            <Text fontWeight="700" color="gray.800">
+                                                ₹{expenseAckModal.breakdown.foodTotal.toLocaleString('en-IN')}
+                                                <Text as="span" fontSize="2xs" color="gray.400" ml={1}>
+                                                    ({expenseAckModal.breakdown.breakfast}/{expenseAckModal.breakdown.lunch}/{expenseAckModal.breakdown.dinner})
+                                                </Text>
+                                            </Text>
+                                        </Box>
+                                    )}
+                                    {expenseAckModal.breakdown.fuel > 0 && (
+                                        <Box bg="white" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                            <Text color="gray.500" fontSize="2xs">Fuel:</Text>
+                                            <Text fontWeight="700" color="gray.800">₹{expenseAckModal.breakdown.fuel.toLocaleString('en-IN')}</Text>
+                                        </Box>
+                                    )}
+                                    {expenseAckModal.breakdown.otherTotal > 0 && (
+                                        <Box bg="white" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100" gridColumn="span 2">
+                                            <Text color="gray.500" fontSize="2xs">Other Expenses:</Text>
+                                            <Text fontWeight="700" color="purple.700">₹{expenseAckModal.breakdown.otherTotal.toLocaleString('en-IN')}</Text>
+                                            <VStack align="stretch" spacing={0.5} mt={1}>
+                                                {expenseAckModal.breakdown.otherList.map((oe, idx) => (
+                                                    <Flex key={idx} justify="space-between" fontSize="2xs" color="gray.600">
+                                                        <Text>• {oe.name}</Text>
+                                                        <Text fontWeight="600">₹{oe.amount}</Text>
+                                                    </Flex>
+                                                ))}
+                                            </VStack>
+                                        </Box>
+                                    )}
+                                </SimpleGrid>
+                            </Box>
+
+                            {/* Sites Linked */}
+                            {expenseAckModal.sites.length > 0 && (
+                                <Box p={2.5} bg="gray.50" borderRadius="xl" fontSize="xs">
+                                    <Text fontSize="2xs" color="gray.500" fontWeight="700">Allocated Sites ({expenseAckModal.sites.length}):</Text>
+                                    {expenseAckModal.sites.map((sName, i) => (
+                                        <Text key={i} fontSize="xs" fontWeight="600" color="gray.800">
+                                            📍 {sName}
+                                        </Text>
+                                    ))}
+                                </Box>
+                            )}
+
+                            {/* Confirmation Banner */}
+                            <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <HStack spacing={2} align="start">
+                                    <Icon as={FaCheckCircle} color="green.600" mt={0.5} />
+                                    <Box fontSize="xs">
+                                        <Text fontWeight="700" color="green.800">Expense Applied &amp; Confirmed:</Text>
+                                        <Text color="green.700" fontSize="2xs" mt={0.5}>
+                                            • Entry recorded on your employee daily sheet.
+                                        </Text>
+                                        <Text color="green.700" fontSize="2xs">
+                                            • Automated WhatsApp notification queued to registered mobile.
+                                        </Text>
+                                    </Box>
+                                </HStack>
+                            </Box>
+                        </VStack>
+                    </ModalBody>
+
+                    <ModalFooter pt={2}>
+                        <Button
+                            w="full"
+                            colorScheme="green"
+                            borderRadius="xl"
+                            onClick={() => setExpenseAckModal(p => ({ ...p, isOpen: false }))}
+                            fontWeight="700"
+                        >
+                            Understood &amp; Done
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </Box>
     );
 };

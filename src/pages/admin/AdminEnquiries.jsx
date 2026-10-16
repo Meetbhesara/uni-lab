@@ -134,6 +134,20 @@ const AdminEnquiries = () => {
     const [customNotes, setCustomNotes] = useState("(1) Payment After Performer Invoice\n(2) Transportation And Packing Charge Will be Extra As Per Actual");
     const [newPolicy, setNewPolicy] = useState({ label: '', value: '' });
 
+    // Quotation Delivery & Google Contact Sync Acknowledgement Modal State
+    const [quotationAckModal, setQuotationAckModal] = useState({
+        isOpen: false,
+        phone: '',
+        clientName: '',
+        companyName: '',
+        refNo: '',
+        grandTotal: 0,
+        time: '',
+        whatsappSent: true,
+        whatsappError: null,
+        googleContactResult: null
+    });
+
     // Product Picker Modal State
     const { isOpen: isPickerOpen, onOpen: onPickerOpen, onClose: onPickerClose } = useDisclosure();
     const [pickerCategory, setPickerCategory] = useState(null);
@@ -367,16 +381,41 @@ const AdminEnquiries = () => {
         const { type, id, status } = statusConfirmData;
         try {
             const endpoint = type === 'enquiry' ? `/enquiries/${id}` : `/quotations/${id}`;
-            await api.put(endpoint, { status });
+            const res = await api.put(endpoint, { status });
             toast({
                 title: `Success`,
-                description: `Quotation has been moved to ${status} status.`,
+                description: `${type === 'enquiry' ? 'Enquiry' : 'Quotation'} updated to ${status}.`,
                 status: "success",
                 duration: 3000,
                 isClosable: true
             });
             onStatusConfirmClose();
             fetchData();
+
+            // If Google Contact was synced with changes, show acknowledgement modal
+            if (res.data?.googleContactResult && (
+                (res.data.googleContactResult.fieldChanges?.addedFields && res.data.googleContactResult.fieldChanges.addedFields.length > 0) ||
+                (res.data.googleContactResult.fieldChanges?.updatedFields && res.data.googleContactResult.fieldChanges.updatedFields.length > 0)
+            )) {
+                const targetObj = type === 'enquiry' 
+                    ? enquiries.find(e => e._id === id) 
+                    : (quotations.find(q => q._id === id) || processedQuotations.find(q => q._id === id));
+                const clientPhone = targetObj?.phone || targetObj?.mobile || res.data.phone || '';
+                const clientName = targetObj?.contactPersonName || targetObj?.companyName || targetObj?.partyName || targetObj?.Name || res.data.Name || 'Client';
+
+                setQuotationAckModal({
+                    isOpen: true,
+                    phone: (clientPhone || '').replace(/\D/g, '').slice(-10),
+                    clientName,
+                    companyName: targetObj?.companyName || targetObj?.partyName || '',
+                    refNo: targetObj?.refNo || `Enquiry Status: ${status}`,
+                    grandTotal: targetObj?.grandTotal || targetObj?.totalAmount || 0,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+                    whatsappSent: null,
+                    whatsappError: null,
+                    googleContactResult: res.data.googleContactResult
+                });
+            }
         } catch (error) {
             console.error("Status update failed", error);
             toast({ title: "Failed to update status", status: "error" });
@@ -1068,6 +1107,23 @@ const AdminEnquiries = () => {
             setEnquiries(prev => prev.map(e => e._id === selectedEnquiry._id ? { ...e, isSeen: true } : e));
 
             toast({ title: "Quotation Created & Saved", status: "success" });
+
+            // If Google Contact Result was returned from creating quotation, show acknowledgment modal
+            if (response.data?.googleContactResult) {
+                setQuotationAckModal({
+                    isOpen: true,
+                    phone: (quoteMobile || '').replace(/\D/g, '').slice(-10),
+                    clientName: quoteContactPerson || quotePartyName || 'Client',
+                    companyName: quotePartyName || '',
+                    refNo: response.data.refNo || 'Quotation',
+                    grandTotal: flatTotals.grandTotal || quoteTotals.total || 0,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+                    whatsappSent: null, // Just created quote, not dispatched on WhatsApp yet
+                    whatsappError: null,
+                    googleContactResult: response.data.googleContactResult
+                });
+            }
+
             setSelectedEnquiry(null);
             setIsCreatingQuote(false);
 
@@ -1089,15 +1145,57 @@ const AdminEnquiries = () => {
             const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Client';
             const message = `Hello *${clientName}*,\n\nHere is your *Quotation* from *Uni-BC*.\n\n*Reference:* ${q.refNo || 'N/A'}\n*Date:* ${new Date(q.createdAt).toLocaleDateString('en-GB')}\n*Grand Total:* ₹${q.grandTotal || '0'}\n\nThank you!`;
 
-            await api.post('/whatsapp/send-quotation', {
+            const res = await api.post('/whatsapp/send-quotation', {
                 quotationId: q._id,
                 phone: phoneNumber,
                 message: message
             });
-            toast({ title: "Quotation sent on WhatsApp!", status: "success" });
+
+            const data = res.data || {};
+            const cleanDigits = (phoneNumber || '').replace(/\D/g, '').slice(-10);
+
+            // Pop up the detailed Acknowledgement Modal with WhatsApp & Google Contacts sync status
+            setQuotationAckModal({
+                isOpen: true,
+                phone: cleanDigits,
+                clientName: data.clientName || clientName,
+                companyName: data.companyName || q.partyName || '',
+                refNo: q.refNo || 'N/A',
+                grandTotal: q.grandTotal || q.totalAmount || 0,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+                whatsappSent: data.whatsappSent !== false,
+                whatsappError: data.whatsappError || null,
+                googleContactResult: data.googleContactResult || null
+            });
+
+            if (data.whatsappSent !== false) {
+                toast({ title: "Quotation sent on WhatsApp!", status: "success" });
+            } else {
+                toast({
+                    title: "WhatsApp Notice",
+                    description: data.whatsappError || "Delivery connection issue. Google Contact was synced.",
+                    status: "warning"
+                });
+            }
         } catch (e) {
             console.error(e);
-            toast({ title: "Failed to send", status: "error" });
+            const errRes = e.response?.data;
+            if (errRes && errRes.googleContactResult) {
+                setQuotationAckModal({
+                    isOpen: true,
+                    phone: (phoneNumber || '').replace(/\D/g, '').slice(-10),
+                    clientName: q.partyName || 'Client',
+                    companyName: '',
+                    refNo: q.refNo || 'N/A',
+                    grandTotal: q.grandTotal || q.totalAmount || 0,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+                    whatsappSent: false,
+                    whatsappError: errRes.error || e.message,
+                    googleContactResult: errRes.googleContactResult
+                });
+            } else {
+                toast({ title: "Failed to send", description: errRes?.error || e.message, status: "error" });
+            }
         } finally {
             setSendingWhatsappId(null);
         }
@@ -1734,6 +1832,18 @@ const AdminEnquiries = () => {
                                                         <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status === 'Done' ? 'Accepted' : 'Rejected'}</Badge></Td>
                                                         <Td textAlign="right">
                                                             <HStack spacing={2} justify="flex-end">
+                                                                <Button
+                                                                    size="sm"
+                                                                    bg="#25D366"
+                                                                    color="white"
+                                                                    _hover={{ bg: "#128C7E" }}
+                                                                    leftIcon={<FaWhatsapp />}
+                                                                    isLoading={sendingWhatsappId === q._id}
+                                                                    isDisabled={!!sendingWhatsappId}
+                                                                    onClick={() => handleSendWhatsApp(q)}
+                                                                >
+                                                                    WhatsApp
+                                                                </Button>
                                                                 <Button size="sm" variant="outline" leftIcon={<FiEye />} onClick={() => handleViewQuotation(q)}>View Quote</Button>
                                                                 {q.status === 'Done' && (
                                                                     <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
@@ -2486,10 +2596,23 @@ const AdminEnquiries = () => {
                     <ModalHeader>
                         <Flex justify="space-between" align="center" pr={8}>
                             <Text>Quotation Preview</Text>
-                            <Button
-                                size="sm"
-                                leftIcon={<FiPrinter />}
-                                colorScheme="blue"
+                            <HStack spacing={3}>
+                                <Button
+                                    size="sm"
+                                    leftIcon={<FaWhatsapp />}
+                                    bg="#25D366"
+                                    color="white"
+                                    _hover={{ bg: "#128C7E" }}
+                                    isLoading={sendingWhatsappId === selectedQuotation?._id}
+                                    isDisabled={!!sendingWhatsappId}
+                                    onClick={() => handleSendWhatsApp(selectedQuotation)}
+                                >
+                                    Send on WhatsApp
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    leftIcon={<FiPrinter />}
+                                    colorScheme="blue"
                                 onClick={() => {
                                     const win = window.open('', '_blank');
                                     win.document.write(`<html><head><style>@media print{ * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } button{display:none} img { max-width: 100%; height: auto; } }</style></head><body>`);
@@ -2509,6 +2632,7 @@ const AdminEnquiries = () => {
                             >
                                 Print Quotation
                             </Button>
+                            </HStack>
                         </Flex>
                     </ModalHeader>
                     <ModalCloseButton />
@@ -2902,6 +3026,203 @@ const AdminEnquiries = () => {
                     </ModalBody>
                     <ModalFooter p={4} borderTop="1px solid" borderColor="gray.100">
                         <Button variant="ghost" borderRadius="full" w="full" onClick={onFollowUpClose}>Close</Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* QUOTATION & GOOGLE CONTACT ACKNOWLEDGEMENT MODAL */}
+            <Modal
+                isOpen={quotationAckModal.isOpen}
+                onClose={() => setQuotationAckModal(p => ({ ...p, isOpen: false }))}
+                isCentered
+                size="md"
+            >
+                <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+                <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader
+                        bg={
+                            quotationAckModal.whatsappSent === true
+                                ? "linear-gradient(135deg, #128C7E 0%, #25D366 100%)"
+                                : quotationAckModal.whatsappSent === false
+                                    ? "linear-gradient(135deg, #E53E3E 0%, #DD6B20 100%)"
+                                    : "linear-gradient(135deg, #2B6CB0 0%, #4299E1 100%)"
+                        }
+                        color="white"
+                        py={4}
+                    >
+                        <HStack spacing={3} align="center">
+                            <Box bg="whiteAlpha.300" p={2.5} borderRadius="full">
+                                {quotationAckModal.whatsappSent === true ? (
+                                    <FaWhatsapp size={22} />
+                                ) : quotationAckModal.whatsappSent === false ? (
+                                    <FaTimesCircle size={22} />
+                                ) : (
+                                    <FaCheckCircle size={22} />
+                                )}
+                            </Box>
+                            <Box>
+                                <Text fontSize="md" fontWeight="800">
+                                    {quotationAckModal.whatsappSent === true
+                                        ? "WhatsApp Delivery & Contact Synced"
+                                        : quotationAckModal.whatsappSent === false
+                                            ? "WhatsApp Notice & Contact Synced"
+                                            : "Quotation Saved & Contact Synced"}
+                                </Text>
+                                <Text fontSize="xs" fontWeight="normal" opacity={0.9}>
+                                    {quotationAckModal.refNo ? `Ref: ${quotationAckModal.refNo}` : 'Unique Lab Instruments'}
+                                </Text>
+                            </Box>
+                        </HStack>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" />
+                    <ModalBody p={5}>
+                        {/* Recipient Details & WhatsApp Status */}
+                        <Box bg="gray.50" p={3.5} borderRadius="xl" borderWidth="1px" borderColor="gray.100" mb={3}>
+                            <HStack justify="space-between" mb={2}>
+                                <Text fontSize="xs" color="gray.500" fontWeight="600">RECIPIENT / CLIENT</Text>
+                                {quotationAckModal.whatsappSent === true && (
+                                    <Badge colorScheme="green" variant="solid" borderRadius="full" px={2} fontSize="2xs">
+                                        WhatsApp Delivered
+                                    </Badge>
+                                )}
+                                {quotationAckModal.whatsappSent === false && (
+                                    <Badge colorScheme="orange" variant="solid" borderRadius="full" px={2} fontSize="2xs">
+                                        WhatsApp Delivery Issue
+                                    </Badge>
+                                )}
+                                {quotationAckModal.whatsappSent === null && (
+                                    <Badge colorScheme="blue" variant="solid" borderRadius="full" px={2} fontSize="2xs">
+                                        Quotation Saved
+                                    </Badge>
+                                )}
+                            </HStack>
+
+                            <Text fontWeight="800" color="gray.800" fontSize="md">
+                                {quotationAckModal.clientName || 'Client'}
+                                {quotationAckModal.companyName ? ` (${quotationAckModal.companyName})` : ''}
+                            </Text>
+
+                            <HStack justify="space-between" mt={2} fontSize="xs" color="gray.600">
+                                <Text>📱 Phone: <Text as="span" fontWeight="700" color="gray.800">+91 {quotationAckModal.phone}</Text></Text>
+                                <Text>🕒 Time: <Text as="span" fontWeight="700" color="gray.800">{quotationAckModal.time}</Text></Text>
+                            </HStack>
+
+                            {quotationAckModal.grandTotal ? (
+                                <Text fontSize="xs" color="gray.600" mt={1}>
+                                    💰 Amount: <Text as="span" fontWeight="800" color="blue.600">₹{Number(quotationAckModal.grandTotal).toLocaleString('en-IN')}</Text>
+                                </Text>
+                            ) : null}
+
+                            {quotationAckModal.whatsappSent === false && quotationAckModal.whatsappError && (
+                                <Box mt={2} p={2} bg="orange.50" borderRadius="md" borderWidth="1px" borderColor="orange.200">
+                                    <Text fontSize="xs" color="orange.700" fontWeight="600">
+                                        ⚠️ WhatsApp Delivery Note: {quotationAckModal.whatsappError}
+                                    </Text>
+                                    <Text fontSize="2xs" color="gray.500" mt={0.5}>
+                                        (Client was saved/updated in Google Contacts. You can re-send via WhatsApp once connected.)
+                                    </Text>
+                                </Box>
+                            )}
+                        </Box>
+
+                        {/* Google Contact Sync Section */}
+                        {quotationAckModal.googleContactResult && (
+                            <Box
+                                p={3.5}
+                                bg={quotationAckModal.googleContactResult.success ? (quotationAckModal.googleContactResult.added ? 'green.50' : 'blue.50') : 'orange.50'}
+                                borderRadius="xl"
+                                borderWidth="1px"
+                                borderColor={quotationAckModal.googleContactResult.success ? (quotationAckModal.googleContactResult.added ? 'green.200' : 'blue.200') : 'orange.200'}
+                            >
+                                <HStack justify="space-between" align="center" mb={2}>
+                                    <Text
+                                        fontWeight="800"
+                                        fontSize="sm"
+                                        color={quotationAckModal.googleContactResult.success ? (quotationAckModal.googleContactResult.added ? 'green.700' : 'blue.700') : 'orange.700'}
+                                    >
+                                        {quotationAckModal.googleContactResult.success
+                                            ? (quotationAckModal.googleContactResult.added ? '✅ Google Contact Created' : '📝 Google Contact Updated')
+                                            : '⚠️ Google Contact Sync Info'}
+                                    </Text>
+                                    {quotationAckModal.phone && (
+                                        <Badge colorScheme="purple" fontSize="2xs" borderRadius="md">
+                                            EU-{quotationAckModal.phone.slice(-8)}
+                                        </Badge>
+                                    )}
+                                </HStack>
+
+                                {quotationAckModal.googleContactResult.contactName && (
+                                    <Text fontSize="xs" fontWeight="700" color="gray.700" mb={2}>
+                                        Contact: {quotationAckModal.googleContactResult.contactName}
+                                    </Text>
+                                )}
+
+                                {/* Newly Added Fields */}
+                                {quotationAckModal.googleContactResult.fieldChanges?.addedFields?.length > 0 && (
+                                    <Box mb={2.5}>
+                                        <Text fontWeight="700" color="green.700" fontSize="xs" mb={1}>
+                                            🆕 Newly Added Fields:
+                                        </Text>
+                                        <VStack align="stretch" spacing={1} pl={2}>
+                                            {quotationAckModal.googleContactResult.fieldChanges.addedFields.map((f, i) => (
+                                                <HStack key={i} spacing={2} fontSize="xs">
+                                                    <Badge colorScheme="green" fontSize="2xs" px={1.5}>{f.field}</Badge>
+                                                    <Text color="gray.700" isTruncated maxW="240px">{f.value}</Text>
+                                                </HStack>
+                                            ))}
+                                        </VStack>
+                                    </Box>
+                                )}
+
+                                {/* Updated Fields with Diff */}
+                                {quotationAckModal.googleContactResult.fieldChanges?.updatedFields?.length > 0 && (
+                                    <Box mb={2.5}>
+                                        <Text fontWeight="700" color="blue.700" fontSize="xs" mb={1}>
+                                            ✏️ Updated Fields:
+                                        </Text>
+                                        <VStack align="stretch" spacing={1.5} pl={2}>
+                                            {quotationAckModal.googleContactResult.fieldChanges.updatedFields.map((f, i) => (
+                                                <Box key={i}>
+                                                    <Badge colorScheme="blue" fontSize="2xs" mb={0.5} px={1.5}>{f.field}</Badge>
+                                                    <HStack spacing={1.5} fontSize="xs">
+                                                        <Text color="red.500" textDecoration="line-through">{f.before}</Text>
+                                                        <Text color="gray.400">→</Text>
+                                                        <Text color="green.600" fontWeight="700">{f.after}</Text>
+                                                    </HStack>
+                                                </Box>
+                                            ))}
+                                        </VStack>
+                                    </Box>
+                                )}
+
+                                {/* Already up to date */}
+                                {quotationAckModal.googleContactResult.success &&
+                                 !quotationAckModal.googleContactResult.fieldChanges?.addedFields?.length &&
+                                 !quotationAckModal.googleContactResult.fieldChanges?.updatedFields?.length && (
+                                    <Text fontSize="xs" color="gray.600">
+                                        ✅ All fields already synchronized in Google Contacts.
+                                    </Text>
+                                )}
+
+                                {/* Sync Error */}
+                                {!quotationAckModal.googleContactResult.success && (
+                                    <Text fontSize="xs" color="orange.700">
+                                        {quotationAckModal.googleContactResult.error || quotationAckModal.googleContactResult.reason || 'Sync could not be verified.'}
+                                    </Text>
+                                )}
+                            </Box>
+                        )}
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" py={3}>
+                        <Button
+                            colorScheme={quotationAckModal.whatsappSent === false ? "orange" : "blue"}
+                            onClick={() => setQuotationAckModal(p => ({ ...p, isOpen: false }))}
+                            size="sm"
+                            borderRadius="lg"
+                            w="full"
+                        >
+                            Acknowledge & Close
+                        </Button>
                     </ModalFooter>
                 </ModalContent>
             </Modal>

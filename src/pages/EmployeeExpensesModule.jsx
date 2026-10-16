@@ -2680,6 +2680,27 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
 
     // Fetch Day Schedules on Date change
     const [committedExpenses, setCommittedExpenses] = useState([]);
+    const [expenseAckModal, setExpenseAckModal] = useState({
+        isOpen: false,
+        employeeName: '',
+        empId: '',
+        date: '',
+        attendance: '',
+        attendanceRemark: '',
+        breakdown: {
+            breakfast: 0,
+            lunch: 0,
+            dinner: 0,
+            fuel: 0,
+            fuelType: 'Petrol',
+            foodTotal: 0,
+            otherList: [],
+            otherTotal: 0,
+            grandTotal: 0
+        },
+        sites: [],
+        totalFilesCount: 0
+    });
     const [selectedExpenseForView, setSelectedExpenseForView] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
@@ -3306,7 +3327,73 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
             });
 
             if (res.data.success) {
-                toast({ title: 'Expense Saved Successfully', status: 'success' });
+                // Compute breakdown for acknowledgement
+                const bf = Number(cleanStandardExpenses.breakfast) || 0;
+                const lun = Number(cleanStandardExpenses.lunch) || 0;
+                const din = Number(cleanStandardExpenses.dinner) || 0;
+                const fuel = Number(cleanStandardExpenses.petrol) || 0;
+                const foodTotal = bf + lun + din;
+                const otherList = otherExpsToSend.map(o => ({ name: o.expenseName, amount: Number(o.amount) || 0 }));
+                const otherTotal = otherList.reduce((acc, curr) => acc + curr.amount, 0);
+                const grandTotal = foodTotal + fuel + otherTotal;
+
+                let filesCount = 0;
+                Object.keys(expenseFiles).forEach(k => { filesCount += (expenseFiles[k] || []).length; });
+                otherExpenses.forEach(oe => { filesCount += (oe.files || []).length; });
+                allocations.forEach(al => {
+                    if (al.files) {
+                        filesCount += (al.files.photos || []).length;
+                        filesCount += (al.files.dailyReports || []).length;
+                        filesCount += (al.files.data || []).length;
+                        filesCount += (al.files.drawing || []).length;
+                    }
+                });
+
+                const allocatedSiteDetails = allocations.map(al => {
+                    const s = sites.find(x => x._id === al.siteId);
+                    const c = clients.find(x => x._id === al.clientId);
+                    return {
+                        siteName: s?.siteName || 'Site',
+                        clientName: c?.clientName || '',
+                        ledger: al.ledger || '',
+                        quantity: al.quantity || 0
+                    };
+                });
+
+                const isActuallySent = res.data.whatsappSent === true;
+
+                if (isActuallySent) {
+                    setExpenseAckModal({
+                        isOpen: true,
+                        employeeName: selectedEmployee?.name || 'Employee',
+                        empId: selectedEmployee?.empId || '',
+                        date: date ? new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today',
+                        attendance: attendance || 'Present',
+                        attendanceRemark: attendanceRemark || '',
+                        breakdown: {
+                            breakfast: bf,
+                            lunch: lun,
+                            dinner: din,
+                            fuel: fuel,
+                            fuelType: fuelType || 'Petrol',
+                            foodTotal,
+                            otherList,
+                            otherTotal,
+                            grandTotal
+                        },
+                        sites: allocatedSiteDetails,
+                        totalFilesCount: filesCount
+                    });
+
+                    toast({ title: 'Expense Saved & WhatsApp Sent', status: 'success', duration: 3000 });
+                } else {
+                    toast({ 
+                        title: 'Expense Saved (WhatsApp Not Sent)', 
+                        description: res.data.whatsappError || 'WhatsApp notification could not be delivered to the employee.',
+                        status: 'warning',
+                        duration: 5000 
+                    });
+                }
                 
                 // 1. Update local state IMMEDIATELY for instant UI feedback
                 if (res.data.updatedEmployee && onUpdateEmployee) {
@@ -4849,6 +4936,138 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                     <ModalFooter bg="white" borderTop="1px solid" borderColor="gray.100">
                         <Button colorScheme="blue" onClick={() => setIsViewModalOpen(false)} borderRadius="xl" px={6}>
                             Close
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* ── EXPENSE APPLIED ACKNOWLEDGEMENT MODAL ── */}
+            <Modal isOpen={expenseAckModal.isOpen} onClose={() => setExpenseAckModal(p => ({ ...p, isOpen: false }))} isCentered size="md">
+                <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" p={2} boxShadow="2xl">
+                    <ModalHeader display="flex" alignItems="center" gap={3} pb={2}>
+                        <Box p={2.5} bg="green.100" borderRadius="xl">
+                            <Icon as={FaCheckCircle} color="green.600" w={6} h={6} />
+                        </Box>
+                        <Box>
+                            <Heading fontSize="lg" fontWeight="800" color="green.800">Expense Applied &amp; Logged!</Heading>
+                            <Text fontSize="xs" color="gray.500" fontWeight="normal">Daily expense registered &amp; employee account updated.</Text>
+                        </Box>
+                    </ModalHeader>
+                    <ModalCloseButton mt={3} mr={3} borderRadius="full" />
+
+                    <ModalBody py={3}>
+                        <VStack spacing={3} align="stretch">
+                            {/* Employee & Date Card */}
+                            <Box p={3} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                <SimpleGrid columns={2} spacing={2} fontSize="xs">
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Employee:</Text>
+                                        <Text fontWeight="800" color="gray.800" fontSize="sm">{expenseAckModal.employeeName}</Text>
+                                        {expenseAckModal.empId && <Text fontSize="2xs" color="gray.500">ID: {expenseAckModal.empId}</Text>}
+                                    </Box>
+                                    <Box>
+                                        <Text color="gray.500" fontWeight="600">Expense Date:</Text>
+                                        <Text fontWeight="700" color="gray.700">📅 {expenseAckModal.date}</Text>
+                                        <Badge mt={0.5} colorScheme={expenseAckModal.attendance === 'Present' ? 'green' : expenseAckModal.attendance === 'Half Day' ? 'orange' : 'red'} fontSize="2xs">
+                                            {expenseAckModal.attendance}
+                                        </Badge>
+                                    </Box>
+                                </SimpleGrid>
+                            </Box>
+
+                            {/* Expense Breakdown Card */}
+                            <Box p={3} bg="green.50/40" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <Flex justify="space-between" align="center" mb={2}>
+                                    <Text fontWeight="800" fontSize="xs" color="green.900">Applied Breakdown</Text>
+                                    <Badge colorScheme="green" fontSize="xs" px={2} py={0.5} borderRadius="full">
+                                        Total: ₹{expenseAckModal.breakdown.grandTotal.toLocaleString('en-IN')}
+                                    </Badge>
+                                </Flex>
+
+                                <SimpleGrid columns={2} spacing={1.5} fontSize="xs">
+                                    {expenseAckModal.breakdown.foodTotal > 0 && (
+                                        <Box bg="white" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                            <Text color="gray.500" fontSize="2xs">Food (B/L/D):</Text>
+                                            <Text fontWeight="700" color="gray.800">
+                                                ₹{expenseAckModal.breakdown.foodTotal.toLocaleString('en-IN')}
+                                                <Text as="span" fontSize="2xs" color="gray.400" ml={1}>
+                                                    ({expenseAckModal.breakdown.breakfast}/{expenseAckModal.breakdown.lunch}/{expenseAckModal.breakdown.dinner})
+                                                </Text>
+                                            </Text>
+                                        </Box>
+                                    )}
+                                    {expenseAckModal.breakdown.fuel > 0 && (
+                                        <Box bg="white" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100">
+                                            <Text color="gray.500" fontSize="2xs">{expenseAckModal.breakdown.fuelType || 'Fuel'}:</Text>
+                                            <Text fontWeight="700" color="gray.800">₹{expenseAckModal.breakdown.fuel.toLocaleString('en-IN')}</Text>
+                                        </Box>
+                                    )}
+                                    {expenseAckModal.breakdown.otherTotal > 0 && (
+                                        <Box bg="white" p={2} borderRadius="lg" border="1px solid" borderColor="gray.100" gridColumn="span 2">
+                                            <Text color="gray.500" fontSize="2xs">Other Expenses:</Text>
+                                            <Text fontWeight="700" color="purple.700">₹{expenseAckModal.breakdown.otherTotal.toLocaleString('en-IN')}</Text>
+                                            <VStack align="stretch" spacing={0.5} mt={1}>
+                                                {expenseAckModal.breakdown.otherList.map((oe, idx) => (
+                                                    <Flex key={idx} justify="space-between" fontSize="2xs" color="gray.600">
+                                                        <Text>• {oe.name}</Text>
+                                                        <Text fontWeight="600">₹{oe.amount}</Text>
+                                                    </Flex>
+                                                ))}
+                                            </VStack>
+                                        </Box>
+                                    )}
+                                </SimpleGrid>
+                            </Box>
+
+                            {/* Linked Sites & Uploads */}
+                            {(expenseAckModal.sites.length > 0 || expenseAckModal.totalFilesCount > 0) && (
+                                <Box p={2.5} bg="gray.50" borderRadius="xl" fontSize="xs">
+                                    {expenseAckModal.sites.length > 0 && (
+                                        <Box mb={expenseAckModal.totalFilesCount > 0 ? 1.5 : 0}>
+                                            <Text fontSize="2xs" color="gray.500" fontWeight="700">Linked Site Allocations:</Text>
+                                            {expenseAckModal.sites.map((st, i) => (
+                                                <Text key={i} fontSize="xs" fontWeight="600" color="gray.800">
+                                                    📍 {st.siteName} {st.ledger ? `(${st.ledger}${st.quantity ? ` - ${st.quantity}` : ''})` : ''}
+                                                </Text>
+                                            ))}
+                                        </Box>
+                                    )}
+                                    {expenseAckModal.totalFilesCount > 0 && (
+                                        <Text fontSize="2xs" color="teal.700" fontWeight="600">
+                                            📎 {expenseAckModal.totalFilesCount} bill(s) / site documentation uploaded
+                                        </Text>
+                                    )}
+                                </Box>
+                            )}
+
+                            {/* WhatsApp Notification Dispatch Notice */}
+                            <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <HStack spacing={2} align="start">
+                                    <Icon as={FaCheckCircle} color="green.600" mt={0.5} />
+                                    <Box fontSize="xs">
+                                        <Text fontWeight="700" color="green.800">WhatsApp Dispatch &amp; Ledger Updated:</Text>
+                                        <Text color="green.700" fontSize="2xs" mt={0.5}>
+                                            • Automated WhatsApp expense statement sent to {expenseAckModal.employeeName}.
+                                        </Text>
+                                        <Text color="green.700" fontSize="2xs">
+                                            • Daily balance &amp; site visit quantities successfully updated.
+                                        </Text>
+                                    </Box>
+                                </HStack>
+                            </Box>
+                        </VStack>
+                    </ModalBody>
+
+                    <ModalFooter pt={2}>
+                        <Button
+                            w="full"
+                            colorScheme="green"
+                            borderRadius="xl"
+                            onClick={() => setExpenseAckModal(p => ({ ...p, isOpen: false }))}
+                            fontWeight="700"
+                        >
+                            Understood &amp; Done
                         </Button>
                     </ModalFooter>
                 </ModalContent>

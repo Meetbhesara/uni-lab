@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, Divider, VStack, Progress } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -365,11 +365,12 @@ const CartSidebar = () => {
 
 const Products = () => {
     const location = useLocation();
+    const { id: routeProductId } = useParams();
     const { user } = useAuth();
     const searchParams = new URLSearchParams(location.search);
     const searchQuery = searchParams.get('search') || '';
     const urlCategory = searchParams.get('category') || '';
-    const highlightId = searchParams.get('highlight') || '';
+    const highlightId = routeProductId || searchParams.get('highlight') || '';
     const { addToCart, cart } = useCart();
     const toast = useToast();
     const [products, setProducts] = useState([]);
@@ -377,6 +378,7 @@ const Products = () => {
     const [activeCategory, setActiveCategory] = useState(null);
     const [sliderProducts, setSliderProducts] = useState([]);
     const highlightRef = useRef(null);
+    const autoInquiryDoneRef = useRef(false);
     // In-memory cache for instant category switching (0ms roundtrip)
     const categoryCacheRef = useRef({});
 
@@ -392,21 +394,75 @@ const Products = () => {
         }
     }, [urlCategory]);
 
+    // If route has product ID (from /product/:id or ?highlight=id), auto-resolve category and switch to it
+    useEffect(() => {
+        autoInquiryDoneRef.current = false;
+        if (highlightId && !activeCategory) {
+            api.get(`/products/${highlightId}`)
+                .then(res => {
+                    const prod = res.data;
+                    if (!prod || !prod._id) return;
+                    let targetCat = null;
+                    if (prod.category) {
+                        const found = PRODUCT_CATEGORIES.find(c => 
+                            c.id.toLowerCase() === prod.category.toLowerCase() || 
+                            c.slug.toLowerCase() === prod.category.toLowerCase() || 
+                            c.title.toLowerCase() === prod.category.toLowerCase()
+                        );
+                        targetCat = found ? found.id : prod.category;
+                    }
+                    if (!targetCat) {
+                        const pName = (prod.name || '').toLowerCase();
+                        if (pName.includes('soil') || pName.includes('shear') || pName.includes('cbr') || pName.includes('liquid limit')) {
+                            targetCat = 'SOIL TESTING EQUIPMENT';
+                        } else if (pName.includes('bitumen') || pName.includes('ductility') || pName.includes('penetrometer')) {
+                            targetCat = 'BITUMIN TESTING EQUPMENT';
+                        } else if (pName.includes('survey') || pName.includes('level') || pName.includes('total station') || pName.includes('theodolite')) {
+                            targetCat = 'SURVEY & MEASURING INSTRUMENT';
+                        } else if (pName.includes('safety') || pName.includes('helmet') || pName.includes('jacket')) {
+                            targetCat = 'SAFETY PRODUCTS';
+                        } else if (pName.includes('mixer') || pName.includes('machine') || pName.includes('shaker')) {
+                            targetCat = 'Construction Machinery';
+                        } else {
+                            targetCat = 'CEMENT,CONCRETE & AGGREGAT TESTING EQUIPMENT';
+                        }
+                    }
+                    setActiveCategory(targetCat);
+                })
+                .catch(err => {
+                    console.warn('[Products] Could not auto-resolve category for product ID:', err.message);
+                });
+        }
+    }, [highlightId, activeCategory]);
+
     // Reset pagination when switching categories or running a new search
     useEffect(() => {
         setVisibleCount(PAGE_SIZE);
     }, [activeCategory, searchQuery]);
 
-    // If highlightId is present, ensure visibleCount expands to show the highlighted item
+    // If highlightId is present, ensure visibleCount expands to show the highlighted item, scroll to it, and open inquiry
     useEffect(() => {
         if (highlightId && products.length > 0) {
             const targetIndex = products.findIndex(p => (p._id === highlightId || p.id === highlightId));
-            if (targetIndex >= 0 && targetIndex >= visibleCount) {
-                setVisibleCount(targetIndex + 4);
+            if (targetIndex >= 0) {
+                if (targetIndex >= visibleCount) {
+                    setVisibleCount(targetIndex + 4);
+                }
+                const targetProduct = products[targetIndex];
+                setTimeout(() => {
+                    highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    if (!autoInquiryDoneRef.current && targetProduct) {
+                        autoInquiryDoneRef.current = true;
+                        // Add product to Enquiry Cart and open Enquiry Drawer
+                        addToCart(targetProduct);
+                        setTimeout(() => {
+                            const enquiryBtn = document.getElementById('enquiry-cart-btn');
+                            if (enquiryBtn) enquiryBtn.click();
+                        }, 500);
+                    }
+                }, 400);
             }
-            setTimeout(() => {
-                highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 400);
         }
     }, [highlightId, products, visibleCount]);
 
@@ -438,7 +494,7 @@ const Products = () => {
         const cacheKey = `${category || 'All'}__${search || ''}`;
 
         // If in cache and not searching, show instantly without network delay
-        if (categoryCacheRef.current[cacheKey] && !search) {
+        if (categoryCacheRef.current[cacheKey] && !search && !highlightId) {
             setProducts(categoryCacheRef.current[cacheKey]);
             setLoading(false);
             return;
@@ -452,10 +508,21 @@ const Products = () => {
 
             const res = await api.get(url);
             let finalData = Array.isArray(res.data) ? res.data : (res.data.data || []);
+
+            // If highlightId is present and not in finalData, fetch single product and prepend it
+            if (highlightId && !finalData.some(p => (p._id === highlightId || p.id === highlightId))) {
+                try {
+                    const singleRes = await api.get(`/products/${highlightId}`);
+                    if (singleRes.data && singleRes.data._id) {
+                        finalData = [singleRes.data, ...finalData];
+                    }
+                } catch (_) {}
+            }
+
             setProducts(finalData);
 
             // Store in cache for instant future retrieval
-            if (!search && category) {
+            if (!search && category && !highlightId) {
                 categoryCacheRef.current[cacheKey] = finalData;
             }
         } catch (err) {
