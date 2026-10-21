@@ -275,6 +275,60 @@ const CivilEngineeringServices = () => {
         ? `${currentSurveyObj.title.toLowerCase()}, counter survey, contour survey, counter survey ahmedabad, ${currentSurveyObj.slug.replace(/-/g, ' ')}, land survey ahmedabad, gujarat, uecivil`
         : "counter survey ahmedabad, contour survey, counter survey gujarat, topography survey gujarat, point marking survey, boundary demarcation survey, land survey ahmedabad, dgps survey gujarat, drone survey ahmedabad, layout marking, unique survey, uecivil";
 
+    // Dynamic JSON-LD schema for Google AI, Gemini, and SEO rich snippets
+    const serviceSchema = useMemo(() => {
+        const baseBreadcrumbs = [
+            { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://uecivil.com/" },
+            { "@type": "ListItem", "position": 2, "name": "Survey Services", "item": "https://uecivil.com/services" }
+        ];
+
+        if (currentSurveyObj) {
+            baseBreadcrumbs.push({
+                "@type": "ListItem",
+                "position": 3,
+                "name": currentSurveyObj.title,
+                "item": `https://uecivil.com/services?survey=${currentSurveyObj.slug}`
+            });
+        }
+
+        const faqItems = SURVEY_SOLUTIONS.map(s => ({
+            "@type": "Question",
+            "name": s.faqQuestion,
+            "acceptedAnswer": {
+                "@type": "Answer",
+                "text": s.faqAnswer
+            }
+        }));
+
+        return {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "BreadcrumbList",
+                    "itemListElement": baseBreadcrumbs
+                },
+                {
+                    "@type": "Service",
+                    "name": currentSurveyObj ? currentSurveyObj.title : "Land Surveying Services",
+                    "description": currentSurveyObj ? currentSurveyObj.summary : "Precision land surveying services in Ahmedabad, Gujarat, India.",
+                    "provider": {
+                        "@type": "LocalBusiness",
+                        "name": "Unique Survey",
+                        "url": "https://uecivil.com"
+                    },
+                    "areaServed": {
+                        "@type": "State",
+                        "name": "Gujarat"
+                    }
+                },
+                {
+                    "@type": "FAQPage",
+                    "mainEntity": faqItems
+                }
+            ]
+        };
+    }, [currentSurveyObj]);
+
     return (
         <Box py={{ base: 10, md: 16 }} bg="gray.50">
             {/* Dynamic SEO Tags for Services Page */}
@@ -283,6 +337,7 @@ const CivilEngineeringServices = () => {
                 description={serviceDescription}
                 keywords={serviceKeywords}
                 canonical={serviceCanonical}
+                schema={serviceSchema}
             />
 
             <Container maxW="container.xl">

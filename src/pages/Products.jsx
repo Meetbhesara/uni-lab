@@ -590,6 +590,64 @@ const Products = () => {
         ? `https://uecivil.com/products?category=${currentCategoryObj.slug}`
         : `https://uecivil.com/products`;
 
+    // Dynamic JSON-LD schema for Google AI, Gemini, and SEO rich snippets
+    const productSchema = useMemo(() => {
+        const breadcrumbs = [
+            { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://uecivil.com/" },
+            { "@type": "ListItem", "position": 2, "name": "Civil Lab Products", "item": "https://uecivil.com/products" }
+        ];
+
+        if (currentCategoryObj) {
+            breadcrumbs.push({
+                "@type": "ListItem",
+                "position": 3,
+                "name": currentCategoryObj.title,
+                "item": `https://uecivil.com/products?category=${currentCategoryObj.slug}`
+            });
+        }
+
+        const categoryFaqs = [
+            {
+                "@type": "Question",
+                "name": `What civil engineering equipment is included under ${currentCategoryObj ? currentCategoryObj.title : 'our catalog'}?`,
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": currentCategoryObj
+                        ? `Unique Engineering supplies certified ${currentCategoryObj.title} including ${currentCategoryObj.seoKeywords}. All machines come with manufacturer warranty and optional calibration certificates.`
+                        : "Unique Engineering supplies complete laboratory testing equipment for concrete, soil, bitumen, aggregate, cement, total stations, auto levels, and construction machinery."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "How to request a quotation or technical datasheet for testing equipment?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Add desired instruments to your inquiry cart on uecivil.com, call +91 90991 60391, or send an email to atulkanak@uniquelabservices.com for immediate quotation and catalog delivery."
+                }
+            }
+        ];
+
+        return {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "BreadcrumbList",
+                    "itemListElement": breadcrumbs
+                },
+                {
+                    "@type": "CollectionPage",
+                    "name": seoTitle,
+                    "description": seoDescription,
+                    "url": seoCanonical
+                },
+                {
+                    "@type": "FAQPage",
+                    "mainEntity": categoryFaqs
+                }
+            ]
+        };
+    }, [currentCategoryObj, seoTitle, seoDescription, seoCanonical]);
+
     return (
         <Container maxW={hasCartItems ? '7xl' : '6xl'} py={10}>
             {/* Dynamic Category SEO */}
@@ -598,6 +656,7 @@ const Products = () => {
                 description={seoDescription}
                 keywords={seoKeywords}
                 canonical={seoCanonical}
+                schema={productSchema}
             />
 
             <Flex gap={6} align="flex-start">

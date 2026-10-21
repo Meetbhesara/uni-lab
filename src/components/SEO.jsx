@@ -57,8 +57,8 @@ const SEO = ({
       setMeta('name', 'twitter:image', ogImage);
     }
 
-    // 5. Canonical URL
-    const finalCanonical = canonical || `https://uecivil.com${location.pathname}`;
+    // 5. Canonical URL (Ensure exact self-referencing canonical for every route & query param)
+    const finalCanonical = canonical || `https://uecivil.com${location.pathname}${location.search || ''}`;
     let canonicalLink = document.querySelector('link[rel="canonical"]');
     if (!canonicalLink) {
       canonicalLink = document.createElement('link');
@@ -68,6 +68,9 @@ const SEO = ({
     canonicalLink.setAttribute('href', finalCanonical);
     setMeta('property', 'og:url', finalCanonical);
     setMeta('name', 'twitter:url', finalCanonical);
+
+    // Robots meta guarantee
+    setMeta('name', 'robots', 'index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1');
 
     // 6. Optional Dynamic JSON-LD Schema
     let scriptTag = document.getElementById('dynamic-page-schema');
@@ -82,7 +85,7 @@ const SEO = ({
     } else if (scriptTag) {
       scriptTag.remove();
     }
-  }, [title, description, keywords, canonical, ogTitle, ogDescription, ogImage, schema, location.pathname]);
+  }, [title, description, keywords, canonical, ogTitle, ogDescription, ogImage, schema, location.pathname, location.search]);
 
   return null;
 };

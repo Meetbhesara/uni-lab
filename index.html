@@ -10,10 +10,7 @@
     <meta name="apple-mobile-web-app-title" content="uecivil.com" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
 
-    <!-- Canonical URL -->
-    <link rel="canonical" href="https://uecivil.com/" />
-
-    <!-- Primary SEO Meta Tags -->
+    <!-- Primary SEO Meta Tags (Dynamic Canonical managed by React SEO component) -->
     <title>Unique Engineering | Civil Lab Instruments & Survey Solutions Ahmedabad — uecivil.com</title>
     <meta name="title" content="Unique Engineering | Civil Lab Instruments & Survey Solutions Ahmedabad — uecivil.com" />
     <meta name="description" content="Unique Engineering (uecivil.com) — Premier Civil Engineering Instruments & Land Surveying Services in Ahmedabad, Gujarat. Specialists in Topography Survey, Counter Survey (Contour), Point Marking, DGPS & Drone Surveys, plus Concrete, Soil & Bitumen Lab Testing Equipment." />
@@ -44,20 +41,20 @@
     <meta name="twitter:description" content="Specialists in Topographical Land Survey, Counter Survey (Contour), Point Marking Demarcation, and Civil Lab Testing Equipment in Ahmedabad, Gujarat." />
     <meta name="twitter:image" content="https://uecivil.com/pwa-512x512.png" />
 
-    <!-- Google Structured Data (JSON-LD Schema) for LocalBusiness & Services -->
+    <!-- Google Structured Data (JSON-LD Schema) for LocalBusiness, OfferCatalog & AI FAQ -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@graph": [
         {
-          "@type": "LocalBusiness",
+          "@type": ["LocalBusiness", "ProfessionalService"],
           "@id": "https://uecivil.com/#organization",
           "name": "Unique Engineering & Unique Survey",
           "alternateName": ["uecivil.com", "Unique Lab & Services", "Unique Survey"],
           "url": "https://uecivil.com/",
           "logo": "https://uecivil.com/pwa-512x512.png",
           "image": "https://uecivil.com/pwa-512x512.png",
-          "description": "Leading civil engineering instruments provider and professional land surveying consultancy in Ahmedabad, Gujarat. Specialized in counter surveys (contour surveys), topography surveys, point marking, DGPS surveying, and civil lab testing equipment.",
+          "description": "Premier civil engineering lab testing equipment manufacturer and certified land surveying consultancy in Ahmedabad, Gujarat. Specialized in counter surveys (contour surveys), topography surveys, point marking, DGPS surveying, and civil lab testing equipment.",
           "telephone": "+919099160391",
           "email": "atulkanak@uniquelabservices.com",
           "priceRange": "₹₹",
@@ -131,13 +128,105 @@
             },
             "query-input": "required name=search_term_string"
           }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://uecivil.com/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What land surveying services does Unique Survey provide in Ahmedabad and Gujarat?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Unique Survey provides certified Counter Survey (Contour Survey), Land Topography Survey, Point Marking and Boundary Demarcation, DGPS RTK Geodetic Survey, Drone Aerial Mapping, Plot Layout Marking, and Road/Canal Alignment using high-precision Electronic Total Stations and GNSS receivers."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What civil engineering laboratory testing instruments are available at Unique Engineering?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Unique Engineering manufactures and supplies Compression Testing Machines (CTM 2000kN/3000kN), concrete cube moulds, soil direct shear and CBR testing apparatus, bitumen penetrometers, softening point apparatus, digital auto levels, and construction laboratory equipment compliant with IS, BS, and ASTM standards."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is a counter survey (contour survey) and why is it important?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "A counter survey (contour survey) maps ground points of equal elevation (Reduced Levels / RL). It allows civil engineers, architects, and builders to calculate precise cut-and-fill earthwork volumes, plan foundation depth, and design rainwater drainage gradients."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does Point Marking & Boundary Demarcation prevent property disputes?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Point marking uses high-precision DGPS and Total Station instruments to correlate revenue department record maps (Village Form No. 7/12, TP schemes, CTS) with actual satellite coordinates, fixing physical stone markers at exact mathematical corners."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Where is Unique Engineering located and how can I request a quotation?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Unique Engineering and Unique Survey is headquartered at 123, Shyamal Cross Road, Satellite, Ahmedabad, Gujarat 380015, India. You can call +91 90991 60391 or email atulkanak@uniquelabservices.com for instant equipment brochures and survey quotations."
+              }
+            }
+          ]
         }
       ]
     }
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Initial crawlable semantic content for search engine bots & AI crawlers (Replaced immediately by React on client load) -->
+    <div id="root">
+      <header>
+        <h1>Unique Engineering & Unique Survey — uecivil.com</h1>
+        <p>Premier Civil Engineering Testing Instruments & Certified Land Surveying Services in Ahmedabad, Gujarat, India.</p>
+        <nav aria-label="Main Navigation">
+          <a href="/">Home</a> |
+          <a href="/products">Civil Lab Products Catalog</a> |
+          <a href="/services">Land Survey Services</a> |
+          <a href="/about">About Us</a> |
+          <a href="/contact">Contact Office</a>
+        </nav>
+      </header>
+      <main>
+        <section>
+          <h2>Specialized Land Surveying Services (Unique Survey)</h2>
+          <p>Equipped with Electronic Total Stations, RTK Dual-Frequency DGPS GNSS, and Survey UAV Drones across Gujarat.</p>
+          <ul>
+            <li><a href="/services?survey=contour-survey"><strong>Counter Survey (Contour Survey)</strong>: High-Accuracy Elevation Counter Levels, Slope Analysis & Cut-Fill Earthwork Volumes</a></li>
+            <li><a href="/services?survey=topography-survey"><strong>Land Topography Survey</strong>: Complete Ground Feature Mapping, Spot RLs & AutoCAD (.DWG) Plans</a></li>
+            <li><a href="/services?survey=point-marking"><strong>Point Marking & Boundary Demarcation</strong>: Sub-centimeter Pegging & Revenue Map 7/12 Correlation</a></li>
+            <li><a href="/services?survey=dgps-survey"><strong>DGPS & RTK Geodetic Survey</strong>: Satellite GNSS Georeferencing & Benchmark (TBM) Fixing</a></li>
+            <li><a href="/services?survey=drone-survey"><strong>Drone & UAV Aerial Survey</strong>: High-Resolution Orthomosaics & 3D Terrain Elevation Models</a></li>
+            <li><a href="/services?survey=layout-demarcation"><strong>Plot Layout Setting Out & Demarcation</strong>: Building Column & Subdivision Marking</a></li>
+            <li><a href="/services?survey=road-alignment"><strong>Road, Canal & Pipeline Alignment Survey</strong>: Centerline Setting & Profile Levelling</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Civil Engineering Laboratory Testing Equipment (Unique Engineering)</h2>
+          <p>Complete ISI/ASTM certified testing machines for concrete, soil, bitumen, and construction quality control.</p>
+          <ul>
+            <li><a href="/products?category=cement-concrete"><strong>Cement, Concrete & Aggregate Testing</strong>: Compression Testing Machines (CTM 2000kN/3000kN), Cube Moulds, Slump Cones, CTM Digital Indicators</a></li>
+            <li><a href="/products?category=soil-testing"><strong>Soil Testing Instruments</strong>: Direct Shear Apparatus, California Bearing Ratio (CBR), Casagrande Liquid Limit, Core Cutters</a></li>
+            <li><a href="/products?category=bitumen-testing"><strong>Bitumen & Asphalt Equipment</strong>: Bitumen Penetrometer, Ductility Machine, Ring & Ball Softening Point, Marshall Stability</a></li>
+            <li><a href="/products?category=survey-instruments"><strong>Survey & Measuring Instruments</strong>: Electronic Total Stations, Auto Levels, Digital Theodolites, Prism Poles, Tripods</a></li>
+            <li><a href="/products?category=construction-machinery"><strong>Construction Machinery</strong>: Laboratory Concrete Mixers, Motorized Sieve Shakers, Core Cutting Machines</a></li>
+            <li><a href="/products?category=safety-products"><strong>Safety Equipment & PPE</strong>: ISI Helmets, High-Visibility Vests, Safety Shoes</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Office Location & Contact</h2>
+          <p>Address: 123, Shyamal Cross Road, Satellite, Ahmedabad, Gujarat 380015, India</p>
+          <p>Phone: +91 90991 60391 | Email: atulkanak@uniquelabservices.com</p>
+          <p>Website: <a href="https://uecivil.com">https://uecivil.com</a></p>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

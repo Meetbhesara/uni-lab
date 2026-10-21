@@ -218,6 +218,39 @@ const LocationCard = ({ loc, index }) => {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 const Contact = () => {
+    const contactSchema = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://uecivil.com/" },
+                    { "@type": "ListItem", "position": 2, "name": "Contact Us", "item": "https://uecivil.com/contact" }
+                ]
+            },
+            {
+                "@type": "ContactPage",
+                "@id": "https://uecivil.com/contact#webpage",
+                "name": "Contact Unique Engineering & Unique Survey",
+                "url": "https://uecivil.com/contact",
+                "mainEntity": {
+                    "@type": "LocalBusiness",
+                    "name": "Unique Engineering & Unique Survey",
+                    "telephone": "+919099160391",
+                    "email": "atulkanak@uniquelabservices.com",
+                    "address": {
+                        "@type": "PostalAddress",
+                        "streetAddress": "123, Shyamal Cross Road, Satellite",
+                        "addressLocality": "Ahmedabad",
+                        "addressRegion": "Gujarat",
+                        "postalCode": "380015",
+                        "addressCountry": "IN"
+                    }
+                }
+            }
+        ]
+    };
+
     return (
         <Box bg="gray.50" minH="100vh">
             <SEO
@@ -225,6 +258,7 @@ const Contact = () => {
                 description="Get in touch with Unique Engineering and Unique Survey at Shyamal Cross Road, Satellite, Ahmedabad, Gujarat. Phone: +91 90991 60391. Inquire for civil lab instruments and land surveying quotes."
                 keywords="contact unique engineering, land survey office ahmedabad, unique lab services contact, uecivil phone number"
                 canonical="https://uecivil.com/contact"
+                schema={contactSchema}
             />
 
             {/* ── Hero Banner ── */}

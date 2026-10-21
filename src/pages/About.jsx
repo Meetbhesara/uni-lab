@@ -25,6 +25,31 @@ import SEO from '../components/SEO';
 const MotionBox = motion.create(Box);
 
 const About = () => {
+    const aboutSchema = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://uecivil.com/" },
+                    { "@type": "ListItem", "position": 2, "name": "About Us", "item": "https://uecivil.com/about" }
+                ]
+            },
+            {
+                "@type": "AboutPage",
+                "@id": "https://uecivil.com/about#webpage",
+                "name": "About Unique Engineering & Unique Survey",
+                "description": "Premier civil engineering testing equipment provider and certified land surveying company headquartered in Ahmedabad, Gujarat.",
+                "url": "https://uecivil.com/about",
+                "mainEntity": {
+                    "@type": "Organization",
+                    "name": "Unique Engineering",
+                    "url": "https://uecivil.com"
+                }
+            }
+        ]
+    };
+
     return (
         <Box bg="gray.50" minH="100vh">
             <SEO
@@ -32,6 +57,7 @@ const About = () => {
                 description="Learn about Unique Engineering and Unique Survey (uecivil.com). Founded in Ahmedabad, Gujarat, providing high-precision civil engineering lab testing equipment and certified land surveying services."
                 keywords="about unique engineering, unique survey ahmedabad, civil engineering company gujarat, uecivil"
                 canonical="https://uecivil.com/about"
+                schema={aboutSchema}
             />
             {/* Hero Banner */}
             <Box 

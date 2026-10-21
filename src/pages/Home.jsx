@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     Box, Heading, Text, Button, Container, SimpleGrid, Card, CardBody, Stack, Flex, Icon,
     useDisclosure, Badge, Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, VStack
@@ -19,6 +19,49 @@ const Home = () => {
         onOpen();
     };
 
+    const homeSchema = useMemo(() => ({
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebSite",
+                "@id": "https://uecivil.com/#website",
+                "name": "Unique Engineering & Unique Survey",
+                "url": "https://uecivil.com/",
+                "description": "Premier civil engineering lab testing equipment and land surveying solutions in Ahmedabad, Gujarat."
+            },
+            {
+                "@type": "FAQPage",
+                "@id": "https://uecivil.com/#home-faq",
+                "mainEntity": [
+                    {
+                        "@type": "Question",
+                        "name": "What land surveying services are offered by Unique Survey in Ahmedabad?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "Unique Survey offers specialized Counter Survey (Contour Survey), Land Topography Survey, Point Marking & Boundary Demarcation, DGPS RTK Geodetic Survey, Drone Aerial Photogrammetry, and Plot Layout Setting Out using high-precision Total Stations and GNSS receivers."
+                        }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "What civil engineering laboratory testing instruments are supplied by Unique Engineering?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "Unique Engineering supplies Compression Testing Machines (CTM 2000kN/3000kN), concrete cube moulds, soil CBR and direct shear testing apparatus, bitumen penetrometers, softening point apparatus, digital auto levels, and construction laboratory equipment compliant with IS, BS, and ASTM standards."
+                        }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Where is Unique Engineering located?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "Unique Engineering is located at 123, Shyamal Cross Road, Satellite, Ahmedabad, Gujarat 380015, India. Contact: +91 90991 60391, Email: atulkanak@uniquelabservices.com."
+                        }
+                    }
+                ]
+            }
+        ]
+    }), []);
+
     return (
         <Box bg="gray.50" minH="100vh">
             {/* Dynamic SEO Tags for Homepage */}
@@ -27,6 +70,7 @@ const Home = () => {
                 description="Unique Engineering (uecivil.com) — Premier Civil Engineering Instruments and Land Topography Surveys in Ahmedabad, Gujarat. Specialists in Counter Survey (Contour), Point Marking, DGPS & Lab Testing Equipment."
                 keywords="uecivil, uecivil.com, Unique Engineering, Unique Survey, counter survey, contour survey, counter survey ahmedabad, topography survey, point marking, civil lab instruments gujarat, compression testing machine ahmedabad"
                 canonical="https://uecivil.com/"
+                schema={homeSchema}
             />
 
             {/* Hero Section */}
