@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, Divider, VStack, Progress } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
@@ -560,20 +560,7 @@ const Products = () => {
         toast({ title: "Added to Enquiry Cart", status: "success", duration: 2000 });
     };
 
-    if (loading) {
-        return <Flex justify="center" align="center" minH="50vh"><Spinner size="xl" color="brand.500" /></Flex>
-    }
-
-    const safeCart = Array.isArray(cart) ? cart : [];
-    const hasCartItems = safeCart.length > 0;
-
-    // Open the cart drawer — trigger click on the Enquiry button in Header
-    const handleOpenCart = () => {
-        const enquiryBtn = document.getElementById('enquiry-cart-btn');
-        if (enquiryBtn) enquiryBtn.click();
-    };
-
-    // Compute dynamic SEO metadata for category or search
+    // Compute dynamic SEO metadata for category or search (Called unconditionally before any return)
     const currentCategoryObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory || c.slug === activeCategory);
     const seoTitle = currentCategoryObj
         ? `${currentCategoryObj.title} | Civil Lab Equipment Ahmedabad`
@@ -590,7 +577,7 @@ const Products = () => {
         ? `https://uecivil.com/products?category=${currentCategoryObj.slug}`
         : `https://uecivil.com/products`;
 
-    // Dynamic JSON-LD schema for Google AI, Gemini, and SEO rich snippets
+    // Dynamic JSON-LD schema for Google AI, Gemini, and SEO rich snippets (Unconditional Hook)
     const productSchema = useMemo(() => {
         const breadcrumbs = [
             { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://uecivil.com/" },
@@ -647,6 +634,32 @@ const Products = () => {
             ]
         };
     }, [currentCategoryObj, seoTitle, seoDescription, seoCanonical]);
+
+    if (loading) {
+        return (
+            <Container maxW="6xl" py={10}>
+                <SEO
+                    title={seoTitle}
+                    description={seoDescription}
+                    keywords={seoKeywords}
+                    canonical={seoCanonical}
+                    schema={productSchema}
+                />
+                <Flex justify="center" align="center" minH="50vh">
+                    <Spinner size="xl" color="brand.500" />
+                </Flex>
+            </Container>
+        );
+    }
+
+    const safeCart = Array.isArray(cart) ? cart : [];
+    const hasCartItems = safeCart.length > 0;
+
+    // Open the cart drawer — trigger click on the Enquiry button in Header
+    const handleOpenCart = () => {
+        const enquiryBtn = document.getElementById('enquiry-cart-btn');
+        if (enquiryBtn) enquiryBtn.click();
+    };
 
     return (
         <Container maxW={hasCartItems ? '7xl' : '6xl'} py={10}>
