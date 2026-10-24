@@ -203,11 +203,12 @@ const AdminDashboard = () => {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminForm.email)) {
             return toast({ title: 'Enter a valid email', status: 'error', duration: 2500 });
         }
-        if (adminForm.phone.length < 10) {
+        const clean10 = adminForm.phone.replace(/\D/g, '').slice(-10);
+        if (clean10.length !== 10) {
             return toast({ title: 'Enter a valid 10-digit phone number', status: 'error', duration: 2500 });
         }
         setAdminLoading(true);
-        const res = await createAdmin(adminForm.name, adminForm.email, adminForm.phone, adminForm.permissions, adminForm.isSuperAdmin);
+        const res = await createAdmin(adminForm.name, adminForm.email, clean10, adminForm.permissions, adminForm.isSuperAdmin);
         setAdminLoading(false);
         if (res.success) {
             toast({ title: '✅ Admin Created!', description: res.msg || 'Admin account created successfully', status: 'success' });
@@ -236,7 +237,8 @@ const AdminDashboard = () => {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email)) {
             return toast({ title: 'Enter a valid email', status: 'error', duration: 2500 });
         }
-        if (editForm.phone.length < 10) {
+        const clean10 = editForm.phone.replace(/\D/g, '').slice(-10);
+        if (clean10.length !== 10) {
             return toast({ title: 'Enter a valid 10-digit phone number', status: 'error', duration: 2500 });
         }
         setEditLoading(true);
@@ -244,7 +246,7 @@ const AdminDashboard = () => {
             const res = await api.put(`/auth/admins/${editForm._id}`, {
                 name: editForm.name,
                 email: editForm.email,
-                phone: editForm.phone,
+                phone: clean10,
                 isSuperAdmin: editForm.isSuperAdmin
             });
             if (res.data?.success || res.status === 200) {
@@ -291,7 +293,8 @@ const AdminDashboard = () => {
         if (!editUserForm.phone) {
             return toast({ title: 'Phone number is required', status: 'error', duration: 2500 });
         }
-        if (editUserForm.phone.length < 10) {
+        const clean10 = editUserForm.phone.replace(/\D/g, '').slice(-10);
+        if (clean10.length !== 10) {
             return toast({ title: 'Enter a valid 10-digit phone number', status: 'error', duration: 2500 });
         }
         if (editUserForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editUserForm.email)) {
@@ -305,7 +308,7 @@ const AdminDashboard = () => {
                 contactPersonName: editUserForm.contactPersonName.trim(),
                 companyName: editUserForm.companyName.trim(),
                 email: editUserForm.email.trim(),
-                phone: editUserForm.phone.trim(),
+                phone: clean10,
                 gstNumber: editUserForm.gstNumber.trim().toUpperCase(),
                 address: editUserForm.address.trim()
             };
@@ -368,10 +371,13 @@ const AdminDashboard = () => {
     const filteredUsers = users.filter(u => {
         if (!userSearch) return true;
         const q = userSearch.toLowerCase();
+        const cleanQ = userSearch.replace(/\D/g, '').slice(-10);
+        const userCleanPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
         return (
             (u.name || '').toLowerCase().includes(q) ||
             (u.email || '').toLowerCase().includes(q) ||
             (u.phone || '').includes(q) ||
+            (cleanQ && userCleanPhone.includes(cleanQ)) ||
             (u.companyName || '').toLowerCase().includes(q) ||
             (u.contactPersonName || '').toLowerCase().includes(q)
         );

@@ -185,7 +185,8 @@ const AdminProducts = () => {
     };
 
     const handleSinglePhoneChange = async (e) => {
-        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        const rawDigits = e.target.value.replace(/\D/g, '');
+        const val = rawDigits.slice(-10);
         setWhatsappPhone(val);
         if (singleClientAutoFilled) {
             setSingleWhatsappForm({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
@@ -264,7 +265,8 @@ const AdminProducts = () => {
     };
 
     const fetchUserDetails = async (phoneNum) => {
-        const phone = phoneNum.replace(/\D/g, '');
+        const rawDigits = phoneNum.replace(/\D/g, '');
+        const phone = rawDigits.slice(-10);
         if (phone.length === 10) {
             setIsFetchingUser(true);
             try {
@@ -317,7 +319,8 @@ const AdminProducts = () => {
     };
 
     const handlePhoneChange = (e) => {
-        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        const rawDigits = e.target.value.replace(/\D/g, '');
+        const val = rawDigits.slice(-10);
         // If the form was previously auto-filled and user changes the phone, clear fields immediately
         setGlobalWhatsappForm(prev => {
             if (globalClientAutoFilled) {
@@ -339,8 +342,9 @@ const AdminProducts = () => {
     };
 
     const handleSendGlobalWhatsapp = async () => {
-        const phone = globalWhatsappForm.phone.replace(/\D/g, '');
-        if (phone.length < 10) {
+        const rawDigits = globalWhatsappForm.phone.replace(/\D/g, '');
+        const phone = rawDigits.slice(-10);
+        if (phone.length !== 10) {
             toast({ title: "Valid 10-digit phone number required", status: "error" });
             return;
         }
@@ -349,6 +353,7 @@ const AdminProducts = () => {
             const selectedProducts = products.filter(p => selectedProductIds.has(p._id || p.id));
             const mpRes = await api.post('/whatsapp/send-multiple-products', {
                 ...globalWhatsappForm,
+                phone,
                 products: selectedProducts
             });
             if (mpRes.data?.whatsappSent === false) {
@@ -782,7 +787,9 @@ const AdminProducts = () => {
 
     // WhatsApp Helper
     const handleSendProductWhatsapp = async () => {
-        if (!whatsappPhone || whatsappPhone.replace(/\D/g, '').length < 10) {
+        const rawDigits = (whatsappPhone || '').replace(/\D/g, '');
+        const clean10 = rawDigits.slice(-10);
+        if (clean10.length !== 10) {
             return toast({ title: "Valid 10 digit phone number required", status: "warning" });
         }
         setIsWhatsappSending(true);
@@ -806,7 +813,7 @@ const AdminProducts = () => {
                             `✅ *Quality Assured by Unique Lab Instrument*`;
             
             const spRes = await api.post('/whatsapp/send-product', {
-                phone: whatsappPhone,
+                phone: clean10,
                 imageUrl: imgUrl,
                 caption: caption,
                 product: whatsappProduct,

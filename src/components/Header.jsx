@@ -671,14 +671,15 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
     // Auto-fill for admin mode when phone number is entered
     React.useEffect(() => {
         const fetchUserData = async () => {
-            const cleanPhone = phoneInput.replace(/\D/g, '');
-            // Only auto-fill if Admin is logged in and phone is exactly 10 digits
+            const rawDigits = phoneInput.replace(/\D/g, '');
+            const cleanPhone = rawDigits.slice(-10);
+            // Auto-fill if Admin is logged in and phone has at least 10 digits (extracting core 10 digits)
             if (user?.isAdmin && cleanPhone.length === 10) {
                 setIsCheckingPhone(true);
                 try {
                     const res = await api.get(`/auth/phone/${cleanPhone}`);
                     if (res.data) {
-                        const userData = res.data;
+                        const userData = res.data?.user || res.data;
                         const hasEmail = !!userData.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email);
                         setFormData({
                             companyName: userData.companyName || '',
@@ -702,7 +703,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                             setShowFullAdminForm(false);
                             toast({
                                 title: "Client Details Loaded",
-                                description: `Ready to submit for ${userData.contactPersonName || userData.companyName}`,
+                                description: `Ready to submit for ${userData.contactPersonName || userData.companyName || userData.name}`,
                                 status: "success",
                                 duration: 2000,
                                 position: "top"
@@ -738,10 +739,12 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             // Priority Check: If admin is logged in, use formData + phoneInput instead of admin profile details.
             // If normal user, use their profile.
             const isAdm = caller && caller.isAdmin;
+            const rawPhone = isAdm ? phoneInput : (caller.phone || phoneInput || 'N/A');
+            const clean10 = rawPhone !== 'N/A' ? (rawPhone.replace(/\D/g, '').slice(-10) || rawPhone) : 'N/A';
 
             const finalCompanyName = isAdm ? formData.companyName : (caller.companyName || 'Guest');
             const finalContactPerson = isAdm ? formData.contactPersonName : (caller.name || caller.contactPersonName || 'Guest');
-            const finalPhone = isAdm ? phoneInput : (caller.phone || phoneInput || 'N/A');
+            const finalPhone = clean10;
             const finalEmail = isAdm ? formData.email : (caller.email || 'N/A');
             const finalGst = isAdm ? formData.gstNumber : (caller.gstNumber || '');
             const finalAddress = isAdm ? formData.address : (caller.address || formData.address || '');
@@ -786,12 +789,13 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
     };
 
     const handlePhoneNext = async () => {
-        if (!/^\d{10,}$/.test(phoneInput.replace(/\D/g, ''))) {
+        const clean10 = phoneInput.replace(/\D/g, '').slice(-10);
+        if (clean10.length !== 10) {
             return toast({ title: "Validation Error", description: "Please enter a valid 10-digit phone number.", status: "error" });
         }
 
         setIsCheckingPhone(true);
-        const res = await sendOtp(phoneInput);
+        const res = await sendOtp(clean10);
         setIsCheckingPhone(false);
 
         if (res.success) {
@@ -801,7 +805,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             if (res.status === 404) {
                 toast({ title: "Registration", description: "Welcome! Please enter your details below.", status: "success" });
                 setAuthStep('register');
-                setFormData(prev => ({ ...prev, email: `${phoneInput.replace(/\D/g, '')}@gmail.com` }));
+                setFormData(prev => ({ ...prev, email: `${clean10}@gmail.com` }));
             } else {
                 toast({ title: "Failed", description: res.message || "Could not send OTP", status: "error" });
             }
@@ -813,8 +817,9 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             return toast({ title: "Validation Error", description: "Please enter a valid OTP code.", status: "error" });
         }
 
+        const clean10 = phoneInput.replace(/\D/g, '').slice(-10);
         setIsCheckingPhone(true);
-        const res = await verifyOtp(phoneInput, otpInput);
+        const res = await verifyOtp(clean10, otpInput);
         setIsCheckingPhone(false);
 
         if (res.success) {
@@ -835,8 +840,8 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             await submitEnquiry(user);
         } else if (user && user.isAdmin) {
             // Admin is logged in, they must provide client details
-            const cleanPhone = phoneInput.replace(/\D/g, '');
-            if (cleanPhone.length < 10) {
+            const cleanPhone = phoneInput.replace(/\D/g, '').slice(-10);
+            if (cleanPhone.length !== 10) {
                 return toast({ title: "Validation Error", description: "Please enter a valid 10-digit phone number.", status: "error" });
             }
             if (!formData.companyName.trim() && !formData.contactPersonName.trim()) {
@@ -863,8 +868,9 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                 return toast({ title: "Restricted", description: "This administrative email cannot be used for client enquiries.", status: "error" });
             }
 
+            const cleanPhone = phoneInput.replace(/\D/g, '').slice(-10);
             setIsSending(true);
-            const res = await phoneRegister({ phone: phoneInput, ...formData });
+            const res = await phoneRegister({ phone: cleanPhone, ...formData });
             if (res.success) {
                 await submitEnquiry(res.user);
             } else {
@@ -985,7 +991,7 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                             </Box>
                                         )}
 
-                                        {(showFullAdminForm || (adminClientStatus === 'notfound' && phoneInput.length >= 10)) && (
+                                        {(showFullAdminForm || (adminClientStatus === 'notfound' && phoneInput.replace(/\D/g, '').length >= 10)) && (
                                             <Stack spacing={3} p={2} borderLeft="2px" borderColor="purple.100" ml={1}>
                                                 <FormControl>
                                                     <FormLabel fontSize="sm" mb={1}>Client Company Name</FormLabel>

@@ -405,12 +405,13 @@ const CompanyMaster = () => {
     };
 
     const handleSharePhoneChange = async (e) => {
-        const raw = e.target.value.replace(/\D/g, '').slice(0, 10);
+        const rawDigits = e.target.value.replace(/\D/g, '');
+        const clean10 = rawDigits.slice(-10);
         setShareForm(prev => {
             if (shareClientAutoFilled) {
                 return {
                     ...prev,
-                    phone: raw,
+                    phone: clean10,
                     companyName: '',
                     contactPersonName: '',
                     email: '',
@@ -418,19 +419,19 @@ const CompanyMaster = () => {
                     address: ''
                 };
             }
-            return { ...prev, phone: raw };
+            return { ...prev, phone: clean10 };
         });
         setShareClientAutoFilled(false);
 
-        if (raw.length === 10) {
+        if (clean10.length === 10) {
             setIsFetchingShareClient(true);
             try {
-                const res = await api.get(`/auth/phone/${raw}`);
+                const res = await api.get(`/auth/phone/${clean10}`);
                 const u = res.data?.user || res.data;
                 if (u && (u._id || u.phone)) {
                     setShareForm(prev => ({
                         ...prev,
-                        phone: raw,
+                        phone: clean10,
                         companyName: u.companyName || '',
                         contactPersonName: u.contactPersonName || u.name || '',
                         email: (u.email && !u.email.includes('noemail')) ? u.email : '',
@@ -501,8 +502,9 @@ const CompanyMaster = () => {
     };
 
     const handleSendShareWhatsapp = async () => {
-        const cleanPhone = shareForm.phone.replace(/\D/g, '');
-        if (cleanPhone.length < 10) {
+        const rawDigits = shareForm.phone.replace(/\D/g, '');
+        const cleanPhone = rawDigits.slice(-10);
+        if (cleanPhone.length !== 10) {
             return toast({ title: 'Enter a valid 10-digit phone number', status: 'warning', duration: 2500 });
         }
         if (!shareTargetCompany) return;
