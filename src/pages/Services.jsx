@@ -390,7 +390,10 @@ const CivilEngineeringServices = () => {
                             borderRadius="full"
                             colorScheme={activeSurveyFilter === 'all' ? 'blue' : 'gray'}
                             variant={activeSurveyFilter === 'all' ? 'solid' : 'outline'}
-                            onClick={() => setActiveSurveyFilter('all')}
+                            onClick={() => {
+                                setActiveSurveyFilter('all');
+                                navigate('/services', { replace: true });
+                            }}
                         >
                             All Surveys ({SURVEY_SOLUTIONS.length})
                         </Button>
@@ -401,7 +404,10 @@ const CivilEngineeringServices = () => {
                                 borderRadius="full"
                                 colorScheme={activeSurveyFilter === s.slug ? 'blue' : 'gray'}
                                 variant={activeSurveyFilter === s.slug ? 'solid' : 'outline'}
-                                onClick={() => setActiveSurveyFilter(s.slug)}
+                                onClick={() => {
+                                    setActiveSurveyFilter(s.slug);
+                                    navigate(`/services?survey=${s.slug}`, { replace: true });
+                                }}
                             >
                                 {s.title.includes('Counter') ? 'Counter Survey' : s.title.includes('Topography') ? 'Topography' : s.title.includes('Demarcation') ? 'Demarcation' : s.title.split(' ')[0]}
                             </Button>
@@ -558,7 +564,16 @@ const CivilEngineeringServices = () => {
                             </HStack>
                         </Box>
                         <Box>
-                            <Image borderRadius="3xl" src={`${API_BASE_URL}/uploads/local/construction.jpeg`} alt="Construction & Surveying" objectFit="cover" h="400px" w="full" fallbackSrc="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" />
+                            <Image 
+                                borderRadius="3xl" 
+                                src={getSafeImageUrl('/api/uploads/products/images/cat_construction.jpg')} 
+                                alt="Civil Engineering Construction & Land Surveying Services - Unique Survey" 
+                                objectFit="cover" 
+                                h="400px" 
+                                w="full" 
+                                loading="lazy"
+                                fallbackSrc="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" 
+                            />
                         </Box>
                     </SimpleGrid>
                 </Box>

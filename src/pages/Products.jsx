@@ -364,6 +364,7 @@ const CartSidebar = () => {
 };
 
 const Products = () => {
+    const navigate = useNavigate();
     const location = useLocation();
     const { id: routeProductId } = useParams();
     const { user } = useAuth();
@@ -375,7 +376,18 @@ const Products = () => {
     const toast = useToast();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [activeCategory, setActiveCategory] = useState(null);
+
+    // Immediate synchronous resolution of initial category from URL so SEO canonical is never delayed or null on first render
+    const initialCategory = () => {
+        if (!urlCategory) return null;
+        const found = PRODUCT_CATEGORIES.find(c => 
+            c.slug.toLowerCase() === urlCategory.toLowerCase() || 
+            c.id.toLowerCase() === urlCategory.toLowerCase() || 
+            c.title.toLowerCase() === urlCategory.toLowerCase()
+        );
+        return found ? found.id : urlCategory;
+    };
+    const [activeCategory, setActiveCategory] = useState(initialCategory);
     const [sliderProducts, setSliderProducts] = useState([]);
     const highlightRef = useRef(null);
     const autoInquiryDoneRef = useRef(false);
@@ -386,13 +398,19 @@ const Products = () => {
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const loadMoreTriggerRef = useRef(null);
 
-    // If URL has a category param (from slider click or sitemap slug), auto-select it
+    // If URL has a category param (from slider click, sitemap slug, or back/forward navigation), auto-select it
     useEffect(() => {
         if (urlCategory) {
-            const found = PRODUCT_CATEGORIES.find(c => c.slug === urlCategory || c.id === urlCategory || c.title.toLowerCase() === urlCategory.toLowerCase());
+            const found = PRODUCT_CATEGORIES.find(c => 
+                c.slug.toLowerCase() === urlCategory.toLowerCase() || 
+                c.id.toLowerCase() === urlCategory.toLowerCase() || 
+                c.title.toLowerCase() === urlCategory.toLowerCase()
+            );
             setActiveCategory(found ? found.id : urlCategory);
+        } else if (!searchQuery && !highlightId) {
+            setActiveCategory(null);
         }
-    }, [urlCategory]);
+    }, [urlCategory, searchQuery, highlightId]);
 
     // If route has product ID (from /product/:id or ?highlight=id), auto-resolve category and switch to it
     useEffect(() => {
@@ -534,7 +552,10 @@ const Products = () => {
     };
 
     const handleCategoryClick = (catId) => {
+        const catObj = PRODUCT_CATEGORIES.find(c => c.id === catId || c.slug === catId);
+        const slug = catObj ? catObj.slug : encodeURIComponent(catId);
         setActiveCategory(catId);
+        navigate(`/products?category=${slug}`);
         const cacheKey = `${catId}__`;
         if (categoryCacheRef.current[cacheKey]) {
             setProducts(categoryCacheRef.current[cacheKey]);
@@ -744,7 +765,7 @@ const Products = () => {
                                     leftIcon={<FaChevronLeft />}
                                     onClick={() => {
                                         setActiveCategory(null);
-                                        if (searchQuery) window.history.pushState({}, '', '/products');
+                                        navigate('/products');
                                     }}
                                     variant="ghost"
                                     colorScheme="brand"
