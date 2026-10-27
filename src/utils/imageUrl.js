@@ -29,4 +29,6 @@ export const getImageUrl = (path) => {
     return cleanPath;
 };
 
+export const getSafeImageUrl = getImageUrl;
+
 export default getImageUrl;
