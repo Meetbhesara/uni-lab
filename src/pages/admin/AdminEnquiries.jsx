@@ -1142,7 +1142,7 @@ const AdminEnquiries = () => {
         }
         setSendingWhatsappId(q._id);
         try {
-            const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Client';
+            const clientName = q.enquiryId?.Name || q.enquiry?.Name || q.partyName || 'Client';
             const message = `Hello *${clientName}*,\n\nHere is your *Quotation* from *Uni-BC*.\n\n*Reference:* ${q.refNo || 'N/A'}\n*Date:* ${new Date(q.createdAt).toLocaleDateString('en-GB')}\n*Grand Total:* ₹${q.grandTotal || '0'}\n\nThank you!`;
 
             const res = await api.post('/whatsapp/send-quotation', {
@@ -1592,7 +1592,7 @@ const AdminEnquiries = () => {
                                                     refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
                                                 }
                                             }
-                                            const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
+                                            const clientName = q.enquiryId?.Name || q.enquiry?.Name || q.partyName || 'Unknown';
                                             const totalAmt = q.grandTotal || q.totalAmount || 0;
 
                                             const nextDate = q.nextFollowUp
@@ -1661,7 +1661,7 @@ const AdminEnquiries = () => {
                                                     <Td>
                                                         <VStack align="start" spacing={0}>
                                                             <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
-                                                            <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
+                                                            <Text fontSize="xs" color="gray.500">{q.enquiryId?.phone || q.enquiry?.phone || q.mobile || ''}</Text>
                                                         </VStack>
                                                     </Td>
                                                     <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
@@ -1815,7 +1815,7 @@ const AdminEnquiries = () => {
                                                         refSuffix = q.refNo.substring(lowerRef.indexOf('(r'));
                                                     }
                                                 }
-                                                const clientName = q.partyName || q.enquiryId?.Name || q.enquiry?.Name || 'Unknown';
+                                                const clientName = q.enquiryId?.Name || q.enquiry?.Name || q.partyName || 'Unknown';
                                                 const totalAmt = q.grandTotal || q.totalAmount || 0;
 
                                                 return (
@@ -1825,7 +1825,7 @@ const AdminEnquiries = () => {
                                                         <Td>
                                                             <VStack align="start" spacing={0}>
                                                                 <Text fontWeight="medium">{clientName} <Text as="span" color="red.500" fontWeight="bold">{refSuffix}</Text></Text>
-                                                                <Text fontSize="xs" color="gray.500">{q.mobile || q.enquiryId?.phone || q.enquiry?.phone || ''}</Text>
+                                                                <Text fontSize="xs" color="gray.500">{q.enquiryId?.phone || q.enquiry?.phone || q.mobile || ''}</Text>
                                                             </VStack>
                                                         </Td>
                                                         <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>

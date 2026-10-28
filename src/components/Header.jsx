@@ -1,33 +1,184 @@
 import React, { useState } from 'react';
 import {
-    Box, Flex, Text, Button, Stack, useDisclosure,
+    Box, Flex, Text, Button, Stack, useDisclosure, Badge,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton,
     Drawer, DrawerBody, DrawerFooter, DrawerHeader, DrawerOverlay, DrawerContent, DrawerCloseButton,
-    FormControl, FormLabel, Input, useToast, Image, IconButton, Divider, VStack, Textarea
+    FormControl, FormLabel, Input, useToast, Image, IconButton, Divider, VStack, Textarea,
+    Tooltip, HStack, Link
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
-import { FaPhone, FaEnvelope, FaShoppingCart, FaTrash, FaBars, FaSearch } from 'react-icons/fa';
+import { FaPhone, FaEnvelope, FaShoppingCart, FaTrash, FaBars, FaSearch, FaYoutube, FaInstagram } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 
+// Social Media Links
+export const SOCIAL_LINKS = {
+    youtube: 'https://www.youtube.com/@UECIVIL', // Official YouTube channel URL
+    instagram: '',                              // Leave empty until official link is provided
+};
+
 const MotionBox = motion.create(Box);
 
-const MobileNavLink = ({ to, children, onClick }) => (
+// Social Media Header Icon with rich branded hover states & micro-interactions
+const SocialHeaderIcon = ({ platform, href, isDark = false, size = "28px" }) => {
+    const isYoutube = platform === 'youtube';
+    const label = isYoutube ? 'Watch on YouTube' : 'Follow on Instagram';
+    const IconComponent = isYoutube ? FaYoutube : FaInstagram;
+    
+    // Official Branding Colors
+    const ytBrand = "#FF0000";
+    const igGradient = "radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)";
+
+    if (isDark) {
+        return (
+            <Tooltip label={label} hasArrow placement="bottom" bg="gray.800" color="white" fontSize="xs" borderRadius="md">
+                <Link
+                    href={href}
+                    isExternal
+                    aria-label={label}
+                    title={label}
+                    display="inline-flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    w={size}
+                    h={size}
+                    borderRadius="full"
+                    bg={isYoutube ? "rgba(255, 0, 0, 0.18)" : "rgba(225, 48, 108, 0.18)"}
+                    color={isYoutube ? "#FF4D4D" : "#FF6584"}
+                    border="1px solid"
+                    borderColor={isYoutube ? "rgba(255, 77, 77, 0.45)" : "rgba(255, 101, 132, 0.45)"}
+                    transition="all 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                    _hover={{
+                        bg: isYoutube ? ytBrand : igGradient,
+                        color: "white",
+                        borderColor: "transparent",
+                        transform: "translateY(-2px) scale(1.12)",
+                        boxShadow: isYoutube 
+                            ? "0 4px 14px rgba(255, 0, 0, 0.6)" 
+                            : "0 4px 14px rgba(225, 48, 108, 0.6)"
+                    }}
+                    _active={{
+                        transform: "scale(0.95)"
+                    }}
+                >
+                    <IconComponent size={parseInt(size) > 28 ? "16px" : "14px"} />
+                </Link>
+            </Tooltip>
+        );
+    }
+
+    return (
+        <Tooltip label={label} hasArrow placement="bottom" bg="gray.800" color="white" fontSize="xs" borderRadius="md">
+            <Link
+                href={href}
+                isExternal
+                aria-label={label}
+                title={label}
+                display="inline-flex"
+                alignItems="center"
+                justifyContent="center"
+                w={size}
+                h={size}
+                borderRadius="full"
+                bg={isYoutube ? "red.50" : "pink.50"}
+                color={isYoutube ? "#FF0000" : "#E4405F"}
+                border="1px solid"
+                borderColor={isYoutube ? "red.200" : "pink.200"}
+                transition="all 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                _hover={{
+                    bg: isYoutube ? ytBrand : igGradient,
+                    color: "white",
+                    borderColor: "transparent",
+                    transform: "translateY(-2px) scale(1.12)",
+                    boxShadow: isYoutube 
+                        ? "0 4px 14px rgba(255, 0, 0, 0.4)" 
+                        : "0 4px 14px rgba(225, 48, 108, 0.4)"
+                }}
+                _active={{
+                    transform: "scale(0.95)"
+                }}
+            >
+                <IconComponent size={parseInt(size) > 28 ? "16px" : "14px"} />
+            </Link>
+        </Tooltip>
+    );
+};
+
+const NavLinkItem = ({ to, children, isActive }) => (
+    <Box
+        as={RouterLink}
+        to={to}
+        px={3.5}
+        py={1.5}
+        borderRadius="full"
+        fontWeight={isActive ? "800" : "600"}
+        fontSize="sm"
+        color={isActive ? "brand.600" : "gray.700"}
+        bg={isActive ? "brand.50" : "transparent"}
+        borderWidth="1.5px"
+        borderColor={isActive ? "brand.300" : "transparent"}
+        boxShadow={isActive ? "0 2px 8px rgba(0, 102, 204, 0.15)" : "none"}
+        _hover={{
+            color: "brand.600",
+            bg: isActive ? "brand.50" : "gray.50",
+            textDecoration: "none"
+        }}
+        transition="all 0.2s ease"
+        display="inline-flex"
+        alignItems="center"
+        gap={1.5}
+    >
+        {children}
+        {isActive && (
+            <Box w="6px" h="6px" borderRadius="full" bg="brand.500" />
+        )}
+    </Box>
+);
+
+const MobileNavLink = ({ to, children, onClick, isActive }) => (
     <Box
         as={RouterLink}
         to={to}
         onClick={onClick}
         px={4}
         py={3}
-        fontWeight="bold"
-        _hover={{ bg: 'brand.50', color: 'brand.500' }}
+        borderRadius="xl"
+        fontWeight={isActive ? "800" : "600"}
+        fontSize="sm"
+        color={isActive ? "brand.600" : "gray.700"}
+        bg={isActive ? "brand.50" : "transparent"}
+        borderLeft="4px solid"
+        borderColor={isActive ? "brand.500" : "transparent"}
         borderBottom="1px"
-        borderColor="gray.50"
-        display="block"
+        borderBottomColor={isActive ? "brand.100" : "gray.50"}
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        transition="all 0.15s ease"
+        _hover={{
+            bg: isActive ? "brand.50" : "gray.50",
+            color: "brand.600",
+            textDecoration: "none"
+        }}
     >
-        {children}
+        <Text>{children}</Text>
+        {isActive && (
+            <Badge
+                bg="brand.500"
+                color="white"
+                borderRadius="full"
+                px={2.5}
+                py={0.5}
+                fontSize="2xs"
+                fontWeight="800"
+                letterSpacing="0.5px"
+                textTransform="uppercase"
+            >
+                Current
+            </Badge>
+        )}
     </Box>
 );
 
@@ -41,6 +192,13 @@ const Header = () => {
     const { isOpen: isNavOpen, onToggle: toggleNav } = useDisclosure();
 
     const [searchTerm, setSearchTerm] = useState('');
+
+    const isActiveLink = (path) => {
+        if (path === '/') {
+            return location.pathname === '/';
+        }
+        return location.pathname.startsWith(path);
+    };
 
     // Sync search input with URL
     React.useEffect(() => {
@@ -77,7 +235,21 @@ const Header = () => {
                             <FaPhone /> <Text>+91 98765 43210</Text>
                         </Flex>
                     </Flex>
-                    <Text>GST: 22AAAAA0000A1Z5</Text>
+                    <Flex align="center" gap={4}>
+                        <Text fontSize="xs" color="gray.300">GST: 22AAAAA0000A1Z5</Text>
+                        <Box h="14px" w="1px" bg="whiteAlpha.400" />
+                        <HStack spacing={2} align="center">
+                            <Text fontSize="xs" fontWeight="700" color="gray.300" letterSpacing="0.5px">
+                                Follow Us:
+                            </Text>
+                            {SOCIAL_LINKS.youtube && (
+                                <SocialHeaderIcon platform="youtube" href={SOCIAL_LINKS.youtube} isDark={true} size="28px" />
+                            )}
+                            {SOCIAL_LINKS.instagram && (
+                                <SocialHeaderIcon platform="instagram" href={SOCIAL_LINKS.instagram} isDark={true} size="28px" />
+                            )}
+                        </HStack>
+                    </Flex>
                 </Flex>
             </Box>
 
@@ -102,13 +274,13 @@ const Header = () => {
                     </Box>
                 </Flex>
 
-                {/* Navigation Links */}
-                <Flex display={{ base: 'none', md: 'flex' }} gap={8} align="center">
-                    <RouterLink to="/">Home</RouterLink>
-                    <RouterLink to="/about">About Us</RouterLink>
-                    <RouterLink style={{ color: 'inherit', textDecoration: 'none' }} to="/products">Products</RouterLink>
-                    <RouterLink style={{ color: 'inherit', textDecoration: 'none' }} to="/services">Services</RouterLink>
-                    <RouterLink style={{ color: 'inherit', textDecoration: 'none' }} to="/contact">Contact</RouterLink>
+                {/* Navigation Links - Desktop & Tablet */}
+                <Flex display={{ base: 'none', lg: 'flex' }} gap={{ lg: 2, xl: 3 }} align="center">
+                    <NavLinkItem to="/" isActive={isActiveLink('/')}>Home</NavLinkItem>
+                    <NavLinkItem to="/about" isActive={isActiveLink('/about')}>About Us</NavLinkItem>
+                    <NavLinkItem to="/products" isActive={isActiveLink('/product')}>Products</NavLinkItem>
+                    <NavLinkItem to="/services" isActive={isActiveLink('/services')}>Services</NavLinkItem>
+                    <NavLinkItem to="/contact" isActive={isActiveLink('/contact')}>Contact</NavLinkItem>
                 </Flex>
 
                 {/* Actions - Desktop */}
@@ -155,7 +327,34 @@ const Header = () => {
                 </Flex>
 
                 {/* Mobile Icons Header */}
-                <Flex display={{ base: 'flex', lg: 'none' }} align="center" gap={2}>
+                <Flex display={{ base: 'flex', lg: 'none' }} align="center" gap={1.5}>
+                    {location.pathname === '/' && (
+                        <Badge
+                            display={{ base: 'none', sm: 'inline-flex' }}
+                            bg="brand.50"
+                            color="brand.600"
+                            border="1px solid"
+                            borderColor="brand.300"
+                            borderRadius="full"
+                            px={2.5}
+                            py={0.5}
+                            fontSize="2xs"
+                            fontWeight="800"
+                            letterSpacing="0.5px"
+                        >
+                            Home
+                        </Badge>
+                    )}
+                    {SOCIAL_LINKS.youtube && (
+                        <Box display={{ base: 'inline-flex', md: 'none' }}>
+                            <SocialHeaderIcon platform="youtube" href={SOCIAL_LINKS.youtube} isDark={false} size="32px" />
+                        </Box>
+                    )}
+                    {SOCIAL_LINKS.instagram && (
+                        <Box display={{ base: 'inline-flex', md: 'none' }}>
+                            <SocialHeaderIcon platform="instagram" href={SOCIAL_LINKS.instagram} isDark={false} size="32px" />
+                        </Box>
+                    )}
                     <IconButton
                         icon={<FaShoppingCart />}
                         aria-label="Cart"
@@ -187,12 +386,73 @@ const Header = () => {
                         borderTop="1px"
                         borderColor="gray.50"
                     >
-                        <Stack spacing={0} p={4}>
-                            <MobileNavLink to="/" onClick={toggleNav}>Home</MobileNavLink>
-                            <MobileNavLink to="/about" onClick={toggleNav}>About Us</MobileNavLink>
-                            <MobileNavLink to="/products" onClick={toggleNav}>Products</MobileNavLink>
-                            <MobileNavLink to="/services" onClick={toggleNav}>Services</MobileNavLink>
-                            <MobileNavLink to="/contact" onClick={toggleNav}>Contact</MobileNavLink>
+                        <Stack spacing={1} p={3}>
+                            <MobileNavLink to="/" isActive={isActiveLink('/')} onClick={toggleNav}>Home</MobileNavLink>
+                            <MobileNavLink to="/about" isActive={isActiveLink('/about')} onClick={toggleNav}>About Us</MobileNavLink>
+                            <MobileNavLink to="/products" isActive={isActiveLink('/product')} onClick={toggleNav}>Products</MobileNavLink>
+                            <MobileNavLink to="/services" isActive={isActiveLink('/services')} onClick={toggleNav}>Services</MobileNavLink>
+                            <MobileNavLink to="/contact" isActive={isActiveLink('/contact')} onClick={toggleNav}>Contact</MobileNavLink>
+
+                            {/* Social Channels in Drawer */}
+                            {(SOCIAL_LINKS.youtube || SOCIAL_LINKS.instagram) && (
+                                <Box p={3} my={2} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                    <Text fontSize="xs" fontWeight="700" color="gray.600" mb={2.5} textTransform="uppercase" letterSpacing="0.5px">
+                                        Follow Unique Engineering
+                                    </Text>
+                                    <Flex gap={2}>
+                                        {SOCIAL_LINKS.youtube && (
+                                            <Button
+                                                as="a"
+                                                href={SOCIAL_LINKS.youtube}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                size="sm"
+                                                flex="1"
+                                                leftIcon={<FaYoutube color="#FF0000" size="18px" />}
+                                                bg="white"
+                                                border="1px solid"
+                                                borderColor="red.200"
+                                                color="gray.700"
+                                                _hover={{
+                                                    bg: "red.50",
+                                                    borderColor: "red.400",
+                                                    transform: "translateY(-1px)",
+                                                    boxShadow: "sm"
+                                                }}
+                                                fontSize="xs"
+                                                fontWeight="700"
+                                            >
+                                                Watch on YouTube
+                                            </Button>
+                                        )}
+                                        {SOCIAL_LINKS.instagram && (
+                                            <Button
+                                                as="a"
+                                                href={SOCIAL_LINKS.instagram}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                size="sm"
+                                                flex="1"
+                                                leftIcon={<FaInstagram color="#E4405F" size="18px" />}
+                                                bg="white"
+                                                border="1px solid"
+                                                borderColor="pink.200"
+                                                color="gray.700"
+                                                _hover={{
+                                                    bg: "pink.50",
+                                                    borderColor: "pink.400",
+                                                    transform: "translateY(-1px)",
+                                                    boxShadow: "sm"
+                                                }}
+                                                fontSize="xs"
+                                                fontWeight="700"
+                                            >
+                                                Instagram
+                                            </Button>
+                                        )}
+                                    </Flex>
+                                </Box>
+                            )}
 
                             <Box py={4} px={4}>
                                 <FormControl mb={4}>

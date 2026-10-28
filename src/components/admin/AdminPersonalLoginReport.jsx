@@ -56,30 +56,48 @@ const AdminPersonalLoginReport = ({ user }) => {
         user?.role === 'superadmin' ||
         user?.role === 'superAdmin' ||
         user?.role === 'SuperAdmin' ||
-        (user?.role && String(user?.role).toLowerCase().includes('super'))
+        (user?.role && String(user?.role).toLowerCase().includes('super')) ||
+        user?.email === 'iatulkanak@gmail.com'
     );
     const [selectedAdminId, setSelectedAdminId] = useState('');
 
-    // Active record being viewed (selected admin for Super Admin, or current logged-in user)
+    // Active record being viewed (selected admin for Super Admin, or strictly own record for regular admin)
     const activeRecord = useMemo(() => {
         if (!reportData.length) return null;
+
+        // Super Admin can inspect another admin if selected
         if (isSuperAdmin && selectedAdminId) {
             const found = reportData.find(a => String(a._id) === String(selectedAdminId));
             if (found) return found;
         }
-        // Default to logged-in user
-        return reportData.find(a =>
-            (user?._id && String(a._id) === String(user._id)) ||
-            (user?.id && String(a._id) === String(user.id)) ||
-            (user?.email && a.email && a.email.toLowerCase() === user.email.toLowerCase()) ||
-            (user?.phone && a.phone && a.phone === user.phone)
-        ) || reportData[0] || null;
+
+        // Match logged-in user's own record by ID, email, phone, or name
+        const myRecord = reportData.find(a => {
+            const matchId = (user?._id && String(a._id) === String(user._id)) ||
+                            (user?.id && String(a._id) === String(user.id)) ||
+                            (user?._id && a.userId && String(a.userId) === String(user._id)) ||
+                            (user?.id && a.userId && String(a.userId) === String(user.id));
+            const matchEmail = Boolean(user?.email && a.email && a.email.trim().toLowerCase() === user.email.trim().toLowerCase());
+            const matchPhone = Boolean(user?.phone && a.phone && String(a.phone).trim() === String(user.phone).trim());
+            const matchName = Boolean(user?.name && a.name && a.name.trim().toLowerCase() === user.name.trim().toLowerCase());
+            return matchId || matchEmail || matchPhone || matchName;
+        });
+
+        if (myRecord) return myRecord;
+
+        // If Super Admin and no match, default to first admin
+        if (isSuperAdmin) {
+            return reportData[0] || null;
+        }
+
+        // Regular admin: NEVER show another admin's data!
+        return null;
     }, [user, reportData, isSuperAdmin, selectedAdminId]);
 
     // Check if viewing own personal record
     const isViewingSelf = useMemo(() => {
         if (!user || !activeRecord) return true;
-        return (
+        return Boolean(
             (user._id && String(activeRecord._id) === String(user._id)) ||
             (user.id && String(activeRecord._id) === String(user.id)) ||
             (user.email && activeRecord.email && activeRecord.email.toLowerCase() === user.email.toLowerCase())
@@ -554,6 +572,14 @@ const AdminPersonalLoginReport = ({ user }) => {
                         <Text fontSize="xs" color="gray.500" fontWeight="bold">Loading your personal attendance...</Text>
                     </VStack>
                 </Flex>
+            ) : !activeRecord ? (
+                <Box p={8} textAlign="center" bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300" my={4}>
+                    <Icon as={FiClock} boxSize={8} color="gray.400" mb={2} />
+                    <Text fontWeight="bold" color="gray.700">No Attendance Records Found</Text>
+                    <Text fontSize="xs" color="gray.500" mt={1}>
+                        No login activity recorded for your account ({user?.name || user?.email}) for {month}.
+                    </Text>
+                </Box>
             ) : (
                 <Box w="full" overflow="hidden">
                     <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>

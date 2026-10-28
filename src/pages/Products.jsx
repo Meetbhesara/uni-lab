@@ -11,6 +11,8 @@ import SEO from '../components/SEO';
 
 import { getImageUrl } from '../utils/imageUrl';
 
+const MotionBox = motion.create(Box);
+
 const PAGE_SIZE = 10;
 
 export const PRODUCT_CATEGORIES = [
@@ -280,86 +282,277 @@ const ImageCarousel = ({ images }) => {
     );
 };
 
-// Sticky Cart Sidebar Component — read-only selected items view
-const CartSidebar = () => {
+// Sticky Cart Sidebar Component — Desktop sidebar + Mobile sticky floating bar
+const CartSidebar = ({ onOpenCart }) => {
     const { cart } = useCart();
+    const [isMobileExpanded, setIsMobileExpanded] = useState(false);
 
     const safeCart = Array.isArray(cart) ? cart : [];
     if (safeCart.length === 0) return null;
 
+    const totalQty = safeCart.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+
     return (
-        <Box
-            as={motion.div}
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            position="sticky"
-            top="100px"
-            w="240px"
-            flexShrink={0}
-            borderRadius="2xl"
-            border="2px solid"
-            borderColor="orange.200"
-            bg="white"
-            boxShadow="xl"
-            overflow="hidden"
-        >
-            {/* Header */}
-            <Flex
-                bg="linear-gradient(135deg, #f97316 0%, #ea580c 100%)"
-                px={4} py={3}
-                align="center"
-                gap={2}
+        <>
+            {/* ── DESKTOP STICKY SIDEBAR (Hidden on mobile) ── */}
+            <Box
+                display={{ base: 'none', lg: 'block' }}
+                as={motion.div}
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                position="sticky"
+                top="90px"
+                w="270px"
+                flexShrink={0}
+                borderRadius="2xl"
+                border="2px solid"
+                borderColor="orange.200"
+                bg="white"
+                boxShadow="2xl"
+                overflow="hidden"
+                zIndex={10}
             >
-                <FaShoppingCart color="white" size={14} />
-                <Text fontWeight="800" color="white" fontSize="sm">Selected Items</Text>
-                <Badge ml="auto" bg="white" color="orange.600" borderRadius="full" px={2} fontSize="xs">
-                    {safeCart.length}
-                </Badge>
-            </Flex>
+                {/* Header */}
+                <Flex
+                    bg="linear-gradient(135deg, #f97316 0%, #ea580c 100%)"
+                    px={4} py={3.5}
+                    align="center"
+                    gap={2.5}
+                >
+                    <Flex w={7} h={7} bg="whiteAlpha.300" borderRadius="full" align="center" justify="center">
+                        <FaShoppingCart color="white" size={13} />
+                    </Flex>
+                    <Box>
+                        <Text fontWeight="800" color="white" fontSize="sm" lineHeight="1.1">Selected Items</Text>
+                        <Text fontSize="10px" color="orange.100" fontWeight="600">{safeCart.length} product{safeCart.length > 1 ? 's' : ''} ({totalQty} total)</Text>
+                    </Box>
+                    <Badge ml="auto" bg="white" color="orange.600" borderRadius="full" px={2.5} py={0.5} fontSize="xs" fontWeight="800">
+                        {totalQty}
+                    </Badge>
+                </Flex>
 
-            {/* Items — read-only list */}
-            <Stack spacing={0} maxH="420px" overflowY="auto">
-                {safeCart.map((item, idx) => {
-                    const product = item.productId || item.product || {};
-                    const name = product.name || item.name || 'Product';
-                    const qty = item.quantity || 1;
-                    const img = product.localImages?.[0] || product.images?.[0] || product.photos?.[0] || item.images?.[0] || '';
-                    const imgSrc = img
-                        ? (img.startsWith('http') ? img : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'}${img.startsWith('/') ? '' : '/'}${img}`)
-                        : 'https://via.placeholder.com/36';
+                {/* Items — read-only list */}
+                <Stack spacing={0} maxH="380px" overflowY="auto">
+                    {safeCart.map((item, idx) => {
+                        const product = item.productId || item.product || {};
+                        const name = product.name || item.name || 'Product';
+                        const qty = item.quantity || 1;
+                        const img = product.localImages?.[0] || product.images?.[0] || product.photos?.[0] || item.images?.[0] || '';
+                        const imgSrc = getImageUrl(img);
 
-                    return (
-                        <Flex
-                            key={item._id || item.id || idx}
-                            px={3} py={2}
-                            align="center"
-                            gap={3}
+                        return (
+                            <Flex
+                                key={item._id || item.id || idx}
+                                px={3.5} py={2.5}
+                                align="center"
+                                gap={3}
+                                borderBottom="1px solid"
+                                borderColor="gray.100"
+                                _hover={{ bg: 'orange.50' }}
+                                transition="background 0.2s"
+                            >
+                                <Image
+                                    src={imgSrc}
+                                    boxSize="40px"
+                                    borderRadius="lg"
+                                    objectFit="cover"
+                                    fallbackSrc="https://via.placeholder.com/40"
+                                    flexShrink={0}
+                                    border="1px solid"
+                                    borderColor="gray.200"
+                                />
+                                <Box flex={1} minW={0}>
+                                    <Text fontSize="xs" fontWeight="700" color="gray.800" noOfLines={2} lineHeight="1.3">
+                                        {name}
+                                    </Text>
+                                    <Text fontSize="11px" color="orange.600" fontWeight="700" mt="1px">
+                                        Qty: {qty}
+                                    </Text>
+                                </Box>
+                            </Flex>
+                        );
+                    })}
+                </Stack>
+
+                {/* Footer Action Button */}
+                <Box p={3} bg="gray.50" borderTop="1px solid" borderColor="gray.100">
+                    <Button
+                        w="full"
+                        bg="orange.500"
+                        _hover={{ bg: 'orange.600', transform: 'translateY(-1px)' }}
+                        _active={{ bg: 'orange.700' }}
+                        color="white"
+                        size="sm"
+                        borderRadius="xl"
+                        fontWeight="bold"
+                        onClick={onOpenCart}
+                        rightIcon={<FaShoppingCart />}
+                        shadow="md"
+                    >
+                        View & Submit Enquiry
+                    </Button>
+                </Box>
+            </Box>
+
+            {/* ── MOBILE STICKY FLOATING SELECTED ITEMS BAR (Static/Sticky on mobile while scrolling) ── */}
+            <Box
+                display={{ base: 'block', lg: 'none' }}
+                position="fixed"
+                bottom="14px"
+                left="12px"
+                right="12px"
+                zIndex={999}
+                borderRadius="2xl"
+                bg="linear-gradient(135deg, #f97316 0%, #ea580c 100%)"
+                boxShadow="0 10px 30px rgba(234, 88, 12, 0.45), 0 3px 10px rgba(0,0,0,0.2)"
+                border="2px solid rgba(255, 255, 255, 0.3)"
+                overflow="hidden"
+                transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+            >
+                {/* Expanded Items Drawer (Mobile) */}
+                <AnimatePresence>
+                    {isMobileExpanded && (
+                        <MotionBox
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            bg="white"
                             borderBottom="1px solid"
-                            borderColor="gray.100"
-                            _hover={{ bg: 'orange.50' }}
-                            transition="background 0.2s"
+                            borderColor="orange.100"
+                            maxH="260px"
+                            overflowY="auto"
                         >
-                            <Image
-                                src={imgSrc}
-                                boxSize="36px"
-                                borderRadius="md"
-                                objectFit="cover"
-                                fallbackSrc="https://via.placeholder.com/36"
-                                flexShrink={0}
-                            />
-                            <Box flex={1} minW={0}>
-                                <Text fontSize="xs" fontWeight="700" color="gray.800" noOfLines={2} lineHeight="1.3">
-                                    {name}
-                                </Text>
-                                <Text fontSize="10px" color="orange.500" fontWeight="600" mt="1px">
-                                    Qty: {qty}
-                                </Text>
+                            <Box p={3}>
+                                <Flex justify="space-between" align="center" mb={2} px={1}>
+                                    <Text fontSize="xs" fontWeight="800" color="gray.800" textTransform="uppercase" letterSpacing="0.5px">
+                                        Selected Items ({safeCart.length})
+                                    </Text>
+                                    <Text fontSize="xs" color="gray.500" fontWeight="600">
+                                        Total Qty: {totalQty}
+                                    </Text>
+                                </Flex>
+                                <Stack spacing={2}>
+                                    {safeCart.map((item, idx) => {
+                                        const product = item.productId || item.product || {};
+                                        const name = product.name || item.name || 'Product';
+                                        const qty = item.quantity || 1;
+                                        const img = product.localImages?.[0] || product.images?.[0] || product.photos?.[0] || item.images?.[0] || '';
+                                        const imgSrc = getImageUrl(img);
+
+                                        return (
+                                            <Flex
+                                                key={`mobile-cart-${item._id || item.id || idx}`}
+                                                p={2}
+                                                bg="orange.50"
+                                                borderRadius="xl"
+                                                align="center"
+                                                gap={3}
+                                            >
+                                                <Image
+                                                    src={imgSrc}
+                                                    boxSize="36px"
+                                                    borderRadius="md"
+                                                    objectFit="cover"
+                                                    fallbackSrc="https://via.placeholder.com/36"
+                                                    flexShrink={0}
+                                                    bg="white"
+                                                    border="1px solid"
+                                                    borderColor="orange.200"
+                                                />
+                                                <Box flex={1} minW={0}>
+                                                    <Text fontSize="xs" fontWeight="700" color="gray.800" noOfLines={1}>
+                                                        {name}
+                                                    </Text>
+                                                    <Text fontSize="10px" color="orange.600" fontWeight="bold">
+                                                        Qty: {qty}
+                                                    </Text>
+                                                </Box>
+                                            </Flex>
+                                        );
+                                    })}
+                                </Stack>
                             </Box>
+                        </MotionBox>
+                    )}
+                </AnimatePresence>
+
+                {/* Main Sticky Bottom Bar */}
+                <Flex
+                    px={3.5}
+                    py={2.5}
+                    align="center"
+                    justify="space-between"
+                    gap={2}
+                >
+                    {/* Left: Cart Icon + Count + Title */}
+                    <Flex
+                        align="center"
+                        gap={2.5}
+                        cursor="pointer"
+                        onClick={() => setIsMobileExpanded(prev => !prev)}
+                        flex={1}
+                        minW={0}
+                    >
+                        <Flex
+                            w={9}
+                            h={9}
+                            borderRadius="full"
+                            bg="white"
+                            align="center"
+                            justify="center"
+                            flexShrink={0}
+                            shadow="sm"
+                        >
+                            <FaShoppingCart color="#ea580c" size={15} />
                         </Flex>
-                    );
-                })}
-            </Stack>
-        </Box>
+
+                        <Box minW={0}>
+                            <Flex align="center" gap={1.5}>
+                                <Text fontWeight="900" color="white" fontSize="xs" lineHeight="1.1">
+                                    Selected Items
+                                </Text>
+                                <Badge bg="white" color="orange.600" borderRadius="full" px={1.5} fontSize="10px" fontWeight="900">
+                                    {totalQty}
+                                </Badge>
+                            </Flex>
+                            <Text fontSize="10px" color="orange.100" fontWeight="600" noOfLines={1}>
+                                {isMobileExpanded ? 'Tap to collapse' : `${safeCart.length} item${safeCart.length > 1 ? 's' : ''} added · Tap to view`}
+                            </Text>
+                        </Box>
+                    </Flex>
+
+                    {/* Right: Action Buttons */}
+                    <Flex align="center" gap={1.5} flexShrink={0}>
+                        <IconButton
+                            aria-label="Toggle items preview"
+                            icon={isMobileExpanded ? <FaChevronRight style={{ transform: 'rotate(90deg)' }} /> : <FaChevronRight style={{ transform: 'rotate(-90deg)' }} />}
+                            size="sm"
+                            variant="ghost"
+                            colorScheme="whiteAlpha"
+                            color="white"
+                            borderRadius="full"
+                            onClick={() => setIsMobileExpanded(prev => !prev)}
+                        />
+                        <Button
+                            bg="white"
+                            color="orange.600"
+                            _hover={{ bg: 'orange.50' }}
+                            _active={{ bg: 'orange.100' }}
+                            size="sm"
+                            borderRadius="xl"
+                            fontWeight="900"
+                            fontSize="xs"
+                            px={3.5}
+                            h="34px"
+                            shadow="md"
+                            onClick={onOpenCart}
+                        >
+                            Enquire Now
+                        </Button>
+                    </Flex>
+                </Flex>
+            </Box>
+        </>
     );
 };
 
@@ -375,7 +568,7 @@ const Products = () => {
     const { addToCart, cart } = useCart();
     const toast = useToast();
     const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(() => Boolean(urlCategory || searchQuery || highlightId));
 
     // Immediate synchronous resolution of initial category from URL so SEO canonical is never delayed or null on first render
     const initialCategory = () => {
@@ -683,7 +876,12 @@ const Products = () => {
     };
 
     return (
-        <Container maxW={hasCartItems ? '7xl' : '6xl'} py={10}>
+        <Container
+            maxW={hasCartItems ? '7xl' : '6xl'}
+            py={{ base: 6, md: 10 }}
+            px={{ base: 4, sm: 6, md: 8 }}
+            pb={hasCartItems ? { base: "115px", lg: 10 } : { base: 6, md: 10 }}
+        >
             {/* Dynamic Category SEO */}
             <SEO
                 title={seoTitle}
@@ -693,18 +891,31 @@ const Products = () => {
                 schema={productSchema}
             />
 
-            <Flex gap={6} align="flex-start">
+            <Flex direction={{ base: 'column', lg: 'row' }} gap={{ base: 6, lg: 8 }} align="flex-start" w="100%">
                 {/* Main Content */}
-                <Box flex={1} minW={0}>
+                <Box flex={1} minW={0} w="100%">
 
                     {/* ── Infinite Product Image Slider — only on category home screen ── */}
                     {!activeCategory && !searchQuery && <ProductSlider products={sliderProducts} />}
 
-                    <Heading mb={2} color="brand.700">Our Products</Heading>
-                    <Text color="gray.500" mb={6}>Browse our extensive catalog of quality equipment.</Text>
+                    <Heading
+                        as="h1"
+                        fontSize={{ base: '26px', sm: '32px', md: '40px' }}
+                        fontWeight="900"
+                        letterSpacing="tight"
+                        color="brand.700"
+                        mb={2}
+                        lineHeight="1.2"
+                        wordBreak="keep-all"
+                    >
+                        Our Products
+                    </Heading>
+                    <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.500" mb={{ base: 5, md: 6 }}>
+                        Browse our extensive catalog of quality equipment.
+                    </Text>
 
                     {!activeCategory && !searchQuery ? (
-                        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6} mb={8}>
+                        <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={{ base: 4, md: 6 }} mb={8}>
                             {PRODUCT_CATEGORIES.map((cat) => (
                                 <Box
                                     key={cat.id}
@@ -712,7 +923,7 @@ const Products = () => {
                                     cursor="pointer"
                                     overflow="hidden"
                                     position="relative"
-                                    h="250px"
+                                    h={{ base: '200px', sm: '230px', md: '250px' }}
                                     boxShadow="md"
                                     _hover={{
                                         transform: 'translateY(-5px)',
@@ -746,12 +957,12 @@ const Products = () => {
                                         align="center"
                                         justify="flex-end"
                                         h="100%"
-                                        p={6}
+                                        p={{ base: 4, md: 6 }}
                                         position="relative"
                                         zIndex={1}
                                         textAlign="center"
                                     >
-                                        <Heading size="md" color="white" lineHeight="1.4" fontWeight="800" letterSpacing="wide">
+                                        <Heading size={{ base: 'sm', sm: 'md' }} color="white" lineHeight="1.4" fontWeight="800" letterSpacing="wide">
                                             {cat.title}
                                         </Heading>
                                     </Flex>
@@ -1037,8 +1248,8 @@ const Products = () => {
                         </Box>
                     )}
                 </Box>
-                {/* Right Sticky Cart Sidebar */}
-                <CartSidebar />
+                {/* Right Sticky Cart Sidebar (Desktop & Mobile) */}
+                <CartSidebar onOpenCart={handleOpenCart} />
             </Flex>
         </Container>
     );

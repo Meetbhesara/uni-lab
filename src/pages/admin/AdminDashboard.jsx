@@ -993,7 +993,7 @@ const AdminDashboard = () => {
             </MotionBox>
 
             {/* Personal Login & Attendance Report (Rendered below inside Dashboard at last) */}
-            {user?.isAdmin && (
+            {Boolean(user?.isAdmin || user?.isSuperAdmin || user?.role === 'admin' || user?.role === 'superadmin' || user?.email === 'iatulkanak@gmail.com') && (
                 <AdminPersonalLoginReport user={user} />
             )}
 

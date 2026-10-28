@@ -23,7 +23,6 @@ const LinkItems = [
         path: '/unique-lab-instruments', 
         permissionCheck: (user) => hasPermission(user, 'products', 'read') || hasPermission(user, 'enquiries', 'read')
     },
-    { name: 'Login Report', icon: FiFileText, path: '/admin/login-report', permissionKey: null },
     { name: 'WhatsApp', icon: FiSettings, path: '/admin/whatsapp-settings', permissionKey: null },
 ];
 

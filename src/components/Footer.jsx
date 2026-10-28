@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Container, Stack, Text, Link, SimpleGrid, HStack, VStack, Flex, Icon, Divider } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
-import { FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, FaCheckCircle } from 'react-icons/fa';
+import { FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, FaCheckCircle, FaYoutube, FaInstagram } from 'react-icons/fa';
+import { SOCIAL_LINKS } from './Header';
 
 const scrollToTop = () => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -35,8 +36,8 @@ const Footer = () => {
                                 <Link href="tel:+919099160391" _hover={{ color: "white" }}>+91 90991 60391</Link>
                             </HStack>
                             <HStack spacing={2} fontSize="xs" color="gray.300">
-                                <Icon as={FaEnvelope} color="blue.400" />
-                                <Link href="mailto:atulkanak@uniquelabservices.com" _hover={{ color: "white" }}>atulkanak@uniquelabservices.com</Link>
+                                <Icon as={FaEnvelope} color="blue.400" flexShrink={0} />
+                                <Link href="mailto:atulkanak@uniquelabservices.com" wordBreak="break-all" _hover={{ color: "white" }}>atulkanak@uniquelabservices.com</Link>
                             </HStack>
                         </VStack>
                     </Stack>
@@ -129,10 +130,43 @@ const Footer = () => {
                     <Text fontSize="xs" color="gray.500">
                         © {new Date().getFullYear()} Unique Engineering (uecivil.com). All rights reserved.
                     </Text>
-                    <HStack spacing={6} fontSize="xs" color="gray.400">
-                        <Link as={RouterLink} to="/services?view=public" onClick={scrollToTop} _hover={{ color: "white" }}>Surveying</Link>
-                        <Link as={RouterLink} to="/products" onClick={scrollToTop} _hover={{ color: "white" }}>Equipment</Link>
-                        <Link as={RouterLink} to="/contact" onClick={scrollToTop} _hover={{ color: "white" }}>Support</Link>
+                    <HStack spacing={5} align="center">
+                        <HStack spacing={2.5}>
+                            {SOCIAL_LINKS.youtube && (
+                                <Link
+                                    href={SOCIAL_LINKS.youtube}
+                                    isExternal
+                                    aria-label="YouTube Channel"
+                                    color="gray.400"
+                                    _hover={{ color: "#FF0000", transform: "scale(1.18)" }}
+                                    transition="all 0.2s ease"
+                                    display="inline-flex"
+                                    alignItems="center"
+                                >
+                                    <Icon as={FaYoutube} boxSize="18px" />
+                                </Link>
+                            )}
+                            {SOCIAL_LINKS.instagram && (
+                                <Link
+                                    href={SOCIAL_LINKS.instagram}
+                                    isExternal
+                                    aria-label="Instagram Page"
+                                    color="gray.400"
+                                    _hover={{ color: "#E4405F", transform: "scale(1.18)" }}
+                                    transition="all 0.2s ease"
+                                    display="inline-flex"
+                                    alignItems="center"
+                                >
+                                    <Icon as={FaInstagram} boxSize="18px" />
+                                </Link>
+                            )}
+                        </HStack>
+                        <Divider orientation="vertical" h="14px" borderColor="whiteAlpha.300" />
+                        <HStack spacing={5} fontSize="xs" color="gray.400">
+                            <Link as={RouterLink} to="/services?view=public" onClick={scrollToTop} _hover={{ color: "white" }}>Surveying</Link>
+                            <Link as={RouterLink} to="/products" onClick={scrollToTop} _hover={{ color: "white" }}>Equipment</Link>
+                            <Link as={RouterLink} to="/contact" onClick={scrollToTop} _hover={{ color: "white" }}>Support</Link>
+                        </HStack>
                     </HStack>
                 </Flex>
             </Container>

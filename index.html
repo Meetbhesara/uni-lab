@@ -179,9 +179,97 @@
     }
     </script>
   </head>
-  <body>
-    <!-- Initial crawlable semantic content for search engine bots & AI crawlers (Replaced immediately by React on client load) -->
+    <!-- Initial branded loader (replaced seamlessly when React mounts) -->
     <div id="root">
+      <style>
+        #app-splash-loader {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          background: #ffffff;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          z-index: 999999;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          user-select: none;
+        }
+        .splash-logo-box {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 20px;
+        }
+        .splash-logo {
+          width: 68px;
+          height: 68px;
+          object-fit: contain;
+          animation: splashPulse 2s ease-in-out infinite;
+        }
+        .splash-brand-title {
+          font-size: 24px;
+          font-weight: 900;
+          color: #0D3F66;
+          letter-spacing: 2px;
+          line-height: 1.1;
+          margin: 0;
+          text-align: center;
+        }
+        .splash-brand-subtitle {
+          font-size: 10px;
+          font-weight: 700;
+          color: #ea580c;
+          letter-spacing: 3px;
+          text-transform: uppercase;
+          margin: 4px 0 24px 0;
+          text-align: center;
+        }
+        .splash-progress-track {
+          width: 140px;
+          height: 4px;
+          background: #e2e8f0;
+          border-radius: 999px;
+          overflow: hidden;
+          position: relative;
+        }
+        .splash-progress-bar {
+          position: absolute;
+          top: 0;
+          left: 0;
+          height: 100%;
+          width: 45%;
+          background: linear-gradient(90deg, #0066cc, #ea580c);
+          border-radius: 999px;
+          animation: splashSlide 1.3s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+        }
+        @keyframes splashPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.06); opacity: 0.9; }
+        }
+        @keyframes splashSlide {
+          0% { left: -45%; width: 35%; }
+          50% { width: 65%; }
+          100% { left: 100%; width: 35%; }
+        }
+      </style>
+      <div id="app-splash-loader">
+        <div class="splash-logo-box">
+          <img class="splash-logo" src="/uni-logo.svg" alt="Unique Engineering" />
+        </div>
+        <h1 class="splash-brand-title">UNIQUE</h1>
+        <p class="splash-brand-subtitle">ENGINEERING</p>
+        <div class="splash-progress-track">
+          <div class="splash-progress-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Crawlable semantic fallback for search bots and non-JS clients (Invisible to regular JS users) -->
+    <noscript>
       <header>
         <h1>Unique Engineering & Unique Survey — uecivil.com</h1>
         <p>Premier Civil Engineering Testing Instruments & Certified Land Surveying Services in Ahmedabad, Gujarat, India.</p>
@@ -226,7 +314,7 @@
           <p>Website: <a href="https://uecivil.com">https://uecivil.com</a></p>
         </section>
       </main>
-    </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
