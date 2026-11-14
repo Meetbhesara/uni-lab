@@ -360,8 +360,138 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // ── Unified Multi-Branch Mobile Auth Flow ──
+    const checkPhone = async (phone) => {
+        try {
+            const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+            const res = await api.post('/auth/check-phone', { phone: cleanPhone });
+            return res.data;
+        } catch (error) {
+            return {
+                success: false,
+                msg: error.response?.data?.msg || 'Failed to check mobile number',
+                status: error.response?.status
+            };
+        }
+    };
+
+    const sendAdminMobileOtp = async (phone, email) => {
+        try {
+            const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+            const { latitude, longitude } = await getCoordinates();
+            const res = await api.post('/auth/send-admin-mobile-otp', {
+                phone: cleanPhone,
+                email,
+                latitude,
+                longitude
+            });
+            return res.data;
+        } catch (error) {
+            return {
+                success: false,
+                msg: error.response?.data?.msg || 'Access restricted: Verification failed',
+                status: error.response?.status
+            };
+        }
+    };
+
+    const verifyAdminMobileOtp = async (phone, email, otp) => {
+        try {
+            const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+            const { latitude, longitude } = await getCoordinates();
+            const res = await api.post('/auth/verify-admin-mobile-otp', {
+                phone: cleanPhone,
+                email,
+                otp,
+                latitude,
+                longitude
+            });
+            const { token, user: userData } = res.data;
+            if (token) {
+                sessionStorage.setItem('token', token);
+                sessionStorage.setItem('user', JSON.stringify(userData));
+                sessionStorage.setItem('lastLoginAt', Date.now().toString());
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                localStorage.removeItem('lastLoginAt');
+                setUser(userData);
+            }
+            return { success: true, user: userData, token };
+        } catch (error) {
+            return {
+                success: false,
+                msg: error.response?.data?.msg || 'Access restricted: Verification failed',
+                status: error.response?.status
+            };
+        }
+    };
+
+    const loginWithPassword = async (phone, password) => {
+        try {
+            const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+            const res = await api.post('/auth/user-password-login', {
+                phone: cleanPhone,
+                password
+            });
+            const { token, user: userData } = res.data;
+            if (token) {
+                sessionStorage.setItem('token', token);
+                sessionStorage.setItem('user', JSON.stringify(userData));
+                sessionStorage.setItem('lastLoginAt', Date.now().toString());
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                localStorage.removeItem('lastLoginAt');
+                setUser(userData);
+            }
+            return { success: true, user: userData, token };
+        } catch (error) {
+            return {
+                success: false,
+                msg: error.response?.data?.msg || 'Password login failed',
+                status: error.response?.status
+            };
+        }
+    };
+
+    const setUserPassword = async (phone, password, name = '', companyName = '', address = '', gstNumber = '', email = '') => {
+        try {
+            const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+            const res = await api.post('/auth/set-user-password', {
+                phone: cleanPhone,
+                password,
+                name,
+                companyName,
+                address,
+                gstNumber,
+                email
+            });
+            const { token, user: userData, msg } = res.data;
+            if (token) {
+                sessionStorage.setItem('token', token);
+                sessionStorage.setItem('user', JSON.stringify(userData));
+                sessionStorage.setItem('lastLoginAt', Date.now().toString());
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                localStorage.removeItem('lastLoginAt');
+                setUser(userData);
+            }
+            return { success: true, user: userData, token, msg };
+        } catch (error) {
+            return {
+                success: false,
+                msg: error.response?.data?.msg || 'Failed to set password',
+                status: error.response?.status
+            };
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, setUser, login, logout, register, phoneLogin, phoneRegister, sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin, setup2FA, verifyEnable2FA, login2FA, resetWithBackup, loading, refreshUser }}>
+        <AuthContext.Provider value={{
+            user, setUser, login, logout, register, phoneLogin, phoneRegister,
+            sendOtp, verifyOtp, sendAdminOtp, verifyAdminOtp, createAdmin,
+            setup2FA, verifyEnable2FA, login2FA, resetWithBackup, loading, refreshUser,
+            checkPhone, sendAdminMobileOtp, verifyAdminMobileOtp, loginWithPassword, setUserPassword
+        }}>
             {children}
         </AuthContext.Provider>
     );

@@ -4,7 +4,7 @@ import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, Ic
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { FaShoppingCart, FaChevronLeft, FaChevronRight, FaTrash } from 'react-icons/fa';
-import { FiSettings, FiSearch, FiPlay } from 'react-icons/fi';
+import { FiSettings, FiSearch, FiPlay, FiShare2 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 import SEO from '../components/SEO';
@@ -568,6 +568,7 @@ const Products = () => {
     const { addToCart, cart } = useCart();
     const toast = useToast();
     const [products, setProducts] = useState([]);
+    const [highlightProduct, setHighlightProduct] = useState(null);
     const [loading, setLoading] = useState(() => Boolean(urlCategory || searchQuery || highlightId));
 
     // Immediate synchronous resolution of initial category from URL so SEO canonical is never delayed or null on first render
@@ -605,14 +606,27 @@ const Products = () => {
         }
     }, [urlCategory, searchQuery, highlightId]);
 
-    // If route has product ID (from /product/:id or ?highlight=id), auto-resolve category and switch to it
+    // If route has product ID (from /product/:id or ?highlight=id), fetch/sync highlightProduct and auto-resolve category
     useEffect(() => {
         autoInquiryDoneRef.current = false;
-        if (highlightId && !activeCategory) {
-            api.get(`/products/${highlightId}`)
-                .then(res => {
-                    const prod = res.data;
-                    if (!prod || !prod._id) return;
+        if (!highlightId) {
+            setHighlightProduct(null);
+            return;
+        }
+
+        // Check if product is already in memory
+        const foundInList = products.find(p => (p._id === highlightId || p.id === highlightId));
+        if (foundInList) {
+            setHighlightProduct(foundInList);
+        }
+
+        api.get(`/products/${highlightId}`)
+            .then(res => {
+                const prod = res.data;
+                if (!prod || !prod._id) return;
+                setHighlightProduct(prod);
+
+                if (!activeCategory) {
                     let targetCat = null;
                     if (prod.category) {
                         const found = PRODUCT_CATEGORIES.find(c => 
@@ -639,11 +653,11 @@ const Products = () => {
                         }
                     }
                     setActiveCategory(targetCat);
-                })
-                .catch(err => {
-                    console.warn('[Products] Could not auto-resolve category for product ID:', err.message);
-                });
-        }
+                }
+            })
+            .catch(err => {
+                console.warn('[Products] Could not auto-resolve product or category for product ID:', err.message);
+            });
     }, [highlightId, activeCategory]);
 
     // Reset pagination when switching categories or running a new search
@@ -774,25 +788,129 @@ const Products = () => {
         toast({ title: "Added to Enquiry Cart", status: "success", duration: 2000 });
     };
 
-    // Compute dynamic SEO metadata for category or search (Called unconditionally before any return)
+    // Alternative names for highlighted product
+    const altNames = Array.isArray(highlightProduct?.alternativeNames)
+        ? highlightProduct.alternativeNames.filter(Boolean).map(n => n.trim())
+        : [];
+
+    // Compute dynamic SEO metadata for product, category, or search (Called unconditionally before any return)
     const currentCategoryObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory || c.slug === activeCategory);
-    const seoTitle = currentCategoryObj
+    const seoTitle = highlightProduct
+        ? `${highlightProduct.name.trim()}${altNames.length > 0 ? ` (${altNames.slice(0, 2).join(', ')})` : ''} | Unique Lab Instruments`
+        : currentCategoryObj
         ? `${currentCategoryObj.title} | Civil Lab Equipment Ahmedabad`
         : searchQuery
         ? `Search: "${searchQuery}" | Civil Lab Equipment`
         : `Civil Lab Testing Instruments & Survey Equipment Catalog`;
-    const seoDescription = currentCategoryObj
+    const seoDescription = highlightProduct
+        ? `${highlightProduct.name.trim()}${altNames.length > 0 ? ` [Also: ${altNames.join(', ')}]` : ''} - ${highlightProduct.description || 'Civil engineering testing instrument by Unique Lab Instruments Ahmedabad'}. Certified standard quality with PAN India delivery, warranty & calibration.`
+        : currentCategoryObj
         ? `Explore high-precision ${currentCategoryObj.title} by Unique Engineering (uecivil.com). Certified civil laboratory testing instruments, brochures & quotations in Gujarat.`
         : `Complete catalog of civil engineering testing instruments in Ahmedabad: Concrete, Soil, Bitumen, Construction Machinery, Survey Total Stations & PPE safety equipment.`;
-    const seoKeywords = currentCategoryObj
+    const seoKeywords = highlightProduct
+        ? [
+            highlightProduct.name.trim(),
+            ...altNames,
+            highlightProduct.category,
+            'Unique Lab Instruments',
+            'uecivil',
+            'civil testing equipment ahmedabad',
+            'buy lab testing equipment'
+          ].filter(Boolean).join(', ')
+        : currentCategoryObj
         ? `${currentCategoryObj.seoKeywords}, uecivil, unique lab instruments`
         : `civil lab instruments ahmedabad, concrete testing equipment, soil testing apparatus, bitumen testing machine, total station gujarat, uecivil`;
-    const seoCanonical = currentCategoryObj
+    const seoCanonical = highlightProduct
+        ? `https://uecivil.com/products/${highlightProduct._id}`
+        : currentCategoryObj
         ? `https://uecivil.com/products?category=${currentCategoryObj.slug}`
         : `https://uecivil.com/products`;
 
+    const targetImg = highlightProduct
+        ? (highlightProduct.localImages?.[0] || highlightProduct.images?.[0] || highlightProduct.photos?.[0])
+        : null;
+    const seoOgImage = targetImg ? getImageUrl(targetImg) : 'https://uecivil.com/pwa-512x512.png';
+
     // Dynamic JSON-LD schema for Google AI, Gemini, and SEO rich snippets (Unconditional Hook)
     const productSchema = useMemo(() => {
+        if (highlightProduct) {
+            let details = highlightProduct.details;
+            if (typeof details === 'string') {
+                try { details = JSON.parse(details); } catch (e) {}
+                if (typeof details === 'string') { try { details = JSON.parse(details); } catch (e) {} }
+            }
+            const specsProperties = (details && typeof details === 'object')
+                ? Object.entries(details).map(([k, v]) => ({
+                    "@type": "PropertyValue",
+                    "name": String(k).trim(),
+                    "value": String(v).trim()
+                }))
+                : [];
+
+            const breadcrumbs = [
+                { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://uecivil.com/" },
+                { "@type": "ListItem", "position": 2, "name": "Civil Lab Products", "item": "https://uecivil.com/products" }
+            ];
+
+            if (currentCategoryObj) {
+                breadcrumbs.push({
+                    "@type": "ListItem",
+                    "position": 3,
+                    "name": currentCategoryObj.title,
+                    "item": `https://uecivil.com/products?category=${currentCategoryObj.slug}`
+                });
+                breadcrumbs.push({
+                    "@type": "ListItem",
+                    "position": 4,
+                    "name": highlightProduct.name.trim(),
+                    "item": `https://uecivil.com/products/${highlightProduct._id}`
+                });
+            } else {
+                breadcrumbs.push({
+                    "@type": "ListItem",
+                    "position": 3,
+                    "name": highlightProduct.name.trim(),
+                    "item": `https://uecivil.com/products/${highlightProduct._id}`
+                });
+            }
+
+            return {
+                "@context": "https://schema.org",
+                "@graph": [
+                    {
+                        "@type": "Product",
+                        "@id": `https://uecivil.com/products/${highlightProduct._id}#product`,
+                        "name": highlightProduct.name.trim(),
+                        ...(altNames.length > 0 ? { "alternateName": altNames } : {}),
+                        "description": highlightProduct.description || `${highlightProduct.name.trim()} - Civil engineering testing instrument by Unique Lab Instruments`,
+                        "image": [seoOgImage],
+                        "category": highlightProduct.category || "Civil Engineering Testing Equipment",
+                        "brand": {
+                            "@type": "Brand",
+                            "name": "Unique Lab Instruments"
+                        },
+                        "manufacturer": {
+                            "@type": "Organization",
+                            "name": "Unique Engineering",
+                            "url": "https://uecivil.com"
+                        },
+                        "offers": {
+                            "@type": "Offer",
+                            "url": `https://uecivil.com/products/${highlightProduct._id}`,
+                            "availability": "https://schema.org/InStock",
+                            "itemCondition": "https://schema.org/NewCondition",
+                            "priceCurrency": "INR"
+                        },
+                        ...(specsProperties.length > 0 ? { "additionalProperty": specsProperties } : {})
+                    },
+                    {
+                        "@type": "BreadcrumbList",
+                        "itemListElement": breadcrumbs
+                    }
+                ]
+            };
+        }
+
         const breadcrumbs = [
             { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://uecivil.com/" },
             { "@type": "ListItem", "position": 2, "name": "Civil Lab Products", "item": "https://uecivil.com/products" }
@@ -847,7 +965,7 @@ const Products = () => {
                 }
             ]
         };
-    }, [currentCategoryObj, seoTitle, seoDescription, seoCanonical]);
+    }, [highlightProduct, currentCategoryObj, seoTitle, seoDescription, seoCanonical, seoOgImage, altNames]);
 
     if (loading) {
         return (
@@ -857,6 +975,7 @@ const Products = () => {
                     description={seoDescription}
                     keywords={seoKeywords}
                     canonical={seoCanonical}
+                    ogImage={seoOgImage}
                     schema={productSchema}
                 />
                 <Flex justify="center" align="center" minH="50vh">
@@ -882,12 +1001,13 @@ const Products = () => {
             px={{ base: 4, sm: 6, md: 8 }}
             pb={hasCartItems ? { base: "115px", lg: 10 } : { base: 6, md: 10 }}
         >
-            {/* Dynamic Category SEO */}
+            {/* Dynamic Category / Product SEO */}
             <SEO
                 title={seoTitle}
                 description={seoDescription}
                 keywords={seoKeywords}
                 canonical={seoCanonical}
+                ogImage={seoOgImage}
                 schema={productSchema}
             />
 
@@ -1054,12 +1174,46 @@ const Products = () => {
                                                                         <Heading size="lg" color="slate.800" fontWeight="800" letterSpacing="tight">
                                                                             {product.name}
                                                                         </Heading>
+                                                                        {/* Alternative names display for SEO & customer search clarity */}
+                                                                        {product.alternativeNames && product.alternativeNames.filter(Boolean).length > 0 && (
+                                                                            <Flex wrap="wrap" align="center" gap={1.5} mt={1}>
+                                                                                <Text fontSize="11px" fontWeight="700" color="gray.500">
+                                                                                    Also Known As:
+                                                                                </Text>
+                                                                                {product.alternativeNames.filter(Boolean).map((alt, aIdx) => (
+                                                                                    <Badge key={aIdx} colorScheme="orange" variant="subtle" fontSize="10px" borderRadius="md" px={2} py={0.5}>
+                                                                                        {alt.trim()}
+                                                                                    </Badge>
+                                                                                ))}
+                                                                            </Flex>
+                                                                        )}
                                                                     </Stack>
-                                                                    {product.ISI && (
-                                                                        <Badge colorScheme="green" variant="solid" borderRadius="lg" px={3} py={1} boxShadow="sm" fontSize="xs">
-                                                                            ISI CERTIFIED
-                                                                        </Badge>
-                                                                    )}
+                                                                    <Flex align="center" gap={2}>
+                                                                        {product.ISI && (
+                                                                            <Badge colorScheme="green" variant="solid" borderRadius="lg" px={3} py={1} boxShadow="sm" fontSize="xs">
+                                                                                ISI CERTIFIED
+                                                                            </Badge>
+                                                                        )}
+                                                                        <IconButton
+                                                                            aria-label="Share direct product link"
+                                                                            icon={<FiShare2 />}
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            colorScheme="orange"
+                                                                            title="Copy Direct Product Link"
+                                                                            onClick={() => {
+                                                                                const prodUrl = `${window.location.origin}/products/${product._id}`;
+                                                                                navigator.clipboard.writeText(prodUrl);
+                                                                                toast({
+                                                                                    title: "Link Copied!",
+                                                                                    description: `Direct link for ${product.name} copied to clipboard`,
+                                                                                    status: "success",
+                                                                                    duration: 2500,
+                                                                                    isClosable: true
+                                                                                });
+                                                                            }}
+                                                                        />
+                                                                    </Flex>
                                                                 </Flex>
 
                                                                 <Text color="gray.600" fontSize="md" lineHeight="tall" fontWeight="500">

@@ -15,7 +15,7 @@ import {
     FaCalendarAlt, FaUser, FaBuilding, FaMapMarkerAlt, FaFilter,
     FaFileAlt, FaCamera, FaFilePdf, FaSyncAlt, FaDownload, FaEnvelope,
     FaListUl, FaExclamationTriangle, FaMoneyBillWave, FaTimes, FaPrint, FaWhatsapp,
-    FaBell, FaHistory
+    FaBell, FaHistory, FaSortAmountDown, FaSortAmountUp, FaSort
 } from 'react-icons/fa';
 import api from '../../api/axios';
 import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
@@ -198,6 +198,7 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     // Tabs & Invoice Form state
     const [activeTab, setActiveTab] = useState(0);
     const [closedPage, setClosedPage] = useState(1); // pagination for Closed tab
+    const [closedSortBy, setClosedSortBy] = useState('closingDateDesc'); // sorting for Closed tab: closingDateDesc | closingDateAsc | clientNameAsc | clientNameDesc | amountDesc | amountAsc
     const [companies, setCompanies] = useState([]);
     const [invoiceForm, setInvoiceForm] = useState({
         isOpen: false, type: '', entries: [], entryConfigs: {},
@@ -581,7 +582,10 @@ const InvoiceReport = ({ isInsideServices = false }) => {
             `💰 *Amount Due:* ₹${Number(amount).toLocaleString('en-IN')}\n` +
             `🏭 *Billed By:* ${compName}\n\n` +
             `Kindly arrange the payment at your earliest convenience. If already paid, please ignore this message.\n\n` +
-            `Thank you!`;
+             +
+            `🌐 *Explore Products Online:* https://uecivil.com\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Thank you,\n*Unique Engineering & Unique Lab Instruments*\n🌐 https://uecivil.com`;
 
         const cleanPhone = (phone || '').replace(/\D/g, '');
         const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
@@ -730,6 +734,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         if (s.status === 'Deactive' || s.status === 'deactive') return false;
         if (s.contractCancelled === true) return false;
 
+        // Closed entries and entries with generated invoices should NEVER be hidden due to missing docs!
+        if (s.invoiceStatus === 'Closed' || s.invoiceStatus === 'Completed' || s.closedDate || s.proformaInvoiceId || s.finalInvoiceId || s.invoiceDetails?.invoiceId) {
+            return true;
+        }
+
         const isTopo = (s.scheduleType || '').toUpperCase().includes('TOPOGRAPHY');
 
         const hasMailFile = (s.draftingWorkFiles?.mailFiles && s.draftingWorkFiles.mailFiles.length > 0) ||
@@ -763,7 +772,14 @@ const InvoiceReport = ({ isInsideServices = false }) => {
         const matchSearch = !q ||
             s.client?.clientName?.toLowerCase().includes(q) ||
             s.site?.siteName?.toLowerCase().includes(q) ||
-            s.operative?.name?.toLowerCase().includes(q);
+            s.operative?.name?.toLowerCase().includes(q) ||
+            s.receiverName?.toLowerCase().includes(q) ||
+            s.transactionNo?.toLowerCase().includes(q) ||
+            s.paymentRemark?.toLowerCase().includes(q) ||
+            s.paymentMode?.toLowerCase().includes(q) ||
+            s.finalInvoiceId?.toLowerCase().includes(q) ||
+            s.proformaInvoiceId?.toLowerCase().includes(q) ||
+            s.invoiceDetails?.invoiceId?.toLowerCase().includes(q);
         const matchLedger = !filterLedger || s.ledger === filterLedger;
 
         const targetStatus = tabStatusKeys[activeTab];
@@ -919,9 +935,8 @@ const InvoiceReport = ({ isInsideServices = false }) => {
     const groupedGroups = React.useMemo(() => {
         const groups = {};
         displayed.forEach(s => {
-            const clientId = s.client?._id || s.client;
-            const siteId = s.site?._id || s.site;
-            if (!clientId || !siteId) return;
+            const clientId = s.client?._id || s.client || 'unknown-client';
+            const siteId = s.site?._id || s.site || 'unknown-site';
             const sType = s.scheduleType || 'VISIT';
 
             // If the entry is part of a generated invoice, group by that invoice ID. 
@@ -1022,22 +1037,73 @@ const InvoiceReport = ({ isInsideServices = false }) => {
 
             // Find invoice generation timestamp for proper sorting
             g.latestInvoiceDate = g.entries.find(e => e.invoiceDetails?.generatedAt)?.invoiceDetails?.generatedAt || g.latestEntryDate;
+
+            // Closed date & clean client name for precise sorting on Closed tab
+            const cDate = g.entries.find(e => e.closedDate)?.closedDate 
+                || g.entries.find(e => e.updatedAt)?.updatedAt 
+                || g.latestEntryDate;
+            g.closedDate = cDate;
+            g.closedDateTime = cDate ? new Date(cDate).getTime() : 0;
+            g.cleanClientName = (g.client?.clientName || g.entries[0]?.client?.clientName || '').trim().toLowerCase();
+            g.closedTotalAmt = g.entries.reduce((sum, e) => {
+                const pAmt = Number(e.paymentAmount || 0);
+                return sum + (pAmt > 0 ? pAmt : calculateEntryAmount(e, e.invoiceDetails || g.entries.find(x => x.invoiceDetails)?.invoiceDetails));
+            }, 0);
         });
 
-        // Sort: Pending groups first (ordered by earliestPendingDate asc), Completed groups next (ordered by latestInvoiceDate desc)
-        list.sort((a, b) => {
-            if (a.status === 'Pending' && b.status !== 'Pending') return -1;
-            if (a.status !== 'Pending' && b.status === 'Pending') return 1;
+        // Sort: On Closed tab (activeTab === 4), sort according to user selection (Default: Closing date newest first)
+        if (activeTab === 4) {
+            list.sort((a, b) => {
+                if (closedSortBy === 'closingDateAsc') {
+                    return a.closedDateTime - b.closedDateTime;
+                }
+                if (closedSortBy === 'clientNameAsc') {
+                    return a.cleanClientName.localeCompare(b.cleanClientName);
+                }
+                if (closedSortBy === 'clientNameDesc') {
+                    return b.cleanClientName.localeCompare(a.cleanClientName);
+                }
+                if (closedSortBy === 'amountDesc') {
+                    return b.closedTotalAmt - a.closedTotalAmt;
+                }
+                if (closedSortBy === 'amountAsc') {
+                    return a.closedTotalAmt - b.closedTotalAmt;
+                }
+                // Default: closingDateDesc (latest closing date at the very top)
+                return b.closedDateTime - a.closedDateTime;
+            });
+        } else {
+            // Sort: Pending groups first (ordered by earliestPendingDate asc), Completed groups next (ordered by latestInvoiceDate desc)
+            list.sort((a, b) => {
+                if (a.status === 'Pending' && b.status !== 'Pending') return -1;
+                if (a.status !== 'Pending' && b.status === 'Pending') return 1;
 
-            if (a.status === 'Pending' && b.status === 'Pending') {
-                return new Date(a.earliestPendingDate) - new Date(b.earliestPendingDate);
-            }
+                if (a.status === 'Pending' && b.status === 'Pending') {
+                    return new Date(a.earliestPendingDate) - new Date(b.earliestPendingDate);
+                }
 
-            return new Date(b.latestInvoiceDate) - new Date(a.latestInvoiceDate);
-        });
+                return new Date(b.latestInvoiceDate) - new Date(a.latestInvoiceDate);
+            });
+        }
 
         return list;
-    }, [displayed, activeTab]);
+    }, [displayed, activeTab, closedSortBy]);
+
+        const handleMarkInvoiceClosed = (inv) => {
+        const entryIds = (inv.entries || []).map(e => e._id);
+        if (entryIds.length === 0) return;
+        setSelectedEntries(entryIds);
+        setCashUpiModal({
+            isOpen: true,
+            mode: 'CASH',
+            receiverName: '',
+            transactionNo: '',
+            paymentAmount: inv.totalAmt ? String(inv.totalAmt) : '',
+            closedDate: new Date().toISOString().split('T')[0],
+            remark: 'Marked closed from invoice ' + (inv.invoiceId || ''),
+            isSubmitting: false
+        });
+    };
 
     const validateAndPrepareGlobalInvoice = async (type) => {
         if (selectedEntries.length === 0) {
@@ -1499,24 +1565,47 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                     {activeTab !== 3 && (
                         <Card borderRadius="2xl" shadow="sm" border="1px solid" borderColor="gray.100">
                             <CardBody p={{ base: 3.5, md: 5 }}>
-                                <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={{ base: 3, md: 4 }} alignItems="flex-end">
+                                <SimpleGrid columns={{ base: 1, sm: 2, md: activeTab === 4 ? 5 : 4 }} spacing={{ base: 3, md: 4 }} alignItems="flex-end">
                                     <InputGroup>
                                         <InputLeftElement><Icon as={FaSearch} color="gray.400" /></InputLeftElement>
                                         <Input
-                                            placeholder="Search client, site, operative..."
+                                            placeholder={activeTab === 4 ? "Search client, site, txn, receiver..." : "Search client, site, operative..."}
                                             value={search}
-                                            onChange={e => setSearch(e.target.value)}
+                                            onChange={e => { setSearch(e.target.value); setClosedPage(1); }}
                                             borderRadius="xl"
                                             bg="gray.50"
                                             fontSize="xs"
                                         />
                                     </InputGroup>
-                                    <Select placeholder="All Ledger Types" value={filterLedger} onChange={e => setFilterLedger(e.target.value)} borderRadius="xl" bg="gray.50" fontSize="xs">
+                                    <Select placeholder="All Ledger Types" value={filterLedger} onChange={e => { setFilterLedger(e.target.value); setClosedPage(1); }} borderRadius="xl" bg="gray.50" fontSize="xs">
                                         <option value="Full Day">Full Day</option>
                                         <option value="Half Day">Half Day</option>
                                     </Select>
-                                    <Input type="date" placeholder="From Date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} borderRadius="xl" bg="gray.50" fontSize="xs" />
-                                    <Input type="date" placeholder="To Date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} borderRadius="xl" bg="gray.50" fontSize="xs" />
+                                    {activeTab === 4 && (
+                                        <Select
+                                            value={closedSortBy}
+                                            onChange={e => {
+                                                setClosedSortBy(e.target.value);
+                                                setClosedPage(1);
+                                            }}
+                                            borderRadius="xl"
+                                            bg="green.50"
+                                            borderColor="green.300"
+                                            color="green.800"
+                                            fontWeight="bold"
+                                            fontSize="xs"
+                                            title="Sort Closed Tab entries"
+                                        >
+                                            <option value="closingDateDesc">📅 Closing Date (Newest first)</option>
+                                            <option value="closingDateAsc">📅 Closing Date (Oldest first)</option>
+                                            <option value="clientNameAsc">🏢 Client Name (A → Z)</option>
+                                            <option value="clientNameDesc">🏢 Client Name (Z → A)</option>
+                                            <option value="amountDesc">💰 Amount (High → Low)</option>
+                                            <option value="amountAsc">💰 Amount (Low → High)</option>
+                                        </Select>
+                                    )}
+                                    <Input type="date" placeholder="From Date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setClosedPage(1); }} borderRadius="xl" bg="gray.50" fontSize="xs" />
+                                    <Input type="date" placeholder="To Date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setClosedPage(1); }} borderRadius="xl" bg="gray.50" fontSize="xs" />
                                 </SimpleGrid>
                             </CardBody>
                         </Card>
@@ -2203,12 +2292,25 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                             <Text fontSize="xs" color="gray.600">Point Marking</Text>
                                         </HStack>
                                     </HStack>
-                                    <Text fontSize="xs" color="gray.400" ml={{ base: 0, sm: "auto" }}>
-                                        {activeTab === 4
-                                            ? `${groupedGroups.length} entries · Page ${closedPage} of ${Math.max(1, Math.ceil(groupedGroups.length / 30))}`
-                                            : `${groupedGroups.length} entries listed`
-                                        }
-                                    </Text>
+                                    {activeTab === 4 ? (
+                                        <HStack spacing={2} ml={{ base: 0, sm: "auto" }}>
+                                            <Badge colorScheme="green" variant="subtle" border="1px solid" borderColor="green.200" borderRadius="full" px={2.5} py={0.5} fontSize="10px" fontWeight="bold">
+                                                {closedSortBy === 'closingDateDesc' && '📅 Closing: Newest First'}
+                                                {closedSortBy === 'closingDateAsc' && '📅 Closing: Oldest First'}
+                                                {closedSortBy === 'clientNameAsc' && '🏢 Client: A → Z'}
+                                                {closedSortBy === 'clientNameDesc' && '🏢 Client: Z → A'}
+                                                {closedSortBy === 'amountDesc' && '💰 Amount: High → Low'}
+                                                {closedSortBy === 'amountAsc' && '💰 Amount: Low → High'}
+                                            </Badge>
+                                            <Text fontSize="xs" color="gray.500" fontWeight="bold">
+                                                {groupedGroups.length} entries · Page {closedPage} of {Math.max(1, Math.ceil(groupedGroups.length / 30))}
+                                            </Text>
+                                        </HStack>
+                                    ) : (
+                                        <Text fontSize="xs" color="gray.400" ml={{ base: 0, sm: "auto" }}>
+                                            {groupedGroups.length} entries listed
+                                        </Text>
+                                    )}
                                 </Flex>
                             </Box>
                             <Divider />
@@ -2238,11 +2340,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                             const siteCount = group.siteGroups ? group.siteGroups.length : 1;
 
                                             const groupClientId = String(group.client?._id || group.client);
-                                            const groupTotalAmt = group.entries.reduce((sum, e) => sum + Number(e.paymentAmount || 0), 0);
+                                            const groupTotalAmt = group.closedTotalAmt > 0 ? group.closedTotalAmt : group.entries.reduce((sum, e) => sum + Number(e.paymentAmount || 0), 0);
                                             const paymentMode = group.entries.find(e => e.paymentMode)?.paymentMode || (group.entries.find(e => e.transactionNo)?.transactionNo ? 'UPI' : (group.entries.find(e => e.receiverName)?.receiverName ? 'CASH' : null));
                                             const receiverName = group.entries.find(e => e.receiverName)?.receiverName;
                                             const transactionNo = group.entries.find(e => e.transactionNo)?.transactionNo;
-                                            const closedDate = group.entries.find(e => e.closedDate)?.closedDate;
+                                            const closedDate = group.closedDate || group.entries.find(e => e.closedDate)?.closedDate;
                                             const isDifferentClient = activeSelectedClientId && groupClientId !== activeSelectedClientId;
 
                                             const { bg, border } = rowStyle(group);
@@ -2509,11 +2611,55 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     {activeTab === 4 ? (
                                                         <>
                                                             <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">INVOICE NO. & TYPE</Th>
-                                                            <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">CLIENT NAME</Th>
+                                                            <Th
+                                                                py={4}
+                                                                color="blue.800"
+                                                                fontSize="10px"
+                                                                fontWeight="black"
+                                                                cursor="pointer"
+                                                                userSelect="none"
+                                                                title="Click to sort by Client Name"
+                                                                onClick={() => {
+                                                                    setClosedSortBy(p => p === 'clientNameAsc' ? 'clientNameDesc' : 'clientNameAsc');
+                                                                    setClosedPage(1);
+                                                                }}
+                                                            >
+                                                                CLIENT NAME {closedSortBy === 'clientNameAsc' ? '▲' : closedSortBy === 'clientNameDesc' ? '▼' : '↕'}
+                                                            </Th>
                                                             <Th py={4} color="blue.800" fontSize="10px" fontWeight="black">SITES COVERED</Th>
                                                             <Th py={4} color="blue.800" fontSize="10px" textAlign="center" fontWeight="black">PAYMENT DETAILS</Th>
-                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="center" fontWeight="black">CLOSED DATE</Th>
-                                                            <Th py={4} color="blue.800" fontSize="10px" textAlign="right" fontWeight="black">CLOSED AMOUNT (₹)</Th>
+                                                            <Th
+                                                                py={4}
+                                                                color="blue.800"
+                                                                fontSize="10px"
+                                                                textAlign="center"
+                                                                fontWeight="black"
+                                                                cursor="pointer"
+                                                                userSelect="none"
+                                                                title="Click to sort by Closing Date"
+                                                                onClick={() => {
+                                                                    setClosedSortBy(p => p === 'closingDateDesc' ? 'closingDateAsc' : 'closingDateDesc');
+                                                                    setClosedPage(1);
+                                                                }}
+                                                            >
+                                                                CLOSED DATE {closedSortBy === 'closingDateDesc' ? '▼' : closedSortBy === 'closingDateAsc' ? '▲' : '↕'}
+                                                            </Th>
+                                                            <Th
+                                                                py={4}
+                                                                color="blue.800"
+                                                                fontSize="10px"
+                                                                textAlign="right"
+                                                                fontWeight="black"
+                                                                cursor="pointer"
+                                                                userSelect="none"
+                                                                title="Click to sort by Closed Amount"
+                                                                onClick={() => {
+                                                                    setClosedSortBy(p => p === 'amountDesc' ? 'amountAsc' : 'amountDesc');
+                                                                    setClosedPage(1);
+                                                                }}
+                                                            >
+                                                                CLOSED AMOUNT (₹) {closedSortBy === 'amountDesc' ? '▼' : closedSortBy === 'amountAsc' ? '▲' : '↕'}
+                                                            </Th>
                                                             <Th py={4} color="blue.800" fontSize="10px" textAlign="right" minW="200px" fontWeight="black">ACTIONS</Th>
                                                         </>
                                                     ) : (
@@ -2539,11 +2685,11 @@ const InvoiceReport = ({ isInsideServices = false }) => {
                                                     const siteCount = group.siteGroups ? group.siteGroups.length : 1;
 
                                                     const groupClientId = String(group.client?._id || group.client);
-                                                    const groupTotalAmt = group.entries.reduce((sum, e) => sum + Number(e.paymentAmount || 0), 0);
+                                                    const groupTotalAmt = group.closedTotalAmt > 0 ? group.closedTotalAmt : group.entries.reduce((sum, e) => sum + Number(e.paymentAmount || 0), 0);
                                                     const paymentMode = group.entries.find(e => e.paymentMode)?.paymentMode || (group.entries.find(e => e.transactionNo)?.transactionNo ? 'UPI' : (group.entries.find(e => e.receiverName)?.receiverName ? 'CASH' : null));
                                                     const receiverName = group.entries.find(e => e.receiverName)?.receiverName;
                                                     const transactionNo = group.entries.find(e => e.transactionNo)?.transactionNo;
-                                                    const closedDate = group.entries.find(e => e.closedDate)?.closedDate;
+                                                    const closedDate = group.closedDate || group.entries.find(e => e.closedDate)?.closedDate;
                                                     const isDifferentClient = activeSelectedClientId && groupClientId !== activeSelectedClientId;
 
                                                     const { bg, border, hoverBg } = rowStyle(group);

@@ -526,19 +526,19 @@ const AdminEnquiries = () => {
 
         // --- Find last quotation to copy previous prices ---
         const allEnqQuotes = [...quotations, ...processedQuotations]
-            .filter(q => q.enquiry?._id === selectedEnquiry._id)
+            .filter(q => (q.enquiry?._id || q.enquiryId?._id || q.enquiry || q.enquiryId) === selectedEnquiry._id)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const lastQuote = allEnqQuotes.length > 0 ? allEnqQuotes[0] : null;
 
-        // Initialize custom party details - Don't pre-fill 'Guest' if that's the default name
+        // Initialize custom party details - Prefer previous quote details on revision, or enquiry initial data
         const initialName = (selectedEnquiry.Name === 'Guest' || !selectedEnquiry.Name) ? '' : selectedEnquiry.Name;
         const initialCompanyName = (selectedEnquiry.companyName === 'Guest' || !selectedEnquiry.companyName) ? '' : selectedEnquiry.companyName;
 
-        setQuotePartyName(initialCompanyName || initialName || '');
-        setQuoteContactPerson(selectedEnquiry.contactPersonName || '');
-        setQuoteEmail(selectedEnquiry.email && selectedEnquiry.email !== 'N/A' ? selectedEnquiry.email : '');
-        setQuoteMobile(selectedEnquiry.phone && selectedEnquiry.phone !== 'N/A' ? selectedEnquiry.phone : '');
-        setQuoteAddress(''); // Start empty
+        setQuotePartyName(lastQuote?.partyName || initialCompanyName || initialName || '');
+        setQuoteContactPerson(lastQuote?.contactPerson || selectedEnquiry.contactPersonName || '');
+        setQuoteEmail(lastQuote?.email || (selectedEnquiry.email && selectedEnquiry.email !== 'N/A' ? selectedEnquiry.email : ''));
+        setQuoteMobile(lastQuote?.phone || (selectedEnquiry.phone && selectedEnquiry.phone !== 'N/A' ? selectedEnquiry.phone : ''));
+        setQuoteAddress(lastQuote?.address || selectedEnquiry.address || '');
 
         // Initialize items
         let initialItems = [];
@@ -1108,22 +1108,6 @@ const AdminEnquiries = () => {
 
             toast({ title: "Quotation Created & Saved", status: "success" });
 
-            // If Google Contact Result was returned from creating quotation, show acknowledgment modal
-            if (response.data?.googleContactResult) {
-                setQuotationAckModal({
-                    isOpen: true,
-                    phone: (quoteMobile || '').replace(/\D/g, '').slice(-10),
-                    clientName: quoteContactPerson || quotePartyName || 'Client',
-                    companyName: quotePartyName || '',
-                    refNo: response.data.refNo || 'Quotation',
-                    grandTotal: flatTotals.grandTotal || quoteTotals.total || 0,
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
-                    whatsappSent: null, // Just created quote, not dispatched on WhatsApp yet
-                    whatsappError: null,
-                    googleContactResult: response.data.googleContactResult
-                });
-            }
-
             setSelectedEnquiry(null);
             setIsCreatingQuote(false);
 
@@ -1143,7 +1127,19 @@ const AdminEnquiries = () => {
         setSendingWhatsappId(q._id);
         try {
             const clientName = q.enquiryId?.Name || q.enquiry?.Name || q.partyName || 'Client';
-            const message = `Hello *${clientName}*,\n\nHere is your *Quotation* from *Uni-BC*.\n\n*Reference:* ${q.refNo || 'N/A'}\n*Date:* ${new Date(q.createdAt).toLocaleDateString('en-GB')}\n*Grand Total:* ₹${q.grandTotal || '0'}\n\nThank you!`;
+            const message = `Hello *${clientName}*,\n\n` +
+                `Please find attached your official *Quotation* from *Unique Engineering & Unique Lab Instruments*.\n\n` +
+                `📋 *Reference No:* ${q.refNo || 'N/A'}\n` +
+                `📅 *Date:* ${new Date(q.createdAt).toLocaleDateString('en-GB')}\n` +
+                `💰 *Grand Total:* ₹${Number(q.grandTotal || q.totalAmount || 0).toLocaleString('en-IN')}\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━\n` +
+                `🏗️ *CIVIL LAB  MACHINES & SURVEY EQUIPMENT*\n` +
+                `We manufacture & supply CTM (Digital Compression Testing Machines), Cube Moulds, Concrete/Soil Testing Equipment & Auto Levels with NABL calibration delivering PAN-India.\n` +
+                `🌐 *Browse & Order Online:* https://uecivil.com\n` +
+                `━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `Thank you for connecting with us! 🙏\n` +
+                `*Unique Lab Instruments*\n` +
+                `🌐 https://uecivil.com`;
 
             const res = await api.post('/whatsapp/send-quotation', {
                 quotationId: q._id,

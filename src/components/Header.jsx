@@ -4,12 +4,19 @@ import {
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton,
     Drawer, DrawerBody, DrawerFooter, DrawerHeader, DrawerOverlay, DrawerContent, DrawerCloseButton,
     FormControl, FormLabel, Input, useToast, Image, IconButton, Divider, VStack, Textarea,
-    Tooltip, HStack, Link
+    Tooltip, HStack, Link,
+    Menu, MenuButton, MenuList, MenuItem, MenuDivider,
+    InputGroup, InputLeftAddon, InputLeftElement, InputRightElement, Alert, AlertIcon, AlertDescription
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { FaPhone, FaEnvelope, FaShoppingCart, FaTrash, FaBars, FaSearch, FaYoutube, FaInstagram } from 'react-icons/fa';
+import {
+    FiMoreVertical, FiLogIn, FiLogOut, FiShield, FiUser, FiLock,
+    FiPhone, FiMail, FiCheckCircle, FiEye, FiEyeOff, FiArrowLeft, FiKey, FiGrid,
+    FiBriefcase, FiMapPin, FiFileText
+} from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 
@@ -183,13 +190,22 @@ const MobileNavLink = ({ to, children, onClick, isActive }) => (
 );
 
 const Header = () => {
+    const toast = useToast();
     const { user, logout } = useAuth();
-    const { cart } = useCart();
+    const { cart, clearCart } = useCart();
     const navigate = useNavigate();
     const location = useLocation();
     const { isOpen: isRegisterOpen, onOpen: onRegisterOpen, onClose: onRegisterClose } = useDisclosure();
     const { isOpen: isEnquiryOpen, onOpen: onEnquiryOpen, onClose: onEnquiryClose } = useDisclosure();
     const { isOpen: isNavOpen, onToggle: toggleNav } = useDisclosure();
+
+    const [authModalInitialPhone, setAuthModalInitialPhone] = useState('');
+    const [authOrigin, setAuthOrigin] = useState('cart'); // 'cart' | 'nav'
+    const handleOpenAuth = (phoneToPrefill = '', origin = 'cart') => {
+        setAuthModalInitialPhone(phoneToPrefill);
+        setAuthOrigin(origin);
+        onRegisterOpen();
+    };
 
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -313,15 +329,93 @@ const Header = () => {
                     <Button id="enquiry-cart-btn" colorScheme="orange" variant="accent" size="sm" onClick={handleEnquiryClick}>
                         Enquiry
                     </Button>
-                    {!user ? (
-                        <Button variant="outline" size="sm" onClick={onRegisterOpen}>Admin Login</Button>
-                    ) : (
-                        <Flex align="center" gap={3}>
-                            <Text fontWeight="bold" fontSize="sm" color="brand.600" noOfLines={1}>Hi, {user.name.split(' ')[0]}</Text>
-                            <Button size="xs" variant="ghost" colorScheme="red" onClick={() => {
-                                logout();
-                                navigate('/');
-                            }}>Logout</Button>
+                    {/* Three Dots More Menu (Contains Login) */}
+                    <Menu isLazy placement="bottom-end">
+                        <MenuButton
+                            as={IconButton}
+                            icon={<FiMoreVertical size={18} />}
+                            variant="outline"
+                            size="sm"
+                            borderRadius="xl"
+                            borderColor="gray.300"
+                            aria-label="Account Options"
+                            _hover={{ bg: 'brand.50', borderColor: 'brand.400' }}
+                            title="Account & Login"
+                        />
+                        <MenuList zIndex={9999} boxShadow="2xl" borderRadius="2xl" p={2} minW="210px" border="1px solid" borderColor="gray.100">
+                            {!user ? (
+                                <MenuItem
+                                    icon={<FiLogIn size={16} color="#0076a3" />}
+                                    fontWeight="700"
+                                    color="brand.600"
+                                    borderRadius="xl"
+                                    py={2.5}
+                                    onClick={() => handleOpenAuth('', 'nav')}
+                                >
+                                    Login
+                                </MenuItem>
+                            ) : (
+                                <>
+                                    <Box px={3} py={2} bg="gray.50" borderRadius="xl" mb={1.5}>
+                                        <Text fontSize="10px" color="gray.400" fontWeight="800" textTransform="uppercase" letterSpacing="wider">LOGGED IN AS</Text>
+                                        <Text fontWeight="800" fontSize="sm" color="gray.800" noOfLines={1}>{user.name || user.phone}</Text>
+                                        <Badge colorScheme={user.isAdmin ? 'purple' : 'green'} fontSize="2xs" mt={1} borderRadius="full" px={2}>
+                                            {user.isSuperAdmin ? 'SUPER ADMIN' : user.isAdmin ? 'ADMIN' : 'CUSTOMER'}
+                                        </Badge>
+                                    </Box>
+                                    <MenuItem
+                                        icon={<FiGrid size={16} color="#0076a3" />}
+                                        fontWeight="700"
+                                        color="brand.600"
+                                        borderRadius="xl"
+                                        py={2}
+                                        onClick={() => navigate('/my-dashboard')}
+                                    >
+                                        My Dashboard
+                                    </MenuItem>
+                                    <MenuItem
+                                        icon={<FiUser size={16} color="#2B6CB0" />}
+                                        fontWeight="700"
+                                        borderRadius="xl"
+                                        py={2}
+                                        onClick={() => navigate('/my-profile')}
+                                    >
+                                        My Profile
+                                    </MenuItem>
+                                    {user.isAdmin && (
+                                        <MenuItem
+                                            icon={<FiShield size={16} color="#805AD5" />}
+                                            fontWeight="700"
+                                            color="brand.600"
+                                            borderRadius="xl"
+                                            py={2}
+                                            onClick={() => navigate('/admin/dashboard')}
+                                        >
+                                            Admin Dashboard
+                                        </MenuItem>
+                                    )}
+                                    <MenuDivider my={1} />
+                                    <MenuItem
+                                        icon={<FiLogOut size={16} color="#E53E3E" />}
+                                        fontWeight="700"
+                                        color="red.600"
+                                        borderRadius="xl"
+                                        py={2}
+                                        onClick={() => {
+                                            logout();
+                                            navigate('/');
+                                        }}
+                                    >
+                                        Logout
+                                    </MenuItem>
+                                </>
+                            )}
+                        </MenuList>
+                    </Menu>
+
+                    {user && (
+                        <Flex align="center" gap={2} ml={1}>
+                            <Text fontWeight="bold" fontSize="sm" color="brand.600" noOfLines={1}>Hi, {(user.name || 'User').split(' ')[0]}</Text>
                         </Flex>
                     )}
                 </Flex>
@@ -362,6 +456,88 @@ const Header = () => {
                         size="sm"
                         onClick={() => navigate('/products')}
                     />
+
+                    {/* Three Dots Menu Button on Mobile */}
+                    <Menu isLazy placement="bottom-end">
+                        <MenuButton
+                            as={IconButton}
+                            icon={<FiMoreVertical size={18} />}
+                            variant="ghost"
+                            size="sm"
+                            borderRadius="full"
+                            aria-label="Account Menu"
+                        />
+                        <MenuList zIndex={9999} boxShadow="2xl" borderRadius="2xl" p={2} minW="200px">
+                            {!user ? (
+                                <MenuItem
+                                    icon={<FiLogIn size={16} color="#0076a3" />}
+                                    fontWeight="700"
+                                    color="brand.600"
+                                    borderRadius="xl"
+                                    py={2.5}
+                                    onClick={() => handleOpenAuth('', 'nav')}
+                                >
+                                    Login
+                                </MenuItem>
+                            ) : (
+                                <>
+                                    <Box px={3} py={2} bg="gray.50" borderRadius="xl" mb={1.5}>
+                                        <Text fontSize="10px" color="gray.400" fontWeight="800" textTransform="uppercase">LOGGED IN AS</Text>
+                                        <Text fontWeight="800" fontSize="sm" color="gray.800" noOfLines={1}>{user.name || user.phone}</Text>
+                                        <Badge colorScheme={user.isAdmin ? 'purple' : 'green'} fontSize="2xs" mt={1}>
+                                            {user.isSuperAdmin ? 'SUPER ADMIN' : user.isAdmin ? 'ADMIN' : 'CUSTOMER'}
+                                        </Badge>
+                                    </Box>
+                                    <MenuItem
+                                        icon={<FiGrid size={16} color="#0076a3" />}
+                                        fontWeight="700"
+                                        color="brand.600"
+                                        borderRadius="xl"
+                                        py={2}
+                                        onClick={() => navigate('/my-dashboard')}
+                                    >
+                                        My Dashboard
+                                    </MenuItem>
+                                    <MenuItem
+                                        icon={<FiUser size={16} color="#2B6CB0" />}
+                                        fontWeight="700"
+                                        borderRadius="xl"
+                                        py={2}
+                                        onClick={() => navigate('/my-profile')}
+                                    >
+                                        My Profile
+                                    </MenuItem>
+                                    {user.isAdmin && (
+                                        <MenuItem
+                                            icon={<FiShield size={16} color="#805AD5" />}
+                                            fontWeight="700"
+                                            color="purple.600"
+                                            borderRadius="xl"
+                                            py={2}
+                                            onClick={() => navigate('/admin/dashboard')}
+                                        >
+                                            Admin Dashboard
+                                        </MenuItem>
+                                    )}
+                                    <MenuDivider my={1} />
+                                    <MenuItem
+                                        icon={<FiLogOut size={16} color="#E53E3E" />}
+                                        fontWeight="700"
+                                        color="red.600"
+                                        borderRadius="xl"
+                                        py={2}
+                                        onClick={() => {
+                                            logout();
+                                            navigate('/');
+                                        }}
+                                    >
+                                        Logout
+                                    </MenuItem>
+                                </>
+                            )}
+                        </MenuList>
+                    </Menu>
+
                     <IconButton
                         icon={<FaBars />}
                         onClick={toggleNav}
@@ -478,7 +654,7 @@ const Header = () => {
                                     )}
 
                                     {!user ? (
-                                        <Button variant="outline" w="full" onClick={() => { onRegisterOpen(); toggleNav(); }}>
+                                        <Button variant="outline" w="full" onClick={() => { handleOpenAuth('', 'nav'); toggleNav(); }}>
                                             Admin Login
                                         </Button>
                                     ) : (
@@ -493,98 +669,447 @@ const Header = () => {
                 )}
             </AnimatePresence>
 
-            {/* Register/Login Modal */}
-            <AuthModal isOpen={isRegisterOpen} onClose={onRegisterClose} />
-
             {/* Enquiry Drawer (Slider) */}
-            <EnquiryDrawer isOpen={isEnquiryOpen} onClose={onEnquiryClose} cart={cart} />
+            <EnquiryDrawer
+                isOpen={isEnquiryOpen}
+                onClose={onEnquiryClose}
+                cart={cart}
+                onOpenAuth={handleOpenAuth}
+            />
+
+            {/* Single Unified Register/Login Modal */}
+            <AuthModal
+                isOpen={isRegisterOpen}
+                onClose={() => {
+                    setAuthModalInitialPhone('');
+                    onRegisterClose();
+                    if (authOrigin === 'cart' && cart.length > 0 && !user) {
+                        onEnquiryOpen();
+                    }
+                }}
+                initialPhone={authModalInitialPhone}
+                disallowAdmin={authOrigin === 'cart'}
+                onLoginSuccess={async (loggedInUser) => {
+                    setAuthModalInitialPhone('');
+                    onRegisterClose();
+                    if (authOrigin === 'nav') {
+                        if (loggedInUser?.isAdmin || loggedInUser?.isSuperAdmin) {
+                            navigate('/admin/dashboard');
+                        } else {
+                            navigate('/my-dashboard');
+                        }
+                    } else if (authOrigin === 'cart') {
+                        if (cart && cart.length > 0 && !loggedInUser?.isAdmin) {
+                            try {
+                                const enquiryData = {
+                                    companyName: loggedInUser.companyName || loggedInUser.name || 'Client',
+                                    contactPersonName: loggedInUser.contactPersonName || loggedInUser.name || 'Client',
+                                    phone: loggedInUser.phone,
+                                    email: loggedInUser.email || `${loggedInUser.phone}@client.com`,
+                                    gstNumber: loggedInUser.gstNumber || '',
+                                    address: loggedInUser.address || '',
+                                    products: cart.map(item => {
+                                        const product = item.productId || item.product || {};
+                                        return {
+                                            productId: product._id || product.id,
+                                            quantity: Number(item.quantity) || 1
+                                        };
+                                    }),
+                                    status: 'Pending',
+                                    type: 'enquiry',
+                                    sessionId: localStorage.getItem('sessionId') || ''
+                                };
+                                await api.post('/enquiries', enquiryData);
+                                await clearCart();
+                                toast({
+                                    title: "Enquiry Sent!",
+                                    description: "Thank you! We will get back to you shortly.",
+                                    status: "success",
+                                    duration: 5000,
+                                    isClosable: true
+                                });
+                                navigate('/products');
+                            } catch (err) {
+                                console.error("Enquiry submission error:", err);
+                                onEnquiryOpen();
+                            }
+                        } else {
+                            onEnquiryOpen();
+                        }
+                    }
+                }}
+            />
 
         </Box>
     );
 };
 
-const AuthModal = ({ isOpen, onClose }) => {
-    const { sendAdminOtp, verifyAdminOtp, setup2FA, verifyEnable2FA, login2FA, resetWithBackup } = useAuth();
+const AuthModal = ({ isOpen, onClose, initialPhone = '', onLoginSuccess, disallowAdmin = false }) => {
+    const {
+        checkPhone, sendAdminMobileOtp, verifyAdminMobileOtp,
+        loginWithPassword, setUserPassword, setup2FA, verifyEnable2FA, login2FA, resetWithBackup
+    } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
-    const [step, setStep] = React.useState('email'); // 'email' | 'choose' | 'otp' | 'mfa' | 'mfa-setup' | 'reset-2fa'
+
+    // Steps: 'phone' | 'admin-email' | 'admin-otp' | 'user-password' | 'user-set-password' | 'mfa' | 'mfa-setup' | 'reset-backup'
+    const [step, setStep] = React.useState('phone');
     const [isLoading, setIsLoading] = React.useState(false);
+
+    // Form fields
+    const [phone, setPhone] = React.useState('');
+    const [cleanPhone, setCleanPhone] = React.useState('');
     const [email, setEmail] = React.useState('');
     const [otp, setOtp] = React.useState('');
+    const [password, setPassword] = React.useState('');
+    const [confirmPassword, setConfirmPassword] = React.useState('');
+    const [showPassword, setShowPassword] = React.useState(false);
+    const [name, setName] = React.useState('');
+    const [companyName, setCompanyName] = React.useState('');
+    const [address, setAddress] = React.useState('');
+    const [gstNumber, setGstNumber] = React.useState('');
+    const [userName, setUserName] = React.useState('');
+
+    // MFA / 2FA states
     const [mfaCode, setMfaCode] = React.useState('');
     const [qrCode, setQrCode] = React.useState('');
     const [is2FAEnabled, setIs2FAEnabled] = React.useState(false);
-    const [whatsappFailed, setWhatsappFailed] = React.useState(false);
-    const [resetLoading, setResetLoading] = React.useState(false);
     const [backupCodeInput, setBackupCodeInput] = React.useState('');
+    const [resetLoading, setResetLoading] = React.useState(false);
+
+    // Rate Limiter Error Message
+    const [rateLimitError, setRateLimitError] = React.useState('');
 
     const resetAndClose = () => {
-        setStep('email'); setEmail(''); setOtp(''); setMfaCode(''); setQrCode('');
-        setWhatsappFailed(false); setBackupCodeInput(''); setIs2FAEnabled(false);
+        setStep('phone');
+        setPhone('');
+        setCleanPhone('');
+        setEmail('');
+        setOtp('');
+        setPassword('');
+        setConfirmPassword('');
+        setShowPassword(false);
+        setName('');
+        setCompanyName('');
+        setAddress('');
+        setGstNumber('');
+        setUserName('');
+        setMfaCode('');
+        setQrCode('');
+        setIs2FAEnabled(false);
+        setBackupCodeInput('');
+        setRateLimitError('');
         onClose();
     };
 
-    const handleSendOtp = async () => {
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            return toast({ title: 'Enter a valid email', status: 'error', duration: 2500 });
+    // Helper: compute 10 digits
+    const getCleanDigits = (val) => (val || '').replace(/\D/g, '').slice(-10);
+
+    // Reset states when modal closes
+    React.useEffect(() => {
+        if (!isOpen) {
+            setStep('phone');
+            setPhone('');
+            setCleanPhone('');
+            setEmail('');
+            setOtp('');
+            setPassword('');
+            setConfirmPassword('');
+            setShowPassword(false);
+            setName('');
+            setCompanyName('');
+            setAddress('');
+            setGstNumber('');
+            setUserName('');
+            setMfaCode('');
+            setQrCode('');
+            setIs2FAEnabled(false);
+            setBackupCodeInput('');
+            setRateLimitError('');
         }
+    }, [isOpen]);
+
+    // Auto-prefill and advance to password or registration when initialPhone is provided from Cart
+    React.useEffect(() => {
+        if (isOpen && initialPhone) {
+            const digits = getCleanDigits(initialPhone);
+            setPhone(digits);
+            if (digits.length === 10) {
+                setIsLoading(true);
+                setRateLimitError('');
+                checkPhone(digits).then(res => {
+                    setIsLoading(false);
+                    if (!res) return;
+                    if (res.status === 429) {
+                        setRateLimitError(res.msg || 'Too many attempts. For security, please wait 15 minutes before trying again.');
+                        return;
+                    }
+                    if (!res.success) {
+                        toast({ title: 'Error Checking Mobile', description: res.msg, status: 'error', duration: 4000 });
+                        return;
+                    }
+                    setCleanPhone(res.phone || digits);
+                    if (res.requiresVerification || res.role === 'admin' || res.isAdmin) {
+                        if (disallowAdmin) {
+                            toast({
+                                title: 'Admin Account Not Allowed',
+                                description: 'Administrative accounts cannot submit customer enquiries. Please use your customer mobile number or log in via Admin Login in the menu.',
+                                status: 'error',
+                                duration: 5000,
+                                isClosable: true
+                            });
+                            resetAndClose();
+                            return;
+                        }
+                        setStep('admin-email');
+                    } else {
+                        setUserName(res.name || res.contactPersonName || '');
+                        if (res.name) setName(res.name);
+                        if (res.companyName) setCompanyName(res.companyName);
+                        if (res.address) setAddress(res.address);
+                        if (res.gstNumber) setGstNumber(res.gstNumber);
+
+                        if (res.hasPassword) {
+                            setStep('user-password');
+                        } else {
+                            setStep('user-set-password');
+                        }
+                    }
+                }).catch(() => setIsLoading(false));
+            }
+        }
+    }, [isOpen, initialPhone]);
+
+    // Step 1: Check Mobile Number
+    const handlePhoneSubmit = async () => {
+        const digits = getCleanDigits(phone);
+        if (!digits || digits.length !== 10) {
+            return toast({
+                title: 'Invalid Mobile Number',
+                description: 'Please enter a valid 10-digit mobile number.',
+                status: 'warning',
+                duration: 3000
+            });
+        }
+
         setIsLoading(true);
-        const res = await sendAdminOtp(email);
+        setRateLimitError('');
+        const res = await checkPhone(digits);
         setIsLoading(false);
 
-        if (res.success) {
-            setIs2FAEnabled(res.is2FAEnabled);
-            const failed = res.whatsappStatus === 'failed';
-            setWhatsappFailed(failed);
+        if (res.status === 429) {
+            setRateLimitError(res.msg || 'Too many attempts. For security, please wait 15 minutes before trying again.');
+            return;
+        }
 
-            if (failed) {
-                toast({
-                    title: '⚠️ WhatsApp OTP Failed',
-                    description: 'WhatsApp service is offline. Use Google Authenticator to login.',
-                    status: 'warning',
-                    duration: 6000,
-                    isClosable: true,
-                });
-            } else {
-                toast({
-                    title: '✅ OTP Sent!',
-                    description: res.msg || 'Check your WhatsApp for the OTP code.',
-                    status: 'success',
-                    duration: 4000,
+        if (!res.success) {
+            return toast({
+                title: 'Error Checking Mobile',
+                description: res.msg || 'Unable to verify mobile number.',
+                status: 'error',
+                duration: 4000
+            });
+        }
+
+        setCleanPhone(res.phone || digits);
+
+        if (res.requiresVerification || res.role === 'admin' || res.isAdmin) {
+            if (disallowAdmin) {
+                return toast({
+                    title: 'Admin Account Not Allowed',
+                    description: 'Administrative accounts cannot submit customer enquiries. Please use your customer mobile number or log in via Admin Login in the menu.',
+                    status: 'error',
+                    duration: 5000,
+                    isClosable: true
                 });
             }
-            // Always go to choose — if WhatsApp failed + 2FA enabled, skip straight to mfa
-            if (failed && res.is2FAEnabled) {
-                setStep('mfa');
-            } else {
-                setStep('choose');
-            }
+            setStep('admin-email');
         } else {
-            toast({ title: 'Failed', description: res.message, status: 'error' });
+            setUserName(res.name || res.contactPersonName || '');
+            if (res.name) setName(res.name);
+            if (res.companyName) setCompanyName(res.companyName);
+            if (res.address) setAddress(res.address);
+            if (res.gstNumber) setGstNumber(res.gstNumber);
+
+            if (res.hasPassword) {
+                setStep('user-password');
+            } else {
+                setStep('user-set-password');
+            }
         }
     };
 
-    const handleVerifyOtp = async () => {
-        if (!/^\d{4}$/.test(otp)) {
-            return toast({ title: 'Enter the 4-digit OTP', status: 'error', duration: 2500 });
+    // Step 2A: Admin Email Verification & WhatsApp OTP Request
+    const handleAdminEmailSubmit = async () => {
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return toast({ title: 'Enter a valid email address', status: 'warning', duration: 3000 });
         }
+
         setIsLoading(true);
-        const res = await verifyAdminOtp(email, otp);
+        setRateLimitError('');
+        const res = await sendAdminMobileOtp(cleanPhone, email);
         setIsLoading(false);
 
-        if (res.success && res.user?.isAdmin) {
-            toast({ title: `Welcome, ${res.user.name || 'Admin'}!`, status: 'success' });
+        if (res.status === 429) {
+            setRateLimitError(res.msg || 'Too many attempts. For security, please wait 15 minutes before trying again.');
+            return;
+        }
+
+        if (!res.success) {
+            return toast({
+                title: res.status === 403 ? 'Access Restricted' : 'Verification Failed',
+                description: res.msg || 'Access restricted: Verification failed.',
+                status: 'error',
+                duration: 5000
+            });
+        }
+
+        toast({
+            title: '✅ OTP Sent!',
+            description: res.msg || `Verification OTP sent to WhatsApp linked to +91 ${cleanPhone}`,
+            status: 'success',
+            duration: 4500
+        });
+
+        setIs2FAEnabled(Boolean(res.is2FAEnabled));
+        setStep('admin-otp');
+    };
+
+    // Step 2A-OTP: Verify Admin OTP
+    const handleAdminOtpSubmit = async () => {
+        if (!/^\d{4}$/.test(otp)) {
+            return toast({ title: 'Enter 4-digit OTP', status: 'warning', duration: 2500 });
+        }
+
+        setIsLoading(true);
+        setRateLimitError('');
+        const res = await verifyAdminMobileOtp(cleanPhone, email, otp);
+        setIsLoading(false);
+
+        if (res.status === 429) {
+            setRateLimitError(res.msg || 'Too many attempts. For security, please wait 15 minutes before trying again.');
+            return;
+        }
+
+        if (res.success) {
+            toast({
+                title: `Welcome back${res.user?.name ? `, ${res.user.name}` : ''}!`,
+                description: 'Logged in successfully.',
+                status: 'success',
+                duration: 3500
+            });
             resetAndClose();
-            navigate('/admin/dashboard');
+            if (onLoginSuccess) {
+                onLoginSuccess(res.user);
+            } else if (res.user?.isAdmin || res.user?.isSuperAdmin) {
+                navigate('/admin/dashboard');
+            } else {
+                navigate('/my-dashboard');
+            }
         } else {
-            toast({ title: 'Incorrect OTP', description: res.message || 'Try again.', status: 'error' });
+            toast({
+                title: 'Invalid OTP',
+                description: res.msg || 'Incorrect or expired OTP. Please try again.',
+                status: 'error',
+                duration: 4000
+            });
             setOtp('');
         }
     };
 
+    // Step 2B: User Password Login
+    const handleUserPasswordLogin = async () => {
+        if (!password) {
+            return toast({ title: 'Enter Password', status: 'warning', duration: 2500 });
+        }
+
+        setIsLoading(true);
+        setRateLimitError('');
+        const res = await loginWithPassword(cleanPhone, password);
+        setIsLoading(false);
+
+        if (res.status === 429) {
+            setRateLimitError(res.msg || 'Too many attempts. For security, please wait 15 minutes before trying again.');
+            return;
+        }
+
+        if (res.success) {
+            toast({
+                title: `Welcome back${res.user?.name ? `, ${res.user.name}` : ''}!`,
+                description: 'You are now logged in.',
+                status: 'success',
+                duration: 3500
+            });
+            resetAndClose();
+            if (onLoginSuccess) {
+                onLoginSuccess(res.user);
+            } else {
+                navigate('/my-dashboard');
+            }
+        } else {
+            toast({
+                title: 'Login Failed',
+                description: res.msg || 'Incorrect password. Please try again.',
+                status: 'error',
+                duration: 4000
+            });
+        }
+    };
+
+    // Step 2B-Set: User Set Password (New User Registration)
+    const handleUserSetPassword = async () => {
+        if (!companyName || !companyName.trim()) {
+            return toast({
+                title: 'Company Name Required',
+                description: 'Please enter your Company / Firm name to register.',
+                status: 'warning',
+                duration: 4000
+            });
+        }
+        if (!password || password.length < 6) {
+            return toast({ title: 'Password Too Short', description: 'Password must be at least 6 characters long.', status: 'warning' });
+        }
+        if (password !== confirmPassword) {
+            return toast({ title: 'Passwords Do Not Match', description: 'Please re-enter matching passwords.', status: 'warning' });
+        }
+
+        setIsLoading(true);
+        setRateLimitError('');
+        const res = await setUserPassword(cleanPhone, password, name, companyName.trim(), address.trim(), gstNumber.trim(), email.trim());
+        setIsLoading(false);
+
+        if (res.status === 429) {
+            setRateLimitError(res.msg || 'Too many attempts. For security, please wait 15 minutes before trying again.');
+            return;
+        }
+
+        if (res.success) {
+            toast({
+                title: '✅ Password Saved!',
+                description: 'Your account is secured and you are now logged in.',
+                status: 'success',
+                duration: 4000
+            });
+            resetAndClose();
+            if (onLoginSuccess) {
+                onLoginSuccess(res.user);
+            } else {
+                navigate('/my-dashboard');
+            }
+        } else {
+            toast({
+                title: 'Error Setting Password',
+                description: res.msg || 'Failed to save password.',
+                status: 'error',
+                duration: 4000
+            });
+        }
+    };
+
+    // MFA Handlers for Admins
     const handleMfaLogin = async () => {
         if (!/^\d{6}$/.test(mfaCode)) {
-            return toast({ title: 'Enter 6-digit code', status: 'error' });
+            return toast({ title: 'Enter 6-digit code', status: 'warning' });
         }
         setIsLoading(true);
         const res = await login2FA(email, mfaCode);
@@ -593,7 +1118,11 @@ const AuthModal = ({ isOpen, onClose }) => {
         if (res.success) {
             toast({ title: 'Authenticated!', status: 'success' });
             resetAndClose();
-            navigate('/admin/dashboard');
+            if (onLoginSuccess) {
+                onLoginSuccess(res.user);
+            } else {
+                navigate('/admin/dashboard');
+            }
         } else {
             toast({ title: 'Invalid Code', description: res.message, status: 'error' });
         }
@@ -613,7 +1142,7 @@ const AuthModal = ({ isOpen, onClose }) => {
 
     const handleCompleteMfaSetup = async () => {
         if (!/^\d{6}$/.test(mfaCode)) {
-            return toast({ title: 'Enter 6-digit code from app', status: 'error' });
+            return toast({ title: 'Enter 6-digit code from app', status: 'warning' });
         }
         setIsLoading(true);
         const res = await verifyEnable2FA(email, mfaCode);
@@ -627,7 +1156,7 @@ const AuthModal = ({ isOpen, onClose }) => {
     };
 
     const handleResetWithBackup = async () => {
-        if (!backupCodeInput) return toast({ title: 'Enter Master Code', status: 'error' });
+        if (!backupCodeInput) return toast({ title: 'Enter Master Code', status: 'warning' });
         setResetLoading(true);
         const res = await resetWithBackup(email, backupCodeInput);
         setResetLoading(false);
@@ -639,147 +1168,510 @@ const AuthModal = ({ isOpen, onClose }) => {
             toast({ title: 'Failed', description: res.message || 'Invalid Master Code', status: 'error' });
         }
     };
-// ── Recovery handlers removed (WhatsApp) ─────────────────────────────────────────────────────
-
 
     return (
-        <Modal isOpen={isOpen} onClose={resetAndClose} isCentered size="sm">
-            <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.400" />
-            <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
-                <Box bg="blue.700" px={6} py={4}>
-                    <Text fontWeight="800" color="white" fontSize="lg">🔐 Admin Login</Text>
-                    <Text fontSize="xs" color="blue.200" mt={1}>
-                        {step === 'email' && 'Enter your admin email to continue.'}
-                        {step === 'choose' && 'Choose your login method.'}
-                        {step === 'otp' && `Enter the WhatsApp OTP sent for ${email}`}
-                        {step === 'mfa' && 'Enter the 6-digit code from Google Authenticator.'}
-                        {step === 'mfa-setup' && 'Scan this QR code with Google Authenticator app.'}
-                        {step === 'reset-backup' && 'Enter the Master Recovery Code to reset 2FA.'}
-                    </Text>
+        <Modal isOpen={isOpen} onClose={resetAndClose} isCentered size="md">
+            <ModalOverlay bg="blackAlpha.700" />
+            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl">
+                {/* Header Banner */}
+                <Box
+                    bg="linear-gradient(135deg, #0076a3 0%, #004d6e 100%)"
+                    px={6} py={5} color="white"
+                >
+                    <HStack spacing={3} align="center">
+                        <Box p={2.5} bg="whiteAlpha.200" borderRadius="xl">
+                            {step.startsWith('admin') ? (
+                                <FiShield size={24} color="#90CDF4" />
+                            ) : step === 'user-password' ? (
+                                <FiKey size={24} color="#90CDF4" />
+                            ) : step === 'user-set-password' ? (
+                                <FiLock size={24} color="#9AE6B4" />
+                            ) : (
+                                <FiPhone size={24} color="#63B3ED" />
+                            )}
+                        </Box>
+                        <Box>
+                            <HStack spacing={2} align="center">
+                                <Text fontWeight="900" fontSize="lg" letterSpacing="tight">
+                                    {step === 'phone' && 'Welcome! Login or Register'}
+                                    {step === 'admin-email' && 'Security Verification'}
+                                    {step === 'admin-otp' && 'WhatsApp OTP Verification'}
+                                    {step === 'user-password' && 'Account Login'}
+                                    {step === 'user-set-password' && 'Create Your Password'}
+                                    {step === 'mfa' && 'Google Authenticator'}
+                                    {step === 'mfa-setup' && 'Setup Google Authenticator'}
+                                    {step === 'reset-backup' && 'Master Code Recovery'}
+                                </Text>
+                            </HStack>
+                            <Text fontSize="xs" opacity={0.85} mt={0.5}>
+                                {step === 'phone' && 'Enter your 10-digit mobile number to proceed.'}
+                                {step === 'admin-email' && 'Confirm your registered email address to proceed.'}
+                                {step === 'admin-otp' && `Enter 4-digit code sent to WhatsApp for +91 ${cleanPhone}.`}
+                                {step === 'user-password' && `Enter password for +91 ${cleanPhone}.`}
+                                {step === 'user-set-password' && 'One-time setup: secure your account with a password.'}
+                                {step === 'mfa' && 'Enter the 6-digit code from Google Authenticator.'}
+                                {step === 'mfa-setup' && 'Scan QR code with your authenticator app.'}
+                                {step === 'reset-backup' && 'Enter master recovery code to reset 2FA.'}
+                            </Text>
+                        </Box>
+                    </HStack>
                 </Box>
-                <ModalCloseButton color="white" top={3} right={3} />
+                <ModalCloseButton color="white" top={4} right={4} />
 
                 <Box p={6}>
-                    {/* Step 1: Email */}
-                    {step === 'email' && (
+                    {/* Rate Limiter Warning Banner */}
+                    {rateLimitError && (
+                        <Alert status="error" borderRadius="xl" mb={4} variant="subtle" border="1px solid" borderColor="red.300">
+                            <AlertIcon />
+                            <Box flex="1">
+                                <Text fontSize="xs" fontWeight="bold" color="red.800">
+                                    ⏳ Rate Limit Active (15-Min Window)
+                                </Text>
+                                <AlertDescription fontSize="xs" color="red.700" display="block">
+                                    {rateLimitError}
+                                </AlertDescription>
+                            </Box>
+                        </Alert>
+                    )}
+
+                    {/* ───────────────── STEP 1: PHONE NUMBER ───────────────── */}
+                    {step === 'phone' && (
                         <Stack spacing={4}>
                             <FormControl isRequired>
-                                <FormLabel fontSize="sm" fontWeight="700">Admin Email</FormLabel>
-                                <Input
-                                    type="email"
-                                    placeholder="admin@uniqueengineering.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
-                                    size="lg" borderRadius="xl"
-                                />
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase" letterSpacing="0.5px">
+                                    Mobile Number
+                                </FormLabel>
+                                <InputGroup size="lg">
+                                    <InputLeftAddon fontWeight="800" bg="gray.100" color="gray.700" borderRadius="xl">
+                                        🇮🇳 +91
+                                    </InputLeftAddon>
+                                    <Input
+                                        type="tel"
+                                        placeholder="98988 35374"
+                                        value={phone}
+                                        onChange={(e) => {
+                                            setPhone(e.target.value);
+                                            setRateLimitError('');
+                                        }}
+                                        onKeyDown={(e) => e.key === 'Enter' && handlePhoneSubmit()}
+                                        fontWeight="bold"
+                                        letterSpacing="1px"
+                                        borderRadius="xl"
+                                        autoFocus
+                                    />
+                                </InputGroup>
+                                <Text fontSize="2xs" color="gray.400" mt={1.5}>
+                                    Clean 10-digit format (e.g. +91 98988 35374 or 09898835374)
+                                </Text>
                             </FormControl>
-                            <Button colorScheme="blue" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleSendOtp}>
-                                Next →
+
+                            <Button
+                                colorScheme="brand"
+                                size="lg"
+                                borderRadius="xl"
+                                py={6}
+                                fontWeight="800"
+                                isLoading={isLoading}
+                                onClick={handlePhoneSubmit}
+                                boxShadow="md"
+                            >
+                                Continue →
                             </Button>
                         </Stack>
                     )}
 
-                    {/* Step 2: Choose Method */}
-                    {step === 'choose' && (
+                    {/* ─────────────── STEP 2A: EMAIL VERIFICATION ─────────────── */}
+                    {step === 'admin-email' && (
                         <Stack spacing={4}>
-                            {whatsappFailed && (
-                                <Box bg="red.50" border="1px solid" borderColor="red.300" borderRadius="xl" p={3}>
-                                    <Text fontSize="xs" fontWeight="700" color="red.700">⚠️ WhatsApp OTP Failed</Text>
-                                    <Text fontSize="xs" color="red.600" mt={1}>
-                                        WhatsApp is offline. Only Google Authenticator is available.
+                            <Box p={3} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.200">
+                                <HStack spacing={2} mb={1}>
+                                    <FiShield color="#0076a3" />
+                                    <Text fontSize="xs" fontWeight="800" color="blue.900">
+                                        Account Verification
                                     </Text>
-                                </Box>
-                            )}
-
-                            <Text fontSize="sm" fontWeight="700" color="gray.500" textAlign="center">
-                                Select login method:
-                            </Text>
-
-                            {/* WhatsApp OTP card */}
-                            <Box
-                                p={4} borderRadius="xl" border="2px solid"
-                                borderColor={whatsappFailed ? 'gray.200' : 'green.400'}
-                                bg={whatsappFailed ? 'gray.50' : 'green.50'}
-                                opacity={whatsappFailed ? 0.45 : 1}
-                                cursor={whatsappFailed ? 'not-allowed' : 'pointer'}
-                                onClick={() => !whatsappFailed && setStep('otp')}
-                                transition="all 0.15s"
-                                _hover={!whatsappFailed ? { borderColor: 'green.600', bg: 'green.100' } : {}}
-                            >
-                                <Text fontWeight="800" color={whatsappFailed ? 'gray.400' : 'green.800'} fontSize="sm">
-                                    📱 WhatsApp OTP
-                                </Text>
-                                <Text fontSize="xs" color={whatsappFailed ? 'gray.400' : 'green.600'} mt={1}>
-                                    {whatsappFailed ? 'Unavailable — service offline' : 'OTP already sent to your linked WhatsApp'}
+                                </HStack>
+                                <Text fontSize="xs" color="blue.800">
+                                    Mobile: <strong>+91 {cleanPhone}</strong>. For security, please enter your registered email address to receive your verification code.
                                 </Text>
                             </Box>
 
-                            {/* Google Authenticator card */}
-                            <Box
-                                p={4} borderRadius="xl" border="2px solid"
-                                borderColor="orange.400" bg="orange.50"
-                                cursor={isLoading ? 'wait' : 'pointer'}
-                                onClick={() => !isLoading && (is2FAEnabled ? setStep('mfa') : handleStartMfaSetup())}
-                                transition="all 0.15s"
-                                _hover={{ borderColor: 'orange.600', bg: 'orange.100' }}
-                            >
-                                <Text fontWeight="800" color="orange.800" fontSize="sm">
-                                    🔑 Google Authenticator
-                                </Text>
-                                <Text fontSize="xs" color="orange.600" mt={1}>
-                                    {is2FAEnabled ? 'Use your 6-digit TOTP code' : 'Set up Google Authenticator for future logins'}
-                                </Text>
-                                {isLoading && <Text fontSize="xs" color="orange.500" mt={1}>Setting up...</Text>}
-                            </Box>
-
-                            {/* ── Master Code Reset Option (Always Visible for Admins) ── */}
-                            <Box textAlign="center" pt={2}>
-                                <Divider mb={4} />
-                                <Button
-                                    variant="outline"
-                                    colorScheme="red"
-                                    size="md"
-                                    w="full"
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase">
+                                    Registered Email Address
+                                </FormLabel>
+                                <Input
+                                    type="email"
+                                    placeholder="name@example.com"
+                                    value={email}
+                                    onChange={(e) => {
+                                        setEmail(e.target.value);
+                                        setRateLimitError('');
+                                    }}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAdminEmailSubmit()}
+                                    size="lg"
                                     borderRadius="xl"
-                                    leftIcon={<span>🔄</span>}
-                                    onClick={() => setStep('reset-backup')}
-                                >
-                                    Forgot Authenticator? Reset 2FA
-                                </Button>
-                            </Box>
+                                    autoFocus
+                                />
+                            </FormControl>
 
-                            <Button variant="link" size="xs" onClick={() => setStep('email')}>{'<-'} Back</Button>
+                            <Button
+                                colorScheme="brand"
+                                size="lg"
+                                borderRadius="xl"
+                                py={6}
+                                fontWeight="800"
+                                isLoading={isLoading}
+                                onClick={handleAdminEmailSubmit}
+                            >
+                                Send WhatsApp OTP →
+                            </Button>
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                colorScheme="gray"
+                                onClick={() => setStep('phone')}
+                                leftIcon={<FiArrowLeft />}
+                            >
+                                Change Mobile Number
+                            </Button>
                         </Stack>
                     )}
 
-                    {/* Step 3a: WhatsApp OTP entry */}
-                    {step === 'otp' && (
+                    {/* ─────────────── STEP 2A-OTP: ADMIN OTP ENTRY ─────────────── */}
+                    {step === 'admin-otp' && (
                         <Stack spacing={4}>
+                            <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <HStack spacing={2} mb={1}>
+                                    <FiCheckCircle color="#2F855A" />
+                                    <Text fontSize="xs" fontWeight="800" color="green.800">
+                                        OTP Dispatched
+                                    </Text>
+                                </HStack>
+                                <Text fontSize="xs" color="green.700">
+                                    We sent a 4-digit OTP to your WhatsApp linked to <strong>+91 {cleanPhone}</strong> for <strong>{email}</strong>.
+                                </Text>
+                            </Box>
+
                             <FormControl isRequired>
-                                <FormLabel fontSize="sm" fontWeight="700">WhatsApp OTP</FormLabel>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase">
+                                    Enter 4-Digit OTP
+                                </FormLabel>
                                 <Input
                                     placeholder="• • • •"
                                     maxLength={4}
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
-                                    textAlign="center" fontSize="2xl" letterSpacing="0.5em"
-                                    size="lg" borderRadius="xl"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAdminOtpSubmit()}
+                                    textAlign="center"
+                                    fontSize="2xl"
+                                    letterSpacing="0.4em"
+                                    fontWeight="900"
+                                    size="lg"
+                                    borderRadius="xl"
+                                    autoFocus
                                 />
                             </FormControl>
-                            <Button colorScheme="green" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleVerifyOtp}>
-                                Verify WhatsApp OTP
+
+                            <Button
+                                colorScheme="brand"
+                                size="lg"
+                                borderRadius="xl"
+                                py={6}
+                                fontWeight="800"
+                                isLoading={isLoading}
+                                onClick={handleAdminOtpSubmit}
+                            >
+                                Verify &amp; Continue →
                             </Button>
-                            <Button variant="link" size="xs" onClick={() => setStep('choose')}>← Choose different method</Button>
+
+                            {is2FAEnabled && (
+                                <Button
+                                    variant="outline"
+                                    colorScheme="orange"
+                                    size="sm"
+                                    borderRadius="xl"
+                                    onClick={() => setStep('mfa')}
+                                >
+                                    🔑 Or Login with Google Authenticator
+                                </Button>
+                            )}
+
+                            <HStack justify="space-between">
+                                <Button
+                                    variant="link"
+                                    size="xs"
+                                    color="gray.500"
+                                    onClick={() => setStep('admin-email')}
+                                    leftIcon={<FiArrowLeft />}
+                                >
+                                    Change Email
+                                </Button>
+                                <Button
+                                    variant="link"
+                                    size="xs"
+                                    color="purple.600"
+                                    onClick={handleAdminEmailSubmit}
+                                    isLoading={isLoading}
+                                >
+                                    Resend OTP
+                                </Button>
+                            </HStack>
                         </Stack>
                     )}
 
-                    {/* Step 3b: Google Authenticator login */}
+                    {/* ─────────────── STEP 2B: USER PASSWORD LOGIN ─────────────── */}
+                    {step === 'user-password' && (
+                        <Stack spacing={4}>
+                            <Box p={3} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.200">
+                                <Text fontSize="sm" fontWeight="800" color="blue.800">
+                                    Welcome back{userName ? `, ${userName}` : ''}!
+                                </Text>
+                                <Text fontSize="xs" color="blue.600">
+                                    Mobile: <strong>+91 {cleanPhone}</strong>
+                                </Text>
+                            </Box>
+
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase">
+                                    Your Password
+                                </FormLabel>
+                                <InputGroup size="lg">
+                                    <Input
+                                        type={showPassword ? 'text' : 'password'}
+                                        placeholder="Enter your password"
+                                        value={password}
+                                        onChange={(e) => {
+                                            setPassword(e.target.value);
+                                            setRateLimitError('');
+                                        }}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleUserPasswordLogin()}
+                                        borderRadius="xl"
+                                        autoFocus
+                                    />
+                                    <InputRightElement>
+                                        <IconButton
+                                            icon={showPassword ? <FiEyeOff /> : <FiEye />}
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowPassword(p => !p)}
+                                            aria-label="Toggle password visibility"
+                                        />
+                                    </InputRightElement>
+                                </InputGroup>
+                            </FormControl>
+
+                            <Button
+                                colorScheme="brand"
+                                size="lg"
+                                borderRadius="xl"
+                                py={6}
+                                fontWeight="800"
+                                isLoading={isLoading}
+                                onClick={handleUserPasswordLogin}
+                            >
+                                Login →
+                            </Button>
+
+                            <Button
+                                variant="link"
+                                size="xs"
+                                color="gray.500"
+                                onClick={() => setStep('phone')}
+                                leftIcon={<FiArrowLeft />}
+                            >
+                                Use Different Mobile Number
+                            </Button>
+                        </Stack>
+                    )}
+
+                    {/* ─────────────── STEP 2B-SET: NEW USER REGISTRATION & PASSWORD SETUP ─────────────── */}
+                    {step === 'user-set-password' && (
+                        <Stack spacing={3.5}>
+                            <Box p={3} bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                <HStack spacing={2} mb={1}>
+                                    <FiLock color="#276749" />
+                                    <Text fontSize="xs" fontWeight="800" color="green.800">
+                                        New Account Setup
+                                    </Text>
+                                    <Badge colorScheme="green" fontSize="2xs" borderRadius="full">NEW USER</Badge>
+                                </HStack>
+                                <Text fontSize="xs" color="green.700">
+                                    Mobile: <strong>+91 {cleanPhone}</strong>. Please provide your company details and create a password to set up your account.
+                                </Text>
+                            </Box>
+
+                            {/* 1. Company Name (Required) */}
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase" letterSpacing="0.5px">
+                                    Company / Firm Name <Text as="span" color="red.500">*</Text>
+                                </FormLabel>
+                                <InputGroup size="md">
+                                    <InputLeftElement pointerEvents="none" color="gray.400">
+                                        <FiBriefcase />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="e.g. Acme Engineering Works"
+                                        value={companyName}
+                                        onChange={(e) => setCompanyName(e.target.value)}
+                                        borderRadius="xl"
+                                        fontWeight="600"
+                                        autoFocus
+                                    />
+                                </InputGroup>
+                            </FormControl>
+
+                            {/* 2. Contact Person Name */}
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase">
+                                    Contact Person Name
+                                </FormLabel>
+                                <InputGroup size="md">
+                                    <InputLeftElement pointerEvents="none" color="gray.400">
+                                        <FiUser />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="Your full name"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        borderRadius="xl"
+                                        fontWeight="500"
+                                    />
+                                </InputGroup>
+                            </FormControl>
+
+                            {/* 2B. Email Address (Optional) */}
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase">
+                                    Email Address (Optional)
+                                </FormLabel>
+                                <InputGroup size="md">
+                                    <InputLeftElement pointerEvents="none" color="gray.400">
+                                        <FiMail />
+                                    </InputLeftElement>
+                                    <Input
+                                        type="email"
+                                        placeholder="company@example.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        borderRadius="xl"
+                                        fontWeight="500"
+                                    />
+                                </InputGroup>
+                            </FormControl>
+
+                            {/* 3. GST Number of Company */}
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase">
+                                    Company GST No
+                                </FormLabel>
+                                <InputGroup size="md">
+                                    <InputLeftElement pointerEvents="none" color="gray.400">
+                                        <FiFileText />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="e.g. 24AAAAA0000A1Z5"
+                                        maxLength={15}
+                                        value={gstNumber}
+                                        onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                                        borderRadius="xl"
+                                        fontWeight="600"
+                                        letterSpacing="0.5px"
+                                    />
+                                </InputGroup>
+                            </FormControl>
+
+                            {/* 4. Company Address */}
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.600" textTransform="uppercase">
+                                    Company Address
+                                </FormLabel>
+                                <InputGroup size="md">
+                                    <InputLeftElement pointerEvents="none" color="gray.400">
+                                        <FiMapPin />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="Plot/Street, Industrial Area, City, State"
+                                        value={address}
+                                        onChange={(e) => setAddress(e.target.value)}
+                                        borderRadius="xl"
+                                        fontWeight="500"
+                                    />
+                                </InputGroup>
+                            </FormControl>
+
+                            {/* 5. Create Password */}
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                    Create Password <Text as="span" color="red.500">*</Text>
+                                </FormLabel>
+                                <InputGroup size="md">
+                                    <Input
+                                        type={showPassword ? 'text' : 'password'}
+                                        placeholder="Minimum 6 characters"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        borderRadius="xl"
+                                    />
+                                    <InputRightElement>
+                                        <IconButton
+                                            icon={showPassword ? <FiEyeOff /> : <FiEye />}
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowPassword(p => !p)}
+                                            aria-label="Toggle password"
+                                        />
+                                    </InputRightElement>
+                                </InputGroup>
+                            </FormControl>
+
+                            {/* 6. Confirm Password */}
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase">
+                                    Confirm Password <Text as="span" color="red.500">*</Text>
+                                </FormLabel>
+                                <Input
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="Re-enter password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleUserSetPassword()}
+                                    size="md"
+                                    borderRadius="xl"
+                                />
+                            </FormControl>
+
+                            <Button
+                                colorScheme="green"
+                                size="lg"
+                                borderRadius="xl"
+                                py={6}
+                                fontWeight="800"
+                                isLoading={isLoading}
+                                onClick={handleUserSetPassword}
+                                boxShadow="md"
+                                mt={1}
+                            >
+                                Register &amp; Continue →
+                            </Button>
+
+                            <Button
+                                variant="link"
+                                size="xs"
+                                color="gray.500"
+                                onClick={() => setStep('phone')}
+                                leftIcon={<FiArrowLeft />}
+                            >
+                                Use Different Mobile Number
+                            </Button>
+                        </Stack>
+                    )}
+
+                    {/* ─────────────── MFA TOTP / RECOVERY ─────────────── */}
                     {step === 'mfa' && (
                         <Stack spacing={4}>
                             <FormControl isRequired>
-                                <FormLabel fontSize="sm" fontWeight="700">Authenticator Code</FormLabel>
+                                <FormLabel fontSize="sm" fontWeight="700">Google Authenticator Code</FormLabel>
                                 <Input
                                     placeholder="000000"
                                     maxLength={6}
@@ -788,41 +1680,29 @@ const AuthModal = ({ isOpen, onClose }) => {
                                     onKeyDown={(e) => e.key === 'Enter' && handleMfaLogin()}
                                     textAlign="center" fontSize="2xl" letterSpacing="0.2em"
                                     size="lg" borderRadius="xl"
+                                    autoFocus
                                 />
                             </FormControl>
-                            <Button colorScheme="blue" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleMfaLogin}>
+                            <Button colorScheme="purple" w="full" size="lg" borderRadius="xl" isLoading={isLoading} onClick={handleMfaLogin}>
                                 Verify &amp; Login
                             </Button>
-                            {!whatsappFailed && (
-                                <Button variant="ghost" size="sm" onClick={() => setStep('choose')}>{'<-'} Choose different method</Button>
-                            )}
-                            {/* ── Lost authenticator recovery ── */}
+                            <Button variant="ghost" size="sm" onClick={() => setStep('admin-otp')}>← Back to WhatsApp OTP</Button>
                             <Divider />
                             <Box textAlign="center">
-                                <Text fontSize="xs" color="gray.500" mb={1}>Lost access to your authenticator app?</Text>
-                                <Button
-                                    variant="link"
-                                    colorScheme="red"
-                                    size="xs"
-                                    onClick={() => {
-                                        setBackupCodeInput('');
-                                        setStep('reset-backup');
-                                    }}
-                                >
+                                <Button variant="link" colorScheme="red" size="xs" onClick={() => { setBackupCodeInput(''); setStep('reset-backup'); }}>
                                     🔄 Reset 2FA using Master Code
                                 </Button>
                             </Box>
                         </Stack>
                     )}
 
-                    {/* Step 4: Google Authenticator setup */}
                     {step === 'mfa-setup' && (
                         <VStack spacing={4}>
                             <Box border="4px solid" borderColor="gray.100" p={2} borderRadius="lg">
                                 <Image src={qrCode} alt="MFA QR Code" />
                             </Box>
                             <Text fontSize="xs" textAlign="center" color="gray.600">
-                                Scan this with Google Authenticator, then enter the 6-digit code below to enable.
+                                Scan with Google Authenticator, then enter 6-digit code.
                             </Text>
                             <Input
                                 placeholder="000000"
@@ -831,20 +1711,19 @@ const AuthModal = ({ isOpen, onClose }) => {
                                 onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
                                 textAlign="center" size="lg" borderRadius="xl"
                             />
-                            <Button colorScheme="blue" w="full" onClick={handleCompleteMfaSetup} isLoading={isLoading}>
+                            <Button colorScheme="purple" w="full" onClick={handleCompleteMfaSetup} isLoading={isLoading}>
                                 Confirm &amp; Enable
                             </Button>
-                            <Button variant="ghost" size="xs" onClick={() => setStep('choose')}>Cancel Setup</Button>
+                            <Button variant="ghost" size="xs" onClick={() => setStep('admin-otp')}>Cancel Setup</Button>
                         </VStack>
                     )}
 
-                    {/* Step 6: Reset via Master Code */}
                     {step === 'reset-backup' && (
                         <Stack spacing={4}>
                             <Box bg="blue.50" border="1px solid" borderColor="blue.300" borderRadius="xl" p={3}>
                                 <Text fontSize="xs" fontWeight="700" color="blue.700">🔐 Master Recovery</Text>
                                 <Text fontSize="xs" color="blue.600" mt={1}>
-                                    Enter the master recovery code to wipe your 2FA settings and scan a new QR code.
+                                    Enter master recovery code to reset 2FA settings.
                                 </Text>
                             </Box>
                             <FormControl isRequired>
@@ -852,7 +1731,6 @@ const AuthModal = ({ isOpen, onClose }) => {
                                 <Input
                                     placeholder="Enter Master Code"
                                     type="password"
-                                    autoComplete="off"
                                     value={backupCodeInput}
                                     onChange={(e) => setBackupCodeInput(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleResetWithBackup()}
@@ -860,15 +1738,10 @@ const AuthModal = ({ isOpen, onClose }) => {
                                     size="lg" borderRadius="xl"
                                 />
                             </FormControl>
-                            <Button
-                                colorScheme="blue"
-                                w="full" size="lg" borderRadius="xl"
-                                isLoading={resetLoading}
-                                onClick={handleResetWithBackup}
-                            >
+                            <Button colorScheme="blue" w="full" size="lg" borderRadius="xl" isLoading={resetLoading} onClick={handleResetWithBackup}>
                                 Reset 2FA Now
                             </Button>
-                            <Button variant="link" size="xs" onClick={() => setStep('mfa')}>← Back to login</Button>
+                            <Button variant="link" size="xs" onClick={() => setStep('admin-otp')}>← Back</Button>
                         </Stack>
                     )}
                 </Box>
@@ -890,19 +1763,17 @@ const getImageUrl = (path) => {
     return path.startsWith('/') ? path : `/${path}`;
 };
 
-const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
+const EnquiryDrawer = ({ isOpen, onClose, cart = [], onOpenAuth }) => {
     const toast = useToast();
     const { clearCart, removeFromCart, updateQuantity } = useCart();
-    const { user, phoneLogin, phoneRegister, sendOtp, verifyOtp } = useAuth();
+    const { user, checkPhone } = useAuth();
     const navigate = useNavigate();
 
     const [isSending, setIsSending] = React.useState(false);
     const [isCheckingPhone, setIsCheckingPhone] = React.useState(false);
+    const [adminPhoneBlockedError, setAdminPhoneBlockedError] = React.useState('');
 
-    const [authStep, setAuthStep] = React.useState('phone'); // 'phone' | 'otp' | 'register'
     const [phoneInput, setPhoneInput] = React.useState('');
-    const [otpInput, setOtpInput] = React.useState('');
-
     const [adminClientStatus, setAdminClientStatus] = React.useState('none'); // 'none' | 'found' | 'notfound'
     const [showFullAdminForm, setShowFullAdminForm] = React.useState(false);
 
@@ -914,11 +1785,14 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
         address: ''
     });
 
+    const pendingSubmitRef = React.useRef(false);
+
     // Reset flow when drawer is opened
     React.useEffect(() => {
         if (isOpen) {
-            setAuthStep('phone');
-            setOtpInput('');
+            setPhoneInput('');
+            setAdminPhoneBlockedError('');
+            pendingSubmitRef.current = false;
         }
     }, [isOpen]);
 
@@ -927,6 +1801,14 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
     };
 
     const safeCart = Array.isArray(cart) ? cart : [];
+
+    // Auto-submit enquiry immediately after successful customer login from cart!
+    React.useEffect(() => {
+        if (pendingSubmitRef.current && user && !user.isAdmin && safeCart.length > 0) {
+            pendingSubmitRef.current = false;
+            submitEnquiry(user);
+        }
+    }, [user, safeCart]);
 
     // Auto-fill for admin mode when phone number is entered
     React.useEffect(() => {
@@ -1035,7 +1917,6 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             onClose();
 
             // Reset localized states
-            setAuthStep('phone');
             setPhoneInput('');
             setFormData({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
 
@@ -1045,50 +1926,6 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
             toast({ title: "Failed", description: "Could not send request.", status: "error" });
         } finally {
             setIsSending(false);
-        }
-    };
-
-    const handlePhoneNext = async () => {
-        const clean10 = phoneInput.replace(/\D/g, '').slice(-10);
-        if (clean10.length !== 10) {
-            return toast({ title: "Validation Error", description: "Please enter a valid 10-digit phone number.", status: "error" });
-        }
-
-        setIsCheckingPhone(true);
-        const res = await sendOtp(clean10);
-        setIsCheckingPhone(false);
-
-        if (res.success) {
-            toast({ title: "OTP Sent", description: "Verification code sent to your WhatsApp!", status: "success" });
-            setAuthStep('otp');
-        } else {
-            if (res.status === 404) {
-                toast({ title: "Registration", description: "Welcome! Please enter your details below.", status: "success" });
-                setAuthStep('register');
-                setFormData(prev => ({ ...prev, email: `${clean10}@gmail.com` }));
-            } else {
-                toast({ title: "Failed", description: res.message || "Could not send OTP", status: "error" });
-            }
-        }
-    };
-
-    const handleVerifyOtp = async () => {
-        if (!/^\d{4,6}$/.test(otpInput.replace(/\D/g, ''))) {
-            return toast({ title: "Validation Error", description: "Please enter a valid OTP code.", status: "error" });
-        }
-
-        const clean10 = phoneInput.replace(/\D/g, '').slice(-10);
-        setIsCheckingPhone(true);
-        const res = await verifyOtp(clean10, otpInput);
-        setIsCheckingPhone(false);
-
-        if (res.success) {
-            toast({ title: "Verified", description: "Login successful!", status: "success" });
-            if (!res.user || (!res.user.companyName && !res.user.contactPersonName)) {
-                setAuthStep('register');
-            }
-        } else {
-            toast({ title: "Verification Failed", description: res.message, status: "error" });
         }
     };
 
@@ -1113,33 +1950,58 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                 return toast({ title: "Validation Error", description: "A valid email address is required for enquiry submission.", status: "error" });
             }
             await submitEnquiry(user);
-        } else if (authStep === 'phone') {
-            await handlePhoneNext();
-        } else if (authStep === 'otp') {
-            await handleVerifyOtp();
-        } else if (authStep === 'register') {
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-                return toast({ title: "Validation Error", description: "Please enter a valid email address.", status: "error" });
-            }
-
-            // --- Pre-validate for Admin Keywords (Generic check) ---
-            const lowerEmail = formData.email.toLowerCase();
-            if (lowerEmail.includes('uniqueengineering93@gmail.com') || lowerEmail.includes('iatulkanak@gmail.com')) {
-                return toast({ title: "Restricted", description: "This administrative email cannot be used for client enquiries.", status: "error" });
-            }
-
+        } else {
+            // Customer is NOT logged in: validate 10 digits and check phone status
             const cleanPhone = phoneInput.replace(/\D/g, '').slice(-10);
-            setIsSending(true);
-            const res = await phoneRegister({ phone: cleanPhone, ...formData });
-            if (res.success) {
-                await submitEnquiry(res.user);
-            } else {
-                setIsSending(false);
-                const isEmailErr = res.message?.toLowerCase().includes('admin') || res.message?.toLowerCase().includes('associated');
-                toast({
-                    title: isEmailErr ? "Registration Restricted" : "Registration Failed",
-                    description: res.message,
-                    status: "error"
+            if (!cleanPhone || cleanPhone.length !== 10) {
+                return toast({
+                    title: "Mobile Number Required",
+                    description: "Please enter your 10-digit mobile number.",
+                    status: "warning",
+                    duration: 3000
+                });
+            }
+
+            setAdminPhoneBlockedError('');
+            setIsCheckingPhone(true);
+            try {
+                const res = await checkPhone(cleanPhone);
+                setIsCheckingPhone(false);
+
+                if (!res || !res.success) {
+                    return toast({
+                        title: "Error Checking Number",
+                        description: res?.msg || "Unable to verify phone number.",
+                        status: "error",
+                        duration: 4000
+                    });
+                }
+
+                // Strictly disallow administrative accounts from submitting customer enquiries!
+                if (res.isAdmin || res.role === 'admin' || res.requiresVerification) {
+                    const blockMsg = "Administrative phone numbers cannot be used for customer enquiries. Please enter a customer mobile number.";
+                    setAdminPhoneBlockedError(blockMsg);
+                    return toast({
+                        title: "Admin Number Not Allowed",
+                        description: blockMsg,
+                        status: "error",
+                        duration: 6000,
+                        isClosable: true
+                    });
+                }
+
+                pendingSubmitRef.current = true;
+                onClose(); // Close the drawer smoothly so login modal is centered with zero blur!
+                if (onOpenAuth) {
+                    onOpenAuth(cleanPhone, 'cart');
+                }
+            } catch (err) {
+                setIsCheckingPhone(false);
+                return toast({
+                    title: "Error",
+                    description: "Failed to verify phone number. Please try again.",
+                    status: "error",
+                    duration: 3000
                 });
             }
         }
@@ -1219,11 +2081,23 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                 </Text>
 
                                 {user && !user.isAdmin ? (
-                                    <Box p={4} borderWidth="1px" borderRadius="md" bg="green.50">
-                                        <Text fontWeight="bold" color="green.700" mb={1}>Logged in successfully!</Text>
-                                        <Text fontSize="sm"><b>Name:</b> {user.name || user.contactPersonName || user.companyName}</Text>
-                                        <Text fontSize="sm"><b>Phone:</b> {user.phone}</Text>
-                                        <Text fontSize="xs" color="gray.500" mt={2}>You can now submit your enquiry securely.</Text>
+                                    <Box p={4} borderWidth="1px" borderRadius="xl" bg="green.50" borderColor="green.200">
+                                        <HStack spacing={2} mb={2}>
+                                            <FiCheckCircle color="#2F855A" size={18} />
+                                            <Text fontWeight="bold" color="green.800" fontSize="sm">
+                                                Verified Customer Details
+                                            </Text>
+                                        </HStack>
+                                        <Stack spacing={1.5} fontSize="sm">
+                                            <Text><b>Company:</b> {user.companyName || user.name || 'N/A'}</Text>
+                                            {user.contactPersonName && <Text><b>Contact Person:</b> {user.contactPersonName}</Text>}
+                                            <Text><b>Phone:</b> +91 {user.phone}</Text>
+                                            {user.address && <Text><b>Delivery Address:</b> {user.address}</Text>}
+                                            {user.gstNumber && <Text><b>GST:</b> {user.gstNumber}</Text>}
+                                        </Stack>
+                                        <Text fontSize="xs" color="gray.500" mt={2}>
+                                            Your enquiry will be submitted securely from your account.
+                                        </Text>
                                     </Box>
                                 ) : (user && user.isAdmin) ? (
                                     <Stack spacing={3}>
@@ -1276,75 +2150,55 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                             </Stack>
                                         )}
                                     </Stack>
-                                ) : authStep === 'phone' ? (
-                                    <Stack spacing={3}>
-                                        <Text fontSize="sm" color="gray.600">Please enter your phone number to receive a verification OTP on WhatsApp.</Text>
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="sm" mb={1}>Phone Number</FormLabel>
-                                            <Input size="md" type="tel" placeholder="9876543210" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} />
-                                        </FormControl>
-                                    </Stack>
-                                ) : authStep === 'otp' ? (
-                                    <Stack spacing={3}>
-                                        <Box p={3} bg="blue.50" borderRadius="md" borderLeft="4px solid" borderColor="blue.400">
-                                            <Text fontSize="sm" color="gray.700">
-                                                OTP sent to: <b>{phoneInput}</b>
-                                            </Text>
-                                            <Button 
-                                                size="xs" 
-                                                variant="link" 
-                                                colorScheme="blue" 
-                                                mt={1} 
-                                                onClick={() => {
-                                                    setAuthStep('phone');
-                                                    setOtpInput('');
-                                                }}
-                                            >
-                                                Change Number?
-                                            </Button>
-                                        </Box>
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="sm" mb={1}>Enter 4-Digit OTP</FormLabel>
-                                            <Input size="md" placeholder="1234" maxLength={4} value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} />
-                                        </FormControl>
-                                        <Button size="xs" variant="link" colorScheme="blue" alignSelf="flex-start" onClick={handlePhoneNext}>Resend OTP</Button>
-                                    </Stack>
                                 ) : (
                                     <Stack spacing={3}>
-                                        <Box p={3} bg="blue.50" borderRadius="md" mb={2}>
-                                            <Text fontSize="sm" fontWeight="bold">New Number Detected</Text>
-                                            <Text fontSize="xs">Please complete a one-time registration for {phoneInput}</Text>
+                                        <Box p={3} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.100">
+                                            <Text fontSize="xs" color="blue.800" lineHeight="1.5">
+                                                Please enter your 10-digit mobile number below to proceed with your enquiry.
+                                            </Text>
                                         </Box>
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="sm" mb={1}>Phone Number</FormLabel>
-                                            <Flex gap={2}>
-                                                <Input size="sm" bg="gray.50" value={phoneInput} isReadOnly />
-                                                <Button size="xs" variant="outline" colorScheme="gray" onClick={() => setAuthStep('phone')}>Change</Button>
-                                            </Flex>
-                                        </FormControl>
-                                        <FormControl>
-                                            <FormLabel fontSize="sm" mb={1}>Company Name</FormLabel>
-                                            <Input size="sm" placeholder="e.g. Unique Engineering" name="companyName" value={formData.companyName} onChange={handleChange} />
+                                        <FormControl isRequired isInvalid={!!adminPhoneBlockedError}>
+                                            <FormLabel fontSize="xs" fontWeight="800" color="gray.700" textTransform="uppercase" letterSpacing="0.5px">
+                                                Phone Number
+                                            </FormLabel>
+                                            <InputGroup size="md">
+                                                <InputLeftAddon fontWeight="800" bg="gray.100" color="gray.700" borderRadius="xl">
+                                                    🇮🇳 +91
+                                                </InputLeftAddon>
+                                                <Input
+                                                    type="tel"
+                                                    placeholder="9876543210"
+                                                    maxLength={10}
+                                                    value={phoneInput}
+                                                    onChange={(e) => {
+                                                        setPhoneInput(e.target.value.replace(/\D/g, ''));
+                                                        setAdminPhoneBlockedError('');
+                                                    }}
+                                                    borderRadius="xl"
+                                                    fontWeight="bold"
+                                                    letterSpacing="1px"
+                                                    autoFocus
+                                                />
+                                            </InputGroup>
                                         </FormControl>
 
-                                        <FormControl>
-                                            <FormLabel fontSize="sm" mb={1}>Contact Person Name</FormLabel>
-                                            <Input size="sm" placeholder="e.g. John Doe" name="contactPersonName" value={formData.contactPersonName} onChange={handleChange} />
-                                        </FormControl>
+                                        {adminPhoneBlockedError && (
+                                            <Alert status="error" borderRadius="xl" variant="subtle" border="1px solid" borderColor="red.300" py={2.5}>
+                                                <AlertIcon />
+                                                <Box flex="1">
+                                                    <Text fontSize="xs" fontWeight="bold" color="red.800">
+                                                        Admin Number Not Allowed
+                                                    </Text>
+                                                    <AlertDescription fontSize="xs" color="red.700" display="block" mt={0.5}>
+                                                        {adminPhoneBlockedError}
+                                                    </AlertDescription>
+                                                </Box>
+                                            </Alert>
+                                        )}
 
-                                        <FormControl isRequired>
-                                            <FormLabel fontSize="sm" mb={1}>Email Address</FormLabel>
-                                            <Input size="sm" type="email" name="email" placeholder="you@company.com" value={formData.email} onChange={handleChange} />
-                                        </FormControl>
-
-                                        <FormControl>
-                                            <FormLabel fontSize="sm" mb={1}>GST Number (Optional)</FormLabel>
-                                            <Input size="sm" name="gstNumber" placeholder="22AAAAA0000A1Z5" value={formData.gstNumber} onChange={handleChange} />
-                                        </FormControl>
-                                        <FormControl>
-                                            <FormLabel fontSize="sm" mb={1}>Address (Optional)</FormLabel>
-                                            <Textarea size="sm" rows={2} name="address" placeholder="e.g. 123 Industrial Area, City, State" value={formData.address || ''} onChange={handleChange} />
-                                        </FormControl>
+                                        <Text fontSize="2xs" color="gray.500">
+                                            If your account already exists, you will enter your password on the next screen. If you are a new customer, you will quickly register your company details.
+                                        </Text>
                                     </Stack>
                                 )}
                             </Box>
@@ -1362,9 +2216,11 @@ const EnquiryDrawer = ({ isOpen, onClose, cart = [] }) => {
                                 type="submit"
                                 form="enquiry-form"
                                 isLoading={isCheckingPhone || isSending}
-                                loadingText={isCheckingPhone ? 'Checking...' : 'Sending...'}
+                                loadingText={isCheckingPhone ? 'Checking Number...' : (user ? 'Submitting Enquiry...' : 'Opening Login...')}
+                                borderRadius="xl"
+                                fontWeight="800"
                             >
-                                {user ? 'Submit Enquiry' : authStep === 'phone' ? 'Verify & Continue' : authStep === 'otp' ? 'Validate OTP' : 'Register & Submit'}
+                                {user ? 'Submit Enquiry' : 'Verify & Continue →'}
                             </Button>
                         </Stack>
                     </DrawerFooter>

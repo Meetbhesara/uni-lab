@@ -22,6 +22,8 @@ import AdminLoginReport from "./pages/admin/AdminLoginReport";
 import CompanyMaster from "./pages/admin/CompanyMaster";
 import UniqueLabInstrumentsPage from "./pages/UniqueLabInstrumentsPage";
 import Login from "./pages/Login";
+import MyProfile from "./pages/MyProfile";
+import MyDashboard from "./pages/MyDashboard";
 import ScrollToTop from "./components/ScrollToTop";
 
 function App() {
@@ -59,6 +61,12 @@ function App() {
 
         {/* Login */}
         <Route path="/login" element={<Layout><Login /></Layout>} />
+
+        {/* Customer Portal Routes */}
+        <Route path="/my-dashboard" element={<Layout><MyDashboard /></Layout>} />
+        <Route path="/dashboard" element={<Navigate to="/my-dashboard" replace />} />
+        <Route path="/my-profile" element={<Layout><MyProfile /></Layout>} />
+        <Route path="/profile" element={<Navigate to="/my-profile" replace />} />
 
         {/* User Routes */}
         <Route path="/" element={<Layout><Home /></Layout>} />

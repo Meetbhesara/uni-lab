@@ -7,7 +7,7 @@ import {
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer, Menu, MenuButton, MenuList, MenuItem,
-    NumberInput, NumberInputField, Spinner, Textarea, Alert, AlertIcon, Tooltip
+    NumberInput, NumberInputField, Spinner, Textarea, Alert, AlertIcon, AlertTitle, AlertDescription, Tooltip
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
@@ -979,6 +979,17 @@ const generateBarcodeSvgString = (text, options = {}) => {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="100%" height="${totalHeight}px" style="display:block;max-width:${totalWidth}px;margin:0 auto;">${rects.join('')}${showText ? `<text x="${(totalWidth / 2).toFixed(1)}" y="${height + 9}" text-anchor="middle" font-family="Courier New, monospace" font-size="8.5" font-weight="900" fill="#334155" letter-spacing="1.5">* ${raw} *</text>` : ''}</svg>`;
 };
 
+export const hasDoc = (val) => {
+    if (!val) return false;
+    if (typeof val === 'string') {
+        const s = val.trim();
+        return s.length > 0 && s !== 'null' && s !== 'undefined';
+    }
+    if (typeof val === 'object') {
+        return Boolean((val.url && String(val.url).trim() !== '') || (val.path && String(val.path).trim() !== ''));
+    }
+    return false;
+};
 
 const VehicleMasterForm = () => {
     const toast = useToast();
@@ -987,6 +998,22 @@ const VehicleMasterForm = () => {
     const [rcFile, setRcFile] = useState(null);
     const [insuranceFile, setInsuranceFile] = useState(null);
     const [pucFile, setPucFile] = useState(null);
+    const [existingRcDoc, setExistingRcDoc] = useState(null);
+    const [existingInsuranceDoc, setExistingInsuranceDoc] = useState(null);
+    const [existingPucDoc, setExistingPucDoc] = useState(null);
+    const [deleteRcBook, setDeleteRcBook] = useState(false);
+    const [deleteInsurancePhoto, setDeleteInsurancePhoto] = useState(false);
+    const [deletePucPhoto, setDeletePucPhoto] = useState(false);
+
+    // Renewal modal states (for date-wise renewals of PUC and Insurance)
+    const [renewModalOpen, setRenewModalOpen] = useState(false);
+    const [renewType, setRenewType] = useState('puc'); // 'puc' | 'insurance'
+    const [renewStartDate, setRenewStartDate] = useState('');
+    const [renewExpiryDate, setRenewExpiryDate] = useState('');
+    const [renewPolicyNumber, setRenewPolicyNumber] = useState('');
+    const [renewRemarks, setRenewRemarks] = useState('');
+    const [renewFile, setRenewFile] = useState(null);
+    const [isRenewLoading, setIsRenewLoading] = useState(false);
     // Purchase owner docs
     const [purchaseAadharFile, setPurchaseAadharFile] = useState(null);
     const [purchasePanFile, setPurchasePanFile] = useState(null);
@@ -1014,8 +1041,21 @@ const VehicleMasterForm = () => {
     const [vehicles, setVehicles] = useState([]);
     const [editId, setEditId] = useState(null);
     const [viewVehicle, setViewVehicle] = useState(null);
+    const [activeVehicleViewTab, setActiveVehicleViewTab] = useState('rc'); // 'rc' | 'photos' | 'purchase' | 'insurance' | 'puc' | 'expenses' | 'sell'
+    const [purchaseDocTab, setPurchaseDocTab] = useState('oldRc'); // 'oldRc' | 'oldPuc' | 'aadhar' | 'pan'
+    const [sellDocTab, setSellDocTab] = useState('sellAadhar'); // 'sellAadhar' | 'sellPan'
     const [viewPhotoIdx, setViewPhotoIdx] = useState(0);
     const [activeDocPreview, setActiveDocPreview] = useState(null);
+
+    const handleOpenViewVehicle = (v, tab = 'rc', fromTab = 'reserved') => {
+        setViewFromTab(fromTab);
+        setViewVehicle(v);
+        setViewPhotoIdx(0);
+        setActiveVehicleViewTab(tab);
+        setPurchaseDocTab('oldRc');
+        setSellDocTab('sellAadhar');
+        setActiveDocPreview(null);
+    };
     const [stickerVehicle, setStickerVehicle] = useState(null);
     const [stickerColorIndex, setStickerColorIndex] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
@@ -1815,7 +1855,10 @@ const VehicleMasterForm = () => {
         barcode: '',
         vehicleNumber: '',
         vehicleName: '',
+        rcBookNumber: '',
+        insuranceStartDate: '',
         insuranceDate: '',
+        pucStartDate: '',
         pucDate: '',
         serviceDate: '',
         logInName: user?.name || '',
@@ -1925,6 +1968,62 @@ const VehicleMasterForm = () => {
 
     const handleFileChange = (e) => setRcFile(e.target.files[0]);
 
+    const handleOpenRenew = (type) => {
+        if (!viewVehicle) return;
+        setRenewType(type);
+        setRenewStartDate('');
+        setRenewExpiryDate('');
+        setRenewPolicyNumber(viewVehicle.rcBookNumber || '');
+        setRenewRemarks('');
+        setRenewFile(null);
+        setRenewModalOpen(true);
+    };
+
+    const handleConfirmRenew = async () => {
+        if (!viewVehicle) return;
+        if (!renewExpiryDate) {
+            toast({ title: 'Expiry date is required', status: 'warning', duration: 2500, isClosable: true });
+            return;
+        }
+        if (!renewFile) {
+            toast({ title: 'Please select document (PDF or image)', status: 'warning', duration: 2500, isClosable: true });
+            return;
+        }
+        setIsRenewLoading(true);
+        try {
+            const data = new FormData();
+            if (viewVehicle.vehicleNumber) data.append('vehicleNumber', viewVehicle.vehicleNumber);
+            if (renewStartDate) data.append('startDate', renewStartDate);
+            if (renewExpiryDate) data.append('expiryDate', renewExpiryDate);
+            if (renewRemarks) data.append('remarks', renewRemarks);
+            if (renewType === 'puc') {
+                data.append('pucPhoto', renewFile);
+                const res = await api.post(`/vehicle-master/${viewVehicle._id}/renew-puc`, data);
+                if (res.data?.success) {
+                    toast({ title: 'PUC Renewed Successfully!', description: 'New PUC is active and saved in history log.', status: 'success', duration: 3000, isClosable: true });
+                    setViewVehicle(res.data.data);
+                    fetchVehicles();
+                    setRenewModalOpen(false);
+                }
+            } else {
+                if (renewPolicyNumber) data.append('policyNumber', renewPolicyNumber);
+                data.append('insurancePhoto', renewFile);
+                const res = await api.post(`/vehicle-master/${viewVehicle._id}/renew-insurance`, data);
+                if (res.data?.success) {
+                    toast({ title: 'Insurance Renewed Successfully!', description: 'New policy is active and saved in history log.', status: 'success', duration: 3000, isClosable: true });
+                    setViewVehicle(res.data.data);
+                    fetchVehicles();
+                    setRenewModalOpen(false);
+                }
+            }
+        } catch (err) {
+            console.error('Renewal error:', err);
+            toast({ title: 'Renewal failed', description: err.response?.data?.message || err.message, status: 'error', duration: 4000, isClosable: true });
+        } finally {
+            setIsRenewLoading(false);
+        }
+    };
+
     const handleVehiclePhotoChange = (e) => {
         const files = Array.from(e.target.files);
         if (!files.length) return;
@@ -1998,7 +2097,10 @@ const VehicleMasterForm = () => {
             barcode: '',
             vehicleNumber: '',
             vehicleName: '',
+            rcBookNumber: '',
+            insuranceStartDate: '',
             insuranceDate: '',
+            pucStartDate: '',
             pucDate: '',
             serviceDate: '',
             logInName: user?.name || '',
@@ -2023,6 +2125,12 @@ const VehicleMasterForm = () => {
         setExistingPurchasePan(null);
         setExistingSellAadhar(null);
         setExistingSellPan(null);
+        setExistingRcDoc(null);
+        setExistingInsuranceDoc(null);
+        setExistingPucDoc(null);
+        setDeleteRcBook(false);
+        setDeleteInsurancePhoto(false);
+        setDeletePucPhoto(false);
         setExistingVehiclePhotos([]);
         setNewVehiclePhotos([]);
         setPrimaryType('existing');
@@ -2059,7 +2167,10 @@ const VehicleMasterForm = () => {
             if (formData.barcode) data.append('barcode', formData.barcode);
             data.append('vehicleNumber', formData.vehicleNumber);
             data.append('vehicleName', formData.vehicleName);
+            data.append('rcBookNumber', formData.rcBookNumber || '');
+            data.append('insuranceStartDate', formData.insuranceStartDate || '');
             data.append('insuranceDate', formData.insuranceDate);
+            data.append('pucStartDate', formData.pucStartDate || '');
             data.append('pucDate', formData.pucDate);
             data.append('serviceDate', formData.serviceDate);
             data.append('logInName', formData.logInName);
@@ -2073,6 +2184,9 @@ const VehicleMasterForm = () => {
             if (rcFile) data.append('rcBook', rcFile);
             if (insuranceFile) data.append('insurancePhoto', insuranceFile);
             if (pucFile) data.append('pucPhoto', pucFile);
+            if (deleteRcBook) data.append('deleteRcBook', 'true');
+            if (deleteInsurancePhoto) data.append('deleteInsurancePhoto', 'true');
+            if (deletePucPhoto) data.append('deletePucPhoto', 'true');
             if (purchaseAadharFile) data.append('purchaseAadharDoc', purchaseAadharFile);
             if (purchasePanFile) data.append('purchasePanDoc', purchasePanFile);
             if (purchaseOldRcFile) data.append('purchaseOldRc', purchaseOldRcFile);
@@ -2163,7 +2277,10 @@ const VehicleMasterForm = () => {
             barcode: v.barcode || '',
             vehicleNumber: v.vehicleNumber || '',
             vehicleName: v.vehicleName || '',
+            rcBookNumber: v.rcBookNumber || '',
+            insuranceStartDate: v.insuranceStartDate ? v.insuranceStartDate.substring(0, 10) : '',
             insuranceDate: v.insuranceDate ? v.insuranceDate.substring(0, 10) : '',
+            pucStartDate: v.pucStartDate ? v.pucStartDate.substring(0, 10) : '',
             pucDate: v.pucDate ? v.pucDate.substring(0, 10) : '',
             serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
             logInName: v.logInName || user?.name || '',
@@ -2190,6 +2307,12 @@ const VehicleMasterForm = () => {
             },
         });
         // Restore existing doc references
+        setExistingRcDoc(v.rcBook || null);
+        setExistingInsuranceDoc(v.insurancePhoto || null);
+        setExistingPucDoc(v.pucPhoto || null);
+        setDeleteRcBook(false);
+        setDeleteInsurancePhoto(false);
+        setDeletePucPhoto(false);
         setExistingPurchaseAadhar(v.purchaseAadharDoc || null);
         setExistingPurchasePan(v.purchasePanDoc || null);
         setExistingPurchaseOldRc(v.purchaseOldRc || null);
@@ -2311,482 +2434,1130 @@ const VehicleMasterForm = () => {
                                     <form onSubmit={handleSubmit}>
                                         <VStack spacing={5}>
 
-                                            {/* ── VEHICLE BASIC INFO ── */}
-                                            <Box w="full" bg="purple.50" border="1.5px solid" borderColor="purple.200" borderRadius="2xl" p={{ base: 4, md: 5 }}>
-                                                <HStack mb={4} spacing={2}>
-                                                    <Icon as={FaTruck} color="purple.600" w={4} h={4} />
-                                                    <Text fontWeight="black" fontSize="sm" color="purple.700" textTransform="uppercase" letterSpacing="wide">Vehicle Information</Text>
-                                                </HStack>
-                                                <VStack spacing={4}>
-                                                    {/* Vehicle ID (auto-increment) */}
-                                                    <Flex w="full" align="center" gap={3} p={3} bg="white" borderRadius="xl" border="1.5px solid" borderColor="purple.300" boxShadow="sm">
+                                            {/* ── DESKTOP APPLICATION GUI: VEHICLE MASTER & COMPLIANCE REGISTRY ── */}
+                                            <Box w="full" bg="white" border="1px solid" borderColor="gray.300" borderRadius="xl" boxShadow="sm" overflow="hidden">
+                                                {/* Desktop Window / Panel Header Toolbar */}
+                                                <Flex
+                                                    px={4}
+                                                    py={2.5}
+                                                    bg="gray.800"
+                                                    color="white"
+                                                    justify="space-between"
+                                                    align="center"
+                                                    borderBottom="2px solid"
+                                                    borderColor="blue.500"
+                                                >
+                                                    <HStack spacing={2.5}>
+                                                        <Center w="26px" h="26px" bg="blue.600" borderRadius="md">
+                                                            <Icon as={FaTruck} color="white" boxSize={3.5} />
+                                                        </Center>
                                                         <Box>
-                                                            <Text fontSize="xs" fontWeight="bold" color="purple.500" textTransform="uppercase" letterSpacing="wider" mb={0.5}>Vehicle ID</Text>
-                                                            <HStack spacing={2}>
-                                                                <Badge
-                                                                    colorScheme="purple"
-                                                                    fontSize="md"
-                                                                    px={4}
-                                                                    py={1.5}
-                                                                    borderRadius="lg"
-                                                                    fontFamily="monospace"
-                                                                    letterSpacing="widest"
-                                                                    fontWeight="black"
-                                                                    bg="purple.600"
-                                                                    color="white"
-                                                                    boxShadow="sm"
-                                                                >
-                                                                    {editId
-                                                                        ? (formData.vehicleId || vehicles.find(v => v._id === editId)?.vehicleId || nextVehicleId || 'V-001')
-                                                                        : (nextVehicleId || 'V-001')
-                                                                    }
-                                                                </Badge>
-                                                                {!editId && (
-                                                                    <Text fontSize="xs" color="purple.500" fontStyle="italic">
-                                                                        (auto-assigned on save)
+                                                            <Text fontSize="xs" fontWeight="black" textTransform="uppercase" letterSpacing="wider">
+                                                                {editId ? 'Vehicle Master — Edit Record' : 'Vehicle Master — Asset & Compliance Registry'}
+                                                            </Text>
+                                                        </Box>
+                                                    </HStack>
+                                                    <HStack spacing={2}>
+                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold">ASSET ID:</Text>
+                                                        <Badge
+                                                            colorScheme="blue"
+                                                            fontSize="xs"
+                                                            px={2.5}
+                                                            py={0.5}
+                                                            borderRadius="md"
+                                                            fontFamily="monospace"
+                                                            fontWeight="black"
+                                                            letterSpacing="widest"
+                                                            bg="blue.600"
+                                                            color="white"
+                                                        >
+                                                            {editId
+                                                                ? (formData.vehicleId || vehicles.find(v => v._id === editId)?.vehicleId || nextVehicleId || 'V-001')
+                                                                : (nextVehicleId || 'V-001')
+                                                            }
+                                                        </Badge>
+                                                    </HStack>
+                                                </Flex>
+
+                                                <Box p={4}>
+                                                    <VStack spacing={4} align="stretch">
+                                                        {/* Top Row: Vehicle Core Attributes (Desktop 4-Column Grid) */}
+                                                        <Box bg="gray.50" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="black" color="gray.600" textTransform="uppercase" letterSpacing="wider" mb={2.5}>
+                                                                1. Primary Vehicle Information
+                                                            </Text>
+                                                            <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3}>
+                                                                <FormControl isRequired>
+                                                                    <FormLabel fontSize="11px" fontWeight="bold" color="gray.700" mb={1}>
+                                                                        Vehicle Registration No.
+                                                                    </FormLabel>
+                                                                    <Input
+                                                                        name="vehicleNumber"
+                                                                        placeholder="e.g. MH 12 AB 1234"
+                                                                        value={formData.vehicleNumber}
+                                                                        onChange={handleChange}
+                                                                        borderRadius="md"
+                                                                        size="sm"
+                                                                        h="36px"
+                                                                        bg="white"
+                                                                        borderColor="gray.300"
+                                                                        fontFamily="monospace"
+                                                                        fontWeight="bold"
+                                                                        letterSpacing="1px"
+                                                                        maxLength={13}
+                                                                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182CE" }}
+                                                                    />
+                                                                </FormControl>
+
+                                                                <FormControl>
+                                                                    <FormLabel fontSize="11px" fontWeight="bold" color="gray.700" mb={1}>
+                                                                        Vehicle Make & Model
+                                                                    </FormLabel>
+                                                                    <Input
+                                                                        name="vehicleName"
+                                                                        placeholder="e.g. Tata Tipper 2518 / Ashok Leyland"
+                                                                        value={formData.vehicleName}
+                                                                        onChange={handleChange}
+                                                                        borderRadius="md"
+                                                                        size="sm"
+                                                                        h="36px"
+                                                                        bg="white"
+                                                                        borderColor="gray.300"
+                                                                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182CE" }}
+                                                                    />
+                                                                </FormControl>
+
+                                                                <FormControl>
+                                                                    <FormLabel fontSize="11px" fontWeight="bold" color="gray.700" mb={1}>
+                                                                        RC Book Number
+                                                                    </FormLabel>
+                                                                    <Input
+                                                                        name="rcBookNumber"
+                                                                        placeholder="e.g. RC-9876543210"
+                                                                        value={formData.rcBookNumber || ''}
+                                                                        onChange={handleChange}
+                                                                        borderRadius="md"
+                                                                        size="sm"
+                                                                        h="36px"
+                                                                        bg="white"
+                                                                        borderColor="gray.300"
+                                                                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182CE" }}
+                                                                    />
+                                                                </FormControl>
+
+                                                                <FormControl>
+                                                                    <FormLabel fontSize="11px" fontWeight="bold" color="gray.700" mb={1}>
+                                                                        Next Service Scheduled Date
+                                                                    </FormLabel>
+                                                                    <Input
+                                                                        type="date"
+                                                                        name="serviceDate"
+                                                                        value={formData.serviceDate}
+                                                                        onChange={handleChange}
+                                                                        borderRadius="md"
+                                                                        size="sm"
+                                                                        h="36px"
+                                                                        bg="white"
+                                                                        borderColor="gray.300"
+                                                                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182CE" }}
+                                                                    />
+                                                                </FormControl>
+                                                            </SimpleGrid>
+                                                        </Box>
+
+                                                        {/* Compliance Documents & Validity Registry (Desktop Data Grid Table) */}
+                                                        <Box bg="white" borderRadius="lg" border="1px solid" borderColor="gray.300" overflow="hidden">
+                                                            <Flex px={3.5} py={2} bg="gray.100" justify="space-between" align="center" borderBottom="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={2}>
+                                                                    <Icon as={FaFileContract} color="blue.600" />
+                                                                    <Text fontSize="11px" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                        2. Compliance Documents & Validity Registry
                                                                     </Text>
-                                                                )}
-                                                            </HStack>
-                                                        </Box>
-                                                    </Flex>
-                                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
+                                                                </HStack>
+                                                                <Text fontSize="10px" color="gray.500" fontStyle="italic">
+                                                                    Desktop GUI Table • Upload & Deter Actions
+                                                                </Text>
+                                                            </Flex>
 
-                                                        <FormControl isRequired>
-                                                            <FormLabel fontWeight="bold" fontSize="sm">Vehicle Number</FormLabel>
-                                                            <Box position="relative">
-                                                                <Box position="absolute" left="16px" top="12.5px" color="gray.300" fontSize="md" fontFamily="monospace" pointerEvents="none" letterSpacing="1px">
-                                                                    {Array.from("XX 00 XX 0000").map((char, index) => (
-                                                                        <Text as="span" key={index} opacity={index < formData.vehicleNumber.length ? 0 : 1}>{char}</Text>
-                                                                    ))}
-                                                                </Box>
-                                                                <Input name="vehicleNumber" placeholder="" value={formData.vehicleNumber} onChange={handleChange} borderRadius="xl" size="md" bg="white" fontFamily="monospace" letterSpacing="1px" _placeholder={{ color: 'transparent' }} maxLength={13} />
+                                                            <Box overflowX="auto">
+                                                                <Table size="sm" variant="simple">
+                                                                    <Thead bg="gray.50">
+                                                                        <Tr>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="18%">
+                                                                                Document Type
+                                                                            </Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="16%">
+                                                                                Start Date
+                                                                            </Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="16%">
+                                                                                Expiry Date
+                                                                            </Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="36%">
+                                                                                Document File (PDF / Image)
+                                                                            </Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} textAlign="center" w="14%">
+                                                                                Action / Status
+                                                                            </Th>
+                                                                        </Tr>
+                                                                    </Thead>
+                                                                    <Tbody>
+                                                                        {/* ── ROW 1: RC BOOK ── */}
+                                                                        <Tr _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                            <Td py={2.5}>
+                                                                                <HStack spacing={2}>
+                                                                                    <Center w="26px" h="26px" bg="purple.50" borderRadius="md" border="1px solid" borderColor="purple.200">
+                                                                                        <Icon as={FaFileContract} color="purple.600" boxSize={3.5} />
+                                                                                    </Center>
+                                                                                    <Box>
+                                                                                        <Text fontSize="xs" fontWeight="bold" color="gray.800">RC Book</Text>
+                                                                                        <Text fontSize="10px" color="gray.500">Registration</Text>
+                                                                                    </Box>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td py={2.5} color="gray.400" fontSize="xs" fontStyle="italic">
+                                                                                — (Registration)
+                                                                            </Td>
+                                                                            <Td py={2.5} color="gray.400" fontSize="xs" fontStyle="italic">
+                                                                                — (Lifetime)
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <input type="file" id="rc-upload" hidden onChange={handleFileChange} accept="image/*,.pdf" />
+                                                                                {rcFile ? (
+                                                                                    <HStack
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        bg="green.50"
+                                                                                        border="1px solid"
+                                                                                        borderColor="green.300"
+                                                                                        borderRadius="md"
+                                                                                        justify="space-between"
+                                                                                        maxW="340px"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('rc-upload').click()}>
+                                                                                            <Icon as={FaFilePdf} color="green.600" boxSize={3.5} flexShrink={0} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated>{rcFile.name}</Text>
+                                                                                        </HStack>
+                                                                                        <Tooltip label="Deter / Remove file" hasArrow>
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="red"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaTrash} />}
+                                                                                                onClick={(e) => { e.stopPropagation(); setRcFile(null); }}
+                                                                                                aria-label="Remove RC"
+                                                                                            />
+                                                                                        </Tooltip>
+                                                                                    </HStack>
+                                                                                ) : (existingRcDoc && !deleteRcBook) ? (
+                                                                                    <HStack
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        bg="purple.50"
+                                                                                        border="1px solid"
+                                                                                        borderColor="purple.200"
+                                                                                        borderRadius="md"
+                                                                                        justify="space-between"
+                                                                                        maxW="340px"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} minW={0}>
+                                                                                            <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} flexShrink={0} />
+                                                                                            <Text
+                                                                                                as="a"
+                                                                                                href={getFileUrl(existingRcDoc)}
+                                                                                                target="_blank"
+                                                                                                rel="noreferrer"
+                                                                                                fontSize="xs"
+                                                                                                fontWeight="bold"
+                                                                                                color="purple.700"
+                                                                                                textDecoration="underline"
+                                                                                                isTruncated
+                                                                                            >
+                                                                                                {existingRcDoc.name || 'RC Document'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <HStack spacing={0.5}>
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="purple"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaEdit} />}
+                                                                                                onClick={() => document.getElementById('rc-upload').click()}
+                                                                                                aria-label="Replace RC"
+                                                                                                title="Replace file"
+                                                                                            />
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="red"
+                                                                                                variant="solid"
+                                                                                                icon={<Icon as={FaTrash} />}
+                                                                                                onClick={() => setDeleteRcBook(true)}
+                                                                                                aria-label="Deter RC"
+                                                                                                title="Deter / Delete Document"
+                                                                                            />
+                                                                                        </HStack>
+                                                                                    </HStack>
+                                                                                ) : (
+                                                                                    <Button
+                                                                                        size="xs"
+                                                                                        h="30px"
+                                                                                        variant="outline"
+                                                                                        colorScheme={deleteRcBook ? 'red' : 'gray'}
+                                                                                        leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                                        borderRadius="md"
+                                                                                        onClick={() => { setDeleteRcBook(false); document.getElementById('rc-upload').click(); }}
+                                                                                    >
+                                                                                        {deleteRcBook ? '⚠️ Deterred (Upload New)' : 'Browse RC File'}
+                                                                                    </Button>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td py={2.5} textAlign="center">
+                                                                                <Badge colorScheme={hasDoc(existingRcDoc) && !deleteRcBook ? "green" : rcFile ? "blue" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                    {hasDoc(existingRcDoc) && !deleteRcBook ? 'VERIFIED' : rcFile ? 'NEW FILE' : 'PENDING'}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                        </Tr>
+
+                                                                        {/* ── ROW 2: INSURANCE POLICY ── */}
+                                                                        <Tr _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                            <Td py={2.5}>
+                                                                                <HStack spacing={2}>
+                                                                                    <Center w="26px" h="26px" bg="teal.50" borderRadius="md" border="1px solid" borderColor="teal.200">
+                                                                                        <Icon as={FaShieldAlt} color="teal.600" boxSize={3.5} />
+                                                                                    </Center>
+                                                                                    <Box>
+                                                                                        <Text fontSize="xs" fontWeight="bold" color="gray.800">Insurance Policy</Text>
+                                                                                        <Text fontSize="10px" color="gray.500">Coverage Policy</Text>
+                                                                                    </Box>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="insuranceStartDate"
+                                                                                    value={formData.insuranceStartDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="insuranceDate"
+                                                                                    value={formData.insuranceDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <input type="file" id="ins-upload" hidden onChange={(e) => setInsuranceFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                {insuranceFile ? (
+                                                                                    <HStack
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        bg="green.50"
+                                                                                        border="1px solid"
+                                                                                        borderColor="green.300"
+                                                                                        borderRadius="md"
+                                                                                        justify="space-between"
+                                                                                        maxW="340px"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('ins-upload').click()}>
+                                                                                            <Icon as={FaFilePdf} color="green.600" boxSize={3.5} flexShrink={0} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated>{insuranceFile.name}</Text>
+                                                                                        </HStack>
+                                                                                        <Tooltip label="Deter / Remove file" hasArrow>
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="red"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaTrash} />}
+                                                                                                onClick={(e) => { e.stopPropagation(); setInsuranceFile(null); }}
+                                                                                                aria-label="Remove Insurance"
+                                                                                            />
+                                                                                        </Tooltip>
+                                                                                    </HStack>
+                                                                                ) : (existingInsuranceDoc && !deleteInsurancePhoto) ? (
+                                                                                    <HStack
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        bg="teal.50"
+                                                                                        border="1px solid"
+                                                                                        borderColor="teal.200"
+                                                                                        borderRadius="md"
+                                                                                        justify="space-between"
+                                                                                        maxW="340px"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} minW={0}>
+                                                                                            <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} flexShrink={0} />
+                                                                                            <Text
+                                                                                                as="a"
+                                                                                                href={getFileUrl(existingInsuranceDoc)}
+                                                                                                target="_blank"
+                                                                                                rel="noreferrer"
+                                                                                                fontSize="xs"
+                                                                                                fontWeight="bold"
+                                                                                                color="teal.700"
+                                                                                                textDecoration="underline"
+                                                                                                isTruncated
+                                                                                            >
+                                                                                                {existingInsuranceDoc.name || 'Insurance Doc'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <HStack spacing={0.5}>
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="teal"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaEdit} />}
+                                                                                                onClick={() => document.getElementById('ins-upload').click()}
+                                                                                                aria-label="Replace Insurance"
+                                                                                                title="Replace file"
+                                                                                            />
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="red"
+                                                                                                variant="solid"
+                                                                                                icon={<Icon as={FaTrash} />}
+                                                                                                onClick={() => setDeleteInsurancePhoto(true)}
+                                                                                                aria-label="Deter Insurance"
+                                                                                                title="Deter / Delete Document"
+                                                                                            />
+                                                                                        </HStack>
+                                                                                    </HStack>
+                                                                                ) : (
+                                                                                    <Button
+                                                                                        size="xs"
+                                                                                        h="30px"
+                                                                                        variant="outline"
+                                                                                        colorScheme={deleteInsurancePhoto ? 'red' : 'gray'}
+                                                                                        leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                                        borderRadius="md"
+                                                                                        onClick={() => { setDeleteInsurancePhoto(false); document.getElementById('ins-upload').click(); }}
+                                                                                    >
+                                                                                        {deleteInsurancePhoto ? '⚠️ Deterred (Upload New)' : 'Browse Insurance Policy'}
+                                                                                    </Button>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td py={2.5} textAlign="center">
+                                                                                <Badge colorScheme={hasDoc(existingInsuranceDoc) && !deleteInsurancePhoto ? "teal" : insuranceFile ? "blue" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                    {hasDoc(existingInsuranceDoc) && !deleteInsurancePhoto ? 'ATTACHED' : insuranceFile ? 'NEW FILE' : 'PENDING'}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                        </Tr>
+
+                                                                        {/* ── ROW 3: PUC CERTIFICATE ── */}
+                                                                        <Tr _hover={{ bg: "gray.50" }}>
+                                                                            <Td py={2.5}>
+                                                                                <HStack spacing={2}>
+                                                                                    <Center w="26px" h="26px" bg="green.50" borderRadius="md" border="1px solid" borderColor="green.200">
+                                                                                        <Icon as={FaFileAlt} color="green.600" boxSize={3.5} />
+                                                                                    </Center>
+                                                                                    <Box>
+                                                                                        <Text fontSize="xs" fontWeight="bold" color="gray.800">PUC Certificate</Text>
+                                                                                        <Text fontSize="10px" color="gray.500">Emission Compliance</Text>
+                                                                                    </Box>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="pucStartDate"
+                                                                                    value={formData.pucStartDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="pucDate"
+                                                                                    value={formData.pucDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <input type="file" id="puc-upload" hidden onChange={(e) => setPucFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                {pucFile ? (
+                                                                                    <HStack
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        bg="green.50"
+                                                                                        border="1px solid"
+                                                                                        borderColor="green.300"
+                                                                                        borderRadius="md"
+                                                                                        justify="space-between"
+                                                                                        maxW="340px"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('puc-upload').click()}>
+                                                                                            <Icon as={FaFilePdf} color="green.600" boxSize={3.5} flexShrink={0} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated>{pucFile.name}</Text>
+                                                                                        </HStack>
+                                                                                        <Tooltip label="Deter / Remove file" hasArrow>
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="red"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaTrash} />}
+                                                                                                onClick={(e) => { e.stopPropagation(); setPucFile(null); }}
+                                                                                                aria-label="Remove PUC"
+                                                                                            />
+                                                                                        </Tooltip>
+                                                                                    </HStack>
+                                                                                ) : (existingPucDoc && !deletePucPhoto) ? (
+                                                                                    <HStack
+                                                                                        px={2.5}
+                                                                                        py={1}
+                                                                                        bg="green.50"
+                                                                                        border="1px solid"
+                                                                                        borderColor="green.200"
+                                                                                        borderRadius="md"
+                                                                                        justify="space-between"
+                                                                                        maxW="340px"
+                                                                                    >
+                                                                                        <HStack spacing={1.5} minW={0}>
+                                                                                            <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} flexShrink={0} />
+                                                                                            <Text
+                                                                                                as="a"
+                                                                                                href={getFileUrl(existingPucDoc)}
+                                                                                                target="_blank"
+                                                                                                rel="noreferrer"
+                                                                                                fontSize="xs"
+                                                                                                fontWeight="bold"
+                                                                                                color="green.700"
+                                                                                                textDecoration="underline"
+                                                                                                isTruncated
+                                                                                            >
+                                                                                                {existingPucDoc.name || 'PUC Document'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <HStack spacing={0.5}>
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="green"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaEdit} />}
+                                                                                                onClick={() => document.getElementById('puc-upload').click()}
+                                                                                                aria-label="Replace PUC"
+                                                                                                title="Replace file"
+                                                                                            />
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="red"
+                                                                                                variant="solid"
+                                                                                                icon={<Icon as={FaTrash} />}
+                                                                                                onClick={() => setDeletePucPhoto(true)}
+                                                                                                aria-label="Deter PUC"
+                                                                                                title="Deter / Delete Document"
+                                                                                            />
+                                                                                        </HStack>
+                                                                                    </HStack>
+                                                                                ) : (
+                                                                                    <Button
+                                                                                        size="xs"
+                                                                                        h="30px"
+                                                                                        variant="outline"
+                                                                                        colorScheme={deletePucPhoto ? 'red' : 'gray'}
+                                                                                        leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                                        borderRadius="md"
+                                                                                        onClick={() => { setDeletePucPhoto(false); document.getElementById('puc-upload').click(); }}
+                                                                                    >
+                                                                                        {deletePucPhoto ? '⚠️ Deterred (Upload New)' : 'Browse PUC File'}
+                                                                                    </Button>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td py={2.5} textAlign="center">
+                                                                                <Badge colorScheme={hasDoc(existingPucDoc) && !deletePucPhoto ? "green" : pucFile ? "blue" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                    {hasDoc(existingPucDoc) && !deletePucPhoto ? 'ATTACHED' : pucFile ? 'NEW FILE' : 'PENDING'}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                        </Tr>
+                                                                    </Tbody>
+                                                                </Table>
                                                             </Box>
-                                                        </FormControl>
-                                                        <FormControl>
-                                                            <FormLabel fontWeight="bold" fontSize="sm">Vehicle Name / Model</FormLabel>
-                                                            <Input name="vehicleName" placeholder="e.g. Tata Tipper 2518" value={formData.vehicleName} onChange={handleChange} borderRadius="xl" size="md" bg="white" />
-                                                        </FormControl>
-                                                    </SimpleGrid>
-                                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} w="full">
-                                                        <FormControl>
-                                                            <FormLabel fontWeight="bold" fontSize="sm">Insurance Expiry</FormLabel>
-                                                            <Input type="date" name="insuranceDate" value={formData.insuranceDate} onChange={handleChange} borderRadius="xl" size="md" bg="white" />
-                                                        </FormControl>
-                                                        <FormControl>
-                                                            <FormLabel fontWeight="bold" fontSize="sm">PUC Expiry</FormLabel>
-                                                            <Input type="date" name="pucDate" value={formData.pucDate} onChange={handleChange} borderRadius="xl" size="md" bg="white" />
-                                                        </FormControl>
-                                                        <FormControl>
-                                                            <FormLabel fontWeight="bold" fontSize="sm">Next Service Date</FormLabel>
-                                                            <Input type="date" name="serviceDate" value={formData.serviceDate} onChange={handleChange} borderRadius="xl" size="md" bg="white" />
-                                                        </FormControl>
-                                                    </SimpleGrid>
-                                                </VStack>
-                                            </Box>
-
-                                            {/* ── VEHICLE PHOTOS ── */}
-                                            <Box w="full" bg="white" border="1.5px solid" borderColor="gray.200" borderRadius="2xl" p={{ base: 4, md: 5 }}>
-                                                <HStack mb={3} spacing={2}>
-                                                    <Icon as={FaCamera} color="purple.500" w={4} h={4} />
-                                                    <Text fontWeight="black" fontSize="sm" color="gray.700" textTransform="uppercase" letterSpacing="wide">Vehicle Photos</Text>
-                                                </HStack>
-                                                <Box p={4} border="2px dashed" borderColor="purple.200" borderRadius="xl" bg="purple.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('vehicle-photos-upload').click()} _hover={{ bg: "purple.100", borderColor: "purple.400" }}>
-                                                    <input type="file" id="vehicle-photos-upload" hidden multiple onChange={handleVehiclePhotoChange} accept="image/*" />
-                                                    <Icon as={FaCamera} w={6} h={6} color="purple.500" mb={1} />
-                                                    <Text fontSize="xs" fontWeight="bold" color="purple.700">Tap / Click to Add Vehicle Photos</Text>
+                                                        </Box>
+                                                    </VStack>
                                                 </Box>
-                                                {(existingVehiclePhotos.length > 0 || newVehiclePhotos.length > 0) && (
-                                                    <SimpleGrid columns={{ base: 2, sm: 3, md: 5 }} spacing={3} mt={3}>
-                                                        {existingVehiclePhotos.map((url, i) => {
-                                                            const isPrimary = (primaryType === 'existing' && i === 0) || (primaryType === 'new' && newVehiclePhotos.length === 0 && i === 0);
-                                                            return (
-                                                                <Box key={`existing-${i}`} position="relative" borderRadius="xl" overflow="hidden" border="2px solid" borderColor={isPrimary ? "purple.500" : "purple.200"} boxShadow={isPrimary ? "md" : "none"}>
-                                                                    <Image src={getFileUrl(url)} alt="Vehicle" w="full" h="90px" objectFit="cover" />
-                                                                    {isPrimary ? (<Badge position="absolute" top={1.5} left={1.5} colorScheme="yellow" bg="yellow.400" color="black" fontSize="9px" fontWeight="black" px={2} py={0.5} borderRadius="md" boxShadow="sm">⭐ Primary</Badge>) : (<Button size="2xs" position="absolute" bottom={1.5} left={1.5} colorScheme="purple" variant="solid" bg="purple.600" color="white" _hover={{ bg: "purple.700" }} fontSize="9px" h="22px" px={2} borderRadius="md" boxShadow="md" onClick={(e) => { e.stopPropagation(); setPrimaryExistingPhoto(i); }}>Set Primary</Button>)}
-                                                                    <IconButton icon={<Icon as={FaTrash} />} size="xs" colorScheme="red" variant="solid" position="absolute" top={1.5} right={1.5} borderRadius="md" boxShadow="md" onClick={(e) => { e.stopPropagation(); removeExistingVehiclePhoto(i); }} aria-label="Delete photo" />
-                                                                </Box>
-                                                            );
-                                                        })}
-                                                        {newVehiclePhotos.map((file, i) => {
-                                                            const objUrl = URL.createObjectURL(file);
-                                                            const isPrimary = primaryType === 'new' && i === 0;
-                                                            return (
-                                                                <Box key={`new-${i}`} position="relative" borderRadius="xl" overflow="hidden" border="2px solid" borderColor={isPrimary ? "purple.500" : "purple.200"} boxShadow={isPrimary ? "md" : "none"}>
-                                                                    <Image src={objUrl} alt="New Preview" w="full" h="90px" objectFit="cover" />
-                                                                    {isPrimary ? (<Badge position="absolute" top={1.5} left={1.5} colorScheme="yellow" bg="yellow.400" color="black" fontSize="9px" fontWeight="black" px={2} py={0.5} borderRadius="md" boxShadow="sm">⭐ Primary</Badge>) : (<Button size="2xs" position="absolute" bottom={1.5} left={1.5} colorScheme="purple" variant="solid" bg="purple.600" color="white" _hover={{ bg: "purple.700" }} fontSize="9px" h="22px" px={2} borderRadius="md" boxShadow="md" onClick={(e) => { e.stopPropagation(); setPrimaryNewPhoto(i); }}>Set Primary</Button>)}
-                                                                    <IconButton icon={<Icon as={FaTrash} />} size="xs" colorScheme="red" variant="solid" position="absolute" top={1.5} right={1.5} borderRadius="md" boxShadow="md" onClick={(e) => { e.stopPropagation(); removeNewVehiclePhoto(i); }} aria-label="Delete photo" />
-                                                                </Box>
-                                                            );
-                                                        })}
-                                                    </SimpleGrid>
-                                                )}
                                             </Box>
 
-                                            {/* ── VEHICLE DOCUMENTS ── */}
-                                            <Box w="full" bg="white" border="1.5px solid" borderColor="gray.200" borderRadius="2xl" p={{ base: 4, md: 5 }}>
-                                                <HStack mb={3} spacing={2}>
-                                                    <Icon as={FaFilePdf} color="pink.500" w={4} h={4} />
-                                                    <Text fontWeight="black" fontSize="sm" color="gray.700" textTransform="uppercase" letterSpacing="wide">Vehicle Documents</Text>
-                                                </HStack>
-                                                <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4}>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="sm">RC Book</FormLabel>
-                                                        <Box p={3} border="2px dashed" borderColor="pink.200" borderRadius="xl" bg="pink.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('rc-upload').click()} _hover={{ bg: "pink.100" }}>
-                                                            <input type="file" id="rc-upload" hidden onChange={handleFileChange} accept="image/*,.pdf" />
-                                                            <Icon as={FaCloudUploadAlt} w={5} h={5} color="pink.500" mb={1} />
-                                                            <Text fontSize="xs" fontWeight="bold" color="pink.700" noOfLines={1}>{rcFile ? rcFile.name : "Upload RC Book"}</Text>
-                                                        </Box>
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="sm">Insurance Doc</FormLabel>
-                                                        <Box p={3} border="2px dashed" borderColor="blue.200" borderRadius="xl" bg="blue.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('ins-upload').click()} _hover={{ bg: "blue.100" }}>
-                                                            <input type="file" id="ins-upload" hidden onChange={(e) => setInsuranceFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                            <Icon as={FaCloudUploadAlt} w={5} h={5} color="blue.500" mb={1} />
-                                                            <Text fontSize="xs" fontWeight="bold" color="blue.700" noOfLines={1}>{insuranceFile ? insuranceFile.name : "Upload Insurance"}</Text>
-                                                        </Box>
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="sm">PUC Doc</FormLabel>
-                                                        <Box p={3} border="2px dashed" borderColor="green.200" borderRadius="xl" bg="green.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('puc-upload').click()} _hover={{ bg: "green.100" }}>
-                                                            <input type="file" id="puc-upload" hidden onChange={(e) => setPucFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                            <Icon as={FaCloudUploadAlt} w={5} h={5} color="green.500" mb={1} />
-                                                            <Text fontSize="xs" fontWeight="bold" color="green.700" noOfLines={1}>{pucFile ? pucFile.name : "Upload PUC"}</Text>
-                                                        </Box>
-                                                    </FormControl>
-                                                </SimpleGrid>
-                                            </Box>
-
-                                            {/* ══ PURCHASE OWNER DETAILS ══ */}
-                                            <Box w="full" border="2px solid" borderColor={purchaseSectionOpen ? "orange.400" : "orange.200"} borderRadius="2xl" overflow="hidden">
+                                            {/* ══ PURCHASE SPECIFICATION & SELLER RECORD (DESKTOP ERP STYLE) ══ */}
+                                            <Box w="full" border="1px solid" borderColor="gray.300" borderRadius="xl" overflow="hidden" bg="white" boxShadow="xs">
                                                 <Flex
                                                     as="button"
                                                     type="button"
                                                     w="full"
                                                     align="center"
                                                     justify="space-between"
-                                                    px={{ base: 4, md: 5 }}
-                                                    py={3.5}
-                                                    bg={purchaseSectionOpen ? "orange.500" : "orange.50"}
-                                                    color={purchaseSectionOpen ? "white" : "orange.700"}
+                                                    px={4}
+                                                    py={3}
+                                                    bg={purchaseSectionOpen ? "gray.100" : "gray.50"}
+                                                    color="gray.800"
                                                     onClick={() => setPurchaseSectionOpen(v => !v)}
-                                                    _hover={{ bg: purchaseSectionOpen ? "orange.600" : "orange.100" }}
-                                                    transition="all 0.2s"
+                                                    _hover={{ bg: "gray.100" }}
+                                                    transition="all 0.15s"
                                                     cursor="pointer"
                                                     border="none"
+                                                    borderBottom={purchaseSectionOpen ? "1px solid" : "none"}
+                                                    borderColor="gray.300"
                                                 >
-                                                    <HStack spacing={2}>
-                                                        <Icon as={FaMoneyBillWave} w={4} h={4} />
-                                                        <Text fontWeight="black" fontSize="sm" textTransform="uppercase" letterSpacing="wide">Purchase Owner Details</Text>
-                                                        {formData.purchaseInfo.ownerName && <Badge colorScheme={purchaseSectionOpen ? "yellow" : "orange"} ml={1}>{formData.purchaseInfo.ownerName}</Badge>}
+                                                    <HStack spacing={2.5}>
+                                                        <Center w="26px" h="26px" bg="white" borderRadius="md" border="1px solid" borderColor="gray.300">
+                                                            <Icon as={FaMoneyBillWave} color="gray.700" boxSize={3.5} />
+                                                        </Center>
+                                                        <Text fontWeight="black" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                                                            Purchase Specification & Seller Record
+                                                        </Text>
+                                                        {formData.purchaseInfo?.ownerName && (
+                                                            <Badge colorScheme="purple" variant="subtle" fontSize="10px" px={2} py={0.5} borderRadius="md">
+                                                                Seller: {formData.purchaseInfo.ownerName}
+                                                            </Badge>
+                                                        )}
+                                                        {formData.purchaseInfo?.purchaseRate && (
+                                                            <Badge colorScheme="green" variant="solid" fontSize="10px" px={2} py={0.5} borderRadius="md">
+                                                                ₹{Number(formData.purchaseInfo.purchaseRate).toLocaleString('en-IN')}
+                                                            </Badge>
+                                                        )}
                                                     </HStack>
-                                                    <Icon as={purchaseSectionOpen ? FaChevronUp : FaChevronDown} w={3} h={3} />
+                                                    <HStack spacing={2}>
+                                                        <Text fontSize="11px" color="gray.500" fontWeight="bold">
+                                                            {purchaseSectionOpen ? 'Collapse' : 'Expand'}
+                                                        </Text>
+                                                        <Icon as={purchaseSectionOpen ? FaChevronUp : FaChevronDown} w={3} h={3} color="gray.600" />
+                                                    </HStack>
                                                 </Flex>
                                                 {purchaseSectionOpen && (
-                                                    <Box p={{ base: 4, md: 5 }} bg="orange.50">
-                                                        <VStack spacing={4}>
-                                                            {/* Row 1: Owner Name + Purchase Date */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Purchase Owner Name</FormLabel>
-                                                                    <Input name="ownerName" placeholder="Full name of seller/owner" value={formData.purchaseInfo.ownerName} onChange={handlePurchaseChange} borderRadius="xl" size="md" bg="white" />
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Purchase Date</FormLabel>
-                                                                    <Input type="date" name="purchaseDate" value={formData.purchaseInfo.purchaseDate} onChange={handlePurchaseChange} borderRadius="xl" size="md" bg="white" />
-                                                                </FormControl>
-                                                            </SimpleGrid>
-
-                                                            {/* Row 2: Purchase Rate + Payment Mode */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Purchase Rate (₹)</FormLabel>
-                                                                    <Input name="purchaseRate" type="number" placeholder="e.g. 1500000" value={formData.purchaseInfo.purchaseRate} onChange={handlePurchaseChange} borderRadius="xl" size="md" bg="white" />
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Mode of Payment</FormLabel>
-                                                                    <Select name="paymentMode" placeholder="Select payment mode" value={formData.purchaseInfo.paymentMode} onChange={handlePurchaseChange} borderRadius="xl" size="md" bg="white">
-                                                                        <option value="Cash">💵 Cash</option>
-                                                                        <option value="UPI">📱 UPI</option>
-                                                                        <option value="Bank Transfer">🏦 Bank Transfer</option>
-                                                                        <option value="Cheque">📝 Cheque</option>
-                                                                        <option value="DD">🧾 Demand Draft</option>
-                                                                    </Select>
-                                                                </FormControl>
-                                                            </SimpleGrid>
-
-                                                            {/* Mobile Numbers (Multiple) */}
-                                                            <FormControl w="full">
-                                                                <FormLabel fontWeight="bold" fontSize="sm">
-                                                                    <HStack justify="space-between">
-                                                                        <Text>Mobile Number(s)</Text>
-                                                                        <Button size="xs" colorScheme="orange" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addPurchaseMobile} borderRadius="lg">Add</Button>
-                                                                    </HStack>
-                                                                </FormLabel>
-                                                                <VStack spacing={2} align="stretch">
-                                                                    {formData.purchaseInfo.mobileNumbers.map((mob, i) => (
-                                                                        <HStack key={i} spacing={2}>
-                                                                            <Input
-                                                                                placeholder={`Mobile ${i + 1}`}
-                                                                                value={mob}
-                                                                                onChange={e => setPurchaseMobile(i, e.target.value)}
-                                                                                borderRadius="xl"
-                                                                                size="md"
-                                                                                bg="white"
-                                                                                type="tel"
-                                                                                maxLength={10}
-                                                                            />
-                                                                            {formData.purchaseInfo.mobileNumbers.length > 1 && (
-                                                                                <IconButton icon={<Icon as={FaTrash} />} size="sm" colorScheme="red" variant="ghost" borderRadius="lg" onClick={() => removePurchaseMobile(i)} aria-label="Remove mobile" />
-                                                                            )}
-                                                                        </HStack>
-                                                                    ))}
-                                                                </VStack>
-                                                            </FormControl>
-
-                                                            {/* Email Addresses (Multiple) */}
-                                                            <FormControl w="full">
-                                                                <FormLabel fontWeight="bold" fontSize="sm">
-                                                                    <HStack justify="space-between">
-                                                                        <Text>Email Address(es)</Text>
-                                                                        <Button size="xs" colorScheme="orange" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addPurchaseEmail} borderRadius="lg">Add</Button>
-                                                                    </HStack>
-                                                                </FormLabel>
-                                                                <VStack spacing={2} align="stretch">
-                                                                    {formData.purchaseInfo.emails.map((em, i) => (
-                                                                        <HStack key={i} spacing={2}>
-                                                                            <Input
-                                                                                placeholder={`Email ${i + 1}`}
-                                                                                value={em}
-                                                                                onChange={e => setPurchaseEmail(i, e.target.value)}
-                                                                                borderRadius="xl"
-                                                                                size="md"
-                                                                                bg="white"
-                                                                                type="email"
-                                                                            />
-                                                                            {formData.purchaseInfo.emails.length > 1 && (
-                                                                                <IconButton icon={<Icon as={FaTrash} />} size="sm" colorScheme="red" variant="ghost" borderRadius="lg" onClick={() => removePurchaseEmail(i)} aria-label="Remove email" />
-                                                                            )}
-                                                                        </HStack>
-                                                                    ))}
-                                                                </VStack>
-                                                            </FormControl>
-
-                                                            {/* Aadhar + PAN Numbers */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Aadhar Card Number</FormLabel>
-                                                                    <Input name="aadharNumber" placeholder="XXXX XXXX XXXX" value={formData.purchaseInfo.aadharNumber} onChange={handlePurchaseChange} borderRadius="xl" size="md" bg="white" maxLength={14} />
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">PAN Card Number</FormLabel>
-                                                                    <Input name="panNumber" placeholder="ABCDE1234F" value={formData.purchaseInfo.panNumber} onChange={handlePurchaseChange} borderRadius="xl" size="md" bg="white" maxLength={10} textTransform="uppercase" />
-                                                                </FormControl>
-                                                            </SimpleGrid>
-
-                                                            {/* Aadhar + PAN Document Uploads */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Aadhar Card Doc</FormLabel>
-                                                                    <Box p={3} border="2px dashed" borderColor="orange.300" borderRadius="xl" bg="white" textAlign="center" cursor="pointer" onClick={() => document.getElementById('purchase-aadhar-upload').click()} _hover={{ bg: "orange.50" }}>
-                                                                        <input type="file" id="purchase-aadhar-upload" hidden onChange={e => setPurchaseAadharFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                        <Icon as={FaIdCard} w={5} h={5} color="orange.500" mb={1} />
-                                                                        <Text fontSize="xs" fontWeight="bold" color="orange.700" noOfLines={1}>
-                                                                            {purchaseAadharFile ? purchaseAadharFile.name : (existingPurchaseAadhar ? '✅ Uploaded' : 'Upload Aadhar')}
-                                                                        </Text>
-                                                                    </Box>
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">PAN Card Doc</FormLabel>
-                                                                    <Box p={3} border="2px dashed" borderColor="orange.300" borderRadius="xl" bg="white" textAlign="center" cursor="pointer" onClick={() => document.getElementById('purchase-pan-upload').click()} _hover={{ bg: "orange.50" }}>
-                                                                        <input type="file" id="purchase-pan-upload" hidden onChange={e => setPurchasePanFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                        <Icon as={FaIdBadge} w={5} h={5} color="orange.500" mb={1} />
-                                                                        <Text fontSize="xs" fontWeight="bold" color="orange.700" noOfLines={1}>
-                                                                            {purchasePanFile ? purchasePanFile.name : (existingPurchasePan ? '✅ Uploaded' : 'Upload PAN')}
-                                                                        </Text>
-                                                                    </Box>
-                                                                </FormControl>
-                                                            </SimpleGrid>
-
-                                                            {/* ── Old RC Book + Old PUC Uploads (Swapped: Old RC Book first, Old PUC second) ── */}
-                                                            <Box w="full" p={4} bg="white" borderRadius="xl" border="1.5px solid" borderColor="orange.200">
-                                                                <HStack mb={3} spacing={2}>
-                                                                    <Icon as={FaFilePdf} color="orange.500" w={4} h={4} />
-                                                                    <Text fontWeight="black" fontSize="xs" color="orange.700" textTransform="uppercase" letterSpacing="wide">Previous Vehicle Documents</Text>
-                                                                </HStack>
-                                                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                                    <Box p={{ base: 3, md: 4 }} bg="white">
+                                                        <VStack spacing={4} align="stretch">
+                                                            {/* 1. Transaction & Commercial Grid */}
+                                                            <Box>
+                                                                <Text fontSize="11px" fontWeight="black" color="gray.600" textTransform="uppercase" letterSpacing="wider" mb={2}>
+                                                                    1. Commercial Terms & Seller Identity
+                                                                </Text>
+                                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 6 }} spacing={3}>
                                                                     <FormControl>
-                                                                        <FormLabel fontWeight="bold" fontSize="sm">Old RC Book</FormLabel>
-                                                                        <Box p={3} border="2px dashed" borderColor={purchaseOldRcFile ? "green.400" : "orange.300"} borderRadius="xl" bg={purchaseOldRcFile ? "green.50" : "orange.50"} textAlign="center" cursor="pointer" onClick={() => document.getElementById('purchase-old-rc-upload').click()} _hover={{ bg: "orange.100" }} transition="all 0.2s">
-                                                                            <input type="file" id="purchase-old-rc-upload" hidden onChange={e => setPurchaseOldRcFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                            <Icon as={FaCloudUploadAlt} w={5} h={5} color={purchaseOldRcFile ? "green.500" : "orange.500"} mb={1} />
-                                                                            <Text fontSize="xs" fontWeight="bold" color={purchaseOldRcFile ? "green.700" : "orange.700"} noOfLines={1}>{purchaseOldRcFile ? purchaseOldRcFile.name : (existingPurchaseOldRc ? '✅ Uploaded' : 'Upload Old RC Book')}</Text>
-                                                                            {purchaseOldRcFile && <Button size="2xs" mt={1} colorScheme="red" variant="ghost" fontSize="10px" onClick={e => { e.stopPropagation(); setPurchaseOldRcFile(null); }}>Remove</Button>}
-                                                                        </Box>
+                                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Seller / Owner Name</FormLabel>
+                                                                        <Input
+                                                                            size="sm"
+                                                                            h="32px"
+                                                                            borderRadius="md"
+                                                                            name="ownerName"
+                                                                            placeholder="Full name of seller"
+                                                                            value={formData.purchaseInfo.ownerName}
+                                                                            onChange={handlePurchaseChange}
+                                                                            bg="white"
+                                                                            borderColor="gray.300"
+                                                                        />
                                                                     </FormControl>
+
                                                                     <FormControl>
-                                                                        <FormLabel fontWeight="bold" fontSize="sm">Old PUC Certificate</FormLabel>
-                                                                        <Box p={3} border="2px dashed" borderColor={purchaseOldPucFile ? "green.400" : "orange.300"} borderRadius="xl" bg={purchaseOldPucFile ? "green.50" : "orange.50"} textAlign="center" cursor="pointer" onClick={() => document.getElementById('purchase-old-puc-upload').click()} _hover={{ bg: "orange.100" }} transition="all 0.2s">
-                                                                            <input type="file" id="purchase-old-puc-upload" hidden onChange={e => setPurchaseOldPucFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                            <Icon as={FaCloudUploadAlt} w={5} h={5} color={purchaseOldPucFile ? "green.500" : "orange.500"} mb={1} />
-                                                                            <Text fontSize="xs" fontWeight="bold" color={purchaseOldPucFile ? "green.700" : "orange.700"} noOfLines={1}>{purchaseOldPucFile ? purchaseOldPucFile.name : (existingPurchaseOldPuc ? '✅ Uploaded' : 'Upload Old PUC')}</Text>
-                                                                            {purchaseOldPucFile && <Button size="2xs" mt={1} colorScheme="red" variant="ghost" fontSize="10px" onClick={e => { e.stopPropagation(); setPurchaseOldPucFile(null); }}>Remove</Button>}
-                                                                        </Box>
+                                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Purchase Date</FormLabel>
+                                                                        <Input
+                                                                            type="date"
+                                                                            size="sm"
+                                                                            h="32px"
+                                                                            borderRadius="md"
+                                                                            name="purchaseDate"
+                                                                            value={formData.purchaseInfo.purchaseDate}
+                                                                            onChange={handlePurchaseChange}
+                                                                            bg="white"
+                                                                            borderColor="gray.300"
+                                                                        />
+                                                                    </FormControl>
+
+                                                                    <FormControl>
+                                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Purchase Rate (₹)</FormLabel>
+                                                                        <Input
+                                                                            size="sm"
+                                                                            h="32px"
+                                                                            borderRadius="md"
+                                                                            name="purchaseRate"
+                                                                            type="number"
+                                                                            placeholder="e.g. 1500000"
+                                                                            value={formData.purchaseInfo.purchaseRate}
+                                                                            onChange={handlePurchaseChange}
+                                                                            bg="white"
+                                                                            borderColor="gray.300"
+                                                                        />
+                                                                    </FormControl>
+
+                                                                    <FormControl>
+                                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Payment Mode</FormLabel>
+                                                                        <Select
+                                                                            size="sm"
+                                                                            h="32px"
+                                                                            borderRadius="md"
+                                                                            name="paymentMode"
+                                                                            placeholder="Select mode"
+                                                                            value={formData.purchaseInfo.paymentMode}
+                                                                            onChange={handlePurchaseChange}
+                                                                            bg="white"
+                                                                            borderColor="gray.300"
+                                                                        >
+                                                                            <option value="Cash">Cash</option>
+                                                                            <option value="UPI">UPI</option>
+                                                                            <option value="Bank Transfer">Bank Transfer</option>
+                                                                            <option value="Cheque">Cheque</option>
+                                                                            <option value="DD">Demand Draft</option>
+                                                                        </Select>
+                                                                    </FormControl>
+
+                                                                    <FormControl>
+                                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Seller Aadhar No</FormLabel>
+                                                                        <Input
+                                                                            size="sm"
+                                                                            h="32px"
+                                                                            borderRadius="md"
+                                                                            name="aadharNumber"
+                                                                            placeholder="XXXX XXXX XXXX"
+                                                                            value={formData.purchaseInfo.aadharNumber}
+                                                                            onChange={handlePurchaseChange}
+                                                                            bg="white"
+                                                                            borderColor="gray.300"
+                                                                            maxLength={14}
+                                                                        />
+                                                                    </FormControl>
+
+                                                                    <FormControl>
+                                                                        <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Seller PAN No</FormLabel>
+                                                                        <Input
+                                                                            size="sm"
+                                                                            h="32px"
+                                                                            borderRadius="md"
+                                                                            name="panNumber"
+                                                                            placeholder="ABCDE1234F"
+                                                                            value={formData.purchaseInfo.panNumber}
+                                                                            onChange={handlePurchaseChange}
+                                                                            bg="white"
+                                                                            borderColor="gray.300"
+                                                                            maxLength={10}
+                                                                            textTransform="uppercase"
+                                                                        />
                                                                     </FormControl>
                                                                 </SimpleGrid>
                                                             </Box>
 
-                                                            {/* ── Other Documents (Simple Multi-File Upload & Display) ── */}
-                                                            <Box w="full" p={4} bg="white" borderRadius="xl" border="1.5px solid" borderColor="purple.200">
-                                                                <Flex align="center" justify="space-between" mb={3} wrap="wrap" gap={2}>
+                                                            {/* 2. Communication Channels */}
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                                                    <Box>
+                                                                        <Flex justify="space-between" align="center" mb={1.5}>
+                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.700">Seller Phone Number(s)</Text>
+                                                                            <Button size="2xs" colorScheme="gray" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addPurchaseMobile} borderRadius="md">
+                                                                                Add Phone
+                                                                            </Button>
+                                                                        </Flex>
+                                                                        <VStack spacing={1.5} align="stretch">
+                                                                            {formData.purchaseInfo.mobileNumbers.map((mob, i) => (
+                                                                                <HStack key={i} spacing={1.5}>
+                                                                                    <Input
+                                                                                        size="xs"
+                                                                                        h="30px"
+                                                                                        placeholder={`Mobile ${i + 1}`}
+                                                                                        value={mob}
+                                                                                        onChange={e => setPurchaseMobile(i, e.target.value)}
+                                                                                        borderRadius="md"
+                                                                                        bg="white"
+                                                                                        borderColor="gray.300"
+                                                                                        type="tel"
+                                                                                        maxLength={10}
+                                                                                    />
+                                                                                    {formData.purchaseInfo.mobileNumbers.length > 1 && (
+                                                                                        <IconButton
+                                                                                            size="xs"
+                                                                                            icon={<Icon as={FaTrash} />}
+                                                                                            colorScheme="red"
+                                                                                            variant="ghost"
+                                                                                            onClick={() => removePurchaseMobile(i)}
+                                                                                            aria-label="Remove"
+                                                                                        />
+                                                                                    )}
+                                                                                </HStack>
+                                                                            ))}
+                                                                        </VStack>
+                                                                    </Box>
+
+                                                                    <Box>
+                                                                        <Flex justify="space-between" align="center" mb={1.5}>
+                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.700">Seller Email Address(es)</Text>
+                                                                            <Button size="2xs" colorScheme="gray" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addPurchaseEmail} borderRadius="md">
+                                                                                Add Email
+                                                                            </Button>
+                                                                        </Flex>
+                                                                        <VStack spacing={1.5} align="stretch">
+                                                                            {formData.purchaseInfo.emails.map((em, i) => (
+                                                                                <HStack key={i} spacing={1.5}>
+                                                                                    <Input
+                                                                                        size="xs"
+                                                                                        h="30px"
+                                                                                        placeholder={`Email ${i + 1}`}
+                                                                                        value={em}
+                                                                                        onChange={e => setPurchaseEmail(i, e.target.value)}
+                                                                                        borderRadius="md"
+                                                                                        bg="white"
+                                                                                        borderColor="gray.300"
+                                                                                        type="email"
+                                                                                    />
+                                                                                    {formData.purchaseInfo.emails.length > 1 && (
+                                                                                        <IconButton
+                                                                                            size="xs"
+                                                                                            icon={<Icon as={FaTrash} />}
+                                                                                            colorScheme="red"
+                                                                                            variant="ghost"
+                                                                                            onClick={() => removePurchaseEmail(i)}
+                                                                                            aria-label="Remove"
+                                                                                        />
+                                                                                    )}
+                                                                                </HStack>
+                                                                            ))}
+                                                                        </VStack>
+                                                                    </Box>
+                                                                </SimpleGrid>
+                                                            </Box>
+
+                                                            {/* 3. Purchase Compliance Documents Registry (Desktop ERP Table) */}
+                                                            <Box w="full" bg="white" borderRadius="lg" border="1px solid" borderColor="gray.300" overflow="hidden">
+                                                                <Flex bg="gray.100" px={4} py={2} justify="space-between" align="center" borderBottom="1px solid" borderColor="gray.300">
                                                                     <HStack spacing={2}>
-                                                                        <Icon as={FaFolderOpen} color="purple.500" w={4} h={4} />
-                                                                        <Text fontWeight="black" fontSize="xs" color="purple.700" textTransform="uppercase" letterSpacing="wide">Other Documents</Text>
+                                                                        <Icon as={FaFilePdf} color="gray.700" />
+                                                                        <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                            Purchase Compliance & Transfer Documents Registry
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    <Text fontSize="10px" color="gray.500">
+                                                                        PDF, PNG, JPG formats supported
+                                                                    </Text>
+                                                                </Flex>
+                                                                <Table size="sm" variant="simple">
+                                                                    <Thead bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                                        <Tr>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="45px" textAlign="center">#</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="200px">Document Title</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase">Compliance Purpose</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="320px">Attached Document / Action</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="110px" textAlign="center">Status</Th>
+                                                                        </Tr>
+                                                                    </Thead>
+                                                                    <Tbody>
+                                                                        {/* ROW 1: Old RC Book */}
+                                                                        <Tr _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                            <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">1</Td>
+                                                                            <Td>
+                                                                                <HStack spacing={2}>
+                                                                                    <Icon as={FaFileAlt} color="orange.600" boxSize={3.5} />
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.800">Old RC Book</Text>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td fontSize="xs" color="gray.600">Prior Vehicle Registration Certificate</Td>
+                                                                            <Td>
+                                                                                <input type="file" id="purchase-old-rc-upload" hidden onChange={e => setPurchaseOldRcFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                {purchaseOldRcFile ? (
+                                                                                    <HStack px={2} py={1} bg="green.50" border="1px solid" borderColor="green.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('purchase-old-rc-upload').click()}>
+                                                                                            <Icon as={FaFilePdf} color="green.600" boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated maxW="180px">{purchaseOldRcFile.name}</Text>
+                                                                                        </HStack>
+                                                                                        <IconButton size="2xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setPurchaseOldRcFile(null)} aria-label="Remove" />
+                                                                                    </HStack>
+                                                                                ) : existingPurchaseOldRc ? (
+                                                                                    <HStack px={2} py={1} bg="gray.50" border="1px solid" borderColor="gray.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0}>
+                                                                                            <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} />
+                                                                                            <Text as="a" href={getFileUrl(existingPurchaseOldRc)} target="_blank" rel="noreferrer" fontSize="xs" fontWeight="bold" color="blue.600" textDecoration="underline" isTruncated maxW="180px">
+                                                                                                {existingPurchaseOldRc.name || 'View Old RC'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <Button size="2xs" variant="outline" colorScheme="gray" onClick={() => document.getElementById('purchase-old-rc-upload').click()}>Replace</Button>
+                                                                                    </HStack>
+                                                                                ) : (
+                                                                                    <Button size="xs" h="28px" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaCloudUploadAlt} />} borderRadius="md" onClick={() => document.getElementById('purchase-old-rc-upload').click()}>
+                                                                                        Browse Old RC
+                                                                                    </Button>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td textAlign="center">
+                                                                                <Badge colorScheme={purchaseOldRcFile ? "blue" : existingPurchaseOldRc ? "green" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                    {purchaseOldRcFile ? "NEW FILE" : existingPurchaseOldRc ? "ATTACHED" : "OPTIONAL"}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                        </Tr>
+
+                                                                        {/* ROW 2: Old PUC Certificate */}
+                                                                        <Tr _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                            <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">2</Td>
+                                                                            <Td>
+                                                                                <HStack spacing={2}>
+                                                                                    <Icon as={FaFileAlt} color="green.600" boxSize={3.5} />
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.800">Old PUC Certificate</Text>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td fontSize="xs" color="gray.600">Prior Emission Compliance Record</Td>
+                                                                            <Td>
+                                                                                <input type="file" id="purchase-old-puc-upload" hidden onChange={e => setPurchaseOldPucFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                {purchaseOldPucFile ? (
+                                                                                    <HStack px={2} py={1} bg="green.50" border="1px solid" borderColor="green.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('purchase-old-puc-upload').click()}>
+                                                                                            <Icon as={FaFilePdf} color="green.600" boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated maxW="180px">{purchaseOldPucFile.name}</Text>
+                                                                                        </HStack>
+                                                                                        <IconButton size="2xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setPurchaseOldPucFile(null)} aria-label="Remove" />
+                                                                                    </HStack>
+                                                                                ) : existingPurchaseOldPuc ? (
+                                                                                    <HStack px={2} py={1} bg="gray.50" border="1px solid" borderColor="gray.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0}>
+                                                                                            <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} />
+                                                                                            <Text as="a" href={getFileUrl(existingPurchaseOldPuc)} target="_blank" rel="noreferrer" fontSize="xs" fontWeight="bold" color="blue.600" textDecoration="underline" isTruncated maxW="180px">
+                                                                                                {existingPurchaseOldPuc.name || 'View Old PUC'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <Button size="2xs" variant="outline" colorScheme="gray" onClick={() => document.getElementById('purchase-old-puc-upload').click()}>Replace</Button>
+                                                                                    </HStack>
+                                                                                ) : (
+                                                                                    <Button size="xs" h="28px" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaCloudUploadAlt} />} borderRadius="md" onClick={() => document.getElementById('purchase-old-puc-upload').click()}>
+                                                                                        Browse Old PUC
+                                                                                    </Button>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td textAlign="center">
+                                                                                <Badge colorScheme={purchaseOldPucFile ? "blue" : existingPurchaseOldPuc ? "green" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                    {purchaseOldPucFile ? "NEW FILE" : existingPurchaseOldPuc ? "ATTACHED" : "OPTIONAL"}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                        </Tr>
+
+                                                                        {/* ROW 3: Seller Aadhar Card */}
+                                                                        <Tr _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                            <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">3</Td>
+                                                                            <Td>
+                                                                                <HStack spacing={2}>
+                                                                                    <Icon as={FaIdCard} color="blue.600" boxSize={3.5} />
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.800">Seller Aadhar Card</Text>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td fontSize="xs" color="gray.600">Owner KYC & National Identity Proof</Td>
+                                                                            <Td>
+                                                                                <input type="file" id="purchase-aadhar-upload" hidden onChange={e => setPurchaseAadharFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                {purchaseAadharFile ? (
+                                                                                    <HStack px={2} py={1} bg="green.50" border="1px solid" borderColor="green.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('purchase-aadhar-upload').click()}>
+                                                                                            <Icon as={FaFilePdf} color="green.600" boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated maxW="180px">{purchaseAadharFile.name}</Text>
+                                                                                        </HStack>
+                                                                                        <IconButton size="2xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setPurchaseAadharFile(null)} aria-label="Remove" />
+                                                                                    </HStack>
+                                                                                ) : existingPurchaseAadhar ? (
+                                                                                    <HStack px={2} py={1} bg="gray.50" border="1px solid" borderColor="gray.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0}>
+                                                                                            <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} />
+                                                                                            <Text as="a" href={getFileUrl(existingPurchaseAadhar)} target="_blank" rel="noreferrer" fontSize="xs" fontWeight="bold" color="blue.600" textDecoration="underline" isTruncated maxW="180px">
+                                                                                                {existingPurchaseAadhar.name || 'View Aadhar'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <Button size="2xs" variant="outline" colorScheme="gray" onClick={() => document.getElementById('purchase-aadhar-upload').click()}>Replace</Button>
+                                                                                    </HStack>
+                                                                                ) : (
+                                                                                    <Button size="xs" h="28px" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaCloudUploadAlt} />} borderRadius="md" onClick={() => document.getElementById('purchase-aadhar-upload').click()}>
+                                                                                        Browse Aadhar Card
+                                                                                    </Button>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td textAlign="center">
+                                                                                <Badge colorScheme={purchaseAadharFile ? "blue" : existingPurchaseAadhar ? "green" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                    {purchaseAadharFile ? "NEW FILE" : existingPurchaseAadhar ? "ATTACHED" : "OPTIONAL"}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                        </Tr>
+
+                                                                        {/* ROW 4: Seller PAN Card */}
+                                                                        <Tr _hover={{ bg: "gray.50" }}>
+                                                                            <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">4</Td>
+                                                                            <Td>
+                                                                                <HStack spacing={2}>
+                                                                                    <Icon as={FaIdBadge} color="purple.600" boxSize={3.5} />
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.800">Seller PAN Card</Text>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td fontSize="xs" color="gray.600">Tax Compliance & Entity Verification</Td>
+                                                                            <Td>
+                                                                                <input type="file" id="purchase-pan-upload" hidden onChange={e => setPurchasePanFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                {purchasePanFile ? (
+                                                                                    <HStack px={2} py={1} bg="green.50" border="1px solid" borderColor="green.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('purchase-pan-upload').click()}>
+                                                                                            <Icon as={FaFilePdf} color="green.600" boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated maxW="180px">{purchasePanFile.name}</Text>
+                                                                                        </HStack>
+                                                                                        <IconButton size="2xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setPurchasePanFile(null)} aria-label="Remove" />
+                                                                                    </HStack>
+                                                                                ) : existingPurchasePan ? (
+                                                                                    <HStack px={2} py={1} bg="gray.50" border="1px solid" borderColor="gray.300" borderRadius="md" justify="space-between">
+                                                                                        <HStack spacing={1.5} minW={0}>
+                                                                                            <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} />
+                                                                                            <Text as="a" href={getFileUrl(existingPurchasePan)} target="_blank" rel="noreferrer" fontSize="xs" fontWeight="bold" color="blue.600" textDecoration="underline" isTruncated maxW="180px">
+                                                                                                {existingPurchasePan.name || 'View PAN'}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                        <Button size="2xs" variant="outline" colorScheme="gray" onClick={() => document.getElementById('purchase-pan-upload').click()}>Replace</Button>
+                                                                                    </HStack>
+                                                                                ) : (
+                                                                                    <Button size="xs" h="28px" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaCloudUploadAlt} />} borderRadius="md" onClick={() => document.getElementById('purchase-pan-upload').click()}>
+                                                                                        Browse PAN Card
+                                                                                    </Button>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td textAlign="center">
+                                                                                <Badge colorScheme={purchasePanFile ? "blue" : existingPurchasePan ? "green" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                    {purchasePanFile ? "NEW FILE" : existingPurchasePan ? "ATTACHED" : "OPTIONAL"}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                        </Tr>
+                                                                    </Tbody>
+                                                                </Table>
+                                                            </Box>
+
+                                                            {/* 4. Supporting / Other Transfer Documents Registry (Desktop ERP Table) */}
+                                                            <Box w="full" bg="white" borderRadius="lg" border="1px solid" borderColor="gray.300" overflow="hidden">
+                                                                <Flex bg="gray.100" px={4} py={2} justify="space-between" align="center" borderBottom="1px solid" borderColor="gray.300">
+                                                                    <HStack spacing={2}>
+                                                                        <Icon as={FaFolderOpen} color="gray.700" boxSize={3.5} />
+                                                                        <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                            Additional Supporting Documents & Clearances
+                                                                        </Text>
                                                                         {(existingPurchaseOtherDocs.length + purchaseOtherDocs.length) > 0 && (
-                                                                            <Badge colorScheme="purple" borderRadius="full" px={2} fontSize="xs">
-                                                                                {existingPurchaseOtherDocs.length + purchaseOtherDocs.length}
+                                                                            <Badge colorScheme="purple" borderRadius="full" px={2} fontSize="9px">
+                                                                                {existingPurchaseOtherDocs.length + purchaseOtherDocs.length} Total
                                                                             </Badge>
                                                                         )}
                                                                     </HStack>
-                                                                    <Button
-                                                                        size="xs"
-                                                                        colorScheme="purple"
-                                                                        variant="solid"
-                                                                        leftIcon={<Icon as={FaPlus} />}
-                                                                        onClick={() => document.getElementById('purchase-other-docs-upload').click()}
-                                                                        borderRadius="lg"
-                                                                        boxShadow="sm"
-                                                                    >
-                                                                        Add Documents
-                                                                    </Button>
+                                                                    <HStack spacing={2}>
+                                                                        <input
+                                                                            type="file"
+                                                                            id="purchase-other-docs-upload"
+                                                                            hidden
+                                                                            multiple
+                                                                            onChange={handleOtherDocsChange}
+                                                                            accept="image/*,.pdf,.doc,.docx"
+                                                                        />
+                                                                        <Button
+                                                                            size="xs"
+                                                                            h="28px"
+                                                                            colorScheme="purple"
+                                                                            variant="solid"
+                                                                            leftIcon={<Icon as={FaPlus} />}
+                                                                            onClick={() => document.getElementById('purchase-other-docs-upload').click()}
+                                                                            borderRadius="md"
+                                                                        >
+                                                                            Add Documents
+                                                                        </Button>
+                                                                    </HStack>
                                                                 </Flex>
 
-                                                                {/* Hidden multiple file input */}
-                                                                <input
-                                                                    type="file"
-                                                                    id="purchase-other-docs-upload"
-                                                                    hidden
-                                                                    multiple
-                                                                    onChange={handleOtherDocsChange}
-                                                                    accept="image/*,.pdf,.doc,.docx"
-                                                                />
-
-                                                                {/* Upload Dropzone / Trigger Area */}
-                                                                <Box
-                                                                    p={4}
-                                                                    border="2px dashed"
-                                                                    borderColor="purple.200"
-                                                                    borderRadius="xl"
-                                                                    bg="purple.50"
-                                                                    textAlign="center"
-                                                                    cursor="pointer"
-                                                                    onClick={() => document.getElementById('purchase-other-docs-upload').click()}
-                                                                    _hover={{ bg: "purple.100", borderColor: "purple.400" }}
-                                                                    transition="all 0.2s"
-                                                                    mb={(existingPurchaseOtherDocs.length > 0 || purchaseOtherDocs.length > 0) ? 3 : 0}
-                                                                >
-                                                                    <Icon as={FaCloudUploadAlt} w={6} h={6} color="purple.500" mb={1} />
-                                                                    <Text fontSize="xs" fontWeight="bold" color="purple.700">
-                                                                        Click to Browse or Add Documents
-                                                                    </Text>
-                                                                    <Text fontSize="2xs" color="purple.500" mt={0.5}>
-                                                                        Select multiple files (NOC, Form 28, FC Certificate, etc. - PDF, PNG, JPG)
-                                                                    </Text>
-                                                                </Box>
-
-                                                                {/* List of Uploaded Documents (Existing + New) */}
-                                                                {(existingPurchaseOtherDocs.length > 0 || purchaseOtherDocs.length > 0) && (
-                                                                    <VStack spacing={2} align="stretch">
-                                                                        {/* Existing Documents */}
-                                                                        {existingPurchaseOtherDocs.map((doc, idx) => (
-                                                                            <Flex
-                                                                                key={`existing-${idx}`}
-                                                                                align="center"
-                                                                                justify="space-between"
-                                                                                p={2.5}
-                                                                                bg="purple.50"
-                                                                                borderRadius="lg"
-                                                                                border="1px solid"
-                                                                                borderColor="purple.200"
-                                                                            >
-                                                                                <HStack spacing={3} overflow="hidden" flex={1} mr={2}>
-                                                                                    <Icon as={FaFilePdf} color="purple.500" w={4} h={4} flexShrink={0} />
-                                                                                    <VStack align="start" spacing={0} overflow="hidden">
-                                                                                        <Text fontSize="xs" fontWeight="bold" color="purple.900" noOfLines={1} title={doc.label}>
-                                                                                            {doc.label || `Document ${idx + 1}`}
-                                                                                        </Text>
-                                                                                        <HStack spacing={1}>
-                                                                                            <Badge colorScheme="green" fontSize="9px" px={1.5} borderRadius="sm">Saved</Badge>
+                                                                {(existingPurchaseOtherDocs.length === 0 && purchaseOtherDocs.length === 0) ? (
+                                                                    <Flex p={4} justify="center" align="center" bg="gray.50" direction="column" gap={1}>
+                                                                        <Text fontSize="xs" color="gray.500">No additional clearance documents attached.</Text>
+                                                                        <Text fontSize="10px" color="gray.400">Click "Add Documents" to attach Form 28, Form 29, NOC, FC Certificate, etc.</Text>
+                                                                    </Flex>
+                                                                ) : (
+                                                                    <Table size="sm" variant="simple">
+                                                                        <Thead bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                                            <Tr>
+                                                                                <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="45px" textAlign="center">#</Th>
+                                                                                <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase">Document Name / File</Th>
+                                                                                <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="140px" textAlign="center">Storage State</Th>
+                                                                                <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="120px" textAlign="right">Action</Th>
+                                                                            </Tr>
+                                                                        </Thead>
+                                                                        <Tbody>
+                                                                            {/* Existing Saved Docs */}
+                                                                            {existingPurchaseOtherDocs.map((doc, idx) => (
+                                                                                <Tr key={`exist-${idx}`} _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                                    <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">{idx + 1}</Td>
+                                                                                    <Td>
+                                                                                        <HStack spacing={2}>
+                                                                                            <Icon as={FaFilePdf} color="purple.600" boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.800" noOfLines={1} title={doc.label}>
+                                                                                                {doc.label || `Document ${idx + 1}`}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                    </Td>
+                                                                                    <Td textAlign="center">
+                                                                                        <Badge colorScheme="green" fontSize="9px" px={2} py={0.5} borderRadius="sm">SAVED ON SERVER</Badge>
+                                                                                    </Td>
+                                                                                    <Td textAlign="right">
+                                                                                        <HStack spacing={1} justify="flex-end">
                                                                                             {doc.url && (
-                                                                                                <Text
+                                                                                                <Button
                                                                                                     as="a"
                                                                                                     href={getFileUrl(doc.url)}
                                                                                                     target="_blank"
                                                                                                     rel="noopener noreferrer"
-                                                                                                    fontSize="10px"
-                                                                                                    color="purple.600"
-                                                                                                    textDecoration="underline"
-                                                                                                    _hover={{ color: "purple.800" }}
+                                                                                                    size="2xs"
+                                                                                                    variant="outline"
+                                                                                                    colorScheme="blue"
+                                                                                                    leftIcon={<Icon as={FaEye} />}
                                                                                                 >
-                                                                                                    View File
-                                                                                                </Text>
+                                                                                                    View
+                                                                                                </Button>
                                                                                             )}
+                                                                                            <IconButton
+                                                                                                size="2xs"
+                                                                                                colorScheme="red"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaTrash} />}
+                                                                                                onClick={() => removeExistingOtherDoc(idx)}
+                                                                                                aria-label="Remove"
+                                                                                            />
                                                                                         </HStack>
-                                                                                    </VStack>
-                                                                                </HStack>
-                                                                                <IconButton
-                                                                                    icon={<Icon as={FaTrash} />}
-                                                                                    size="xs"
-                                                                                    colorScheme="red"
-                                                                                    variant="ghost"
-                                                                                    borderRadius="md"
-                                                                                    onClick={() => removeExistingOtherDoc(idx)}
-                                                                                    aria-label="Delete document"
-                                                                                    _hover={{ bg: "red.100", color: "red.600" }}
-                                                                                />
-                                                                            </Flex>
-                                                                        ))}
+                                                                                    </Td>
+                                                                                </Tr>
+                                                                            ))}
 
-                                                                        {/* Newly Selected Documents */}
-                                                                        {purchaseOtherDocs.map((file, idx) => {
-                                                                            const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
-                                                                            const isImg = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
-                                                                            return (
-                                                                                <Flex
-                                                                                    key={`new-${idx}`}
-                                                                                    align="center"
-                                                                                    justify="space-between"
-                                                                                    p={2.5}
-                                                                                    bg="green.50"
-                                                                                    borderRadius="lg"
-                                                                                    border="1px solid"
-                                                                                    borderColor="green.200"
-                                                                                >
-                                                                                    <HStack spacing={3} overflow="hidden" flex={1} mr={2}>
-                                                                                        <Icon as={isPdf ? FaFilePdf : isImg ? FaFileImage : FaFileAlt} color={isPdf ? "red.500" : isImg ? "blue.500" : "green.600"} w={4} h={4} flexShrink={0} />
-                                                                                        <VStack align="start" spacing={0} overflow="hidden">
-                                                                                            <Text fontSize="xs" fontWeight="bold" color="green.900" noOfLines={1} title={file.name}>
-                                                                                                {file.name}
-                                                                                            </Text>
-                                                                                            <HStack spacing={1.5}>
-                                                                                                <Badge colorScheme="green" fontSize="9px" px={1.5} borderRadius="sm">New</Badge>
-                                                                                                <Text fontSize="10px" color="gray.500">{formatFileSize(file.size)}</Text>
-                                                                                            </HStack>
-                                                                                        </VStack>
-                                                                                    </HStack>
-                                                                                    <IconButton
-                                                                                        icon={<Icon as={FaTrash} />}
-                                                                                        size="xs"
-                                                                                        colorScheme="red"
-                                                                                        variant="ghost"
-                                                                                        borderRadius="md"
-                                                                                        onClick={() => removeOtherDoc(idx)}
-                                                                                        aria-label="Delete document"
-                                                                                        _hover={{ bg: "red.100", color: "red.600" }}
-                                                                                    />
-                                                                                </Flex>
-                                                                            );
-                                                                        })}
-                                                                    </VStack>
+                                                                            {/* Newly Selected Docs */}
+                                                                            {purchaseOtherDocs.map((file, idx) => (
+                                                                                <Tr key={`new-${idx}`} _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                                    <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">{existingPurchaseOtherDocs.length + idx + 1}</Td>
+                                                                                    <Td>
+                                                                                        <HStack spacing={2}>
+                                                                                            <Icon as={FaFileAlt} color="blue.600" boxSize={3.5} />
+                                                                                            <VStack align="start" spacing={0}>
+                                                                                                <Text fontSize="xs" fontWeight="bold" color="gray.800" noOfLines={1} title={file.name}>
+                                                                                                    {file.name}
+                                                                                                </Text>
+                                                                                                <Text fontSize="10px" color="gray.400">{formatFileSize(file.size)}</Text>
+                                                                                            </VStack>
+                                                                                        </HStack>
+                                                                                    </Td>
+                                                                                    <Td textAlign="center">
+                                                                                        <Badge colorScheme="blue" fontSize="9px" px={2} py={0.5} borderRadius="sm">NEW FILE</Badge>
+                                                                                    </Td>
+                                                                                    <Td textAlign="right">
+                                                                                        <IconButton
+                                                                                            size="2xs"
+                                                                                            colorScheme="red"
+                                                                                            variant="ghost"
+                                                                                            icon={<Icon as={FaTrash} />}
+                                                                                            onClick={() => removeOtherDoc(idx)}
+                                                                                            aria-label="Remove"
+                                                                                        />
+                                                                                    </Td>
+                                                                                </Tr>
+                                                                            ))}
+                                                                        </Tbody>
+                                                                    </Table>
                                                                 )}
                                                             </Box>
                                                         </VStack>
@@ -2794,147 +3565,406 @@ const VehicleMasterForm = () => {
                                                 )}
                                             </Box>
 
-                                            <Box w="full" border="2px solid" borderColor={sellSectionOpen ? "red.400" : "red.200"} borderRadius="2xl" overflow="hidden">
+                                            {/* ══ VEHICLE DISPOSAL & SELL OUT SPECIFICATION (DESKTOP ERP STYLE) ══ */}
+                                            <Box w="full" border="1px solid" borderColor={formData.isSold ? "red.300" : "gray.300"} borderRadius="xl" overflow="hidden" bg="white" boxShadow="xs">
+                                                {/* Header Bar */}
                                                 <Flex
                                                     as="button"
                                                     type="button"
                                                     w="full"
                                                     align="center"
                                                     justify="space-between"
-                                                    px={{ base: 4, md: 5 }}
-                                                    py={3.5}
-                                                    bg={sellSectionOpen ? "red.500" : "red.50"}
-                                                    color={sellSectionOpen ? "white" : "red.700"}
+                                                    px={4}
+                                                    py={3}
+                                                    bg={formData.isSold ? "red.50" : "gray.100"}
+                                                    borderBottom={sellSectionOpen ? "1px solid" : "none"}
+                                                    borderColor={formData.isSold ? "red.200" : "gray.300"}
                                                     onClick={() => setSellSectionOpen(v => !v)}
-                                                    _hover={{ bg: sellSectionOpen ? "red.600" : "red.100" }}
+                                                    _hover={{ bg: formData.isSold ? "red.100" : "gray.200" }}
                                                     transition="all 0.2s"
                                                     cursor="pointer"
                                                     border="none"
                                                 >
-                                                    <HStack spacing={2}>
-                                                        <Icon as={FaHandshake} w={4} h={4} />
-                                                        <Text fontWeight="black" fontSize="sm" textTransform="uppercase" letterSpacing="wide">Sell Out Vehicle Details</Text>
-                                                        {formData.isSold && <Badge colorScheme={sellSectionOpen ? "yellow" : "red"} ml={1}>SOLD</Badge>}
+                                                    <HStack spacing={2.5}>
+                                                        <Center w="28px" h="28px" bg="white" borderRadius="md" border="1px solid" borderColor={formData.isSold ? "red.300" : "gray.300"}>
+                                                            <Icon as={FaHandshake} color={formData.isSold ? "red.600" : "gray.700"} boxSize={3.5} />
+                                                        </Center>
+                                                        <Box textAlign="left">
+                                                            <HStack spacing={2}>
+                                                                <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                    Vehicle Disposal & Sell Out Specification
+                                                                </Text>
+                                                                <Badge colorScheme={formData.isSold ? "red" : "green"} variant="solid" fontSize="10px" px={2.5} py={0.5} borderRadius="md" fontWeight="black">
+                                                                    {formData.isSold ? 'SOLD / TRANSFERRED' : 'ACTIVE IN FLEET'}
+                                                                </Badge>
+                                                            </HStack>
+                                                            <Text fontSize="10px" color="gray.500">
+                                                                Fleet Exit, Ownership Transfer, Sale Consideration & Buyer KYC Records
+                                                            </Text>
+                                                        </Box>
                                                     </HStack>
-                                                    <Icon as={sellSectionOpen ? FaChevronUp : FaChevronDown} w={3} h={3} />
+                                                    <Icon as={sellSectionOpen ? FaChevronUp : FaChevronDown} w={3.5} h={3.5} color="gray.600" />
                                                 </Flex>
+
                                                 {sellSectionOpen && (
-                                                    <Box p={{ base: 4, md: 5 }} bg="red.50">
-                                                        <VStack spacing={4}>
-                                                            {/* Sold Toggle */}
-                                                            <Flex w="full" align="center" gap={3} p={3} bg="white" borderRadius="xl" border="1px solid" borderColor="red.200">
-                                                                <Text fontWeight="bold" fontSize="sm" color="red.700">Mark Vehicle as Sold Out?</Text>
-                                                                <HStack spacing={2} ml="auto">
-                                                                    <Button size="sm" colorScheme={formData.isSold ? "red" : "gray"} variant={formData.isSold ? "solid" : "outline"} borderRadius="lg" onClick={() => setFormData(prev => ({ ...prev, isSold: true }))} minW="60px">Yes</Button>
-                                                                    <Button size="sm" colorScheme={!formData.isSold ? "gray" : "gray"} variant={!formData.isSold ? "solid" : "outline"} borderRadius="lg" onClick={() => setFormData(prev => ({ ...prev, isSold: false }))} minW="60px">No</Button>
+                                                    <Box p={4} bg="gray.50">
+                                                        <VStack spacing={4} align="stretch">
+                                                            {/* Enterprise Asset Status & Disposal Toggle */}
+                                                            <Flex bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.300" justify="space-between" align="center" wrap="wrap" gap={3}>
+                                                                <Box>
+                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.800">
+                                                                        Current Asset Operational State
+                                                                    </Text>
+                                                                    <Text fontSize="10px" color="gray.500">
+                                                                        Select whether this vehicle remains in active service or has been transferred / liquidated
+                                                                    </Text>
+                                                                </Box>
+                                                                <HStack spacing={1} bg="gray.100" p={1} borderRadius="lg" border="1px solid" borderColor="gray.300">
+                                                                    <Button
+                                                                        size="xs"
+                                                                        h="28px"
+                                                                        px={3}
+                                                                        variant={!formData.isSold ? "solid" : "ghost"}
+                                                                        colorScheme={!formData.isSold ? "green" : "gray"}
+                                                                        bg={!formData.isSold ? "green.600" : "transparent"}
+                                                                        color={!formData.isSold ? "white" : "gray.600"}
+                                                                        _hover={{ bg: !formData.isSold ? "green.700" : "gray.200" }}
+                                                                        borderRadius="md"
+                                                                        fontWeight="bold"
+                                                                        onClick={() => setFormData(prev => ({ ...prev, isSold: false }))}
+                                                                    >
+                                                                        🟢 Active in Fleet
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="xs"
+                                                                        h="28px"
+                                                                        px={3}
+                                                                        variant={formData.isSold ? "solid" : "ghost"}
+                                                                        colorScheme={formData.isSold ? "red" : "gray"}
+                                                                        bg={formData.isSold ? "red.600" : "transparent"}
+                                                                        color={formData.isSold ? "white" : "gray.600"}
+                                                                        _hover={{ bg: formData.isSold ? "red.700" : "gray.200" }}
+                                                                        borderRadius="md"
+                                                                        fontWeight="bold"
+                                                                        onClick={() => setFormData(prev => ({ ...prev, isSold: true }))}
+                                                                    >
+                                                                        🔴 Mark as Sold / Transferred
+                                                                    </Button>
                                                                 </HStack>
                                                             </Flex>
 
-                                                            {/* Row 1: Buyer Name + Sell Date */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Buyer / New Owner Name</FormLabel>
-                                                                    <Input name="ownerName" placeholder="Full name of buyer" value={formData.sellInfo.ownerName} onChange={handleSellChange} borderRadius="xl" size="md" bg="white" />
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Sell Date</FormLabel>
-                                                                    <Input type="date" name="sellDate" value={formData.sellInfo.sellDate} onChange={handleSellChange} borderRadius="xl" size="md" bg="white" />
-                                                                </FormControl>
-                                                            </SimpleGrid>
+                                                            {!formData.isSold ? (
+                                                                <Box bg="white" p={4} borderRadius="lg" border="1px dashed" borderColor="gray.300" textAlign="center">
+                                                                    <Text fontSize="xs" color="gray.600" fontWeight="medium">
+                                                                        This vehicle is currently registered as <Text as="span" fontWeight="bold" color="green.700">ACTIVE IN FLEET</Text>.
+                                                                    </Text>
+                                                                    <Text fontSize="10px" color="gray.400" mt={1}>
+                                                                        To record a sale, transfer of ownership, or liquidation, switch the toggle above to "Mark as Sold / Transferred".
+                                                                    </Text>
+                                                                </Box>
+                                                            ) : (
+                                                                <>
 
-                                                            {/* Row 2: Sell Rate + Payment Mode */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Sell Rate (₹)</FormLabel>
-                                                                    <Input name="sellRate" type="number" placeholder="e.g. 1200000" value={formData.sellInfo.sellRate} onChange={handleSellChange} borderRadius="xl" size="md" bg="white" />
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Mode of Payment</FormLabel>
-                                                                    <Select name="paymentMode" placeholder="Select payment mode" value={formData.sellInfo.paymentMode} onChange={handleSellChange} borderRadius="xl" size="md" bg="white">
-                                                                        <option value="Cash">💵 Cash</option>
-                                                                        <option value="UPI">📱 UPI</option>
-                                                                        <option value="Bank Transfer">🏦 Bank Transfer</option>
-                                                                        <option value="Cheque">📝 Cheque</option>
-                                                                        <option value="DD">🧾 Demand Draft</option>
-                                                                    </Select>
-                                                                </FormControl>
-                                                            </SimpleGrid>
-
-                                                            {/* Buyer Mobile Numbers (Multiple) */}
-                                                            <FormControl w="full">
-                                                                <FormLabel fontWeight="bold" fontSize="sm">
-                                                                    <HStack justify="space-between">
-                                                                        <Text>Buyer Mobile Number(s)</Text>
-                                                                        <Button size="xs" colorScheme="red" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addSellMobile} borderRadius="lg">Add</Button>
-                                                                    </HStack>
-                                                                </FormLabel>
-                                                                <VStack spacing={2} align="stretch">
-                                                                    {formData.sellInfo.mobileNumbers.map((mob, i) => (
-                                                                        <HStack key={i} spacing={2}>
-                                                                            <Input placeholder={`Mobile ${i + 1}`} value={mob} onChange={e => setSellMobile(i, e.target.value)} borderRadius="xl" size="md" bg="white" type="tel" maxLength={10} />
-                                                                            {formData.sellInfo.mobileNumbers.length > 1 && (
-                                                                                <IconButton icon={<Icon as={FaTrash} />} size="sm" colorScheme="red" variant="ghost" borderRadius="lg" onClick={() => removeSellMobile(i)} aria-label="Remove mobile" />
-                                                                            )}
-                                                                        </HStack>
-                                                                    ))}
-                                                                </VStack>
-                                                            </FormControl>
-
-                                                            {/* Buyer Email Addresses (Multiple) */}
-                                                            <FormControl w="full">
-                                                                <FormLabel fontWeight="bold" fontSize="sm">
-                                                                    <HStack justify="space-between">
-                                                                        <Text>Buyer Email Address(es)</Text>
-                                                                        <Button size="xs" colorScheme="red" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addSellEmail} borderRadius="lg">Add</Button>
-                                                                    </HStack>
-                                                                </FormLabel>
-                                                                <VStack spacing={2} align="stretch">
-                                                                    {formData.sellInfo.emails.map((em, i) => (
-                                                                        <HStack key={i} spacing={2}>
-                                                                            <Input placeholder={`Email ${i + 1}`} value={em} onChange={e => setSellEmail(i, e.target.value)} borderRadius="xl" size="md" bg="white" type="email" />
-                                                                            {formData.sellInfo.emails.length > 1 && (
-                                                                                <IconButton icon={<Icon as={FaTrash} />} size="sm" colorScheme="red" variant="ghost" borderRadius="lg" onClick={() => removeSellEmail(i)} aria-label="Remove email" />
-                                                                            )}
-                                                                        </HStack>
-                                                                    ))}
-                                                                </VStack>
-                                                            </FormControl>
-
-                                                            {/* Buyer Aadhar + PAN Numbers */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Buyer Aadhar Number</FormLabel>
-                                                                    <Input name="aadharNumber" placeholder="XXXX XXXX XXXX" value={formData.sellInfo.aadharNumber} onChange={handleSellChange} borderRadius="xl" size="md" bg="white" maxLength={14} />
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Buyer PAN Number</FormLabel>
-                                                                    <Input name="panNumber" placeholder="ABCDE1234F" value={formData.sellInfo.panNumber} onChange={handleSellChange} borderRadius="xl" size="md" bg="white" maxLength={10} textTransform="uppercase" />
-                                                                </FormControl>
-                                                            </SimpleGrid>
-
-                                                            {/* Buyer Aadhar + PAN Document Uploads */}
-                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="full">
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Buyer Aadhar Card Doc</FormLabel>
-                                                                    <Box p={3} border="2px dashed" borderColor="red.300" borderRadius="xl" bg="white" textAlign="center" cursor="pointer" onClick={() => document.getElementById('sell-aadhar-upload').click()} _hover={{ bg: "red.50" }}>
-                                                                        <input type="file" id="sell-aadhar-upload" hidden onChange={e => setSellAadharFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                        <Icon as={FaIdCard} w={5} h={5} color="red.500" mb={1} />
-                                                                        <Text fontSize="xs" fontWeight="bold" color="red.700" noOfLines={1}>
-                                                                            {sellAadharFile ? sellAadharFile.name : (existingSellAadhar ? '✅ Uploaded' : 'Upload Aadhar')}
+                                                                    {/* 1. Buyer & Commercial Terms Grid */}
+                                                                    <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.300">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider" mb={3}>
+                                                                            Buyer Profile & Disposal Financial Terms
                                                                         </Text>
+                                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 6 }} spacing={3}>
+                                                                            <FormControl>
+                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Buyer Full Name</FormLabel>
+                                                                                <Input
+                                                                                    size="sm"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="ownerName"
+                                                                                    placeholder="Full name of buyer"
+                                                                                    value={formData.sellInfo.ownerName}
+                                                                                    onChange={handleSellChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </FormControl>
+
+                                                                            <FormControl>
+                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Disposal / Sell Date</FormLabel>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="sm"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="sellDate"
+                                                                                    value={formData.sellInfo.sellDate}
+                                                                                    onChange={handleSellChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </FormControl>
+
+                                                                            <FormControl>
+                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Sell Consideration (₹)</FormLabel>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    size="sm"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="sellRate"
+                                                                                    placeholder="e.g. 850000"
+                                                                                    value={formData.sellInfo.sellRate}
+                                                                                    onChange={handleSellChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </FormControl>
+
+                                                                            <FormControl>
+                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Payment Mode</FormLabel>
+                                                                                <Select
+                                                                                    size="sm"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="paymentMode"
+                                                                                    placeholder="Select Mode"
+                                                                                    value={formData.sellInfo.paymentMode}
+                                                                                    onChange={handleSellChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                >
+                                                                                    <option value="Cash">Cash</option>
+                                                                                    <option value="UPI">UPI</option>
+                                                                                    <option value="Bank Transfer">Bank Transfer</option>
+                                                                                    <option value="Cheque">Cheque</option>
+                                                                                    <option value="DD">Demand Draft</option>
+                                                                                </Select>
+                                                                            </FormControl>
+
+                                                                            <FormControl>
+                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Buyer Aadhar No</FormLabel>
+                                                                                <Input
+                                                                                    size="sm"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="aadharNumber"
+                                                                                    placeholder="XXXX XXXX XXXX"
+                                                                                    value={formData.sellInfo.aadharNumber}
+                                                                                    onChange={handleSellChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                    maxLength={14}
+                                                                                />
+                                                                            </FormControl>
+
+                                                                            <FormControl>
+                                                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>Buyer PAN No</FormLabel>
+                                                                                <Input
+                                                                                    size="sm"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="panNumber"
+                                                                                    placeholder="ABCDE1234F"
+                                                                                    value={formData.sellInfo.panNumber}
+                                                                                    onChange={handleSellChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                    maxLength={10}
+                                                                                    textTransform="uppercase"
+                                                                                />
+                                                                            </FormControl>
+                                                                        </SimpleGrid>
                                                                     </Box>
-                                                                </FormControl>
-                                                                <FormControl>
-                                                                    <FormLabel fontWeight="bold" fontSize="sm">Buyer PAN Card Doc</FormLabel>
-                                                                    <Box p={3} border="2px dashed" borderColor="red.300" borderRadius="xl" bg="white" textAlign="center" cursor="pointer" onClick={() => document.getElementById('sell-pan-upload').click()} _hover={{ bg: "red.50" }}>
-                                                                        <input type="file" id="sell-pan-upload" hidden onChange={e => setSellPanFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                        <Icon as={FaIdBadge} w={5} h={5} color="red.500" mb={1} />
-                                                                        <Text fontSize="xs" fontWeight="bold" color="red.700" noOfLines={1}>
-                                                                            {sellPanFile ? sellPanFile.name : (existingSellPan ? '✅ Uploaded' : 'Upload PAN')}
-                                                                        </Text>
+
+                                                                    {/* 2. Communication Channels */}
+                                                                    <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.300">
+                                                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                                                                            <Box>
+                                                                                <Flex justify="space-between" align="center" mb={1.5}>
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700">Buyer Phone Number(s)</Text>
+                                                                                    <Button size="2xs" colorScheme="red" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addSellMobile} borderRadius="md">
+                                                                                        Add Phone
+                                                                                    </Button>
+                                                                                </Flex>
+                                                                                <VStack spacing={1.5} align="stretch">
+                                                                                    {formData.sellInfo.mobileNumbers.map((mob, i) => (
+                                                                                        <HStack key={i} spacing={1.5}>
+                                                                                            <Input
+                                                                                                size="xs"
+                                                                                                h="30px"
+                                                                                                placeholder={`Phone ${i + 1} (10 digits)`}
+                                                                                                value={mob}
+                                                                                                onChange={e => setSellMobile(i, e.target.value)}
+                                                                                                borderRadius="md"
+                                                                                                bg="white"
+                                                                                                borderColor="gray.300"
+                                                                                                type="tel"
+                                                                                                maxLength={10}
+                                                                                            />
+                                                                                            {formData.sellInfo.mobileNumbers.length > 1 && (
+                                                                                                <IconButton
+                                                                                                    size="2xs"
+                                                                                                    icon={<Icon as={FaTrash} />}
+                                                                                                    colorScheme="red"
+                                                                                                    variant="ghost"
+                                                                                                    onClick={() => removeSellMobile(i)}
+                                                                                                    aria-label="Remove"
+                                                                                                />
+                                                                                            )}
+                                                                                        </HStack>
+                                                                                    ))}
+                                                                                </VStack>
+                                                                            </Box>
+
+                                                                            <Box>
+                                                                                <Flex justify="space-between" align="center" mb={1.5}>
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700">Buyer Email Address(es)</Text>
+                                                                                    <Button size="2xs" colorScheme="red" variant="outline" leftIcon={<Icon as={FaPlus} />} onClick={addSellEmail} borderRadius="md">
+                                                                                        Add Email
+                                                                                    </Button>
+                                                                                </Flex>
+                                                                                <VStack spacing={1.5} align="stretch">
+                                                                                    {formData.sellInfo.emails.map((em, i) => (
+                                                                                        <HStack key={i} spacing={1.5}>
+                                                                                            <Input
+                                                                                                size="xs"
+                                                                                                h="30px"
+                                                                                                placeholder={`Email ${i + 1}`}
+                                                                                                value={em}
+                                                                                                onChange={e => setSellEmail(i, e.target.value)}
+                                                                                                borderRadius="md"
+                                                                                                bg="white"
+                                                                                                borderColor="gray.300"
+                                                                                                type="email"
+                                                                                            />
+                                                                                            {formData.sellInfo.emails.length > 1 && (
+                                                                                                <IconButton
+                                                                                                    size="2xs"
+                                                                                                    icon={<Icon as={FaTrash} />}
+                                                                                                    colorScheme="red"
+                                                                                                    variant="ghost"
+                                                                                                    onClick={() => removeSellEmail(i)}
+                                                                                                    aria-label="Remove"
+                                                                                                />
+                                                                                            )}
+                                                                                        </HStack>
+                                                                                    ))}
+                                                                                </VStack>
+                                                                            </Box>
+                                                                        </SimpleGrid>
                                                                     </Box>
-                                                                </FormControl>
-                                                            </SimpleGrid>
+
+                                                                    {/* 3. Buyer Transfer & KYC Documents Registry (Desktop ERP Table) */}
+                                                                    <Box bg="white" borderRadius="lg" border="1px solid" borderColor="gray.300" overflow="hidden">
+                                                                        <Flex bg="gray.100" px={4} py={2} justify="space-between" align="center" borderBottom="1px solid" borderColor="gray.300">
+                                                                            <HStack spacing={2}>
+                                                                                <Icon as={FaIdBadge} color="gray.700" />
+                                                                                <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                                    Buyer Transfer & KYC Documents Registry
+                                                                                </Text>
+                                                                            </HStack>
+                                                                            <Text fontSize="10px" color="gray.500">
+                                                                                PDF, PNG, JPG formats supported
+                                                                            </Text>
+                                                                        </Flex>
+                                                                        <Table size="sm" variant="simple">
+                                                                            <Thead bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                                                <Tr>
+                                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="45px" textAlign="center">#</Th>
+                                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="200px">Document Title</Th>
+                                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase">Compliance Purpose</Th>
+                                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="320px">Attached Document / Action</Th>
+                                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="110px" textAlign="center">Status</Th>
+                                                                                </Tr>
+                                                                            </Thead>
+                                                                            <Tbody>
+                                                                                {/* ROW 1: Buyer Aadhar Card */}
+                                                                                <Tr _hover={{ bg: "gray.50" }} borderBottom="1px solid" borderColor="gray.200">
+                                                                                    <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">1</Td>
+                                                                                    <Td>
+                                                                                        <HStack spacing={2}>
+                                                                                            <Icon as={FaIdCard} color="blue.600" boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.800">Buyer Aadhar Card</Text>
+                                                                                        </HStack>
+                                                                                    </Td>
+                                                                                    <Td fontSize="xs" color="gray.600">Buyer KYC & National Identity Proof</Td>
+                                                                                    <Td>
+                                                                                        <input type="file" id="sell-aadhar-upload" hidden onChange={e => setSellAadharFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                        {sellAadharFile ? (
+                                                                                            <HStack px={2} py={1} bg="green.50" border="1px solid" borderColor="green.300" borderRadius="md" justify="space-between">
+                                                                                                <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('sell-aadhar-upload').click()}>
+                                                                                                    <Icon as={FaFilePdf} color="green.600" boxSize={3.5} />
+                                                                                                    <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated maxW="180px">{sellAadharFile.name}</Text>
+                                                                                                </HStack>
+                                                                                                <IconButton size="2xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setSellAadharFile(null)} aria-label="Remove" />
+                                                                                            </HStack>
+                                                                                        ) : existingSellAadhar ? (
+                                                                                            <HStack px={2} py={1} bg="gray.50" border="1px solid" borderColor="gray.300" borderRadius="md" justify="space-between">
+                                                                                                <HStack spacing={1.5} minW={0}>
+                                                                                                    <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} />
+                                                                                                    <Text as="a" href={getFileUrl(existingSellAadhar)} target="_blank" rel="noreferrer" fontSize="xs" fontWeight="bold" color="blue.600" textDecoration="underline" isTruncated maxW="180px">
+                                                                                                        {existingSellAadhar.name || 'View Aadhar'}
+                                                                                                    </Text>
+                                                                                                </HStack>
+                                                                                                <Button size="2xs" variant="outline" colorScheme="gray" onClick={() => document.getElementById('sell-aadhar-upload').click()}>Replace</Button>
+                                                                                            </HStack>
+                                                                                        ) : (
+                                                                                            <Button size="xs" h="28px" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaCloudUploadAlt} />} borderRadius="md" onClick={() => document.getElementById('sell-aadhar-upload').click()}>
+                                                                                                Browse Aadhar Card
+                                                                                            </Button>
+                                                                                        )}
+                                                                                    </Td>
+                                                                                    <Td textAlign="center">
+                                                                                        <Badge colorScheme={sellAadharFile ? "blue" : existingSellAadhar ? "green" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                            {sellAadharFile ? "NEW FILE" : existingSellAadhar ? "ATTACHED" : "OPTIONAL"}
+                                                                                        </Badge>
+                                                                                    </Td>
+                                                                                </Tr>
+
+                                                                                {/* ROW 2: Buyer PAN Card */}
+                                                                                <Tr _hover={{ bg: "gray.50" }}>
+                                                                                    <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">2</Td>
+                                                                                    <Td>
+                                                                                        <HStack spacing={2}>
+                                                                                            <Icon as={FaIdBadge} color="purple.600" boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.800">Buyer PAN Card</Text>
+                                                                                        </HStack>
+                                                                                    </Td>
+                                                                                    <Td fontSize="xs" color="gray.600">Tax Compliance & Entity Verification</Td>
+                                                                                    <Td>
+                                                                                        <input type="file" id="sell-pan-upload" hidden onChange={e => setSellPanFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                                        {sellPanFile ? (
+                                                                                            <HStack px={2} py={1} bg="green.50" border="1px solid" borderColor="green.300" borderRadius="md" justify="space-between">
+                                                                                                <HStack spacing={1.5} minW={0} cursor="pointer" onClick={() => document.getElementById('sell-pan-upload').click()}>
+                                                                                                    <Icon as={FaFilePdf} color="green.600" boxSize={3.5} />
+                                                                                                    <Text fontSize="xs" fontWeight="bold" color="green.800" isTruncated maxW="180px">{sellPanFile.name}</Text>
+                                                                                                </HStack>
+                                                                                                <IconButton size="2xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setSellPanFile(null)} aria-label="Remove" />
+                                                                                            </HStack>
+                                                                                        ) : existingSellPan ? (
+                                                                                            <HStack px={2} py={1} bg="gray.50" border="1px solid" borderColor="gray.300" borderRadius="md" justify="space-between">
+                                                                                                <HStack spacing={1.5} minW={0}>
+                                                                                                    <Icon as={FaCheckCircle} color="green.500" boxSize={3.5} />
+                                                                                                    <Text as="a" href={getFileUrl(existingSellPan)} target="_blank" rel="noreferrer" fontSize="xs" fontWeight="bold" color="blue.600" textDecoration="underline" isTruncated maxW="180px">
+                                                                                                        {existingSellPan.name || 'View PAN'}
+                                                                                                    </Text>
+                                                                                                </HStack>
+                                                                                                <Button size="2xs" variant="outline" colorScheme="gray" onClick={() => document.getElementById('sell-pan-upload').click()}>Replace</Button>
+                                                                                            </HStack>
+                                                                                        ) : (
+                                                                                            <Button size="xs" h="28px" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaCloudUploadAlt} />} borderRadius="md" onClick={() => document.getElementById('sell-pan-upload').click()}>
+                                                                                                Browse PAN Card
+                                                                                            </Button>
+                                                                                        )}
+                                                                                    </Td>
+                                                                                    <Td textAlign="center">
+                                                                                        <Badge colorScheme={sellPanFile ? "blue" : existingSellPan ? "green" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
+                                                                                            {sellPanFile ? "NEW FILE" : existingSellPan ? "ATTACHED" : "OPTIONAL"}
+                                                                                        </Badge>
+                                                                                    </Td>
+                                                                                </Tr>
+                                                                            </Tbody>
+                                                                        </Table>
+                                                                    </Box>
+                                                                </>
+                                                            )}
                                                         </VStack>
                                                     </Box>
                                                 )}
@@ -2998,18 +4028,6 @@ const VehicleMasterForm = () => {
 
                                         {/* Active / Sold Out sub-tabs */}
                                         {(() => {
-                                            const hasDoc = (val) => {
-                                                if (!val) return false;
-                                                if (typeof val === 'string') {
-                                                    const s = val.trim();
-                                                    return s.length > 0 && s !== 'null' && s !== 'undefined';
-                                                }
-                                                if (typeof val === 'object') {
-                                                    return Boolean((val.url && String(val.url).trim() !== '') || (val.path && String(val.path).trim() !== ''));
-                                                }
-                                                return false;
-                                            };
-
                                             const getVehicleDocStatus = (v) => {
                                                 if (!v) return { pendingCount: 0, pendingList: [], uploadedCount: 0, allUploaded: true };
                                                 const pendingList = [];
@@ -3071,7 +4089,7 @@ const VehicleMasterForm = () => {
                                                                     const vId = v.vehicleId || `V-${String(idx + 1).padStart(3, '0')}`;
                                                                     const docSt = getVehicleDocStatus(v);
                                                                     return (
-                                                                        <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: `${accentColor}.50`, cursor: 'pointer' }} transition="background 0.2s" onClick={() => { setViewFromTab(tabKey); setViewVehicle(v); setViewPhotoIdx(0); }}>
+                                                                        <Tr key={v._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: `${accentColor}.50`, cursor: 'pointer' }} transition="background 0.2s" onClick={() => handleOpenViewVehicle(v, 'rc', tabKey)}>
                                                                             <Td textAlign="center" py={2}>
                                                                                 {pPhoto ? (
                                                                                     <Image src={pPhoto} alt={v.vehicleNumber} w="42px" h="42px" borderRadius="lg" objectFit="cover" border="1px solid" borderColor="gray.200" mx="auto" />
@@ -3087,7 +4105,7 @@ const VehicleMasterForm = () => {
                                                                             
                                                                             <Td textAlign="center" onClick={e => e.stopPropagation()}>
 <HStack justify="center" spacing={1.5}>
-<IconButton aria-label="View" size="xs" colorScheme={tabKey === 'pending' ? 'orange' : 'teal'} variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => { setViewFromTab(tabKey); setViewVehicle(v); setViewPhotoIdx(0); }} title={tabKey === 'pending' ? 'View Pending Documents' : 'View Details'} />
+<IconButton aria-label="View" size="xs" colorScheme={tabKey === 'pending' ? 'orange' : 'teal'} variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => handleOpenViewVehicle(v, 'rc', tabKey)} title={tabKey === 'pending' ? 'View Pending Documents' : 'View Details'} />
                                                                                         {tabKey !== 'pending' && (
                                                                                             <>
                                                                                                 <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleEdit(v)} />
@@ -3171,7 +4189,7 @@ const VehicleMasterForm = () => {
                                                                     </Box>
 
                                                                     <HStack spacing={1.5} pt={2} borderTop="1px solid" borderColor="gray.100">
-                                                                        <Button flex={1} size="xs" colorScheme={tabKey === 'pending' ? 'orange' : 'teal'} variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEye} />} onClick={() => { setViewFromTab(tabKey); setViewVehicle(v); setViewPhotoIdx(0); }}>
+                                                                        <Button flex={1} size="xs" colorScheme={tabKey === 'pending' ? 'orange' : 'teal'} variant="solid" borderRadius="lg" leftIcon={<Icon as={FaEye} />} onClick={() => handleOpenViewVehicle(v, 'rc', tabKey)}>
                                                                             {tabKey === 'pending' ? 'View Pending Docs' : 'View'}
                                                                         </Button>
                                                                         {tabKey !== 'pending' && (
@@ -3303,7 +4321,7 @@ const VehicleMasterForm = () => {
                                                             const expiryColor = (s) => s === 'expired' ? 'red.700' : 'green.700';
                                                             const primaryPhoto = getVehiclePrimaryPhoto(v);
                                                             return (
-                                                                <Box key={v._id} mb={3} bg="white" borderRadius="2xl" border="1.5px solid" borderColor="purple.100" overflow="hidden" boxShadow="sm" onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }} cursor="pointer" _hover={{ transform: 'scale(1.01)', boxShadow: 'md' }} transition="all 0.2s">
+                                                                <Box key={v._id} mb={3} bg="white" borderRadius="2xl" border="1.5px solid" borderColor="purple.100" overflow="hidden" boxShadow="sm" onClick={() => handleOpenViewVehicle(v, 'rc')} cursor="pointer" _hover={{ transform: 'scale(1.01)', boxShadow: 'md' }} transition="all 0.2s">
                                                                     <Flex bg="purple.700" p={3} align="center" gap={3}>
                                                                         {primaryPhoto ? <Image src={primaryPhoto} w="50px" h="38px" objectFit="cover" borderRadius="lg" border="2px solid" borderColor="purple.300" /> : <Center w="50px" h="38px" bg="purple.600" borderRadius="lg"><Icon as={FaTruck} color="purple.200" /></Center>}
                                                                         <Box flex={1}>
@@ -3350,7 +4368,7 @@ const VehicleMasterForm = () => {
                                                                     const expiryBg = (s) => s === 'expired' ? 'red.100' : 'green.50';
                                                                     const expiryColor = (s) => s === 'expired' ? 'red.700' : 'green.700';
                                                                     return (
-                                                                        <Tr key={v._id} bg={i % 2 === 0 ? 'white' : 'purple.25'} _hover={{ bg: 'purple.50', cursor: 'pointer' }} transition="background 0.15s" onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }}>
+                                                                        <Tr key={v._id} bg={i % 2 === 0 ? 'white' : 'purple.25'} _hover={{ bg: 'purple.50', cursor: 'pointer' }} transition="background 0.15s" onClick={() => handleOpenViewVehicle(v, 'rc')}>
                                                                             <Td fontSize="xs" fontWeight="bold" color="gray.400" textAlign="center" px={2}>{i+1}</Td>
                                                                             <Td px={2}>{primaryPhoto ? <Image src={primaryPhoto} w="44px" h="33px" objectFit="cover" borderRadius="lg" border="2px solid" borderColor="purple.300" /> : <Center w="44px" h="33px" bg="purple.100" borderRadius="lg" border="2px dashed" borderColor="purple.300"><Icon as={FaTruck} w={3} h={3} color="purple.400" /></Center>}</Td>
                                                                             <Td px={2}><Text fontSize="xs" fontWeight="black" color="purple.800" fontFamily="monospace">{v.vehicleNumber}</Text></Td>
@@ -3387,7 +4405,7 @@ const VehicleMasterForm = () => {
                                                                     const expiryColor = (s) => s === 'expired' ? 'red.700' : 'green.700';
                                                                     const primaryPhoto = getVehiclePrimaryPhoto(v);
                                                                     return (
-                                                                        <Box key={v._id} mb={3} bg="white" borderRadius="2xl" border="1.5px solid" borderColor="red.100" overflow="hidden" boxShadow="sm" onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }} cursor="pointer" _hover={{ transform: 'scale(1.01)', boxShadow: 'md' }} transition="all 0.2s">
+                                                                        <Box key={v._id} mb={3} bg="white" borderRadius="2xl" border="1.5px solid" borderColor="red.100" overflow="hidden" boxShadow="sm" onClick={() => handleOpenViewVehicle(v, 'rc')} cursor="pointer" _hover={{ transform: 'scale(1.01)', boxShadow: 'md' }} transition="all 0.2s">
                                                                             <Flex bg="red.600" p={3} align="center" gap={3}>
                                                                                 {primaryPhoto ? <Image src={primaryPhoto} w="50px" h="38px" objectFit="cover" borderRadius="lg" border="2px solid" borderColor="red.300" /> : <Center w="50px" h="38px" bg="red.500" borderRadius="lg"><Icon as={FaTruck} color="red.100" /></Center>}
                                                                                 <Box flex={1}>
@@ -3433,7 +4451,7 @@ const VehicleMasterForm = () => {
                                                                             const expiryBg = (s) => s === 'expired' ? 'red.100' : 'green.50';
                                                                             const expiryColor = (s) => s === 'expired' ? 'red.700' : 'green.700';
                                                                             return (
-                                                                                <Tr key={v._id} bg={i % 2 === 0 ? 'white' : 'red.25'} _hover={{ bg: 'red.50', cursor: 'pointer' }} transition="background 0.15s" onClick={() => { setViewVehicle(v); setViewPhotoIdx(0); }}>
+                                                                                <Tr key={v._id} bg={i % 2 === 0 ? 'white' : 'red.25'} _hover={{ bg: 'red.50', cursor: 'pointer' }} transition="background 0.15s" onClick={() => handleOpenViewVehicle(v, 'rc')}>
                                                                                     <Td fontSize="xs" fontWeight="bold" color="gray.400" textAlign="center" px={2}>{i+1}</Td>
                                                                                     <Td px={2}>{primaryPhoto ? <Image src={primaryPhoto} w="44px" h="33px" objectFit="cover" borderRadius="lg" border="2px solid" borderColor="red.300" /> : <Center w="44px" h="33px" bg="red.100" borderRadius="lg" border="2px dashed" borderColor="red.300"><Icon as={FaTruck} w={3} h={3} color="red.400" /></Center>}</Td>
                                                                                     <Td px={2}><Text fontSize="xs" fontWeight="black" color="red.800" fontFamily="monospace">{v.vehicleNumber}</Text></Td>
@@ -3467,72 +4485,115 @@ const VehicleMasterForm = () => {
                 </Card>
             </Container>
 
-            {/* Vehicle Details Modal */}
-            {/* Vehicle Details Modal */}
-            <Modal isOpen={!!viewVehicle} onClose={() => { setViewVehicle(null); setActiveDocPreview(null); }} size={viewFromTab === 'pending' ? 'md' : 'full'} isCentered isLazy unmountOnClose>
-                <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(8px)" />
-                <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" maxW={viewFromTab === 'pending' ? { base: "94vw", sm: "480px", md: "520px" } : { base: "98vw", lg: "94vw", xl: "1400px" }} maxH={viewFromTab === 'pending' ? "85vh" : "95vh"} bg={viewFromTab === 'pending' ? "white" : "gray.50"}>
+            {/* Vehicle Details Modal - Instant 7-Button View */}
+            <Modal
+                isOpen={!!viewVehicle}
+                onClose={() => { setViewVehicle(null); setActiveDocPreview(null); }}
+                size="full"
+                isCentered
+                isLazy
+                unmountOnClose
+            >
+                <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(4px)" />
+                <ModalContent
+                    borderRadius={{ base: "xl", md: "3xl" }}
+                    overflow="hidden"
+                    boxShadow="2xl"
+                    maxW={{ base: "98vw", lg: "95vw", xl: "1400px" }}
+                    maxH="96vh"
+                    bg="white"
+                    display="flex"
+                    flexDirection="column"
+                >
                     {viewVehicle && (() => {
                         const vIdx = vehicles.findIndex(item => item._id === viewVehicle._id);
                         const vId = viewVehicle.vehicleId || `V-${String((vIdx >= 0 ? vIdx : 0) + 1).padStart(3, '0')}`;
+                        const allPhotos = getVehicleAllPhotos(viewVehicle);
+                        const primaryPhotoUrl = getVehiclePrimaryPhoto(viewVehicle);
+                        const activePhoto = allPhotos[viewPhotoIdx] || allPhotos[0] || primaryPhotoUrl || null;
 
-                        const handleToggleDocPreview = (url, label, section) => {
-                            if (!url) return;
-                            setActiveDocPreview(prev => {
-                                if (prev && prev.url === url) return null;
-                                const cleanUrl = String(url).split('?')[0].toLowerCase();
-                                const isPdf = cleanUrl.endsWith('.pdf') || cleanUrl.includes('/pdf') || cleanUrl.startsWith('data:application/pdf');
-                                return { url, label, section, isPdf };
-                            });
+                        const getVehicleDocStatus = (v) => {
+                            if (!v) return { pendingCount: 0, pendingList: [] };
+                            const pendingList = [];
+                            if (!hasDoc(v.rcBook)) pendingList.push('RC Book');
+                            if (!hasDoc(v.insurancePhoto)) pendingList.push('Insurance');
+                            if (!hasDoc(v.pucPhoto)) pendingList.push('PUC');
+                            if (!hasDoc(v.purchaseOldRc)) pendingList.push('Old RC Book');
+                            if (!hasDoc(v.purchaseOldPuc)) pendingList.push('Old PUC');
+                            if (!hasDoc(v.purchaseAadharDoc)) pendingList.push('Owner Aadhar');
+                            if (!hasDoc(v.purchasePanDoc)) pendingList.push('Owner PAN');
+                            if (v.isSold) {
+                                if (!hasDoc(v.sellAadharDoc)) pendingList.push('Buyer Aadhar');
+                                if (!hasDoc(v.sellPanDoc)) pendingList.push('Buyer PAN');
+                            }
+                            return {
+                                pendingCount: pendingList.length,
+                                pendingList
+                            };
                         };
 
-                        const renderInlineDocPreview = (preview) => {
-                            if (!preview || !preview.url) return null;
+                        const docStatus = getVehicleDocStatus(viewVehicle);
+
+                        // Generic document viewer for Image or PDF
+                        const renderDocViewer = (doc, title, emptyMessage = 'No document uploaded') => {
+                            const rawUrl = doc?.url || doc?.path || (typeof doc === 'string' ? doc : '');
+                            const url = getFileUrl(rawUrl);
+                            if (!url) {
+                                return (
+                                    <Center p={8} bg="white" borderRadius="2xl" border="2px dashed" borderColor="orange.300" boxShadow="xs">
+                                        <VStack spacing={2}>
+                                            <Icon as={FaExclamationTriangle} color="orange.500" w={8} h={8} />
+                                            <Text fontWeight="bold" color="orange.800" fontSize="sm">{emptyMessage}</Text>
+                                            <Badge colorScheme="orange" borderRadius="full" px={2.5} py={0.5} fontSize="2xs" fontWeight="black">
+                                                DOCUMENT PENDING
+                                            </Badge>
+                                        </VStack>
+                                    </Center>
+                                );
+                            }
+
+                            const clean = String(url).split('?')[0].toLowerCase();
+                            const isPdf = clean.endsWith('.pdf') || clean.includes('/pdf') || clean.startsWith('data:application/pdf');
+
                             return (
-                                <Box
-                                    mt={4}
-                                    p={{ base: 3, sm: 4 }}
-                                    bg="white"
-                                    borderRadius="2xl"
-                                    boxShadow="xl"
-                                    border="2px solid"
-                                    borderColor="teal.400"
-                                    position="relative"
-                                    transition="all 0.25s ease-in-out"
-                                >
+                                <Box bg="white" borderRadius="2xl" border="1.5px solid" borderColor="gray.200" p={{ base: 3, md: 4 }} boxShadow="xs">
                                     <Flex justify="space-between" align="center" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100" wrap="wrap" gap={2}>
-                                        <HStack spacing={2.5}>
-                                            <Badge colorScheme={preview.isPdf ? 'red' : 'purple'} px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black" textTransform="uppercase">
-                                                {preview.isPdf ? '📄 PDF Document' : '🖼️ Image Document'}
+                                        <HStack spacing={2}>
+                                            <Badge colorScheme={isPdf ? 'red' : 'purple'} px={2.5} py={0.5} borderRadius="md" fontSize="xs" fontWeight="black">
+                                                {isPdf ? '📄 PDF Document' : '🖼️ Image Document'}
                                             </Badge>
                                             <Text fontWeight="black" color="gray.800" fontSize="sm" noOfLines={1}>
-                                                {preview.label}
+                                                {title}
                                             </Text>
                                         </HStack>
                                         <HStack spacing={2}>
                                             <Button
                                                 as="a"
-                                                href={preview.url}
+                                                href={url}
                                                 target="_blank"
+                                                rel="noopener noreferrer"
                                                 size="xs"
                                                 colorScheme="teal"
-                                                variant="outline"
+                                                variant="solid"
                                                 leftIcon={<Icon as={FaExternalLinkAlt} />}
                                                 borderRadius="lg"
                                                 fontWeight="bold"
                                             >
                                                 Open in New Tab
                                             </Button>
-                                            <IconButton
+                                            <Button
+                                                as="a"
+                                                href={url}
+                                                download
                                                 size="xs"
-                                                icon={<Icon as={FaTimes} />}
-                                                colorScheme="red"
-                                                variant="solid"
+                                                colorScheme="gray"
+                                                variant="outline"
+                                                leftIcon={<Icon as={FaDownload} />}
                                                 borderRadius="lg"
-                                                aria-label="Close Preview"
-                                                onClick={() => setActiveDocPreview(null)}
-                                                title="Close Preview"
-                                            />
+                                                fontWeight="bold"
+                                            >
+                                                Download
+                                            </Button>
                                         </HStack>
                                     </Flex>
 
@@ -3542,19 +4603,18 @@ const VehicleMasterForm = () => {
                                         bg="gray.50"
                                         border="1px solid"
                                         borderColor="gray.200"
-                                        minH={{ base: '320px', md: '520px' }}
+                                        minH={{ base: '300px', md: '500px' }}
                                         display="flex"
                                         alignItems="center"
                                         justifyContent="center"
-                                        position="relative"
                                     >
-                                        {preview.isPdf ? (
+                                        {isPdf ? (
                                             <iframe
-                                                src={preview.url}
-                                                title={preview.label}
+                                                src={url}
+                                                title={title}
                                                 style={{
                                                     width: '100%',
-                                                    height: '560px',
+                                                    height: '540px',
                                                     border: 'none',
                                                     borderRadius: '12px'
                                                 }}
@@ -3562,13 +4622,16 @@ const VehicleMasterForm = () => {
                                         ) : (
                                             <Box p={3} w="full" display="flex" justifyContent="center">
                                                 <Image
-                                                    src={preview.url}
-                                                    alt={preview.label}
-                                                    maxH={{ base: '350px', md: '560px' }}
+                                                    src={url}
+                                                    alt={title}
+                                                    maxH="540px"
                                                     w="auto"
+                                                    maxW="100%"
                                                     objectFit="contain"
                                                     borderRadius="lg"
                                                     boxShadow="md"
+                                                    cursor="pointer"
+                                                    onClick={() => window.open(url, '_blank')}
                                                 />
                                             </Box>
                                         )}
@@ -3576,1306 +4639,1962 @@ const VehicleMasterForm = () => {
                                 </Box>
                             );
                         };
-                        const allPhotos = getVehicleAllPhotos(viewVehicle);
-                        const activePhoto = allPhotos[viewPhotoIdx] || allPhotos[0] || null;
-                        const hasDoc = (val) => {
-                            if (!val) return false;
-                            if (typeof val === 'string') {
-                                const s = val.trim();
-                                return s.length > 0 && s !== 'null' && s !== 'undefined';
+
+                        // Local helper for single vehicle usage excel
+                        const downloadVehicleUsageExcel = async (rows, vehNo) => {
+                            setReportLoading(true);
+                            try {
+                                const wb = new ExcelJS.Workbook();
+                                const ws = wb.addWorksheet(`Usage - ${vehNo}`);
+                                const usageHeaders = ['Sr.', 'Date', 'Vehicle Number', 'Vehicle Name',
+                                    'Employee', 'Client', 'Site', 'Fuel Type', 'Fuel Amount (₹)'];
+                                ws.columns = usageHeaders.map((h, i) => ({ header: h, key: `col${i}`, width: 18 }));
+                                const headerRow = ws.getRow(1);
+                                headerRow.height = 25;
+                                headerRow.eachCell((cell) => {
+                                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+                                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                                });
+                                rows.forEach((r, i) => {
+                                    const isAlt = i % 2 === 1;
+                                    const rowData = [
+                                        i + 1,
+                                        toExcelDate(r.date),
+                                        r.vehicle?.vehicleNumber || '—',
+                                        r.vehicle?.vehicleName || '—',
+                                        r.employeeName || '—',
+                                        r.clientName || '—',
+                                        r.siteName || '—',
+                                        r.fuelType || '—',
+                                        r.fuelAmount || 0
+                                    ];
+                                    const row = ws.addRow(rowData);
+                                    row.height = 24;
+                                    row.eachCell((cell, colNumber) => {
+                                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isAlt ? 'FFF8FAFC' : 'FFFFFFFF' } };
+                                        cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 || colNumber === 2 ? 'center' : colNumber === 9 ? 'right' : 'left' };
+                                        cell.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+                                    });
+                                });
+                                const buf = await wb.xlsx.writeBuffer();
+                                saveAs(new Blob([buf]), `Usage_${vehNo}_${reportStartDate}_to_${reportEndDate}.xlsx`);
+                            } catch (err) {
+                                toast({ title: 'Error', description: 'Failed to export Excel.', status: 'error' });
+                            } finally {
+                                setReportLoading(false);
                             }
-                            if (typeof val === 'object') {
-                                return Boolean((val.url && String(val.url).trim() !== '') || (val.path && String(val.path).trim() !== ''));
-                            }
-                            return false;
                         };
 
-                        const getVehicleDocStatus = (v) => {
-                            if (!v) return { pendingCount: 0, pendingList: [], uploadedCount: 0, allUploaded: true };
-                            const pendingList = [];
-                            let uploadedCount = 0;
-
-                            // Vehicle Compliance Docs
-                            if (hasDoc(v.rcBook)) uploadedCount++; else pendingList.push('RC Book');
-                            if (hasDoc(v.insurancePhoto)) uploadedCount++; else pendingList.push('Insurance');
-                            if (hasDoc(v.pucPhoto)) uploadedCount++; else pendingList.push('PUC');
-
-                            // Purchase Docs
-                            if (hasDoc(v.purchaseOldRc)) uploadedCount++; else pendingList.push('Old RC Book');
-                            if (hasDoc(v.purchaseOldPuc)) uploadedCount++; else pendingList.push('Old PUC');
-                            if (hasDoc(v.purchaseAadharDoc)) uploadedCount++; else pendingList.push('Owner Aadhar');
-                            if (hasDoc(v.purchasePanDoc)) uploadedCount++; else pendingList.push('Owner PAN');
-
-                            // Sell Docs (only when vehicle is marked as sold out)
-                            if (v.isSold) {
-                                if (hasDoc(v.sellAadharDoc)) uploadedCount++; else pendingList.push('Buyer Aadhar');
-                                if (hasDoc(v.sellPanDoc)) uploadedCount++; else pendingList.push('Buyer PAN');
+                        // Dynamic Insurance validity status calculator
+                        const getInsuranceValidity = (dateStr) => {
+                            if (!dateStr) return { status: 'none', label: 'NOT SET', colorScheme: 'gray', bg: 'gray.500', alert: null };
+                            const end = new Date(dateStr);
+                            const now = new Date();
+                            now.setHours(0, 0, 0, 0);
+                            end.setHours(0, 0, 0, 0);
+                            const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                            if (diffDays < 0) {
+                                return {
+                                    status: 'expired',
+                                    label: `EXPIRED (${Math.abs(diffDays)}d ago)`,
+                                    colorScheme: 'red',
+                                    bg: 'red.600',
+                                    alert: `Insurance policy expired on ${toExcelDate(dateStr)} (${Math.abs(diffDays)} days ago). Immediate renewal required.`
+                                };
                             }
-
+                            if (diffDays <= 30) {
+                                return {
+                                    status: 'expiring_soon',
+                                    label: `EXPIRING SOON (${diffDays}d left)`,
+                                    colorScheme: 'orange',
+                                    bg: 'orange.500',
+                                    alert: `Insurance policy will expire in ${diffDays} day${diffDays === 1 ? '' : 's'} on ${toExcelDate(dateStr)}. Please arrange renewal.`
+                                };
+                            }
                             return {
-                                pendingCount: pendingList.length,
-                                pendingList,
-                                uploadedCount,
-                                allUploaded: pendingList.length === 0
+                                status: 'active',
+                                label: `ACTIVE (${diffDays}d remaining)`,
+                                colorScheme: 'green',
+                                bg: 'green.600',
+                                alert: null
                             };
                         };
 
-                        const docStatus = getVehicleDocStatus(viewVehicle);
-
-                        if (viewFromTab === 'pending') {
-                            return (
-                                <Box position="relative" display="flex" flexDirection="column" maxH="85vh" bg="white">
-                                    <ModalCloseButton color="gray.500" zIndex={10} bg="white" borderRadius="full" boxShadow="sm" top={3} right={3} _hover={{ bg: 'gray.100' }} />
-                                    
-                                    {/* Header / Hero */}
-                                    <Box bgGradient="linear(to-br, orange.50, amber.50, red.50)" p={{ base: 4, sm: 5 }} borderBottom="1px solid" borderColor="orange.100">
-                                        <HStack spacing={3.5} align="center">
-                                            {activePhoto ? (
-                                                <Image 
-                                                    src={activePhoto} 
-                                                    alt={viewVehicle.vehicleNumber} 
-                                                    w="60px" 
-                                                    h="60px" 
-                                                    borderRadius="2xl" 
-                                                    objectFit="cover" 
-                                                    border="2.5px solid white" 
-                                                    boxShadow="md" 
-                                                    cursor="pointer" 
-                                                    onClick={() => window.open(activePhoto, '_blank')} 
-                                                    title="Click to view full image"
-                                                />
-                                            ) : (
-                                                <Center w="60px" h="60px" borderRadius="2xl" bg="orange.100" border="2px solid" borderColor="orange.200" flexShrink={0} boxShadow="sm">
-                                                    <Icon as={FaExclamationTriangle} color="orange.600" w={6} h={6} />
-                                                </Center>
-                                            )}
-                                            <Box flex={1} minW={0}>
-                                                <HStack spacing={2} mb={1} wrap="wrap">
-                                                    <Badge colorScheme="purple" bg="purple.50" color="purple.700" fontFamily="monospace" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black" border="1px solid" borderColor="purple.200">
-                                                        {vId}
-                                                    </Badge>
-                                                    {viewVehicle.isSold ? (
-                                                        <Badge colorScheme="red" bg="red.600" color="white" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">
-                                                            🔴 SOLD OUT
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge colorScheme="green" bg="green.600" color="white" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="black">
-                                                            🟢 RESERVED
-                                                        </Badge>
-                                                    )}
-                                                </HStack>
-                                                <Text fontSize="xl" fontWeight="black" color="gray.900" fontFamily="monospace" letterSpacing="wider" lineHeight="1.2">
-                                                    {viewVehicle.vehicleNumber}
-                                                </Text>
-                                                <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wide" noOfLines={1}>
-                                                    {viewVehicle.vehicleName || 'Fleet Vehicle'}
-                                                </Text>
-                                            </Box>
-                                        </HStack>
-
-                                        {/* Alert Tag */}
-                                        <Box mt={3} p={2.5} bg="red.100" borderRadius="xl" border="1px solid" borderColor="red.200">
-                                            <HStack justify="space-between" align="center">
-                                                <HStack spacing={2}>
-                                                    <Icon as={FaExclamationTriangle} color="red.700" w={4} h={4} flexShrink={0} />
-                                                    <Text fontSize="xs" fontWeight="black" color="red.800">
-                                                        {docStatus.pendingCount} Document{docStatus.pendingCount > 1 ? 's' : ''} Pending
-                                                    </Text>
-                                                </HStack>
-                                                <Badge bg="red.600" color="white" fontSize="9px" px={2} py={0.5} borderRadius="full" fontWeight="black">
-                                                    ACTION NEEDED
-                                                </Badge>
-                                            </HStack>
-                                        </Box>
-                                    </Box>
-
-                                    {/* Body - Pending documents list */}
-                                    <Box p={{ base: 4, sm: 5 }} overflowY="auto" flex={1}>
-                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="widest" mb={3}>
-                                            Missing Documents List ({docStatus.pendingCount})
-                                        </Text>
-                                        {docStatus.pendingCount === 0 ? (
-                                            <Center p={6} bg="green.50" borderRadius="2xl" border="1.5px solid" borderColor="green.200">
-                                                <VStack spacing={2}>
-                                                    <Icon as={FaCheckCircle} color="green.500" w={8} h={8} />
-                                                    <Text fontSize="sm" fontWeight="bold" color="green.800">All required documents are uploaded!</Text>
-                                                </VStack>
-                                            </Center>
-                                        ) : (
-                                            <VStack spacing={2.5} align="stretch">
-                                                {docStatus.pendingList.map((docName, i) => (
-                                                    <HStack
-                                                        key={i}
-                                                        spacing={3}
-                                                        p={3.5}
-                                                        bg="red.50"
-                                                        border="1.5px dashed"
-                                                        borderColor="red.300"
-                                                        borderRadius="xl"
-                                                        transition="all 0.2s"
-                                                        _hover={{ bg: 'red.100', borderColor: 'red.400', transform: 'translateX(2px)' }}
-                                                    >
-                                                        <Center w="32px" h="32px" bg="white" borderRadius="lg" flexShrink={0} boxShadow="xs" border="1px solid" borderColor="red.200">
-                                                            <Icon as={FaFileAlt} color="red.500" w={3.5} h={3.5} />
-                                                        </Center>
-                                                        <Box flex={1} minW={0}>
-                                                            <Text fontSize="xs" fontWeight="black" color="gray.800" noOfLines={1}>{docName}</Text>
-                                                            <Text fontSize="10px" color="red.600" fontWeight="bold">Not uploaded yet</Text>
-                                                        </Box>
-                                                        <Badge bg="red.600" color="white" fontSize="9px" px={2.5} py={1} borderRadius="full" fontWeight="black" flexShrink={0} boxShadow="xs">
-                                                            NOT UPLOADED
-                                                        </Badge>
-                                                    </HStack>
-                                                ))}
-                                            </VStack>
-                                        )}
-                                    </Box>
-
-                                    {/* Footer - Close Button Only (NO Edit button, NO Download Sticker button) */}
-                                    <Box p={{ base: 4, sm: 5 }} pt={2.5} borderTop="1px solid" borderColor="gray.100" bg="white">
-                                        <Button
-                                            w="full"
-                                            size="md"
-                                            variant="solid"
-                                            bg="gray.100"
-                                            color="gray.700"
-                                            _hover={{ bg: 'gray.200' }}
-                                            borderRadius="xl"
-                                            fontWeight="bold"
-                                            onClick={() => { setViewVehicle(null); setActiveDocPreview(null); }}
-                                        >
-                                            Close
-                                        </Button>
-                                    </Box>
-                                </Box>
-                            );
-                        }
+                        // Dynamic PUC validity status calculator
+                        const getPucValidity = (dateStr) => {
+                            if (!dateStr) return { status: 'none', label: 'NOT SET', colorScheme: 'gray', bg: 'gray.500', alert: null };
+                            const end = new Date(dateStr);
+                            const now = new Date();
+                            now.setHours(0, 0, 0, 0);
+                            end.setHours(0, 0, 0, 0);
+                            const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                            if (diffDays < 0) {
+                                return {
+                                    status: 'expired',
+                                    label: `EXPIRED (${Math.abs(diffDays)}d ago)`,
+                                    colorScheme: 'red',
+                                    bg: 'red.600',
+                                    alert: `PUC certificate expired on ${toExcelDate(dateStr)} (${Math.abs(diffDays)} days ago). Vehicle requires emission test.`
+                                };
+                            }
+                            if (diffDays <= 15) {
+                                return {
+                                    status: 'expiring_soon',
+                                    label: `EXPIRING SOON (${diffDays}d left)`,
+                                    colorScheme: 'orange',
+                                    bg: 'orange.500',
+                                    alert: `PUC certificate will expire in ${diffDays} day${diffDays === 1 ? '' : 's'} on ${toExcelDate(dateStr)}. Plan emission test.`
+                                };
+                            }
+                            return {
+                                status: 'valid',
+                                label: `VALID (${diffDays}d remaining)`,
+                                colorScheme: 'green',
+                                bg: 'green.600',
+                                alert: null
+                            };
+                        };
 
                         return (
                             <>
-                                <ModalCloseButton color="gray.500" zIndex={10} bg="white" borderRadius="full" boxShadow="md" m={2} _hover={{ bg: 'gray.200' }} />
-                                <ModalBody p={0} display="flex" flexDirection={{ base: 'column', md: 'row' }} h="100%">
-                                    
-                                    {/* ── LEFT SIDE: Profile, Photo Gallery, Downloads ── */}
-                                    <Box w={{ base: '100%', md: '360px', lg: '400px' }} bg="white" borderRight="1px solid" borderColor="gray.200" p={{ base: 4, md: 5 }} display="flex" flexDirection="column" alignItems="center" flexShrink={0}>
-                                        {/* Main large photo viewer */}
-                                        <Box w="full" position="relative" borderRadius="2xl" overflow="hidden" boxShadow="lg" border="4px solid" borderColor="gray.50" bg="gray.100" mb={3} minH={{ base: '240px', md: '280px' }} style={{ aspectRatio: '4/3' }}>
-                                            {activePhoto ? (
-                                                <Image src={activePhoto} w="full" h="full" objectFit="cover" transition="transform 0.3s" _hover={{ transform: 'scale(1.05)' }} cursor="pointer" onClick={() => window.open(activePhoto, '_blank')} />
-                                            ) : (
-                                                <Center w="full" h="full">
-                                                    <Icon as={FaTruck} w={12} h={12} color="gray.300" />
-                                                </Center>
-                                            )}
-                                            {viewVehicle.isSold ? (
-                                                <Badge position="absolute" top={3} right={3} colorScheme="red" bg="red.600" color="white" fontSize="xs" px={3} py={1} borderRadius="xl" boxShadow="md" fontWeight="black">
-                                                    🔴 SOLD OUT
-                                                </Badge>
-                                            ) : (
-                                                <Badge position="absolute" top={3} right={3} colorScheme="green" bg="green.600" color="white" fontSize="xs" px={3} py={1} borderRadius="xl" boxShadow="md" fontWeight="black">
-                                                    🟢 RESERVED
-                                                </Badge>
-                                            )}
-                                            {allPhotos.length > 1 && (
-                                                <Badge position="absolute" bottom={3} right={3} bg="blackAlpha.600" color="white" fontSize="xs" px={2} py={0.5} borderRadius="lg">
-                                                    {viewPhotoIdx + 1} / {allPhotos.length}
-                                                </Badge>
-                                            )}
-                                        </Box>
-                                        {/* Thumbnail strip — only shown when >1 photo */}
-                                        {allPhotos.length > 1 && (
-                                            <Box w="full" mb={4}>
-                                                <Text fontSize="9px" color="gray.400" fontWeight="bold" textTransform="uppercase" letterSpacing="wide" mb={1.5}>
-                                                    {allPhotos.length} Photos
+                                {/* ── TOP HORIZONTAL VIEW BAR ── */}
+                                <Box bg="white" px={{ base: 4, md: 6 }} py={{ base: 3, md: 4 }} borderBottom="2px solid" borderColor="gray.100" position="relative">
+                                    <Flex
+                                        direction={{ base: 'column', md: 'row' }}
+                                        align={{ base: 'flex-start', md: 'center' }}
+                                        justify="space-between"
+                                        gap={{ base: 4, md: 6 }}
+                                        wrap="nowrap"
+                                    >
+                                        {/* LEFT SIDE: Vehicle ID (VIN), Vehicle Number, Vehicle Name, Vehicle Model Name */}
+                                        <VStack align="flex-start" spacing={1.5} minW={{ base: 'auto', md: '300px' }} flexShrink={0}>
+                                            <HStack spacing={2} align="center">
+                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">
+                                                    VIN / ID:
                                                 </Text>
-                                                <HStack spacing={2} overflowX="auto" pb={1}
-                                                    css={{ '&::-webkit-scrollbar': { height: '4px' }, '&::-webkit-scrollbar-thumb': { background: '#CBD5E0', borderRadius: '4px' } }}
+                                                <Badge
+                                                    colorScheme="purple"
+                                                    bg="purple.50"
+                                                    color="purple.700"
+                                                    fontFamily="monospace"
+                                                    fontSize="xs"
+                                                    px={2.5}
+                                                    py={0.5}
+                                                    borderRadius="md"
+                                                    fontWeight="black"
+                                                    border="1px solid"
+                                                    borderColor="purple.200"
                                                 >
-                                                    {allPhotos.map((url, idx) => (
-                                                        <Box
-                                                            key={idx}
-                                                            flexShrink={0}
-                                                            w="54px"
-                                                            h="40px"
-                                                            borderRadius="lg"
-                                                            overflow="hidden"
-                                                            border="2.5px solid"
-                                                            borderColor={viewPhotoIdx === idx ? 'purple.500' : 'gray.200'}
-                                                            cursor="pointer"
-                                                            onClick={() => setViewPhotoIdx(idx)}
-                                                            transition="border-color 0.15s, transform 0.15s"
-                                                            _hover={{ borderColor: 'purple.400', transform: 'scale(1.08)' }}
-                                                            boxShadow={viewPhotoIdx === idx ? '0 0 0 2px #805AD5' : 'sm'}
-                                                        >
-                                                            <Image src={url} w="full" h="full" objectFit="cover" />
-                                                        </Box>
-                                                    ))}
-                                                </HStack>
-                                            </Box>
-                                        )}
-                                        {/* No photos placeholder with only strip spacing */}
-                                        {allPhotos.length <= 1 && <Box mb={3} />}
-                                        
-                                        <VStack spacing={2} w="full" textAlign="center" mb={6}>
-                                            <Badge colorScheme="purple" bg="purple.50" color="purple.700" fontFamily="monospace" fontSize="sm" px={4} py={1} borderRadius="lg" fontWeight="black" border="1px solid" borderColor="purple.200">
-                                                {vId}
-                                            </Badge>
-                                            <Text fontSize="3xl" fontWeight="black" color="gray.800" fontFamily="monospace" letterSpacing="widest" mt={1}>
-                                                {viewVehicle.vehicleNumber}
-                                            </Text>
-                                            <Text fontSize="sm" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wide">
-                                                {viewVehicle.vehicleName || 'Fleet Vehicle'}
-                                            </Text>
-                                            <HStack spacing={2} justify="center" mt={1} wrap="wrap">
-                                                {viewVehicle.isSold ? (
-                                                    <Badge colorScheme="red" bg="red.600" color="white" fontSize="xs" px={3} py={1} borderRadius="md" fontWeight="black">
-                                                        🔴 SOLD OUT
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge colorScheme="green" bg="green.600" color="white" fontSize="xs" px={3} py={1} borderRadius="md" fontWeight="black">
-                                                        🟢 RESERVED
+                                                    {vId}
+                                                </Badge>
+                                                {viewVehicle.barcode && (
+                                                    <Badge colorScheme="gray" variant="subtle" fontFamily="monospace" fontSize="2xs" px={2} py={0.5} borderRadius="md">
+                                                        {viewVehicle.barcode}
                                                     </Badge>
                                                 )}
                                             </HStack>
-                                        </VStack>
-
-                                        <VStack spacing={3} w="full" mt="auto">
-                                            
-
-                                            {viewFromTab !== 'reserved' && (
-                                                <Button w="full" size="md" variant="outline" colorScheme="gray" leftIcon={<Icon as={FaEdit} />} onClick={() => { const v = viewVehicle; setViewVehicle(null); handleEdit(v); }} borderRadius="xl" fontWeight="bold">
-                                                    Edit Details
-                                                </Button>
-                                            )}
-                                        <Button w="full" size="md" variant="solid" bg="gray.100" color="gray.700" _hover={{ bg: 'gray.200' }} borderRadius="xl" fontWeight="bold" onClick={() => { setViewVehicle(null); setActiveDocPreview(null); }}>
-                                                Close
-                                            </Button>
-                                        </VStack>
-                                    </Box>
-
-                                    {/* ── RIGHT SIDE: Details & Timeline ── */}
-                                    <Box flex={1} p={{ base: 4, md: 6 }} overflowY="auto" maxH={{ base: '60vh', md: '95vh' }}>
-                                        <VStack spacing={8} align="stretch">
-                                            {/* Status & Expirations */}
                                             <Box>
-                                                <Text fontSize="xs" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="widest" mb={4}>Vehicle Status & Dates</Text>
-                                                <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4}>
-                                                    <Box bg="white" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm" borderTop="4px solid" borderTopColor="red.400">
-                                                        <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide">Next Service</Text>
-                                                        <Text fontSize="lg" fontWeight="black" color="gray.800" mt={1}>{viewVehicle.serviceDate ? viewVehicle.serviceDate.substring(0, 10) : 'Not Set'}</Text>
+                                                <Text fontSize="9px" fontWeight="black" color="gray.400" textTransform="uppercase" letterSpacing="wider">
+                                                    REGISTRATION NUMBER
+                                                </Text>
+                                                <Text
+                                                    fontSize={{ base: '2xl', md: '3xl' }}
+                                                    fontWeight="black"
+                                                    color="gray.900"
+                                                    fontFamily="monospace"
+                                                    letterSpacing="wider"
+                                                    lineHeight="1.1"
+                                                >
+                                                    {viewVehicle.vehicleNumber}
+                                                </Text>
+                                            </Box>
+                                            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2.5} w="full" pt={0.5}>
+                                                <Box bg="gray.50" px={2.5} py={1} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                    <Text fontSize="8px" fontWeight="black" color="gray.400" textTransform="uppercase" letterSpacing="wider">
+                                                        VEHICLE NAME
+                                                    </Text>
+                                                    <Text fontSize="xs" fontWeight="bold" color="gray.800" textTransform="uppercase" noOfLines={1}>
+                                                        {viewVehicle.vehicleName?.split(' ')[0] || viewVehicle.vehicleName || 'Fleet Vehicle'}
+                                                    </Text>
+                                                </Box>
+                                                <Box bg="purple.50" px={2.5} py={1} borderRadius="lg" border="1px solid" borderColor="purple.200">
+                                                    <Text fontSize="8px" fontWeight="black" color="purple.500" textTransform="uppercase" letterSpacing="wider">
+                                                        MODEL NAME
+                                                    </Text>
+                                                    <Text fontSize="xs" fontWeight="bold" color="purple.800" textTransform="uppercase" noOfLines={1}>
+                                                        {viewVehicle.vehicleName?.split(' ').slice(1).join(' ') || viewVehicle.rcBookNumber || viewVehicle.vehicleName || 'Standard'}
+                                                    </Text>
+                                                </Box>
+                                            </SimpleGrid>
+                                        </VStack>
+
+                                        {/* CENTER (same horizontal view): Primary Image of vehicle */}
+                                        <Box
+                                            position="relative"
+                                            borderRadius="2xl"
+                                            overflow="hidden"
+                                            border="3px solid"
+                                            borderColor="gray.200"
+                                            boxShadow="md"
+                                            bg="gray.100"
+                                            w={{ base: '140px', md: '170px' }}
+                                            h={{ base: '95px', md: '105px' }}
+                                            flexShrink={0}
+                                            cursor={primaryPhotoUrl ? "pointer" : "default"}
+                                            onClick={() => {
+                                                if (primaryPhotoUrl) window.open(primaryPhotoUrl, '_blank');
+                                            }}
+                                            title={primaryPhotoUrl ? "Click to view full photo" : ""}
+                                            _hover={primaryPhotoUrl ? { transform: 'scale(1.02)', borderColor: 'purple.400' } : {}}
+                                            transition="all 0.2s"
+                                        >
+                                            {primaryPhotoUrl ? (
+                                                <Image
+                                                    src={primaryPhotoUrl}
+                                                    alt={viewVehicle.vehicleNumber}
+                                                    w="full"
+                                                    h="full"
+                                                    objectFit="cover"
+                                                />
+                                            ) : (
+                                                <Center w="full" h="full" bg="gray.100">
+                                                    <Icon as={FaCar} w={8} h={8} color="gray.400" />
+                                                </Center>
+                                            )}
+                                            {allPhotos.length > 1 && (
+                                                <Badge
+                                                    position="absolute"
+                                                    bottom={1}
+                                                    right={1}
+                                                    bg="blackAlpha.700"
+                                                    color="white"
+                                                    fontSize="9px"
+                                                    px={1.5}
+                                                    py={0.2}
+                                                    borderRadius="md"
+                                                    fontWeight="black"
+                                                >
+                                                    📷 {allPhotos.length}
+                                                </Badge>
+                                            )}
+                                        </Box>
+
+                                        {/* RIGHT (same horizontal view): Status: complete(reserved), pending, sell out */}
+                                        <Box textAlign={{ base: 'left', md: 'right' }} minW={{ base: 'auto', md: '240px' }} flexShrink={0}>
+                                            <Text fontSize="10px" fontWeight="black" color="gray.400" textTransform="uppercase" letterSpacing="widest" mb={1.5}>
+                                                Vehicle Status
+                                            </Text>
+                                            {viewVehicle.isSold ? (
+                                                <Badge
+                                                    colorScheme="red"
+                                                    bg="red.600"
+                                                    color="white"
+                                                    fontSize={{ base: 'xs', md: 'sm' }}
+                                                    px={3.5}
+                                                    py={1.5}
+                                                    borderRadius="xl"
+                                                    fontWeight="black"
+                                                    boxShadow="sm"
+                                                >
+                                                    🔴 SELL OUT
+                                                </Badge>
+                                            ) : docStatus.pendingCount > 0 ? (
+                                                <Badge
+                                                    colorScheme="yellow"
+                                                    bg="amber.400"
+                                                    color="gray.900"
+                                                    fontSize={{ base: 'xs', md: 'sm' }}
+                                                    px={3.5}
+                                                    py={1.5}
+                                                    borderRadius="xl"
+                                                    fontWeight="black"
+                                                    boxShadow="sm"
+                                                >
+                                                    🟡 PENDING ({docStatus.pendingCount} DOC{docStatus.pendingCount > 1 ? 'S' : ''})
+                                                </Badge>
+                                            ) : (
+                                                <Badge
+                                                    colorScheme="green"
+                                                    bg="green.600"
+                                                    color="white"
+                                                    fontSize={{ base: 'xs', md: 'sm' }}
+                                                    px={3.5}
+                                                    py={1.5}
+                                                    borderRadius="xl"
+                                                    fontWeight="black"
+                                                    boxShadow="sm"
+                                                >
+                                                    🟢 COMPLETE (RESERVED)
+                                                </Badge>
+                                            )}
+
+                                            <HStack spacing={2} justify={{ base: 'flex-start', md: 'flex-end' }} mt={2.5}>
+                                                <Button
+                                                    size="xs"
+                                                    variant="outline"
+                                                    colorScheme="purple"
+                                                    leftIcon={<Icon as={FaPrint} />}
+                                                    onClick={() => openStickerModal(viewVehicle)}
+                                                    borderRadius="lg"
+                                                    fontWeight="bold"
+                                                >
+                                                    Sticker
+                                                </Button>
+                                                <Button
+                                                    size="xs"
+                                                    variant="outline"
+                                                    colorScheme="gray"
+                                                    leftIcon={<Icon as={FaEdit} />}
+                                                    onClick={() => {
+                                                        const v = viewVehicle;
+                                                        setViewVehicle(null);
+                                                        handleEdit(v);
+                                                    }}
+                                                    borderRadius="lg"
+                                                    fontWeight="bold"
+                                                >
+                                                    Edit
+                                                </Button>
+                                                <IconButton
+                                                    size="xs"
+                                                    icon={<Icon as={FaTimes} />}
+                                                    colorScheme="gray"
+                                                    variant="solid"
+                                                    borderRadius="lg"
+                                                    aria-label="Close"
+                                                    onClick={() => {
+                                                        setViewVehicle(null);
+                                                        setActiveDocPreview(null);
+                                                    }}
+                                                    title="Close"
+                                                />
+                                            </HStack>
+                                        </Box>
+                                    </Flex>
+                                </Box>
+
+                                {/* ── SEVEN SEPARATE ACTION BUTTONS (NOT TABS) ── */}
+                                <Box
+                                    px={{ base: 4, md: 6 }}
+                                    py={3}
+                                    bg="gray.50"
+                                    borderBottom="1px solid"
+                                    borderColor="gray.200"
+                                >
+                                    <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 7 }} spacing={2.5} w="full">
+                                        {[
+                                            { id: 'rc', label: '1. RC Book', icon: FaFileContract, color: 'blue', isPending: !hasDoc(viewVehicle.rcBook) },
+                                            { id: 'photos', label: `2. Photos (${allPhotos.length})`, icon: FaCamera, color: 'purple', isPending: allPhotos.length === 0 },
+                                            { id: 'purchase', label: '3. Purchase', icon: FaMoneyBillWave, color: 'orange', isPending: !hasDoc(viewVehicle.purchaseOldRc) || !hasDoc(viewVehicle.purchaseOldPuc) },
+                                            { id: 'insurance', label: '4. Insurance', icon: FaShieldAlt, color: 'teal', isPending: !hasDoc(viewVehicle.insurancePhoto) },
+                                            { id: 'puc', label: '5. PUC', icon: FaFileAlt, color: 'green', isPending: !hasDoc(viewVehicle.pucPhoto) },
+                                            { id: 'expenses', label: '6. Expenses', icon: FaGasPump, color: 'blue', isPending: false },
+                                            { id: 'sell', label: '7. Sell Out', icon: FaHandshake, color: 'red', isPending: viewVehicle.isSold && (!hasDoc(viewVehicle.sellAadharDoc) || !hasDoc(viewVehicle.sellPanDoc)) },
+                                        ].map(btn => {
+                                            const isActive = activeVehicleViewTab === btn.id;
+                                            return (
+                                                <Button
+                                                    key={btn.id}
+                                                    size="sm"
+                                                    h={{ base: "42px", md: "46px" }}
+                                                    py={2}
+                                                    px={2.5}
+                                                    colorScheme={btn.color}
+                                                    variant={isActive ? 'solid' : 'outline'}
+                                                    bg={isActive ? `${btn.color}.600` : 'white'}
+                                                    color={isActive ? 'white' : `${btn.color}.700`}
+                                                    borderColor={isActive ? `${btn.color}.600` : 'gray.200'}
+                                                    _hover={{
+                                                        bg: isActive ? `${btn.color}.700` : `${btn.color}.50`,
+                                                        borderColor: `${btn.color}.400`,
+                                                        transform: 'translateY(-2px)',
+                                                        boxShadow: 'md'
+                                                    }}
+                                                    transition="all 0.18s ease-in-out"
+                                                    borderRadius="xl"
+                                                    fontWeight="black"
+                                                    fontSize="xs"
+                                                    leftIcon={<Icon as={btn.icon} fontSize="sm" />}
+                                                    onClick={() => {
+                                                        setActiveVehicleViewTab(btn.id);
+                                                        setActiveDocPreview(null);
+                                                    }}
+                                                    boxShadow={isActive ? 'md' : 'xs'}
+                                                    justifyContent="center"
+                                                    whiteSpace="nowrap"
+                                                >
+                                                    {btn.label}
+                                                    {btn.isPending && (
+                                                        <Badge ml={1.5} colorScheme="orange" bg={isActive ? 'yellow.300' : 'orange.500'} color={isActive ? 'gray.900' : 'white'} fontSize="8px" px={1.5} py={0.2} borderRadius="full">
+                                                            !
+                                                        </Badge>
+                                                    )}
+                                                </Button>
+                                            );
+                                        })}
+                                    </SimpleGrid>
+                                </Box>
+
+                                {/* ── SUB-VIEW TAB CONTENT ── */}
+                                <ModalBody p={{ base: 4, md: 6 }} overflowY="auto" flex={1} bg="gray.50">
+                                    {/* ══ 1. RC BOOK ══ */}
+                                    {activeVehicleViewTab === 'rc' && (
+                                        <VStack spacing={4} align="stretch">
+                                            {/* Top horizontal row: RC Book number | Vehicle number | Vehicle model or name */}
+                                            <Box bg="white" p={4} borderRadius="2xl" border="1.5px solid" borderColor="blue.200" boxShadow="xs">
+                                                <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} textAlign={{ base: 'left', sm: 'center' }}>
+                                                    <Box>
+                                                        <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">RC Book Number</Text>
+                                                        <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="blue.900" fontFamily="monospace" mt={0.5}>
+                                                            {viewVehicle.rcBookNumber || 'Not Specified'}
+                                                        </Text>
                                                     </Box>
-                                                    <Box bg="white" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm" borderTop="4px solid" borderTopColor="purple.400">
-                                                        <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide">Insurance Expiry</Text>
-                                                        <Text fontSize="lg" fontWeight="black" color="gray.800" mt={1}>{viewVehicle.insuranceDate ? viewVehicle.insuranceDate.substring(0, 10) : 'Not Set'}</Text>
+                                                    <Box borderLeft={{ sm: '1px solid' }} borderRight={{ sm: '1px solid' }} borderColor={{ sm: 'gray.200' }} px={2}>
+                                                        <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">Vehicle Number</Text>
+                                                        <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="blue.900" fontFamily="monospace" mt={0.5}>
+                                                            {viewVehicle.vehicleNumber}
+                                                        </Text>
                                                     </Box>
-                                                    <Box bg="white" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm" borderTop="4px solid" borderTopColor="green.400">
-                                                        <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide">PUC Expiry</Text>
-                                                        <Text fontSize="lg" fontWeight="black" color="gray.800" mt={1}>{viewVehicle.pucDate ? viewVehicle.pucDate.substring(0, 10) : 'Not Set'}</Text>
+                                                    <Box>
+                                                        <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">Vehicle Model / Name</Text>
+                                                        <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="bold" color="blue.900" mt={0.5} noOfLines={1}>
+                                                            {viewVehicle.vehicleName || 'Fleet Vehicle'}
+                                                        </Text>
                                                     </Box>
                                                 </SimpleGrid>
                                             </Box>
 
-                                            {/* ── Purchase Details & Documents ── */}
-                                            <Box bg="white" p={6} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                                                <HStack mb={5} spacing={3} justify="space-between" wrap="wrap">
-                                                    <HStack spacing={3}>
-                                                        <Center w="36px" h="36px" bg="green.50" borderRadius="lg">
-                                                            <Icon as={FaMoneyBillWave} color="green.600" w={4} h={4} />
-                                                        </Center>
-                                                        <Text fontSize="md" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wide">Purchase Details</Text>
-                                                    </HStack>
-                                                    
-                                                </HStack>
-                                                
-                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
-                                                    <Box>
-                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">OWNER NAME</Text>
-                                                        <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo?.ownerName || '—'}</Text>
-                                                    </Box>
-                                                    <Box>
-                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PURCHASE DATE</Text>
-                                                        <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo?.purchaseDate ? viewVehicle.purchaseInfo.purchaseDate.substring(0, 10) : '—'}</Text>
-                                                    </Box>
-                                                    <Box>
-                                                        <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PURCHASE RATE</Text>
-                                                        <Text fontSize="sm" fontWeight="black" color="green.600">{viewVehicle.purchaseInfo?.purchaseRate ? `₹${Number(viewVehicle.purchaseInfo.purchaseRate).toLocaleString('en-IN')}` : '—'}</Text>
-                                                    </Box>
-                                                    {viewVehicle.purchaseInfo?.paymentMode && (
-                                                        <Box>
-                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PAYMENT MODE</Text>
-                                                            <Badge colorScheme="green" borderRadius="md" px={2}>{viewVehicle.purchaseInfo.paymentMode}</Badge>
-                                                        </Box>
-                                                    )}
-                                                    {viewVehicle.purchaseInfo?.mobileNumbers?.filter(Boolean).length > 0 && (
-                                                        <Box>
-                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">MOBILE</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.mobileNumbers.filter(Boolean)[0]}</Text>
-                                                        </Box>
-                                                    )}
-                                                    {viewVehicle.purchaseInfo?.aadharNumber && (
-                                                        <Box>
-                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">AADHAR</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.aadharNumber}</Text>
-                                                        </Box>
-                                                    )}
-                                                    {viewVehicle.purchaseInfo?.panNumber && (
-                                                        <Box>
-                                                            <Text fontSize="10px" color="gray.400" fontWeight="bold" letterSpacing="wide">PAN</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="gray.800">{viewVehicle.purchaseInfo.panNumber}</Text>
-                                                        </Box>
-                                                    )}
-                                                </SimpleGrid>
+                                            {/* Photo or PDF of that RC book */}
+                                            {renderDocViewer(viewVehicle.rcBook, `${viewVehicle.vehicleNumber} - RC Book`, 'RC Book Document Not Uploaded')}
+                                        </VStack>
+                                    )}
 
-                                                {/* Purchase Documents: uploaded ones clickable, not uploaded ones in dark red */}
-                                                {(() => {
-                                                    const v = viewVehicle;
-                                                    const purchaseDocConfigs = [
-                                                        { key: 'oldRc', label: 'Old RC Book', val: v.purchaseOldRc, icon: FaFilePdf, color: 'purple' },
-                                                        { key: 'oldPuc', label: 'Old PUC', val: v.purchaseOldPuc, icon: FaFilePdf, color: 'teal' },
-                                                        { key: 'ownerAadhar', label: 'Owner Aadhar', val: v.purchaseAadharDoc, icon: FaIdCard, color: 'blue' },
-                                                        { key: 'ownerPan', label: 'Owner PAN', val: v.purchasePanDoc, icon: FaIdBadge, color: 'orange' },
-                                                    ];
-                                                    const otherDocs = Array.isArray(v.purchaseOtherDocs) ? v.purchaseOtherDocs : [];
-
-                                                    return (
-                                                        <Box pt={4} borderTop="1px dashed" borderColor="gray.200">
-                                                            <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" mb={3} letterSpacing="wide">
-                                                                Purchase Documents
+                                    {/* ══ 2. VEHICLE PHOTOS ══ */}
+                                    {activeVehicleViewTab === 'photos' && (
+                                        <VStack spacing={4} align="stretch">
+                                            {allPhotos.length === 0 ? (
+                                                <Center p={10} bg="white" borderRadius="2xl" border="2px dashed" borderColor="gray.300">
+                                                    <VStack spacing={2}>
+                                                        <Icon as={FaCamera} w={10} h={10} color="gray.300" />
+                                                        <Text fontWeight="bold" color="gray.600">No Vehicle Photos Uploaded Yet</Text>
+                                                        <Text fontSize="xs" color="gray.400">Edit vehicle to upload photos.</Text>
+                                                    </VStack>
+                                                </Center>
+                                            ) : (
+                                                <Box bg="white" p={{ base: 4, md: 5 }} borderRadius="2xl" border="1.5px solid" borderColor="purple.200" boxShadow="xs">
+                                                    {/* Featured photo viewer */}
+                                                    <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
+                                                        <HStack spacing={2}>
+                                                            <Badge colorScheme="purple" px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black">
+                                                                Photo {viewPhotoIdx + 1} of {allPhotos.length}
+                                                            </Badge>
+                                                            <Text fontSize="xs" fontWeight="bold" color="gray.500">
+                                                                Click image to open in high-res full screen
                                                             </Text>
-                                                            <Wrap spacing={2.5}>
-                                                                {purchaseDocConfigs.map(doc => {
-                                                                    const uploaded = hasDoc(doc.val);
-                                                                    if (uploaded) {
-                                                                        const url = getFileUrl(doc.val?.url || doc.val?.path || doc.val);
-                                                                        return (
-                                                                            <WrapItem key={doc.key}>
-                                                                                <Button
-                                                                                        size="sm"
-                                                                                        colorScheme={activeDocPreview?.url === url ? 'teal' : doc.color}
-                                                                                        variant="solid"
-                                                                                        leftIcon={<Icon as={activeDocPreview?.url === url ? FaEye : doc.icon} />}
-                                                                                        borderRadius="xl"
-                                                                                        fontWeight="bold"
-                                                                                        boxShadow={activeDocPreview?.url === url ? '0 0 0 3px #319795' : 'sm'}
-                                                                                        _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
-                                                                                        transition="all 0.15s"
-                                                                                        onClick={() => handleToggleDocPreview(url, doc.label, 'purchase')}
-                                                                                    >
-                                                                                        {doc.label}
-                                                                                    </Button>
-                                                                            </WrapItem>
-                                                                        );
-                                                                    }
-                                                                    // In Reserved view: skip showing pending/not-uploaded items
-                                                                    return null;
-                                                                    return (
-                                                                        <WrapItem key={doc.key}>
-                                                                            <HStack
-                                                                                spacing={2}
-                                                                                px={3}
-                                                                                py={1.5}
-                                                                                borderRadius="xl"
-                                                                                bg="red.50"
-                                                                                border="1.5px dashed"
-                                                                                borderColor="red.600"
-                                                                                color="red.800"
-                                                                                boxShadow="xs"
-                                                                            >
-                                                                                <Icon as={FaExclamationTriangle} color="red.600" w={3.5} h={3.5} />
-                                                                                <Text fontSize="xs" fontWeight="black" color="red.800">
-                                                                                    {doc.label} Pending
-                                                                                </Text>
-                                                                                <Badge bg="red.700" color="white" fontSize="9px" px={1.5} py={0.5} borderRadius="full" fontWeight="black">
-                                                                                    NOT UPLOADED
-                                                                                </Badge>
-                                                                            </HStack>
-                                                                        </WrapItem>
-                                                                    );
-                                                                })}
-                                                                {otherDocs.map((doc, i) => {
-                                                                    const u = getFileUrl(doc.url || doc.path || doc);
-                                                                    const l = doc.label || (typeof doc === 'string' ? doc.split('/').pop() : `Doc ${i + 1}`);
-                                                                    return (
-                                                                        <WrapItem key={`other-${i}`}>
-                                                                            <Button
-                                                                                        size="sm"
-                                                                                        colorScheme={activeDocPreview?.url === u ? 'teal' : 'gray'}
-                                                                                        variant={activeDocPreview?.url === u ? 'solid' : 'outline'}
-                                                                                        leftIcon={<Icon as={activeDocPreview?.url === u ? FaEye : FaFileAlt} />}
-                                                                                        borderRadius="xl"
-                                                                                        fontWeight="bold"
-                                                                                        boxShadow={activeDocPreview?.url === u ? '0 0 0 3px #319795' : 'sm'}
-                                                                                        onClick={() => handleToggleDocPreview(u, l, 'purchase')}
-                                                                                    >
-                                                                                        {l}
-                                                                                    </Button>
-                                                                        </WrapItem>
-                                                                    );
-                                                                })}
-                                                            </Wrap>
-                                                                {activeDocPreview && activeDocPreview.section === 'purchase' && renderInlineDocPreview(activeDocPreview)}
-                                                            </Box>
-                                                        );
-                                                    })()}
-                                                </Box>
-
-                                                {/* ── Vehicle Registration & Compliance Documents ── */}
-                                            {(() => {
-                                                const v = viewVehicle;
-                                                const complianceDocConfigs = [
-                                                    { key: 'rcBook', label: 'RC Book', val: v.rcBook, icon: FaFilePdf, color: 'blue' },
-                                                    { key: 'insurancePhoto', label: 'Insurance', val: v.insurancePhoto, icon: FaFileContract, color: 'green' },
-                                                    { key: 'pucPhoto', label: 'PUC', val: v.pucPhoto, icon: FaFileAlt, color: 'teal' },
-                                                ];
-                                                const missingCount = complianceDocConfigs.filter(d => !hasDoc(d.val)).length;
-
-                                                return (
-                                                    <Box bg="blue.50" p={6} borderRadius="2xl" border="1px solid" borderColor="blue.100" boxShadow="sm">
-                                                        <HStack mb={4} spacing={3} justify="space-between" wrap="wrap">
-                                                            <HStack spacing={3}>
-                                                                <Center w="36px" h="36px" bg="blue.100" borderRadius="lg">
-                                                                    <Icon as={FaFileContract} color="blue.600" w={4} h={4} />
-                                                                </Center>
-                                                                <Box>
-                                                                    <Text fontSize="md" fontWeight="black" color="blue.800" textTransform="uppercase" letterSpacing="wide">Vehicle Documents</Text>
-                                                                    <Text fontSize="10px" color="blue.600" fontWeight="bold">RC Book • Insurance • PUC</Text>
-                                                                </Box>
-                                                            </HStack>
-                                                            
                                                         </HStack>
-                                                        <Wrap spacing={2.5}>
-                                                            {complianceDocConfigs.map(doc => {
-                                                                const uploaded = hasDoc(doc.val);
-                                                                if (uploaded) {
-                                                                    const url = getFileUrl(doc.val?.url || doc.val?.path || doc.val);
-                                                                    return (
-                                                                        <WrapItem key={doc.key}>
-                                                                            <Button
-                                                                                    size="sm"
-                                                                                    colorScheme={activeDocPreview?.url === url ? 'teal' : doc.color}
-                                                                                    variant="solid"
-                                                                                    leftIcon={<Icon as={activeDocPreview?.url === url ? FaEye : doc.icon} />}
-                                                                                    borderRadius="xl"
-                                                                                    fontWeight="bold"
-                                                                                    boxShadow={activeDocPreview?.url === url ? '0 0 0 3px #319795' : 'sm'}
-                                                                                    _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
-                                                                                    transition="all 0.15s"
-                                                                                    onClick={() => handleToggleDocPreview(url, doc.label, 'compliance')}
-                                                                                >
-                                                                                    {doc.label}
-                                                                                </Button>
-                                                                        </WrapItem>
-                                                                    );
-                                                                }
-                                                                // In Reserved view: skip pending items
-                                                                return null;
-                                                                return (
-                                                                    <WrapItem key={doc.key}>
-                                                                        <HStack
-                                                                            spacing={2}
-                                                                            px={3}
-                                                                            py={1.5}
-                                                                            borderRadius="xl"
-                                                                            bg="red.50"
-                                                                            border="1.5px dashed"
-                                                                            borderColor="red.600"
-                                                                            color="red.800"
-                                                                            boxShadow="xs"
-                                                                        >
-                                                                            <Icon as={FaExclamationTriangle} color="red.600" w={3.5} h={3.5} />
-                                                                            <Text fontSize="xs" fontWeight="black" color="red.800">
-                                                                                {doc.label} Pending
-                                                                            </Text>
-                                                                            <Badge bg="red.700" color="white" fontSize="9px" px={1.5} py={0.5} borderRadius="full" fontWeight="black">
-                                                                                NOT UPLOADED
+                                                        <HStack spacing={2}>
+                                                            <Button
+                                                                size="xs"
+                                                                colorScheme="purple"
+                                                                variant="solid"
+                                                                leftIcon={<Icon as={FaExternalLinkAlt} />}
+                                                                borderRadius="lg"
+                                                                fontWeight="bold"
+                                                                onClick={() => window.open(activePhoto, '_blank')}
+                                                            >
+                                                                Open Full Size
+                                                            </Button>
+                                                            <Button
+                                                                as="a"
+                                                                href={activePhoto}
+                                                                download
+                                                                size="xs"
+                                                                colorScheme="gray"
+                                                                variant="outline"
+                                                                leftIcon={<Icon as={FaDownload} />}
+                                                                borderRadius="lg"
+                                                                fontWeight="bold"
+                                                            >
+                                                                Download
+                                                            </Button>
+                                                        </HStack>
+                                                    </Flex>
+
+                                                    <Box
+                                                        borderRadius="2xl"
+                                                        overflow="hidden"
+                                                        bg="gray.900"
+                                                        minH={{ base: '300px', md: '480px' }}
+                                                        maxH="600px"
+                                                        display="flex"
+                                                        alignItems="center"
+                                                        justifyContent="center"
+                                                        position="relative"
+                                                        cursor="pointer"
+                                                        onClick={() => window.open(activePhoto, '_blank')}
+                                                    >
+                                                        <Image
+                                                            src={activePhoto}
+                                                            alt="Vehicle Photo"
+                                                            maxH="580px"
+                                                            w="auto"
+                                                            maxW="100%"
+                                                            objectFit="contain"
+                                                        />
+                                                    </Box>
+
+                                                    {/* Thumbnails strip */}
+                                                    {allPhotos.length > 1 && (
+                                                        <Box mt={4} pt={3} borderTop="1px solid" borderColor="gray.100">
+                                                            <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wide" mb={2}>
+                                                                All Photos ({allPhotos.length})
+                                                            </Text>
+                                                            <HStack
+                                                                spacing={3}
+                                                                overflowX="auto"
+                                                                pb={2}
+                                                                css={{
+                                                                    '&::-webkit-scrollbar': { height: '5px' },
+                                                                    '&::-webkit-scrollbar-thumb': { background: '#CBD5E0', borderRadius: '4px' }
+                                                                }}
+                                                            >
+                                                                {allPhotos.map((url, idx) => (
+                                                                    <Box
+                                                                        key={idx}
+                                                                        flexShrink={0}
+                                                                        w="80px"
+                                                                        h="60px"
+                                                                        borderRadius="xl"
+                                                                        overflow="hidden"
+                                                                        border="3px solid"
+                                                                        borderColor={viewPhotoIdx === idx ? 'purple.500' : 'gray.200'}
+                                                                        cursor="pointer"
+                                                                        onClick={() => setViewPhotoIdx(idx)}
+                                                                        transition="all 0.15s"
+                                                                        _hover={{ borderColor: 'purple.400', transform: 'scale(1.05)' }}
+                                                                        boxShadow={viewPhotoIdx === idx ? 'md' : 'xs'}
+                                                                        position="relative"
+                                                                    >
+                                                                        <Image src={url} w="full" h="full" objectFit="cover" />
+                                                                        {idx === 0 && (
+                                                                            <Badge position="absolute" top={1} left={1} colorScheme="yellow" fontSize="8px" px={1} py={0} borderRadius="sm">
+                                                                                ⭐
                                                                             </Badge>
-                                                                        </HStack>
-                                                                    </WrapItem>
-                                                                );
-                                                            })}
-                                                        </Wrap>
-                                                            {activeDocPreview && activeDocPreview.section === 'compliance' && renderInlineDocPreview(activeDocPreview)}
+                                                                        )}
+                                                                    </Box>
+                                                                ))}
+                                                            </HStack>
                                                         </Box>
-                                                    );
-                                                })()}
-
-                                                {/* General / Extra Documents */}
-                                            {(() => {
-                                                const v = viewVehicle;
-                                                const extraDocs = Array.isArray(v.documents) ? v.documents.filter(d => d && (d.url || d.path)) : [];
-                                                if (!extraDocs.length) return null;
-                                                return (
-                                                    <Box bg="purple.50" p={6} borderRadius="2xl" border="1px solid" borderColor="purple.100" boxShadow="sm">
-                                                        <HStack mb={4} spacing={3}>
-                                                            <Center w="36px" h="36px" bg="purple.100" borderRadius="lg">
-                                                                <Icon as={FaFolderOpen} color="purple.600" w={4} h={4} />
-                                                            </Center>
-                                                            <Text fontSize="md" fontWeight="black" color="purple.800" textTransform="uppercase" letterSpacing="wide">Other Documents ({extraDocs.length})</Text>
-                                                        </HStack>
-                                                        <HStack spacing={2} flexWrap="wrap">
-                                                            {extraDocs.map((doc, i) => {
-                                                                const ext = (doc.name || doc.url || '').split('.').pop().toLowerCase();
-                                                                const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
-                                                                return (
-                                                                    <Button
-                                                                            key={i}
-                                                                            size="xs"
-                                                                            colorScheme={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? 'teal' : 'purple'}
-                                                                            variant={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? 'solid' : 'outline'}
-                                                                            leftIcon={<Icon as={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? FaEye : isImg ? FaFileImage : FaFileAlt} />}
-                                                                            borderRadius="lg"
-                                                                            fontWeight="bold"
-                                                                            boxShadow={activeDocPreview?.url === getFileUrl(doc.url || doc.path) ? '0 0 0 2px #319795' : 'none'}
-                                                                            onClick={() => handleToggleDocPreview(getFileUrl(doc.url || doc.path), doc.name || doc.type || `File ${i + 1}`, 'extra')}
-                                                                        >
-                                                                            {doc.name || doc.type || `File ${i + 1}`}
-                                                                        </Button>
-                                                                );
-                                                            })}
-                                                        </HStack>
-                                                            {activeDocPreview && activeDocPreview.section === 'extra' && renderInlineDocPreview(activeDocPreview)}
-                                                        </Box>
-                                                    );
-                                                })()}
-
-                                                {/* ── Sell Details (Shown when Vehicle is Sold Out) ── */}
-                                            {viewVehicle.isSold && (
-                                                <Box bg="red.50" p={6} borderRadius="2xl" border="1px solid" borderColor="red.200" boxShadow="sm">
-                                                    <HStack mb={5} spacing={3} justify="space-between" wrap="wrap">
-                                                        <HStack spacing={3}>
-                                                            <Center w="36px" h="36px" bg="red.100" borderRadius="lg">
-                                                                <Icon as={FaHandshake} color="red.600" w={4} h={4} />
-                                                            </Center>
-                                                            <Box>
-                                                                <Text fontSize="md" fontWeight="black" color="red.800" textTransform="uppercase" letterSpacing="wide">Sell Details (Sold Out)</Text>
-                                                                <Text fontSize="10px" color="red.600" fontWeight="bold">Buyer Information & Transfer Documents</Text>
-                                                            </Box>
-                                                        </HStack>
-                                                        
-                                                    </HStack>
-
-                                                    <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={5} mb={5}>
-                                                        <Box>
-                                                            <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">BUYER NAME</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo?.ownerName || '—'}</Text>
-                                                        </Box>
-                                                        <Box>
-                                                            <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">SELL DATE</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo?.sellDate ? viewVehicle.sellInfo.sellDate.substring(0, 10) : '—'}</Text>
-                                                        </Box>
-                                                        <Box>
-                                                            <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">SELL RATE</Text>
-                                                            <Text fontSize="sm" fontWeight="black" color="red.600">{viewVehicle.sellInfo?.sellRate ? `₹${Number(viewVehicle.sellInfo.sellRate).toLocaleString('en-IN')}` : '—'}</Text>
-                                                        </Box>
-                                                        {viewVehicle.sellInfo?.paymentMode && (
-                                                            <Box>
-                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">PAYMENT MODE</Text>
-                                                                <Badge colorScheme="red" borderRadius="md" px={2}>{viewVehicle.sellInfo.paymentMode}</Badge>
-                                                            </Box>
-                                                        )}
-                                                        {viewVehicle.sellInfo?.mobileNumbers?.filter(Boolean).length > 0 && (
-                                                            <Box>
-                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">MOBILE</Text>
-                                                                <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.mobileNumbers.filter(Boolean)[0]}</Text>
-                                                            </Box>
-                                                        )}
-                                                        {viewVehicle.sellInfo?.aadharNumber && (
-                                                            <Box>
-                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">BUYER AADHAR NO</Text>
-                                                                <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.aadharNumber}</Text>
-                                                            </Box>
-                                                        )}
-                                                        {viewVehicle.sellInfo?.panNumber && (
-                                                            <Box>
-                                                                <Text fontSize="10px" color="red.400" fontWeight="bold" letterSpacing="wide">BUYER PAN NO</Text>
-                                                                <Text fontSize="sm" fontWeight="bold" color="red.900">{viewVehicle.sellInfo.panNumber}</Text>
-                                                            </Box>
-                                                        )}
-                                                    </SimpleGrid>
-
-                                                    {/* Sell Documents: uploaded ones clickable, not uploaded ones in dark red */}
-                                                    {(() => {
-                                                        const v = viewVehicle;
-                                                        const sellDocConfigs = [
-                                                            { key: 'sellAadharDoc', label: 'Buyer Aadhar', val: v.sellAadharDoc, icon: FaIdCard, color: 'red' },
-                                                            { key: 'sellPanDoc', label: 'Buyer PAN', val: v.sellPanDoc, icon: FaIdBadge, color: 'red' },
-                                                        ];
-
-                                                        return (
-                                                            <Box pt={4} borderTop="1px dashed" borderColor="red.200">
-                                                                <Text fontSize="10px" color="red.600" fontWeight="bold" textTransform="uppercase" mb={3} letterSpacing="wide">
-                                                                    Sell Out Documents
-                                                                </Text>
-                                                                <Wrap spacing={2.5}>
-                                                                    {sellDocConfigs.map(doc => {
-                                                                        const uploaded = hasDoc(doc.val);
-                                                                        if (uploaded) {
-                                                                            const url = getFileUrl(doc.val?.url || doc.val?.path || doc.val);
-                                                                            return (
-                                                                                <WrapItem key={doc.key}>
-                                                                                    <Button
-                                                                                        size="sm"
-                                                                                        colorScheme={activeDocPreview?.url === url ? 'teal' : doc.color}
-                                                                                        variant="solid"
-                                                                                        leftIcon={<Icon as={activeDocPreview?.url === url ? FaEye : doc.icon} />}
-                                                                                        borderRadius="xl"
-                                                                                        fontWeight="bold"
-                                                                                        boxShadow={activeDocPreview?.url === url ? '0 0 0 3px #319795' : 'sm'}
-                                                                                        _hover={{ transform: 'translateY(-1px)', boxShadow: 'md' }}
-                                                                                        transition="all 0.15s"
-                                                                                        onClick={() => handleToggleDocPreview(url, doc.label, 'sell')}
-                                                                                    >
-                                                                                        {doc.label}
-                                                                                    </Button>
-                                                                                </WrapItem>
-                                                                            );
-                                                                        }
-                                                                        // In Reserved view: skip pending items
-                                                                        return null;
-                                                                        return (
-                                                                            <WrapItem key={doc.key}>
-                                                                                <HStack
-                                                                                    spacing={2}
-                                                                                    px={3}
-                                                                                    py={1.5}
-                                                                                    borderRadius="xl"
-                                                                                    bg="red.100"
-                                                                                    border="1.5px dashed"
-                                                                                    borderColor="red.600"
-                                                                                    color="red.800"
-                                                                                    boxShadow="xs"
-                                                                                >
-                                                                                    <Icon as={FaExclamationTriangle} color="red.600" w={3.5} h={3.5} />
-                                                                                    <Text fontSize="xs" fontWeight="black" color="red.800">
-                                                                                        {doc.label} Pending
-                                                                                    </Text>
-                                                                                    <Badge bg="red.700" color="white" fontSize="9px" px={1.5} py={0.5} borderRadius="full" fontWeight="black">
-                                                                                        NOT UPLOADED
-                                                                                    </Badge>
-                                                                                </HStack>
-                                                                            </WrapItem>
-                                                                        );
-                                                                    })}
-                                                                </Wrap>
-                                                                {activeDocPreview && activeDocPreview.section === 'sell' && renderInlineDocPreview(activeDocPreview)}
-                                                            </Box>
-                                                        );
-                                                    })()}
+                                                    )}
                                                 </Box>
                                             )}
-                                            {/* ── Dynamic Usage Report for this vehicle (Spacious, Zero-Horizontal-Scroll, Light & Modern Design) ── */}
-                                            {(() => {
-                                                const vehicleRows = vehicleUsageRows.filter(r => r.vehicle?._id === viewVehicle._id);
-                                                const totalFuel = vehicleRows.reduce((s, r) => s + (r.fuelAmount || 0), 0);
-                                                const fuelColorMap = {
-                                                    'Diesel': 'blue',
-                                                    'Petrol': 'orange',
-                                                    'CNG': 'green',
-                                                    'Electric': 'purple',
-                                                    'Fuel': 'teal'
-                                                };
-                                                const fuelHexMap = {
-                                                    'Diesel': '#3182CE',
-                                                    'Petrol': '#DD6B20',
-                                                    'CNG': '#38A169',
-                                                    'Electric': '#805AD5',
-                                                    'Fuel': '#319795'
-                                                };
+                                        </VStack>
+                                    )}
 
-                                                // Calculate fuel breakdown (handles single, multiple distinct fuel types, or no fuel logged)
-                                                const fuelTypeMap = {};
-                                                vehicleRows.forEach(r => {
-                                                    const rawFt = (r.fuelType || '').trim();
-                                                    const amt = Number(r.fuelAmount) || 0;
-                                                    let types = [];
-                                                    if (rawFt && rawFt !== '—' && rawFt !== '-') {
-                                                        types = rawFt.split(',').map(s => s.trim()).filter(Boolean);
-                                                    } else if (amt > 0) {
-                                                        types = ['Fuel'];
-                                                    }
+                                    {/* ══ 3. PURCHASE DETAILS (DESKTOP ERP STYLE) ══ */}
+                                    {activeVehicleViewTab === 'purchase' && (() => {
+                                        const purchaseDocsList = [
+                                            {
+                                                key: 'oldRc',
+                                                title: 'Old RC Book',
+                                                desc: 'Prior Vehicle Registration Certificate',
+                                                doc: viewVehicle.purchaseOldRc,
+                                            },
+                                            {
+                                                key: 'oldPuc',
+                                                title: 'Old PUC Certificate',
+                                                desc: 'Previous Emission Compliance Certificate',
+                                                doc: viewVehicle.purchaseOldPuc,
+                                            },
+                                            {
+                                                key: 'aadhar',
+                                                title: 'Seller Aadhar Card',
+                                                desc: 'Owner KYC & National Identity Proof',
+                                                doc: viewVehicle.purchaseAadharDoc,
+                                            },
+                                            {
+                                                key: 'pan',
+                                                title: 'Seller PAN Card',
+                                                desc: 'Permanent Account Number / Tax Proof',
+                                                doc: viewVehicle.purchasePanDoc,
+                                            },
+                                        ];
 
-                                                    if (types.length > 0) {
-                                                        const perTypeAmt = amt / types.length;
-                                                        types.forEach(t => {
-                                                            const normType = t.toUpperCase() === 'CNG' ? 'CNG' : (t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
-                                                            if (!fuelTypeMap[normType]) {
-                                                                fuelTypeMap[normType] = { count: 0, amount: 0 };
-                                                            }
-                                                            fuelTypeMap[normType].count += 1;
-                                                            fuelTypeMap[normType].amount += perTypeAmt;
-                                                        });
-                                                    }
-                                                });
-                                                const distinctFuelTypes = Object.keys(fuelTypeMap);
+                                        const activeDocObj = purchaseDocsList.find(d => d.key === purchaseDocTab) || purchaseDocsList[0];
 
-                                                // Calculate date difference for title & preset status
-                                                const getDaysDiff = (start, end) => {
-                                                    if (!start || !end) return 10;
-                                                    const d1 = new Date(start);
-                                                    const d2 = new Date(end);
-                                                    const diffTime = Math.abs(d2 - d1);
-                                                    return Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
-                                                };
-                                                const daysCount = getDaysDiff(reportStartDate, reportEndDate);
-
-                                                const getTodayStr = () => new Date().toISOString().split('T')[0];
-                                                const getDaysAgoStr = (num) => {
-                                                    const d = new Date();
-                                                    d.setDate(d.getDate() - num);
-                                                    return d.toISOString().split('T')[0];
-                                                };
-
-                                                return (
-                                                    <Box bg="white" p={{ base: 4, md: 6 }} borderRadius="2xl" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                                                        {/* ── Section Header with Title, Active Range & Excel Download ── */}
-                                                        <Box mb={4}>
-                                                            <Flex justify="space-between" align={{ base: 'flex-start', sm: 'center' }} wrap="wrap" gap={3} mb={3.5}>
-                                                                <HStack spacing={3}>
-                                                                    <Center w="40px" h="40px" bgGradient="linear(to-br, blue.500, blue.600)" borderRadius="xl" boxShadow="sm" color="white">
-                                                                        <Icon as={FaGasPump} w={5} h={5} />
-                                                                    </Center>
-                                                                    <Box>
-                                                                        <HStack spacing={2.5} align="center" wrap="wrap">
-                                                                            <Text fontSize="md" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wide">
-                                                                                {daysCount === 10 ? '10-Day Usage Report' : `${daysCount}-Day Usage Report`}
-                                                                            </Text>
-                                                                            <Badge colorScheme="blue" variant="subtle" fontSize="2xs" px={2.5} py={0.5} borderRadius="full" fontWeight="bold">
-                                                                                {toExcelDate(reportStartDate)} → {toExcelDate(reportEndDate)}
-                                                                            </Badge>
-                                                                        </HStack>
-                                                                        <Text fontSize="xs" color="gray.400" mt={0.5}>
-                                                                            Loaded 10 days by default • Filter by any custom date range below
-                                                                        </Text>
-                                                                    </Box>
-                                                                </HStack>
-
-                                                                {vehicleRows.length > 0 && (
-                                                                    <Button
-                                                                        size="xs"
-                                                                        leftIcon={<Icon as={FaFileExcel} />}
-                                                                        onClick={() => downloadVehicleUsageExcel(vehicleRows, viewVehicle.vehicleNumber || 'Vehicle')}
-                                                                        bgGradient="linear(to-r, green.500, teal.500)"
-                                                                        color="white" borderRadius="lg"
-                                                                        _hover={{ bgGradient: 'linear(to-r, green.600, teal.600)', transform: 'translateY(-1px)' }}
-                                                                        transition="all 0.2s"
-                                                                        fontWeight="bold"
-                                                                        boxShadow="xs"
-                                                                        px={3}
-                                                                        py={2}
-                                                                    >
-                                                                        Export Excel
-                                                                    </Button>
-                                                                )}
-                                                            </Flex>
-
-                                                            {/* ── Interactive Date Filter Bar (Light & Clean) ── */}
-                                                            <Box bg="gray.50" p={3} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
-                                                                    {/* Inputs + Filter Button */}
-                                                                    <HStack spacing={2.5} wrap="wrap" flex={1}>
-                                                                        <HStack spacing={1.5}>
-                                                                            <Text fontSize="10px" fontWeight="black" color="gray.600" textTransform="uppercase">FROM:</Text>
-                                                                            <Input
-                                                                                type="date"
-                                                                                size="xs"
-                                                                                w="130px"
-                                                                                borderRadius="md"
-                                                                                bg="white"
-                                                                                borderColor="gray.300"
-                                                                                value={reportStartDate}
-                                                                                onChange={e => setReportStartDate(e.target.value)}
-                                                                                onKeyDown={e => { if (e.key === 'Enter') fetchReportData(reportStartDate, reportEndDate); }}
-                                                                            />
-                                                                        </HStack>
-                                                                        <HStack spacing={1.5}>
-                                                                            <Text fontSize="10px" fontWeight="black" color="gray.600" textTransform="uppercase">TO:</Text>
-                                                                            <Input
-                                                                                type="date"
-                                                                                size="xs"
-                                                                                w="130px"
-                                                                                borderRadius="md"
-                                                                                bg="white"
-                                                                                borderColor="gray.300"
-                                                                                value={reportEndDate}
-                                                                                onChange={e => setReportEndDate(e.target.value)}
-                                                                                onKeyDown={e => { if (e.key === 'Enter') fetchReportData(reportStartDate, reportEndDate); }}
-                                                                            />
-                                                                        </HStack>
-                                                                        <Button
-                                                                            size="xs"
-                                                                            colorScheme="blue"
-                                                                            borderRadius="md"
-                                                                            leftIcon={<Icon as={FaFilter} />}
-                                                                            onClick={() => fetchReportData(reportStartDate, reportEndDate)}
-                                                                            isLoading={reportLoading}
-                                                                            fontWeight="bold"
-                                                                            boxShadow="xs"
-                                                                            px={3}
-                                                                        >
-                                                                            Filter
-                                                                        </Button>
-                                                                    </HStack>
-
-                                                                    {/* Quick Date Presets */}
-                                                                    <HStack spacing={1.5} wrap="wrap">
-                                                                        <Text fontSize="9px" fontWeight="bold" color="gray.400" mr={0.5}>PRESETS:</Text>
-                                                                        <Button
-                                                                            size="2xs"
-                                                                            variant={daysCount === 10 ? 'solid' : 'outline'}
-                                                                            colorScheme="blue"
-                                                                            borderRadius="full"
-                                                                            fontWeight="bold"
-                                                                            onClick={() => {
-                                                                                const s = getDaysAgoStr(10);
-                                                                                const e = getTodayStr();
-                                                                                setReportStartDate(s);
-                                                                                setReportEndDate(e);
-                                                                                fetchReportData(s, e);
-                                                                            }}
-                                                                        >
-                                                                            10 Days
-                                                                        </Button>
-                                                                        <Button
-                                                                            size="2xs"
-                                                                            variant={daysCount === 30 ? 'solid' : 'outline'}
-                                                                            colorScheme="blue"
-                                                                            borderRadius="full"
-                                                                            fontWeight="bold"
-                                                                            onClick={() => {
-                                                                                const s = getDaysAgoStr(30);
-                                                                                const e = getTodayStr();
-                                                                                setReportStartDate(s);
-                                                                                setReportEndDate(e);
-                                                                                fetchReportData(s, e);
-                                                                            }}
-                                                                        >
-                                                                            30 Days
-                                                                        </Button>
-                                                                        <Button
-                                                                            size="2xs"
-                                                                            variant="outline"
-                                                                            colorScheme="purple"
-                                                                            borderRadius="full"
-                                                                            fontWeight="bold"
-                                                                            onClick={() => {
-                                                                                const now = new Date();
-                                                                                const s = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                                                                                const e = getTodayStr();
-                                                                                setReportStartDate(s);
-                                                                                setReportEndDate(e);
-                                                                                fetchReportData(s, e);
-                                                                            }}
-                                                                        >
-                                                                            This Month
-                                                                        </Button>
-                                                                        <Button
-                                                                            size="2xs"
-                                                                            variant={daysCount === 60 ? 'solid' : 'outline'}
-                                                                            colorScheme="teal"
-                                                                            borderRadius="full"
-                                                                            fontWeight="bold"
-                                                                            onClick={() => {
-                                                                                const s = getDaysAgoStr(60);
-                                                                                const e = getTodayStr();
-                                                                                setReportStartDate(s);
-                                                                                setReportEndDate(e);
-                                                                                fetchReportData(s, e);
-                                                                            }}
-                                                                        >
-                                                                            60 Days
-                                                                        </Button>
-                                                                    </HStack>
-                                                                </Flex>
+                                        return (
+                                            <VStack spacing={4} align="stretch">
+                                                {/* Enterprise Specification Container */}
+                                                <Box bg="white" borderRadius="xl" border="1px solid" borderColor="gray.300" boxShadow="xs" overflow="hidden">
+                                                    {/* Header Toolbar */}
+                                                    <Flex bg="gray.100" px={4} py={3} borderBottom="1px solid" borderColor="gray.300" justify="space-between" align="center" wrap="wrap" gap={2}>
+                                                        <HStack spacing={2.5}>
+                                                            <Center w="28px" h="28px" bg="white" borderRadius="md" border="1px solid" borderColor="gray.300">
+                                                                <Icon as={FaMoneyBillWave} color="gray.700" boxSize={3.5} />
+                                                            </Center>
+                                                            <Box>
+                                                                <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                    Vehicle Purchase & Acquisition Record
+                                                                </Text>
+                                                                <Text fontSize="10px" color="gray.500">
+                                                                    Seller Profile, Financial Consideration & Transfer Registry
+                                                                </Text>
                                                             </Box>
-                                                        </Box>
+                                                        </HStack>
+                                                        <HStack spacing={2}>
+                                                            {viewVehicle.purchaseInfo?.paymentMode && (
+                                                                <Badge colorScheme="blue" variant="subtle" fontSize="10px" px={2.5} py={0.5} borderRadius="md" fontWeight="bold">
+                                                                    MODE: {viewVehicle.purchaseInfo.paymentMode}
+                                                                </Badge>
+                                                            )}
+                                                            <Badge colorScheme="green" variant="solid" fontSize="11px" px={3} py={0.5} borderRadius="md" fontWeight="black">
+                                                                {viewVehicle.purchaseInfo?.purchaseRate ? `₹${Number(viewVehicle.purchaseInfo.purchaseRate).toLocaleString('en-IN')}` : 'RATE NOT SET'}
+                                                            </Badge>
+                                                        </HStack>
+                                                    </Flex>
 
-                                                        {/* ── Summary Chips (Entries • Fuel Spend • Fuel Type(s)) ── */}
-                                                        <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} mb={5}>
-                                                            {/* Card 1: Entries */}
-                                                            <Box bg="gray.50" borderRadius="2xl" p={4} textAlign="center" border="1px solid" borderColor="gray.200" minH="90px" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
-                                                                <Text fontSize="2xl" fontWeight="black" color="blue.700" lineHeight="1">{vehicleRows.length}</Text>
-                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide" mt={1}>Entries / Trips</Text>
-                                                                <Text fontSize="9px" color="gray.400" mt={0.5}>{toExcelDate(reportStartDate)} to {toExcelDate(reportEndDate)}</Text>
-                                                            </Box>
-
-                                                            {/* Card 2: Fuel Spend */}
-                                                            <Box bg="gray.50" borderRadius="2xl" p={4} textAlign="center" border="1px solid" borderColor="gray.200" minH="90px" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
-                                                                <Text fontSize="2xl" fontWeight="black" color="orange.600" lineHeight="1">₹{totalFuel.toLocaleString('en-IN')}</Text>
-                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide" mt={1}>Total Fuel Spend</Text>
-                                                                <Text fontSize="9px" color="gray.400" mt={0.5}>
-                                                                    {vehicleRows.length > 0 ? `Avg ₹${Math.round(totalFuel / vehicleRows.length).toLocaleString('en-IN')} / trip` : '0 entries'}
+                                                    {/* 4-Column Structured Specification Matrix (Desktop ERP Style) */}
+                                                    <Box p={4} bg="white">
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3}>
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Purchase Owner / Seller</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} noOfLines={1} title={viewVehicle.purchaseInfo?.ownerName || '—'}>
+                                                                    {viewVehicle.purchaseInfo?.ownerName || '—'}
                                                                 </Text>
                                                             </Box>
 
-                                                            {/* Card 3: Fuel Type(s) - Handles 0, 1, or Multiple Fuel Types */}
-                                                            <Box
-                                                                bg="gray.50"
-                                                                borderRadius="2xl"
-                                                                p={3.5}
-                                                                textAlign="center"
-                                                                border="1px solid"
-                                                                borderColor="gray.200"
-                                                                minH="90px"
-                                                                display="flex"
-                                                                flexDirection="column"
-                                                                justifyContent="space-between"
-                                                                position="relative"
-                                                                overflow="hidden"
-                                                            >
-                                                                {/* Top Label */}
-                                                                <HStack justify="space-between" w="full" px={1} mb={0.5}>
-                                                                    <HStack spacing={1.5}>
-                                                                        <Icon as={FaGasPump} color={distinctFuelTypes.length > 1 ? "purple.600" : distinctFuelTypes.length === 1 ? "green.600" : "gray.400"} w={3} h={3} />
-                                                                        <Text fontSize="10px" color="gray.600" fontWeight="bold" textTransform="uppercase" letterSpacing="wide">
-                                                                            Fuel Type(s)
-                                                                        </Text>
-                                                                    </HStack>
-                                                                    {distinctFuelTypes.length > 1 && (
-                                                                        <Badge colorScheme="purple" variant="solid" fontSize="9px" borderRadius="full" px={2} py={0.2} fontWeight="black">
-                                                                            {distinctFuelTypes.length} Types
-                                                                        </Badge>
-                                                                    )}
-                                                                </HStack>
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Seller Mobile Number</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace" noOfLines={1}>
+                                                                    {(viewVehicle.purchaseInfo?.mobileNumbers || []).filter(Boolean).join(', ') || '—'}
+                                                                </Text>
+                                                            </Box>
 
-                                                                {/* Body Content */}
-                                                                <Box my="auto" py={0.5}>
-                                                                    {distinctFuelTypes.length === 0 ? (
-                                                                        <VStack spacing={0.5}>
-                                                                            <Badge colorScheme="gray" variant="subtle" fontSize="10px" borderRadius="full" px={2.5} py={0.5} fontWeight="bold">
-                                                                                No Fuel Logged
-                                                                            </Badge>
-                                                                            <Text fontSize="9px" color="gray.400">All trips logged ₹0 fuel</Text>
-                                                                        </VStack>
-                                                                    ) : distinctFuelTypes.length === 1 ? (
-                                                                        <VStack spacing={0.5}>
-                                                                            {(() => {
-                                                                                const ft = distinctFuelTypes[0];
-                                                                                const info = fuelTypeMap[ft];
-                                                                                return (
-                                                                                    <>
-                                                                                        <HStack justify="center" spacing={1.5}>
-                                                                                            <Badge colorScheme={fuelColorMap[ft] || 'teal'} fontSize="xs" px={2.5} py={0.5} borderRadius="full" fontWeight="bold">
-                                                                                                <Icon as={FaGasPump} mr={1} />{ft}
-                                                                                            </Badge>
-                                                                                            <Text fontSize="xs" fontWeight="black" color="orange.600">
-                                                                                                ₹{info.amount.toLocaleString('en-IN')}
-                                                                                            </Text>
-                                                                                        </HStack>
-                                                                                        <Text fontSize="9px" color="gray.400">
-                                                                                            {info.count} trip{info.count > 1 ? 's' : ''} logged with {ft}
-                                                                                        </Text>
-                                                                                    </>
-                                                                                );
-                                                                            })()}
-                                                                        </VStack>
-                                                                    ) : (
-                                                                        <VStack spacing={1.5} w="full">
-                                                                            {/* Wrap of all distinct fuel badges with amounts & counts */}
-                                                                            <Wrap justify="center" spacing={1.5} maxH="56px" overflowY="auto" py={0.5} w="full">
-                                                                                {distinctFuelTypes.map(ft => {
-                                                                                    const info = fuelTypeMap[ft];
-                                                                                    const col = fuelColorMap[ft] || 'teal';
-                                                                                    const pct = totalFuel > 0 ? Math.round((info.amount / totalFuel) * 100) : 0;
-                                                                                    return (
-                                                                                        <WrapItem key={ft}>
-                                                                                            <Tooltip
-                                                                                                label={`${ft}: ₹${info.amount.toLocaleString('en-IN')} (${info.count} trip${info.count > 1 ? 's' : ''}${totalFuel > 0 ? ` • ${pct}% of spend` : ''})`}
-                                                                                                hasArrow
-                                                                                                placement="top"
-                                                                                                bg="gray.900"
-                                                                                                color="white"
-                                                                                                fontSize="xs"
-                                                                                                borderRadius="md"
-                                                                                                px={2} py={1}
-                                                                                            >
-                                                                                                <Badge
-                                                                                                    colorScheme={col}
-                                                                                                    variant="subtle"
-                                                                                                    border="1px solid"
-                                                                                                    borderColor={`${col}.300`}
-                                                                                                    borderRadius="md"
-                                                                                                    px={2}
-                                                                                                    py={0.5}
-                                                                                                    fontSize="9px"
-                                                                                                    fontWeight="bold"
-                                                                                                    cursor="default"
-                                                                                                >
-                                                                                                    <HStack spacing={1}>
-                                                                                                        <Icon as={FaGasPump} w={2.5} h={2.5} />
-                                                                                                        <Text>{ft}:</Text>
-                                                                                                        <Text color="orange.700">₹{info.amount.toLocaleString('en-IN')}</Text>
-                                                                                                        <Text color="gray.500" fontSize="8px">({info.count})</Text>
-                                                                                                    </HStack>
-                                                                                                </Badge>
-                                                                                            </Tooltip>
-                                                                                        </WrapItem>
-                                                                                    );
-                                                                                })}
-                                                                            </Wrap>
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Purchase Consideration</Text>
+                                                                <Text fontSize="sm" fontWeight="black" color="green.700" mt={1} fontFamily="monospace">
+                                                                    {viewVehicle.purchaseInfo?.purchaseRate ? `₹${Number(viewVehicle.purchaseInfo.purchaseRate).toLocaleString('en-IN')}` : '—'}
+                                                                </Text>
+                                                            </Box>
 
-                                                                            {/* Segmented Color Bar showing distribution */}
-                                                                            {totalFuel > 0 && (
-                                                                                <Box w="full" bg="gray.200" h="4px" borderRadius="full" overflow="hidden" display="flex">
-                                                                                    {distinctFuelTypes.map(ft => {
-                                                                                        const info = fuelTypeMap[ft];
-                                                                                        const pct = Math.max(5, Math.round((info.amount / totalFuel) * 100));
-                                                                                        return (
-                                                                                            <Tooltip key={ft} label={`${ft}: ${pct}% (₹${info.amount.toLocaleString('en-IN')})`} hasArrow placement="top">
-                                                                                                <Box
-                                                                                                    w={`${pct}%`}
-                                                                                                    h="full"
-                                                                                                    bg={fuelHexMap[ft] || '#319795'}
-                                                                                                    title={`${ft}: ${pct}%`}
-                                                                                                    transition="all 0.3s"
-                                                                                                />
-                                                                                            </Tooltip>
-                                                                                        );
-                                                                                    })}
-                                                                                </Box>
-                                                                            )}
-                                                                        </VStack>
-                                                                    )}
-                                                                </Box>
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Payment Method</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1}>
+                                                                    {viewVehicle.purchaseInfo?.paymentMode || '—'}
+                                                                </Text>
+                                                            </Box>
 
-                                                                {/* Bottom helper text */}
-                                                                <Text fontSize="9px" color="gray.400" fontWeight="medium">
-                                                                    {distinctFuelTypes.length > 1
-                                                                        ? `Multi-Fuel Usage • ${distinctFuelTypes.join(' & ')}`
-                                                                        : distinctFuelTypes.length === 1
-                                                                        ? `Single Fuel Vehicle Type`
-                                                                        : `No Fuel Expenses`}
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Purchase Date</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace">
+                                                                    {viewVehicle.purchaseInfo?.purchaseDate ? toExcelDate(viewVehicle.purchaseInfo.purchaseDate) : '—'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Seller Aadhar Number</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace">
+                                                                    {viewVehicle.purchaseInfo?.aadharNumber || '—'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Seller PAN Number</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace">
+                                                                    {viewVehicle.purchaseInfo?.panNumber || '—'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Seller Email Address</Text>
+                                                                <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} noOfLines={1} title={(viewVehicle.purchaseInfo?.emails || []).filter(Boolean).join(', ')}>
+                                                                    {(viewVehicle.purchaseInfo?.emails || []).filter(Boolean).join(', ') || '—'}
                                                                 </Text>
                                                             </Box>
                                                         </SimpleGrid>
+                                                    </Box>
 
-                                                        {/* ── Table: ZERO HORIZONTAL SCROLL • AIRY, SPACIOUS & LIGHTWEIGHT ── */}
-                                                        {reportLoading ? (
-                                                            <Center py={8}>
-                                                                <VStack spacing={2}>
-                                                                    <Spinner size="md" color="blue.500" />
-                                                                    <Text fontSize="xs" color="gray.400">Loading usage data…</Text>
-                                                                </VStack>
+                                                    {/* Purchase Compliance & Documents Table (Desktop Table) */}
+                                                    <Box borderTop="1px solid" borderColor="gray.300">
+                                                        <Flex bg="gray.50" px={4} py={2.5} justify="space-between" align="center" borderBottom="1px solid" borderColor="gray.200">
+                                                            <HStack spacing={2}>
+                                                                <Icon as={FaFolderOpen} color="gray.600" />
+                                                                <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                    Purchase Compliance Documents Registry
+                                                                </Text>
+                                                                <Badge colorScheme="purple" borderRadius="full" px={2} fontSize="9px">
+                                                                    {purchaseDocsList.filter(d => hasDoc(d.doc)).length} of {purchaseDocsList.length} Attached
+                                                                </Badge>
+                                                            </HStack>
+                                                            <Text fontSize="10px" color="gray.500">
+                                                                Click any row or "Preview" to inspect document below
+                                                            </Text>
+                                                        </Flex>
+
+                                                        <Table size="sm" variant="simple" sx={{ tableLayout: 'fixed' }}>
+                                                            <Thead bg="gray.100" borderBottom="1px solid" borderColor="gray.300">
+                                                                <Tr>
+                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="45px" textAlign="center">#</Th>
+                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="220px">Document Title</Th>
+                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase">Compliance Purpose</Th>
+                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="140px" textAlign="center">Status</Th>
+                                                                    <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="210px" textAlign="right">Actions</Th>
+                                                                </Tr>
+                                                            </Thead>
+                                                            <Tbody>
+                                                                {purchaseDocsList.map((item, idx) => {
+                                                                    const isAttached = hasDoc(item.doc);
+                                                                    const isSelected = purchaseDocTab === item.key;
+                                                                    const docUrl = getFileUrl(item.doc);
+                                                                    return (
+                                                                        <Tr
+                                                                            key={item.key}
+                                                                            bg={isSelected ? "purple.50" : "white"}
+                                                                            _hover={{ bg: isSelected ? "purple.50" : "gray.50" }}
+                                                                            cursor="pointer"
+                                                                            onClick={() => setPurchaseDocTab(item.key)}
+                                                                            borderBottom="1px solid"
+                                                                            borderColor="gray.200"
+                                                                            transition="background 0.15s"
+                                                                        >
+                                                                            <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">
+                                                                                {idx + 1}
+                                                                            </Td>
+                                                                            <Td>
+                                                                                <HStack spacing={2}>
+                                                                                    <Icon
+                                                                                        as={item.key === 'oldRc' || item.key === 'oldPuc' ? FaFilePdf : FaIdCard}
+                                                                                        color={isAttached ? "purple.600" : "gray.400"}
+                                                                                        boxSize={3.5}
+                                                                                    />
+                                                                                    <Text fontSize="xs" fontWeight="bold" color={isSelected ? "purple.900" : "gray.800"}>
+                                                                                        {item.title}
+                                                                                    </Text>
+                                                                                </HStack>
+                                                                            </Td>
+                                                                            <Td fontSize="xs" color="gray.600">
+                                                                                {item.desc}
+                                                                            </Td>
+                                                                            <Td textAlign="center">
+                                                                                <Badge
+                                                                                    colorScheme={isAttached ? "green" : "gray"}
+                                                                                    fontSize="9px"
+                                                                                    px={2.5}
+                                                                                    py={0.5}
+                                                                                    borderRadius="md"
+                                                                                    fontWeight="bold"
+                                                                                >
+                                                                                    {isAttached ? "ATTACHED" : "NOT ATTACHED"}
+                                                                                </Badge>
+                                                                            </Td>
+                                                                            <Td textAlign="right">
+                                                                                <HStack spacing={1} justify="flex-end" onClick={e => e.stopPropagation()}>
+                                                                                    <Button
+                                                                                        size="2xs"
+                                                                                        colorScheme={isSelected ? "purple" : "gray"}
+                                                                                        variant={isSelected ? "solid" : "outline"}
+                                                                                        leftIcon={<Icon as={FaEye} />}
+                                                                                        onClick={() => setPurchaseDocTab(item.key)}
+                                                                                        borderRadius="md"
+                                                                                    >
+                                                                                        Preview
+                                                                                    </Button>
+                                                                                    {docUrl && (
+                                                                                        <>
+                                                                                            <Button
+                                                                                                as="a"
+                                                                                                href={docUrl}
+                                                                                                target="_blank"
+                                                                                                rel="noreferrer"
+                                                                                                size="2xs"
+                                                                                                colorScheme="blue"
+                                                                                                variant="ghost"
+                                                                                                leftIcon={<Icon as={FaExternalLinkAlt} />}
+                                                                                                borderRadius="md"
+                                                                                            >
+                                                                                                Open
+                                                                                            </Button>
+                                                                                            <Button
+                                                                                                as="a"
+                                                                                                href={docUrl}
+                                                                                                download
+                                                                                                size="2xs"
+                                                                                                colorScheme="gray"
+                                                                                                variant="ghost"
+                                                                                                leftIcon={<Icon as={FaDownload} />}
+                                                                                                borderRadius="md"
+                                                                                            >
+                                                                                                Download
+                                                                                            </Button>
+                                                                                        </>
+                                                                                    )}
+                                                                                </HStack>
+                                                                            </Td>
+                                                                        </Tr>
+                                                                    );
+                                                                })}
+                                                            </Tbody>
+                                                        </Table>
+                                                    </Box>
+                                                </Box>
+
+                                                {/* Inline Document Previewer Pane */}
+                                                <Box>
+                                                    {activeDocObj && renderDocViewer(
+                                                        activeDocObj.doc,
+                                                        `${viewVehicle.vehicleNumber} - ${activeDocObj.title}`,
+                                                        `${activeDocObj.title} is not uploaded for this vehicle.`
+                                                    )}
+                                                </Box>
+                                            </VStack>
+                                        );
+                                    })()}
+
+                                    {/* ══ 4. INSURANCE DETAILS ══ */}
+                                    {activeVehicleViewTab === 'insurance' && (() => {
+                                        const validity = getInsuranceValidity(viewVehicle.insuranceDate);
+                                        return (
+                                            <VStack spacing={4} align="stretch">
+                                                {validity.alert && (
+                                                    <Alert status={validity.status === 'expired' ? 'error' : 'warning'} borderRadius="xl" variant="subtle" py={2.5}>
+                                                        <AlertIcon />
+                                                        <Box flex="1">
+                                                            <AlertTitle fontSize="xs" fontWeight="black">
+                                                                {validity.status === 'expired' ? 'Insurance Expired!' : 'Insurance Expiring Soon!'}
+                                                            </AlertTitle>
+                                                            <AlertDescription fontSize="xs">{validity.alert}</AlertDescription>
+                                                        </Box>
+                                                    </Alert>
+                                                )}
+                                                <Box bg="white" p={{ base: 4, md: 5 }} borderRadius="2xl" border="1.5px solid" borderColor="teal.200" boxShadow="xs">
+                                                    <HStack mb={4} spacing={3} justify="space-between" wrap="wrap">
+                                                        <HStack spacing={3}>
+                                                            <Center w="36px" h="36px" bg="teal.50" borderRadius="xl">
+                                                                <Icon as={FaShieldAlt} color="teal.600" w={4} h={4} />
                                                             </Center>
-                                                        ) : vehicleRows.length === 0 ? (
-                                                            <Center py={8} bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300">
-                                                                <VStack spacing={1.5}>
-                                                                    <Icon as={FaGasPump} w={7} h={7} color="gray.300" />
-                                                                    <Text color="gray.600" fontSize="sm" fontWeight="bold">No usage entries in selected date range</Text>
-                                                                    <Text color="gray.400" fontSize="xs">This vehicle had no recorded fuel or usage activity between {toExcelDate(reportStartDate)} and {toExcelDate(reportEndDate)}.</Text>
-                                                                </VStack>
+                                                            <Box>
+                                                                <Text fontSize="sm" fontWeight="black" color="teal.900" textTransform="uppercase" letterSpacing="wide">Vehicle Insurance Policy</Text>
+                                                                <Text fontSize="10px" color="teal.600" fontWeight="bold">Coverage Period & Document</Text>
+                                                            </Box>
+                                                        </HStack>
+                                                        <HStack spacing={2}>
+                                                            <Button
+                                                                size="xs"
+                                                                colorScheme="teal"
+                                                                variant="solid"
+                                                                leftIcon={<Icon as={FaPlus} />}
+                                                                borderRadius="lg"
+                                                                fontWeight="black"
+                                                                onClick={() => handleOpenRenew('insurance')}
+                                                                boxShadow="xs"
+                                                            >
+                                                                Renew Policy
+                                                            </Button>
+                                                            <Badge colorScheme={validity.colorScheme} bg={validity.bg} color="white" px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black">
+                                                                {validity.label}
+                                                            </Badge>
+                                                        </HStack>
+                                                    </HStack>
+
+                                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} textAlign="center">
+                                                        <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                                            <Text fontSize="10px" color="teal.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Start Date</Text>
+                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                                {viewVehicle.insuranceStartDate ? toExcelDate(viewVehicle.insuranceStartDate) : 'Not Set'}
+                                                            </Text>
+                                                        </Box>
+                                                        <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                                            <Text fontSize="10px" color="teal.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">End Date (Expiry)</Text>
+                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                                {viewVehicle.insuranceDate ? toExcelDate(viewVehicle.insuranceDate) : 'Not Set'}
+                                                            </Text>
+                                                        </Box>
+                                                        <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                                            <Text fontSize="10px" color="teal.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Insurance Status</Text>
+                                                            <Badge colorScheme={validity.colorScheme} bg={validity.bg} color="white" px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black" mt={1}>
+                                                                {validity.status === 'expired' ? 'EXPIRED' : validity.status === 'expiring_soon' ? 'EXPIRING SOON' : validity.status === 'active' ? 'ACTIVE' : 'NOT SET'}
+                                                            </Badge>
+                                                        </Box>
+                                                    </SimpleGrid>
+                                                </Box>
+
+                                                {renderDocViewer(viewVehicle.insurancePhoto, `${viewVehicle.vehicleNumber} - Insurance Document`, 'Insurance Document Not Uploaded')}
+
+                                                {/* ── INSURANCE POLICY HISTORY (DATE-WISE) ── */}
+                                                <Box bg="white" p={{ base: 4, md: 5 }} borderRadius="2xl" border="1.5px solid" borderColor="teal.200" boxShadow="xs">
+                                                    <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaCalendarAlt} color="teal.600" />
+                                                            <Text fontSize="xs" fontWeight="black" color="teal.900" textTransform="uppercase" letterSpacing="wider">
+                                                                Insurance Renewal History (Date-Wise)
+                                                            </Text>
+                                                            <Badge colorScheme="teal" borderRadius="full" px={2} fontSize="9px">
+                                                                {(viewVehicle.insuranceHistory || []).length} Recorded
+                                                            </Badge>
+                                                        </HStack>
+                                                        <Button
+                                                            size="xs"
+                                                            colorScheme="teal"
+                                                            variant="outline"
+                                                            leftIcon={<Icon as={FaPlus} />}
+                                                            borderRadius="md"
+                                                            onClick={() => handleOpenRenew('insurance')}
+                                                        >
+                                                            + Upload New Policy
+                                                        </Button>
+                                                    </Flex>
+
+                                                    {(!viewVehicle.insuranceHistory || viewVehicle.insuranceHistory.length === 0) ? (
+                                                        <Center py={6} bg="teal.50" borderRadius="xl" border="1px dashed" borderColor="teal.200">
+                                                            <VStack spacing={1}>
+                                                                <Icon as={FaShieldAlt} color="teal.300" boxSize={6} />
+                                                                <Text fontSize="xs" color="teal.700" fontWeight="bold">No prior insurance renewals archived yet</Text>
+                                                                <Text fontSize="10px" color="teal.500">Every time you renew or upload a new insurance policy, it will be preserved here date-wise.</Text>
+                                                            </VStack>
+                                                        </Center>
+                                                    ) : (
+                                                        <Box overflowX="auto">
+                                                            <Table size="sm" variant="simple">
+                                                                <Thead bg="teal.50">
+                                                                    <Tr>
+                                                                        <Th fontSize="10px" color="teal.800" py={2.5}>#</Th>
+                                                                        <Th fontSize="10px" color="teal.800" py={2.5}>Period (Start - Expiry)</Th>
+                                                                        <Th fontSize="10px" color="teal.800" py={2.5}>Policy No / Remarks</Th>
+                                                                        <Th fontSize="10px" color="teal.800" py={2.5}>Uploaded On</Th>
+                                                                        <Th fontSize="10px" color="teal.800" py={2.5} textAlign="center">Status</Th>
+                                                                        <Th fontSize="10px" color="teal.800" py={2.5} textAlign="right">Document</Th>
+                                                                    </Tr>
+                                                                </Thead>
+                                                                <Tbody>
+                                                                    {[...viewVehicle.insuranceHistory].reverse().map((h, idx) => {
+                                                                        const hVal = getInsuranceValidity(h.expiryDate);
+                                                                        const docUrl = getFileUrl(h.document);
+                                                                        return (
+                                                                            <Tr key={idx} _hover={{ bg: 'teal.50' }} transition="all 0.15s">
+                                                                                <Td fontSize="xs" color="gray.500" fontWeight="bold">{idx + 1}</Td>
+                                                                                <Td fontSize="xs" fontWeight="black" fontFamily="monospace" color="gray.800">
+                                                                                    {h.startDate ? toExcelDate(h.startDate) : '—'} → {h.expiryDate ? toExcelDate(h.expiryDate) : '—'}
+                                                                                </Td>
+                                                                                <Td fontSize="xs" color="gray.700">
+                                                                                    <Text fontWeight="bold" noOfLines={1}>{h.policyNumber || viewVehicle.rcBookNumber || '—'}</Text>
+                                                                                    {h.remarks && <Text fontSize="10px" color="gray.400">{h.remarks}</Text>}
+                                                                                </Td>
+                                                                                <Td fontSize="xs" color="gray.500" whiteSpace="nowrap">
+                                                                                    {h.uploadedAt ? toExcelDate(h.uploadedAt) : '—'}
+                                                                                </Td>
+                                                                                <Td textAlign="center">
+                                                                                    <Badge colorScheme={hVal.colorScheme} fontSize="9px" px={2} py={0.5} borderRadius="md">
+                                                                                        {hVal.status === 'expired' ? 'EXPIRED' : hVal.status === 'expiring_soon' ? 'EXPIRING' : hVal.status === 'active' ? 'ACTIVE' : 'RECORDED'}
+                                                                                    </Badge>
+                                                                                </Td>
+                                                                                <Td textAlign="right">
+                                                                                    {docUrl ? (
+                                                                                        <HStack justify="flex-end" spacing={1}>
+                                                                                            <Button
+                                                                                                as="a"
+                                                                                                href={docUrl}
+                                                                                                target="_blank"
+                                                                                                rel="noreferrer"
+                                                                                                size="2xs"
+                                                                                                colorScheme="teal"
+                                                                                                variant="outline"
+                                                                                                leftIcon={<Icon as={FaExternalLinkAlt} />}
+                                                                                            >
+                                                                                                View
+                                                                                            </Button>
+                                                                                            <IconButton
+                                                                                                as="a"
+                                                                                                href={docUrl}
+                                                                                                download
+                                                                                                size="2xs"
+                                                                                                colorScheme="teal"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaDownload} />}
+                                                                                                aria-label="Download"
+                                                                                            />
+                                                                                        </HStack>
+                                                                                    ) : (
+                                                                                        <Text fontSize="10px" color="gray.400" fontStyle="italic">No file</Text>
+                                                                                    )}
+                                                                                </Td>
+                                                                            </Tr>
+                                                                        );
+                                                                    })}
+                                                                </Tbody>
+                                                            </Table>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            </VStack>
+                                        );
+                                    })()}
+
+                                    {/* ══ 5. PUC DETAILS ══ */}
+                                    {activeVehicleViewTab === 'puc' && (() => {
+                                        const validity = getPucValidity(viewVehicle.pucDate);
+                                        return (
+                                            <VStack spacing={4} align="stretch">
+                                                {validity.alert && (
+                                                    <Alert status={validity.status === 'expired' ? 'error' : 'warning'} borderRadius="xl" variant="subtle" py={2.5}>
+                                                        <AlertIcon />
+                                                        <Box flex="1">
+                                                            <AlertTitle fontSize="xs" fontWeight="black">
+                                                                {validity.status === 'expired' ? 'PUC Expired!' : 'PUC Expiring Soon!'}
+                                                            </AlertTitle>
+                                                            <AlertDescription fontSize="xs">{validity.alert}</AlertDescription>
+                                                        </Box>
+                                                    </Alert>
+                                                )}
+                                                <Box bg="white" p={{ base: 4, md: 5 }} borderRadius="2xl" border="1.5px solid" borderColor="green.200" boxShadow="xs">
+                                                    <HStack mb={4} spacing={3} justify="space-between" wrap="wrap">
+                                                        <HStack spacing={3}>
+                                                            <Center w="36px" h="36px" bg="green.50" borderRadius="xl">
+                                                                <Icon as={FaFileAlt} color="green.600" w={4} h={4} />
                                                             </Center>
+                                                            <Box>
+                                                                <Text fontSize="sm" fontWeight="black" color="green.900" textTransform="uppercase" letterSpacing="wide">PUC (Pollution Under Control)</Text>
+                                                                <Text fontSize="10px" color="green.600" fontWeight="bold">Emission Compliance & Validity</Text>
+                                                            </Box>
+                                                        </HStack>
+                                                        <HStack spacing={2}>
+                                                            <Button
+                                                                size="xs"
+                                                                colorScheme="green"
+                                                                variant="solid"
+                                                                leftIcon={<Icon as={FaPlus} />}
+                                                                borderRadius="lg"
+                                                                fontWeight="black"
+                                                                onClick={() => handleOpenRenew('puc')}
+                                                                boxShadow="xs"
+                                                            >
+                                                                Renew PUC
+                                                            </Button>
+                                                            <Badge colorScheme={validity.colorScheme} bg={validity.bg} color="white" px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black">
+                                                                {validity.label}
+                                                            </Badge>
+                                                        </HStack>
+                                                    </HStack>
+
+                                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} textAlign="center">
+                                                        <Box bg="green.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="green.100">
+                                                            <Text fontSize="10px" color="green.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Start Date</Text>
+                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                                {viewVehicle.pucStartDate ? toExcelDate(viewVehicle.pucStartDate) : 'Not Set'}
+                                                            </Text>
+                                                        </Box>
+                                                        <Box bg="green.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="green.100">
+                                                            <Text fontSize="10px" color="green.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">End Date (Expiry)</Text>
+                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                                {viewVehicle.pucDate ? toExcelDate(viewVehicle.pucDate) : 'Not Set'}
+                                                            </Text>
+                                                        </Box>
+                                                        <Box bg="green.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="green.100">
+                                                            <Text fontSize="10px" color="green.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">PUC Status</Text>
+                                                            <Badge colorScheme={validity.colorScheme} bg={validity.bg} color="white" px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black" mt={1}>
+                                                                {validity.status === 'expired' ? 'EXPIRED' : validity.status === 'expiring_soon' ? 'EXPIRING SOON' : validity.status === 'valid' ? 'VALID' : 'NOT SET'}
+                                                            </Badge>
+                                                        </Box>
+                                                    </SimpleGrid>
+                                                </Box>
+
+                                                {renderDocViewer(viewVehicle.pucPhoto, `${viewVehicle.vehicleNumber} - PUC Document`, 'PUC Document Not Uploaded')}
+
+                                                {/* ── PUC CERTIFICATE HISTORY (DATE-WISE) ── */}
+                                                <Box bg="white" p={{ base: 4, md: 5 }} borderRadius="2xl" border="1.5px solid" borderColor="green.200" boxShadow="xs">
+                                                    <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
+                                                        <HStack spacing={2}>
+                                                            <Icon as={FaCalendarAlt} color="green.600" />
+                                                            <Text fontSize="xs" fontWeight="black" color="green.900" textTransform="uppercase" letterSpacing="wider">
+                                                                PUC Certificate History (Date-Wise)
+                                                            </Text>
+                                                            <Badge colorScheme="green" borderRadius="full" px={2} fontSize="9px">
+                                                                {(viewVehicle.pucHistory || []).length} Recorded
+                                                            </Badge>
+                                                        </HStack>
+                                                        <Button
+                                                            size="xs"
+                                                            colorScheme="green"
+                                                            variant="outline"
+                                                            leftIcon={<Icon as={FaPlus} />}
+                                                            borderRadius="md"
+                                                            onClick={() => handleOpenRenew('puc')}
+                                                        >
+                                                            + Upload New PUC
+                                                        </Button>
+                                                    </Flex>
+
+                                                    {(!viewVehicle.pucHistory || viewVehicle.pucHistory.length === 0) ? (
+                                                        <Center py={6} bg="green.50" borderRadius="xl" border="1px dashed" borderColor="green.200">
+                                                            <VStack spacing={1}>
+                                                                <Icon as={FaFileAlt} color="green.300" boxSize={6} />
+                                                                <Text fontSize="xs" color="green.700" fontWeight="bold">No prior PUC certificates archived yet</Text>
+                                                                <Text fontSize="10px" color="green.500">Every time you renew or upload a new PUC certificate after expiry, it is preserved here date-wise.</Text>
+                                                            </VStack>
+                                                        </Center>
+                                                    ) : (
+                                                        <Box overflowX="auto">
+                                                            <Table size="sm" variant="simple">
+                                                                <Thead bg="green.50">
+                                                                    <Tr>
+                                                                        <Th fontSize="10px" color="green.800" py={2.5}>#</Th>
+                                                                        <Th fontSize="10px" color="green.800" py={2.5}>Period (Start - Expiry)</Th>
+                                                                        <Th fontSize="10px" color="green.800" py={2.5}>Remarks</Th>
+                                                                        <Th fontSize="10px" color="green.800" py={2.5}>Uploaded On</Th>
+                                                                        <Th fontSize="10px" color="green.800" py={2.5} textAlign="center">Status</Th>
+                                                                        <Th fontSize="10px" color="green.800" py={2.5} textAlign="right">Document</Th>
+                                                                    </Tr>
+                                                                </Thead>
+                                                                <Tbody>
+                                                                    {[...viewVehicle.pucHistory].reverse().map((h, idx) => {
+                                                                        const hVal = getPucValidity(h.expiryDate);
+                                                                        const docUrl = getFileUrl(h.document);
+                                                                        return (
+                                                                            <Tr key={idx} _hover={{ bg: 'green.50' }} transition="all 0.15s">
+                                                                                <Td fontSize="xs" color="gray.500" fontWeight="bold">{idx + 1}</Td>
+                                                                                <Td fontSize="xs" fontWeight="black" fontFamily="monospace" color="gray.800">
+                                                                                    {h.startDate ? toExcelDate(h.startDate) : '—'} → {h.expiryDate ? toExcelDate(h.expiryDate) : '—'}
+                                                                                </Td>
+                                                                                <Td fontSize="xs" color="gray.700">
+                                                                                    <Text fontWeight="bold" noOfLines={1}>{h.remarks || 'Emission Compliance'}</Text>
+                                                                                </Td>
+                                                                                <Td fontSize="xs" color="gray.500" whiteSpace="nowrap">
+                                                                                    {h.uploadedAt ? toExcelDate(h.uploadedAt) : '—'}
+                                                                                </Td>
+                                                                                <Td textAlign="center">
+                                                                                    <Badge colorScheme={hVal.colorScheme} fontSize="9px" px={2} py={0.5} borderRadius="md">
+                                                                                        {hVal.status === 'expired' ? 'EXPIRED' : hVal.status === 'expiring_soon' ? 'EXPIRING' : hVal.status === 'valid' ? 'VALID' : 'RECORDED'}
+                                                                                    </Badge>
+                                                                                </Td>
+                                                                                <Td textAlign="right">
+                                                                                    {docUrl ? (
+                                                                                        <HStack justify="flex-end" spacing={1}>
+                                                                                            <Button
+                                                                                                as="a"
+                                                                                                href={docUrl}
+                                                                                                target="_blank"
+                                                                                                rel="noreferrer"
+                                                                                                size="2xs"
+                                                                                                colorScheme="green"
+                                                                                                variant="outline"
+                                                                                                leftIcon={<Icon as={FaExternalLinkAlt} />}
+                                                                                            >
+                                                                                                View
+                                                                                            </Button>
+                                                                                            <IconButton
+                                                                                                as="a"
+                                                                                                href={docUrl}
+                                                                                                download
+                                                                                                size="2xs"
+                                                                                                colorScheme="green"
+                                                                                                variant="ghost"
+                                                                                                icon={<Icon as={FaDownload} />}
+                                                                                                aria-label="Download"
+                                                                                            />
+                                                                                        </HStack>
+                                                                                    ) : (
+                                                                                        <Text fontSize="10px" color="gray.400" fontStyle="italic">No file</Text>
+                                                                                    )}
+                                                                                </Td>
+                                                                            </Tr>
+                                                                        );
+                                                                    })}
+                                                                </Tbody>
+                                                            </Table>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            </VStack>
+                                        );
+                                    })()}
+
+                                    {/* ══ 6. EXPENSES (VEHICLE ONLY) ══ */}
+                                    {activeVehicleViewTab === 'expenses' && (() => {
+                                        const vehicleRows = vehicleUsageRows.filter(r => r.vehicle?._id === viewVehicle._id);
+                                        const totalFuel = vehicleRows.reduce((s, r) => s + (r.fuelAmount || 0), 0);
+                                        const fuelColorMap = {
+                                            'Diesel': 'blue',
+                                            'Petrol': 'orange',
+                                            'CNG': 'green',
+                                            'Electric': 'purple',
+                                            'Fuel': 'teal'
+                                        };
+                                        const fuelHexMap = {
+                                            'Diesel': '#3182CE',
+                                            'Petrol': '#DD6B20',
+                                            'CNG': '#38A169',
+                                            'Electric': '#805AD5',
+                                            'Fuel': '#319795'
+                                        };
+
+                                        // Calculate fuel breakdown
+                                        const fuelTypeMap = {};
+                                        vehicleRows.forEach(r => {
+                                            const rawFt = (r.fuelType || '').trim();
+                                            const amt = Number(r.fuelAmount) || 0;
+                                            let types = [];
+                                            if (rawFt && rawFt !== '—' && rawFt !== '-') {
+                                                types = rawFt.split(',').map(s => s.trim()).filter(Boolean);
+                                            } else if (amt > 0) {
+                                                types = ['Fuel'];
+                                            }
+
+                                            if (types.length > 0) {
+                                                const perTypeAmt = amt / types.length;
+                                                types.forEach(t => {
+                                                    const normType = t.toUpperCase() === 'CNG' ? 'CNG' : (t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+                                                    if (!fuelTypeMap[normType]) {
+                                                        fuelTypeMap[normType] = { count: 0, amount: 0 };
+                                                    }
+                                                    fuelTypeMap[normType].count += 1;
+                                                    fuelTypeMap[normType].amount += perTypeAmt;
+                                                });
+                                            }
+                                        });
+                                        const distinctFuelTypes = Object.keys(fuelTypeMap);
+
+                                        const getDaysDiff = (start, end) => {
+                                            if (!start || !end) return 10;
+                                            const d1 = new Date(start);
+                                            const d2 = new Date(end);
+                                            const diffTime = Math.abs(d2 - d1);
+                                            return Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+                                        };
+                                        const daysCount = getDaysDiff(reportStartDate, reportEndDate);
+
+                                        const getTodayStr = () => new Date().toISOString().split('T')[0];
+                                        const getDaysAgoStr = (num) => {
+                                            const d = new Date();
+                                            d.setDate(d.getDate() - num);
+                                            return d.toISOString().split('T')[0];
+                                        };
+
+                                        return (
+                                            <Box bg="white" p={{ base: 4, md: 5 }} borderRadius="2xl" border="1.5px solid" borderColor="blue.200" boxShadow="xs">
+                                                {/* Header & Export Excel */}
+                                                <Box mb={4}>
+                                                    <Flex justify="space-between" align={{ base: 'flex-start', sm: 'center' }} wrap="wrap" gap={3} mb={3.5}>
+                                                        <HStack spacing={3}>
+                                                            <Center w="40px" h="40px" bgGradient="linear(to-br, blue.500, blue.600)" borderRadius="xl" boxShadow="sm" color="white">
+                                                                <Icon as={FaGasPump} w={5} h={5} />
+                                                            </Center>
+                                                            <Box>
+                                                                <HStack spacing={2.5} align="center" wrap="wrap">
+                                                                    <Text fontSize="md" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wide">
+                                                                        {daysCount === 10 ? '10-Day Usage Report' : `${daysCount}-Day Usage Report`}
+                                                                    </Text>
+                                                                    <Badge colorScheme="blue" variant="subtle" fontSize="2xs" px={2.5} py={0.5} borderRadius="full" fontWeight="bold">
+                                                                        {toExcelDate(reportStartDate)} → {toExcelDate(reportEndDate)}
+                                                                    </Badge>
+                                                                </HStack>
+                                                                <Text fontSize="xs" color="gray.400" mt={0.5}>
+                                                                    Vehicle-only expenses • Loaded 10 days by default
+                                                                </Text>
+                                                            </Box>
+                                                        </HStack>
+
+                                                        {vehicleRows.length > 0 && (
+                                                            <Button
+                                                                size="xs"
+                                                                leftIcon={<Icon as={FaFileExcel} />}
+                                                                onClick={() => downloadVehicleUsageExcel(vehicleRows, viewVehicle.vehicleNumber || 'Vehicle')}
+                                                                bgGradient="linear(to-r, green.500, teal.500)"
+                                                                color="white" borderRadius="lg"
+                                                                _hover={{ bgGradient: 'linear(to-r, green.600, teal.600)', transform: 'translateY(-1px)' }}
+                                                                transition="all 0.2s"
+                                                                fontWeight="bold"
+                                                                boxShadow="xs"
+                                                                px={3}
+                                                                py={2}
+                                                            >
+                                                                Export Excel
+                                                            </Button>
+                                                        )}
+                                                    </Flex>
+
+                                                    {/* Filter Bar */}
+                                                    <Box bg="gray.50" p={3} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+                                                            <HStack spacing={2.5} wrap="wrap" flex={1}>
+                                                                <HStack spacing={1.5}>
+                                                                    <Text fontSize="10px" fontWeight="black" color="gray.600" textTransform="uppercase">FROM:</Text>
+                                                                    <Input
+                                                                        type="date"
+                                                                        size="xs"
+                                                                        w="130px"
+                                                                        borderRadius="md"
+                                                                        bg="white"
+                                                                        borderColor="gray.300"
+                                                                        value={reportStartDate}
+                                                                        onChange={e => setReportStartDate(e.target.value)}
+                                                                        onKeyDown={e => { if (e.key === 'Enter') fetchReportData(reportStartDate, reportEndDate); }}
+                                                                    />
+                                                                </HStack>
+                                                                <HStack spacing={1.5}>
+                                                                    <Text fontSize="10px" fontWeight="black" color="gray.600" textTransform="uppercase">TO:</Text>
+                                                                    <Input
+                                                                        type="date"
+                                                                        size="xs"
+                                                                        w="130px"
+                                                                        borderRadius="md"
+                                                                        bg="white"
+                                                                        borderColor="gray.300"
+                                                                        value={reportEndDate}
+                                                                        onChange={e => setReportEndDate(e.target.value)}
+                                                                        onKeyDown={e => { if (e.key === 'Enter') fetchReportData(reportStartDate, reportEndDate); }}
+                                                                    />
+                                                                </HStack>
+                                                                <Button
+                                                                    size="xs"
+                                                                    colorScheme="blue"
+                                                                    borderRadius="md"
+                                                                    leftIcon={<Icon as={FaFilter} />}
+                                                                    onClick={() => fetchReportData(reportStartDate, reportEndDate)}
+                                                                    isLoading={reportLoading}
+                                                                    fontWeight="bold"
+                                                                    boxShadow="xs"
+                                                                    px={3}
+                                                                >
+                                                                    Filter
+                                                                </Button>
+                                                            </HStack>
+
+                                                            {/* Quick Date Presets */}
+                                                            <HStack spacing={1.5} wrap="wrap">
+                                                                <Text fontSize="9px" fontWeight="bold" color="gray.400" mr={0.5}>PRESETS:</Text>
+                                                                <Button
+                                                                    size="2xs"
+                                                                    variant={daysCount === 10 ? 'solid' : 'outline'}
+                                                                    colorScheme="blue"
+                                                                    borderRadius="full"
+                                                                    fontWeight="bold"
+                                                                    onClick={() => {
+                                                                        const s = getDaysAgoStr(10);
+                                                                        const e = getTodayStr();
+                                                                        setReportStartDate(s);
+                                                                        setReportEndDate(e);
+                                                                        fetchReportData(s, e);
+                                                                    }}
+                                                                >
+                                                                    10 Days
+                                                                </Button>
+                                                                <Button
+                                                                    size="2xs"
+                                                                    variant={daysCount === 30 ? 'solid' : 'outline'}
+                                                                    colorScheme="blue"
+                                                                    borderRadius="full"
+                                                                    fontWeight="bold"
+                                                                    onClick={() => {
+                                                                        const s = getDaysAgoStr(30);
+                                                                        const e = getTodayStr();
+                                                                        setReportStartDate(s);
+                                                                        setReportEndDate(e);
+                                                                        fetchReportData(s, e);
+                                                                    }}
+                                                                >
+                                                                    30 Days
+                                                                </Button>
+                                                                <Button
+                                                                    size="2xs"
+                                                                    variant="outline"
+                                                                    colorScheme="purple"
+                                                                    borderRadius="full"
+                                                                    fontWeight="bold"
+                                                                    onClick={() => {
+                                                                        const now = new Date();
+                                                                        const s = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                                                                        const e = getTodayStr();
+                                                                        setReportStartDate(s);
+                                                                        setReportEndDate(e);
+                                                                        fetchReportData(s, e);
+                                                                    }}
+                                                                >
+                                                                    This Month
+                                                                </Button>
+                                                                <Button
+                                                                    size="2xs"
+                                                                    variant={daysCount === 60 ? 'solid' : 'outline'}
+                                                                    colorScheme="teal"
+                                                                    borderRadius="full"
+                                                                    fontWeight="bold"
+                                                                    onClick={() => {
+                                                                        const s = getDaysAgoStr(60);
+                                                                        const e = getTodayStr();
+                                                                        setReportStartDate(s);
+                                                                        setReportEndDate(e);
+                                                                        fetchReportData(s, e);
+                                                                    }}
+                                                                >
+                                                                    60 Days
+                                                                </Button>
+                                                            </HStack>
+                                                        </Flex>
+                                                    </Box>
+                                                </Box>
+
+                                                {/* Summary Chips */}
+                                                <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} mb={5}>
+                                                    <Box bg="gray.50" borderRadius="2xl" p={4} textAlign="center" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="2xl" fontWeight="black" color="blue.700" lineHeight="1">{vehicleRows.length}</Text>
+                                                        <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide" mt={1}>Entries / Trips</Text>
+                                                    </Box>
+                                                    <Box bg="gray.50" borderRadius="2xl" p={4} textAlign="center" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="2xl" fontWeight="black" color="orange.600" lineHeight="1">₹{totalFuel.toLocaleString('en-IN')}</Text>
+                                                        <Text fontSize="10px" color="gray.500" fontWeight="bold" textTransform="uppercase" letterSpacing="wide" mt={1}>Total Fuel Spend</Text>
+                                                    </Box>
+                                                    <Box bg="gray.50" borderRadius="2xl" p={3.5} textAlign="center" border="1px solid" borderColor="gray.200">
+                                                        <HStack justify="space-between" w="full" px={1} mb={1}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaGasPump} color="purple.600" w={3} h={3} />
+                                                                <Text fontSize="10px" color="gray.600" fontWeight="bold" textTransform="uppercase">Fuel Types</Text>
+                                                            </HStack>
+                                                            {distinctFuelTypes.length > 0 && (
+                                                                <Badge colorScheme="purple" fontSize="9px" borderRadius="full" px={2}>{distinctFuelTypes.length} Types</Badge>
+                                                            )}
+                                                        </HStack>
+                                                        {distinctFuelTypes.length === 0 ? (
+                                                            <Text fontSize="xs" color="gray.400" mt={2}>No Fuel Logged</Text>
                                                         ) : (
-                                                            <Box w="full" overflow="hidden" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs" bg="white">
-                                                                <Table size="sm" variant="simple" w="full" sx={{ tableLayout: 'fixed' }}>
-                                                                    <Thead bg="gray.50" borderBottom="2px solid" borderColor="gray.200">
+                                                            <Wrap justify="center" spacing={1.5} mt={1}>
+                                                                {distinctFuelTypes.map(ft => (
+                                                                    <WrapItem key={ft}>
+                                                                        <Badge colorScheme={fuelColorMap[ft] || 'teal'} fontSize="xs" px={2} py={0.5} borderRadius="md">
+                                                                            {ft}: ₹{fuelTypeMap[ft].amount.toLocaleString('en-IN')}
+                                                                        </Badge>
+                                                                    </WrapItem>
+                                                                ))}
+                                                            </Wrap>
+                                                        )}
+                                                    </Box>
+                                                </SimpleGrid>
+
+                                                {/* Table */}
+                                                {reportLoading ? (
+                                                    <Center py={8}>
+                                                        <VStack spacing={2}>
+                                                            <Spinner size="md" color="blue.500" />
+                                                            <Text fontSize="xs" color="gray.400">Loading usage data…</Text>
+                                                        </VStack>
+                                                    </Center>
+                                                ) : vehicleRows.length === 0 ? (
+                                                    <Center py={8} bg="gray.50" borderRadius="xl" border="1px dashed" borderColor="gray.300">
+                                                        <VStack spacing={1.5}>
+                                                            <Icon as={FaGasPump} w={7} h={7} color="gray.300" />
+                                                            <Text color="gray.600" fontSize="sm" fontWeight="bold">No usage entries in selected date range</Text>
+                                                            <Text color="gray.400" fontSize="xs">This vehicle had no recorded fuel activity between {toExcelDate(reportStartDate)} and {toExcelDate(reportEndDate)}.</Text>
+                                                        </VStack>
+                                                    </Center>
+                                                ) : (
+                                                    <Box w="full" overflow="hidden" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs" bg="white">
+                                                        <Table size="sm" variant="simple" w="full" sx={{ tableLayout: 'fixed' }}>
+                                                            <Thead bg="gray.50" borderBottom="2px solid" borderColor="gray.200">
+                                                                <Tr>
+                                                                    <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="center" w="36px">#</Th>
+                                                                    <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} w="92px">Expense Date</Th>
+                                                                    <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="center" w="120px">Expense Category</Th>
+                                                                    <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={3} w="28%">Description</Th>
+                                                                    <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="right" w="90px">Amount</Th>
+                                                                    <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="center" w="110px">Payment Mode</Th>
+                                                                    <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={3} w="22%">Remarks</Th>
+                                                                </Tr>
+                                                            </Thead>
+                                                            <Tbody>
+                                                                {vehicleRows.map((r, i) => (
+                                                                    <Tr key={i} bg={i % 2 === 0 ? 'white' : 'gray.50'} _hover={{ bg: 'blue.50' }} transition="background 0.15s" borderBottom="1px solid" borderColor="gray.100">
+                                                                        <Td fontSize="xs" color="gray.400" fontWeight="bold" textAlign="center" px={2} py={3.5}>{i + 1}</Td>
+                                                                        <Td px={2} py={3.5} whiteSpace="nowrap">
+                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.700" fontFamily="monospace">{toExcelDate(r.date)}</Text>
+                                                                        </Td>
+                                                                        <Td px={2} py={3.5} textAlign="center">
+                                                                            {(() => {
+                                                                                const ft = (r.fuelType || '').trim();
+                                                                                if (!ft || ft === '—' || ft === '-') {
+                                                                                    return <Badge colorScheme="blue" variant="subtle" borderRadius="full" fontSize="9px" px={2} py={0.5}>Fuel</Badge>;
+                                                                                }
+                                                                                return (
+                                                                                    <Badge colorScheme={fuelColorMap[ft] || 'blue'} variant="subtle" borderRadius="full" fontSize="9px" px={2.5} py={0.5} fontWeight="bold">
+                                                                                        <Icon as={FaGasPump} mr={0.5} />Fuel ({ft})
+                                                                                    </Badge>
+                                                                                );
+                                                                            })()}
+                                                                        </Td>
+                                                                        <Td px={3} py={3.5}>
+                                                                            <VStack align="start" spacing={0.5}>
+                                                                                <HStack spacing={1.5} maxW="full">
+                                                                                    <Icon as={FaMapMarkerAlt} color="red.500" w={3} h={3} flexShrink={0} />
+                                                                                    <Text fontSize="xs" color="gray.900" fontWeight="bold" isTruncated>{r.siteName || 'Site Location'}</Text>
+                                                                                </HStack>
+                                                                                {r.clientName && (
+                                                                                    <HStack spacing={1.5} maxW="full">
+                                                                                        <Icon as={FaBuilding} color="purple.500" w={2.5} h={2.5} flexShrink={0} />
+                                                                                        <Text fontSize="10px" color="gray.500" isTruncated>{r.clientName}</Text>
+                                                                                    </HStack>
+                                                                                )}
+                                                                            </VStack>
+                                                                        </Td>
+                                                                        <Td px={2} py={3.5} textAlign="right">
+                                                                            <Text fontSize="xs" fontWeight="black" color={r.fuelAmount > 0 ? "orange.600" : "gray.400"}>
+                                                                                ₹{(r.fuelAmount || 0).toLocaleString('en-IN')}
+                                                                            </Text>
+                                                                        </Td>
+                                                                        <Td px={2} py={3.5} textAlign="center">
+                                                                            <Badge colorScheme="teal" variant="outline" borderRadius="md" fontSize="9px" px={2} py={0.5} fontWeight="bold">
+                                                                                {r.paymentMode || 'Direct / Fleet'}
+                                                                            </Badge>
+                                                                        </Td>
+                                                                        <Td px={3} py={3.5}>
+                                                                            <Tooltip label={r.employeeMobile ? `Mobile: ${r.employeeMobile}` : 'Staff entry'} hasArrow placement="top">
+                                                                                <HStack spacing={2} align="center">
+                                                                                    <Avatar size="2xs" name={r.employeeName || 'U'} bg="blue.600" color="white" />
+                                                                                    <VStack align="start" spacing={0} maxW="full">
+                                                                                        <Text fontSize="xs" fontWeight="bold" color="gray.800" isTruncated>{r.employeeName || 'Logged by Staff'}</Text>
+                                                                                        {r.employeeMobile && <Text fontSize="9px" color="gray.500">📱 {r.employeeMobile}</Text>}
+                                                                                    </VStack>
+                                                                                </HStack>
+                                                                            </Tooltip>
+                                                                        </Td>
+                                                                    </Tr>
+                                                                ))}
+                                                            </Tbody>
+                                                        </Table>
+                                                    </Box>
+                                                )}
+                                            </Box>
+                                        );
+                                    })()}
+
+                                    {/* ══ 7. SELL OUT (DESKTOP ERP STYLE) ══ */}
+                                    {activeVehicleViewTab === 'sell' && (() => {
+                                        const isSold = !!viewVehicle.isSold;
+                                        const sellDocsList = [
+                                            {
+                                                key: 'sellAadhar',
+                                                title: 'Buyer Aadhar Card',
+                                                desc: 'New Owner KYC & National Identity Proof',
+                                                doc: viewVehicle.sellAadharDoc,
+                                            },
+                                            {
+                                                key: 'sellPan',
+                                                title: 'Buyer PAN Card',
+                                                desc: 'Permanent Account Number / Transfer Compliance',
+                                                doc: viewVehicle.sellPanDoc,
+                                            },
+                                        ];
+
+                                        const activeSellDoc = sellDocsList.find(d => d.key === sellDocTab) || sellDocsList[0];
+
+                                        return (
+                                            <VStack spacing={4} align="stretch">
+                                                {isSold ? (
+                                                    <>
+                                                        <Box bg="white" borderRadius="xl" border="1px solid" borderColor="gray.300" boxShadow="xs" overflow="hidden">
+                                                            {/* Header Toolbar */}
+                                                            <Flex bg="gray.100" px={4} py={3} borderBottom="1px solid" borderColor="gray.300" justify="space-between" align="center" wrap="wrap" gap={2}>
+                                                                <HStack spacing={2.5}>
+                                                                    <Center w="28px" h="28px" bg="white" borderRadius="md" border="1px solid" borderColor="gray.300">
+                                                                        <Icon as={FaHandshake} color="gray.700" boxSize={3.5} />
+                                                                    </Center>
+                                                                    <Box>
+                                                                        <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                            Vehicle Disposal & Ownership Transfer Record
+                                                                        </Text>
+                                                                        <Text fontSize="10px" color="gray.500">
+                                                                            Buyer Profile, Commercial Transfer Consideration & Handover Verification
+                                                                        </Text>
+                                                                    </Box>
+                                                                </HStack>
+                                                                <HStack spacing={2}>
+                                                                    {viewVehicle.sellInfo?.paymentMode && (
+                                                                        <Badge colorScheme="blue" variant="subtle" fontSize="10px" px={2.5} py={0.5} borderRadius="md" fontWeight="bold">
+                                                                            MODE: {viewVehicle.sellInfo.paymentMode}
+                                                                        </Badge>
+                                                                    )}
+                                                                    <Badge colorScheme="red" variant="solid" fontSize="11px" px={3} py={0.5} borderRadius="md" fontWeight="black">
+                                                                        {viewVehicle.sellInfo?.sellRate ? `SOLD: ₹${Number(viewVehicle.sellInfo.sellRate).toLocaleString('en-IN')}` : 'SOLD OUT'}
+                                                                    </Badge>
+                                                                </HStack>
+                                                            </Flex>
+
+                                                            {/* 4-Column Structured Specification Matrix (Desktop ERP Style) */}
+                                                            <Box p={4} bg="white">
+                                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3}>
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Buyer / New Owner</Text>
+                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} noOfLines={1} title={viewVehicle.sellInfo?.ownerName || '—'}>
+                                                                            {viewVehicle.sellInfo?.ownerName || '—'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Buyer Mobile Number</Text>
+                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace" noOfLines={1}>
+                                                                            {(viewVehicle.sellInfo?.mobileNumbers || []).filter(Boolean).join(', ') || '—'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Selling Consideration</Text>
+                                                                        <Text fontSize="sm" fontWeight="black" color="red.700" mt={1} fontFamily="monospace">
+                                                                            {viewVehicle.sellInfo?.sellRate ? `₹${Number(viewVehicle.sellInfo.sellRate).toLocaleString('en-IN')}` : '—'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Payment Method</Text>
+                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1}>
+                                                                            {viewVehicle.sellInfo?.paymentMode || '—'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Sale / Transfer Date</Text>
+                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace">
+                                                                            {viewVehicle.sellInfo?.sellDate ? toExcelDate(viewVehicle.sellInfo.sellDate) : '—'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Buyer Aadhar Number</Text>
+                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace">
+                                                                            {viewVehicle.sellInfo?.aadharNumber || '—'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Buyer PAN Number</Text>
+                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} fontFamily="monospace">
+                                                                            {viewVehicle.sellInfo?.panNumber || '—'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box bg="gray.50" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" fontWeight="black" color="gray.500" textTransform="uppercase" letterSpacing="wider">Buyer Email Address</Text>
+                                                                        <Text fontSize="sm" fontWeight="bold" color="gray.900" mt={1} noOfLines={1} title={(viewVehicle.sellInfo?.emails || []).filter(Boolean).join(', ')}>
+                                                                            {(viewVehicle.sellInfo?.emails || []).filter(Boolean).join(', ') || '—'}
+                                                                        </Text>
+                                                                    </Box>
+                                                                </SimpleGrid>
+                                                            </Box>
+
+                                                            {/* Buyer Compliance Documents Table */}
+                                                            <Box borderTop="1px solid" borderColor="gray.300">
+                                                                <Flex bg="gray.50" px={4} py={2.5} justify="space-between" align="center" borderBottom="1px solid" borderColor="gray.200">
+                                                                    <HStack spacing={2}>
+                                                                        <Icon as={FaIdBadge} color="gray.600" />
+                                                                        <Text fontSize="xs" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                            Buyer Transfer Documents Registry
+                                                                        </Text>
+                                                                        <Badge colorScheme="red" borderRadius="full" px={2} fontSize="9px">
+                                                                            {sellDocsList.filter(d => hasDoc(d.doc)).length} of {sellDocsList.length} Attached
+                                                                        </Badge>
+                                                                    </HStack>
+                                                                    <Text fontSize="10px" color="gray.500">
+                                                                        Click row or "Preview" to inspect document below
+                                                                    </Text>
+                                                                </Flex>
+
+                                                                <Table size="sm" variant="simple" sx={{ tableLayout: 'fixed' }}>
+                                                                    <Thead bg="gray.100" borderBottom="1px solid" borderColor="gray.300">
                                                                         <Tr>
-                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="center" w="38px">#</Th>
-                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} w="95px">Date</Th>
-                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={3} w="30%">Employee</Th>
-                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} w="17%">Client</Th>
-                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} w="17%">Site</Th>
-                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="center" w="11%">Fuel</Th>
-                                                                            <Th color="gray.700" fontSize="10px" fontWeight="black" textTransform="uppercase" letterSpacing="wider" py={3} px={2} textAlign="right" w="11%">Amount (₹)</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="45px" textAlign="center">#</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="220px">Document Title</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase">Compliance Purpose</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="140px" textAlign="center">Status</Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" w="210px" textAlign="right">Actions</Th>
                                                                         </Tr>
                                                                     </Thead>
                                                                     <Tbody>
-                                                                        {vehicleRows.map((r, i) => (
-                                                                            <Tr key={i} bg={i % 2 === 0 ? 'white' : 'gray.50'} _hover={{ bg: 'blue.50' }} transition="background 0.15s" borderBottom="1px solid" borderColor="gray.100">
-                                                                                {/* # */}
-                                                                                <Td fontSize="xs" color="gray.400" fontWeight="bold" textAlign="center" px={2} py={3.5}>{i + 1}</Td>
-                                                                                
-                                                                                {/* Date */}
-                                                                                <Td px={2} py={3.5} whiteSpace="nowrap">
-                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" fontFamily="monospace">{toExcelDate(r.date)}</Text>
-                                                                                </Td>
-                                                                                
-                                                                                {/* Employee (Spacious, Single-line, Avatar, Truncation, Tooltip & Click-to-copy) */}
-                                                                                <Td px={3} py={3.5}>
-                                                                                    <Tooltip
-                                                                                        label={
-                                                                                            <Box p={2}>
-                                                                                                <HStack spacing={2} mb={1}>
-                                                                                                    <Avatar size="xs" name={r.employeeName || 'User'} bg="blue.600" color="white" />
-                                                                                                    <Box>
-                                                                                                        <Text fontWeight="black" fontSize="xs" color="white">{r.employeeName || 'Unknown Employee'}</Text>
-                                                                                                        {r.employeeEmail && r.employeeEmail !== r.employeeName && (
-                                                                                                            <Text fontSize="10px" color="blue.200">{r.employeeEmail}</Text>
-                                                                                                        )}
-                                                                                                    </Box>
-                                                                                                </HStack>
-                                                                                                {r.employeeMobile && (
-                                                                                                    <Text fontSize="10px" color="gray.300">📱 {r.employeeMobile}</Text>
-                                                                                                )}
-                                                                                                <Text fontSize="9px" color="gray.400" mt={1} fontStyle="italic">Click to copy full name</Text>
-                                                                                            </Box>
-                                                                                        }
-                                                                                        hasArrow
-                                                                                        placement="top"
-                                                                                        bg="gray.900"
-                                                                                        color="white"
-                                                                                        borderRadius="xl"
-                                                                                        p={2.5}
-                                                                                        boxShadow="2xl"
-                                                                                    >
-                                                                                        <HStack
-                                                                                            spacing={2}
-                                                                                            cursor="pointer"
-                                                                                            onClick={(e) => {
-                                                                                                e.stopPropagation();
-                                                                                                if (r.employeeName) {
-                                                                                                    navigator.clipboard?.writeText(r.employeeName);
-                                                                                                    toast({
-                                                                                                        title: 'Copied!',
-                                                                                                        description: `${r.employeeName} copied to clipboard`,
-                                                                                                        status: 'info',
-                                                                                                        duration: 1500,
-                                                                                                        isClosable: true,
-                                                                                                        size: 'sm'
-                                                                                                    });
-                                                                                                }
-                                                                                            }}
-                                                                                            _hover={{ opacity: 0.8 }}
-                                                                                            transition="opacity 0.15s"
-                                                                                            align="center"
+                                                                        {sellDocsList.map((item, idx) => {
+                                                                            const isAttached = hasDoc(item.doc);
+                                                                            const isSelected = sellDocTab === item.key;
+                                                                            const docUrl = getFileUrl(item.doc);
+                                                                            return (
+                                                                                <Tr
+                                                                                    key={item.key}
+                                                                                    bg={isSelected ? "red.50" : "white"}
+                                                                                    _hover={{ bg: isSelected ? "red.50" : "gray.50" }}
+                                                                                    cursor="pointer"
+                                                                                    onClick={() => setSellDocTab(item.key)}
+                                                                                    borderBottom="1px solid"
+                                                                                    borderColor="gray.200"
+                                                                                    transition="background 0.15s"
+                                                                                >
+                                                                                    <Td fontSize="xs" color="gray.500" fontWeight="bold" textAlign="center">
+                                                                                        {idx + 1}
+                                                                                    </Td>
+                                                                                    <Td>
+                                                                                        <HStack spacing={2}>
+                                                                                            <Icon as={FaIdCard} color={isAttached ? "red.600" : "gray.400"} boxSize={3.5} />
+                                                                                            <Text fontSize="xs" fontWeight="bold" color={isSelected ? "red.900" : "gray.800"}>
+                                                                                                {item.title}
+                                                                                            </Text>
+                                                                                        </HStack>
+                                                                                    </Td>
+                                                                                    <Td fontSize="xs" color="gray.600">
+                                                                                        {item.desc}
+                                                                                    </Td>
+                                                                                    <Td textAlign="center">
+                                                                                        <Badge
+                                                                                            colorScheme={isAttached ? "green" : "gray"}
+                                                                                            fontSize="9px"
+                                                                                            px={2.5}
+                                                                                            py={0.5}
+                                                                                            borderRadius="md"
+                                                                                            fontWeight="bold"
                                                                                         >
-                                                                                            <Avatar
-                                                                                                size="xs"
-                                                                                                name={r.employeeName || 'U'}
-                                                                                                bg="blue.600"
-                                                                                                color="white"
-                                                                                                flexShrink={0}
-                                                                                                boxShadow="xs"
-                                                                                            />
-                                                                                            <Text
-                                                                                                fontSize="xs"
-                                                                                                fontWeight="bold"
-                                                                                                color="gray.800"
-                                                                                                isTruncated
+                                                                                            {isAttached ? "ATTACHED" : "NOT ATTACHED"}
+                                                                                        </Badge>
+                                                                                    </Td>
+                                                                                    <Td textAlign="right">
+                                                                                        <HStack spacing={1} justify="flex-end" onClick={e => e.stopPropagation()}>
+                                                                                            <Button
+                                                                                                size="2xs"
+                                                                                                colorScheme={isSelected ? "red" : "gray"}
+                                                                                                variant={isSelected ? "solid" : "outline"}
+                                                                                                leftIcon={<Icon as={FaEye} />}
+                                                                                                onClick={() => setSellDocTab(item.key)}
+                                                                                                borderRadius="md"
                                                                                             >
-                                                                                                {r.employeeName || '—'}
-                                                                                            </Text>
+                                                                                                Preview
+                                                                                            </Button>
+                                                                                            {docUrl && (
+                                                                                                <>
+                                                                                                    <Button
+                                                                                                        as="a"
+                                                                                                        href={docUrl}
+                                                                                                        target="_blank"
+                                                                                                        rel="noreferrer"
+                                                                                                        size="2xs"
+                                                                                                        colorScheme="blue"
+                                                                                                        variant="ghost"
+                                                                                                        leftIcon={<Icon as={FaExternalLinkAlt} />}
+                                                                                                        borderRadius="md"
+                                                                                                    >
+                                                                                                        Open
+                                                                                                    </Button>
+                                                                                                    <Button
+                                                                                                        as="a"
+                                                                                                        href={docUrl}
+                                                                                                        download
+                                                                                                        size="2xs"
+                                                                                                        colorScheme="gray"
+                                                                                                        variant="ghost"
+                                                                                                        leftIcon={<Icon as={FaDownload} />}
+                                                                                                        borderRadius="md"
+                                                                                                    >
+                                                                                                        Download
+                                                                                                    </Button>
+                                                                                                </>
+                                                                                            )}
                                                                                         </HStack>
-                                                                                    </Tooltip>
-                                                                                </Td>
-                                                                                
-                                                                                {/* Client (Best styling & Dark prominent text) */}
-                                                                                <Td px={2} py={3.5}>
-                                                                                    <Tooltip
-                                                                                        label={
-                                                                                            <Box p={1}>
-                                                                                                <Text fontSize="9px" color="purple.300" fontWeight="black" textTransform="uppercase">Client</Text>
-                                                                                                <Text fontSize="xs" fontWeight="bold" color="white">{r.clientName || '—'}</Text>
-                                                                                            </Box>
-                                                                                        }
-                                                                                        hasArrow
-                                                                                        placement="top"
-                                                                                        bg="gray.900"
-                                                                                        color="white"
-                                                                                        borderRadius="lg"
-                                                                                        px={2.5}
-                                                                                        py={1}
-                                                                                        fontSize="xs"
-                                                                                    >
-                                                                                        <HStack spacing={1.5} align="center">
-                                                                                            <Icon as={FaBuilding} color="purple.600" w={3.5} h={3.5} flexShrink={0} />
-                                                                                            <Text
-                                                                                                fontSize="xs"
-                                                                                                color="gray.900"
-                                                                                                fontWeight="bold"
-                                                                                                letterSpacing="tight"
-                                                                                                isTruncated
-                                                                                            >
-                                                                                                {r.clientName || '—'}
-                                                                                            </Text>
-                                                                                        </HStack>
-                                                                                    </Tooltip>
-                                                                                </Td>
-                                                                                
-                                                                                {/* Site (Best styling & Dark prominent text) */}
-                                                                                <Td px={2} py={3.5}>
-                                                                                    <Tooltip
-                                                                                        label={
-                                                                                            <Box p={1}>
-                                                                                                <Text fontSize="9px" color="red.300" fontWeight="black" textTransform="uppercase">Work Site</Text>
-                                                                                                <Text fontSize="xs" fontWeight="bold" color="white">{r.siteName || '—'}</Text>
-                                                                                            </Box>
-                                                                                        }
-                                                                                        hasArrow
-                                                                                        placement="top"
-                                                                                        bg="gray.900"
-                                                                                        color="white"
-                                                                                        borderRadius="lg"
-                                                                                        px={2.5}
-                                                                                        py={1}
-                                                                                        fontSize="xs"
-                                                                                    >
-                                                                                        <HStack spacing={1.5} align="center">
-                                                                                            <Icon as={FaMapMarkerAlt} color="red.500" w={3.5} h={3.5} flexShrink={0} />
-                                                                                            <Text
-                                                                                                fontSize="xs"
-                                                                                                color="gray.900"
-                                                                                                fontWeight="bold"
-                                                                                                letterSpacing="tight"
-                                                                                                isTruncated
-                                                                                            >
-                                                                                                {r.siteName || '—'}
-                                                                                            </Text>
-                                                                                        </HStack>
-                                                                                    </Tooltip>
-                                                                                </Td>
-                                                                                
-                                                                                {/* Fuel Badge */}
-                                                                                <Td px={2} py={3.5} textAlign="center">
-                                                                                    {(() => {
-                                                                                        const ft = (r.fuelType || '').trim();
-                                                                                        if (!ft || ft === '—' || ft === '-') {
-                                                                                            return (
-                                                                                                <Badge colorScheme="gray" variant="subtle" borderRadius="full" fontSize="9px" px={2} py={0.5}>
-                                                                                                    —
-                                                                                                </Badge>
-                                                                                            );
-                                                                                        }
-                                                                                        const types = ft.split(',').map(s => s.trim()).filter(Boolean);
-                                                                                        if (types.length > 1) {
-                                                                                            return (
-                                                                                                <HStack spacing={1} justify="center" wrap="wrap">
-                                                                                                    {types.map(t => (
-                                                                                                        <Badge key={t} colorScheme={fuelColorMap[t] || 'blue'} variant="subtle" border="1px solid" borderColor={`${fuelColorMap[t] || 'blue'}.200`} borderRadius="full" fontSize="9px" px={2} py={0.5} fontWeight="bold">
-                                                                                                            <Icon as={FaGasPump} mr={0.5} />{t}
-                                                                                                        </Badge>
-                                                                                                    ))}
-                                                                                                </HStack>
-                                                                                            );
-                                                                                        }
-                                                                                        return (
-                                                                                            <Badge colorScheme={fuelColorMap[ft] || 'blue'} variant="subtle" border="1px solid" borderColor={`${fuelColorMap[ft] || 'blue'}.200`} borderRadius="full" fontSize="9px" px={2.5} py={0.5} fontWeight="bold">
-                                                                                                <Icon as={FaGasPump} mr={0.5} />{ft}
-                                                                                            </Badge>
-                                                                                        );
-                                                                                    })()}
-                                                                                </Td>
-                                                                                
-                                                                                {/* Amount (₹) */}
-                                                                                <Td px={2} py={3.5} textAlign="right">
-                                                                                    <Text fontSize="xs" fontWeight="black" color={r.fuelAmount > 0 ? "orange.600" : "gray.400"}>
-                                                                                        ₹{(r.fuelAmount || 0).toLocaleString('en-IN')}
-                                                                                    </Text>
-                                                                                </Td>
-                                                                            </Tr>
-                                                                        ))}
+                                                                                    </Td>
+                                                                                </Tr>
+                                                                            );
+                                                                        })}
                                                                     </Tbody>
                                                                 </Table>
                                                             </Box>
-                                                        )}
+                                                        </Box>
+
+                                                        {/* Inline Document Previewer Pane */}
+                                                        <Box>
+                                                            {activeSellDoc && renderDocViewer(
+                                                                activeSellDoc.doc,
+                                                                `${viewVehicle.vehicleNumber} - ${activeSellDoc.title}`,
+                                                                `${activeSellDoc.title} is not uploaded for this vehicle.`
+                                                            )}
+                                                        </Box>
+                                                    </>
+                                                ) : (
+                                                    <Box bg="white" borderRadius="xl" border="1px solid" borderColor="gray.300" p={8} textAlign="center" boxShadow="xs">
+                                                        <VStack spacing={3}>
+                                                            <Center w="52px" h="52px" bg="green.50" borderRadius="xl" border="1px solid" borderColor="green.200">
+                                                                <Icon as={FaCheckCircle} w={7} h={7} color="green.600" />
+                                                            </Center>
+                                                            <Box>
+                                                                <Text fontSize="md" fontWeight="black" color="gray.900" textTransform="uppercase" letterSpacing="wide">
+                                                                    Asset Status: Active in Company Fleet
+                                                                </Text>
+                                                                <Text fontSize="xs" color="gray.500" mt={1} maxW="480px" mx="auto">
+                                                                    This vehicle is currently active and reserved in operational fleet service. No sale, disposal, or ownership transfer record has been registered.
+                                                                </Text>
+                                                            </Box>
+                                                            <Button
+                                                                size="sm"
+                                                                colorScheme="red"
+                                                                variant="outline"
+                                                                leftIcon={<Icon as={FaHandshake} />}
+                                                                borderRadius="lg"
+                                                                fontWeight="bold"
+                                                                onClick={() => {
+                                                                    const v = viewVehicle;
+                                                                    setViewVehicle(null);
+                                                                    handleEdit(v);
+                                                                    setSellSectionOpen(true);
+                                                                }}
+                                                                mt={2}
+                                                            >
+                                                                + Record Sale / Transfer Ownership
+                                                            </Button>
+                                                        </VStack>
                                                     </Box>
-                                                );
-                                            })()}
-                                        </VStack>
-                                    </Box>
+                                                )}
+                                            </VStack>
+                                        );
+                                    })()}
                                 </ModalBody>
+
+                                {/* ── MODAL FOOTER ── */}
+                                <Box px={{ base: 4, md: 6 }} py={3} bg="white" borderTop="1px solid" borderColor="gray.100" display="flex" justifyContent="space-between" alignItems="center">
+                                    <HStack spacing={2}>
+                                        <Text fontSize="xs" color="gray.400" fontFamily="monospace">
+                                            ID: {vId} • {viewVehicle.vehicleNumber}
+                                        </Text>
+                                    </HStack>
+                                    <Button
+                                        size="sm"
+                                        variant="solid"
+                                        bg="gray.100"
+                                        color="gray.700"
+                                        _hover={{ bg: 'gray.200' }}
+                                        borderRadius="xl"
+                                        fontWeight="bold"
+                                        onClick={() => { setViewVehicle(null); setActiveDocPreview(null); }}
+                                    >
+                                        Close
+                                    </Button>
+                                </Box>
                             </>
                         );
                     })()}
+                </ModalContent>
+            </Modal>
+
+            {/* ── Quick Renewal Modal (PUC & Insurance Date-Wise) ── */}
+            <Modal isOpen={renewModalOpen} onClose={() => !isRenewLoading && setRenewModalOpen(false)} size="md" isCentered isLazy>
+                <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(3px)" />
+                <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader bg={renewType === 'puc' ? 'green.600' : 'teal.600'} color="white" py={3.5} px={5}>
+                        <Flex justify="space-between" align="center">
+                            <HStack spacing={2}>
+                                <Icon as={renewType === 'puc' ? FaFileAlt : FaShieldAlt} />
+                                <Text fontSize="sm" fontWeight="bold">
+                                    {renewType === 'puc' ? 'Renew Vehicle PUC Certificate' : 'Renew Vehicle Insurance Policy'}
+                                </Text>
+                            </HStack>
+                            <ModalCloseButton color="white" position="relative" top={0} right={0} />
+                        </Flex>
+                    </ModalHeader>
+                    <ModalBody p={5} bg="gray.50">
+                        <VStack spacing={4} align="stretch">
+                            <Box p={3} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                <Text fontSize="10px" color="gray.500" fontWeight="black" textTransform="uppercase">Target Vehicle</Text>
+                                <Text fontSize="sm" fontWeight="black" color="gray.800">
+                                    {viewVehicle?.vehicleNumber} • {viewVehicle?.vehicleName}
+                                </Text>
+                                <Text fontSize="xs" color="gray.500" mt={0.5}>
+                                    Uploading new certificate archives the existing record date-wise and updates active validity.
+                                </Text>
+                            </Box>
+
+                            {renewType === 'insurance' && (
+                                <FormControl>
+                                    <FormLabel fontSize="xs" fontWeight="bold">Policy Number (Optional)</FormLabel>
+                                    <Input
+                                        placeholder="e.g. POL-98765432"
+                                        value={renewPolicyNumber}
+                                        onChange={(e) => setRenewPolicyNumber(e.target.value)}
+                                        borderRadius="xl"
+                                        size="sm"
+                                        bg="white"
+                                    />
+                                </FormControl>
+                            )}
+
+                            <SimpleGrid columns={2} spacing={3}>
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="xs" fontWeight="bold">Start Date</FormLabel>
+                                    <Input
+                                        type="date"
+                                        value={renewStartDate}
+                                        onChange={(e) => setRenewStartDate(e.target.value)}
+                                        borderRadius="xl"
+                                        size="sm"
+                                        bg="white"
+                                    />
+                                </FormControl>
+                                <FormControl isRequired>
+                                    <FormLabel fontSize="xs" fontWeight="bold">Expiry Date</FormLabel>
+                                    <Input
+                                        type="date"
+                                        value={renewExpiryDate}
+                                        onChange={(e) => setRenewExpiryDate(e.target.value)}
+                                        borderRadius="xl"
+                                        size="sm"
+                                        bg="white"
+                                    />
+                                </FormControl>
+                            </SimpleGrid>
+
+                            <FormControl isRequired>
+                                <FormLabel fontSize="xs" fontWeight="bold">
+                                    New {renewType === 'puc' ? 'PUC Certificate' : 'Insurance Policy'} Document (PDF / Image)
+                                </FormLabel>
+                                <Box
+                                    p={3}
+                                    border="2px dashed"
+                                    borderColor={renewFile ? (renewType === 'puc' ? 'green.400' : 'teal.400') : 'gray.300'}
+                                    borderRadius="xl"
+                                    bg="white"
+                                    textAlign="center"
+                                    cursor="pointer"
+                                    onClick={() => document.getElementById('renew-doc-upload').click()}
+                                    _hover={{ bg: renewType === 'puc' ? 'green.50' : 'teal.50' }}
+                                >
+                                    <input
+                                        type="file"
+                                        id="renew-doc-upload"
+                                        hidden
+                                        onChange={(e) => setRenewFile(e.target.files[0])}
+                                        accept="image/*,.pdf"
+                                    />
+                                    <Icon as={FaCloudUploadAlt} boxSize={6} color={renewType === 'puc' ? 'green.500' : 'teal.500'} mb={1} />
+                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" noOfLines={1}>
+                                        {renewFile ? `Selected: ${renewFile.name}` : 'Click to Select Document'}
+                                    </Text>
+                                    <Text fontSize="10px" color="gray.400">PDF, JPG, JPEG, or PNG up to 50MB</Text>
+                                </Box>
+                            </FormControl>
+
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">Remarks / Notes (Optional)</FormLabel>
+                                <Input
+                                    placeholder="e.g. 1-year renewal certificate / ICICI policy"
+                                    value={renewRemarks}
+                                    onChange={(e) => setRenewRemarks(e.target.value)}
+                                    borderRadius="xl"
+                                    size="sm"
+                                    bg="white"
+                                />
+                            </FormControl>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="white" py={3} px={5} borderTop="1px solid" borderColor="gray.100">
+                        <Button size="sm" variant="ghost" mr={2} onClick={() => setRenewModalOpen(false)} isDisabled={isRenewLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            size="sm"
+                            colorScheme={renewType === 'puc' ? 'green' : 'teal'}
+                            onClick={handleConfirmRenew}
+                            isLoading={isRenewLoading}
+                            leftIcon={<Icon as={FaCheckCircle} />}
+                            borderRadius="xl"
+                            fontWeight="black"
+                        >
+                            Submit Renewal
+                        </Button>
+                    </ModalFooter>
                 </ModalContent>
             </Modal>
 
