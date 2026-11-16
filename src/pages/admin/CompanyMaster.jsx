@@ -5,7 +5,7 @@ import {
     Tabs, TabList, TabPanels, Tab, TabPanel, Table, Thead, Tbody, Tr, Th, Td, Wrap,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner
+    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner, Center
 } from '@chakra-ui/react';
 import {
     FaBuilding, FaCloudUploadAlt, FaTrash, FaEdit, FaEye,
@@ -13,15 +13,19 @@ import {
 } from 'react-icons/fa';
 import {
     FiPhone, FiMail, FiMapPin, FiUser, FiFileText, FiPlus,
-    FiExternalLink, FiBriefcase, FiCheckCircle, FiRefreshCw, FiLayers
+    FiExternalLink, FiBriefcase, FiCheckCircle, FiRefreshCw, FiLayers, FiLock
 } from 'react-icons/fi';
 import api from '../../api/axios';
+import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
+import { useAuth } from '../../context/AuthContext';
+import { hasPermission } from '../../utils/permissions';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001')
     .replace(/\/api\/?$/, '')
     .replace(/\/$/, '');
 
 const CompanyMaster = () => {
+    const { user } = useAuth();
     const toast = useToast();
     const [isLoading, setIsLoading] = useState(false);
 
@@ -101,6 +105,36 @@ const CompanyMaster = () => {
         }
     });
 
+    const canReadForm = hasPermission(user, 'companyMaster_form', 'read') ||
+        (user?.permissions?.companyMaster_form === undefined && hasPermission(user, 'companyMaster', 'read'));
+    const canWriteForm = hasPermission(user, 'companyMaster_form', 'write') ||
+        (user?.permissions?.companyMaster_form === undefined && hasPermission(user, 'companyMaster', 'write'));
+    const canReadView = hasPermission(user, 'companyMaster_view', 'read') ||
+        (user?.permissions?.companyMaster_view === undefined && hasPermission(user, 'companyMaster', 'read'));
+    const canWriteView = hasPermission(user, 'companyMaster_view', 'write') ||
+        (user?.permissions?.companyMaster_view === undefined && hasPermission(user, 'companyMaster', 'write'));
+
+    const tabConfig = [
+        {
+            id: 'form',
+            label: `📝 Company Form ${editId ? `(Editing: ${formData.companyName || 'Company'})` : '(New Company)'}`,
+            permission: 'companyMaster_form',
+            allowed: canReadForm
+        },
+        {
+            id: 'view',
+            label: `👁️ View & Manage Companies (${companies.length})`,
+            permission: 'companyMaster_view',
+            allowed: canReadView
+        }
+    ].filter(tab => tab.allowed);
+
+    useEffect(() => {
+        if (activeTab >= tabConfig.length && tabConfig.length > 0) {
+            setActiveTab(0);
+        }
+    }, [tabConfig.length, activeTab]);
+
     // Deduplication helper for otherDocs: guarantees unique titles and unique URLs
     const getUniqueOtherDocs = (otherDocs, legacyDoc, legacyDocTitle) => {
         const list = Array.isArray(otherDocs) ? [...otherDocs] : [];
@@ -165,7 +199,8 @@ const CompanyMaster = () => {
             }
         });
         resetFiles();
-        setActiveTab(0);
+        const formIdx = tabConfig.findIndex(t => t.id === 'form');
+        if (formIdx !== -1) setActiveTab(formIdx);
         toast({
             title: "✨ Clean Form Ready",
             description: "New company form has been cleanly reset. No previous documents or catalogs attached.",
@@ -652,6 +687,8 @@ const CompanyMaster = () => {
                 // Clean form reset after saving
                 handleAddNew();
                 fetchCompanies();
+                const viewIdx = tabConfig.findIndex(t => t.id === 'view');
+                if (viewIdx !== -1) setActiveTab(viewIdx);
             }
         } catch (error) {
             toast({
@@ -707,7 +744,8 @@ const CompanyMaster = () => {
                 ifscCode: c.bankDetails?.ifscCode || ''
             }
         });
-        setActiveTab(0);
+        const formIdx = tabConfig.findIndex(t => t.id === 'form');
+        if (formIdx !== -1) setActiveTab(formIdx);
         toast({
             title: `Loaded ${c.companyName}`,
             description: `Editing details and company-specific documents.`,
@@ -736,6 +774,7 @@ const CompanyMaster = () => {
     return (
         <Box py={{ base: 2, md: 4 }} w="full">
             <Container maxW={{ base: "full", xl: "7xl" }} px={{ base: 0, md: 4 }}>
+                <ModulePermissionBar moduleGroupKey="companyMasterGroup" />
                 <Card variant="elevated" borderRadius="2xl" boxShadow="xl" bg="white" overflow="hidden" border="1px solid" borderColor="gray.100">
                     
                     {/* Header Banner */}
@@ -758,16 +797,18 @@ const CompanyMaster = () => {
                                     w={{ base: "full", md: "240px" }} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                                     _focus={{ borderColor: "cyan.300", boxShadow: "0 0 0 1px #4fd1c5" }}
                                 />
-                                <Button
-                                    colorScheme="green"
-                                    leftIcon={<Icon as={FiPlus} />}
-                                    onClick={handleAddNew}
-                                    borderRadius="xl"
-                                    fontWeight="bold"
-                                    boxShadow="md"
-                                >
-                                    + Add New Company
-                                </Button>
+                                {canWriteForm && (
+                                    <Button
+                                        colorScheme="green"
+                                        leftIcon={<Icon as={FiPlus} />}
+                                        onClick={handleAddNew}
+                                        borderRadius="xl"
+                                        fontWeight="bold"
+                                        boxShadow="md"
+                                    >
+                                        + Add New Company
+                                    </Button>
+                                )}
                             </HStack>
                         </Stack>
 
@@ -778,18 +819,20 @@ const CompanyMaster = () => {
                                     <Text fontSize="xs" fontWeight="bold" opacity={0.9} mr={1}>
                                         Select Company to Edit / View:
                                     </Text>
-                                    <Button
-                                        size="xs"
-                                        borderRadius="full"
-                                        colorScheme={!editId ? "cyan" : "whiteAlpha"}
-                                        variant={!editId ? "solid" : "outline"}
-                                        color={!editId ? "teal.900" : "white"}
-                                        fontWeight="bold"
-                                        leftIcon={<Icon as={FiPlus} />}
-                                        onClick={handleAddNew}
-                                    >
-                                        New Company (Clean Form)
-                                    </Button>
+                                    {canWriteForm && (
+                                        <Button
+                                            size="xs"
+                                            borderRadius="full"
+                                            colorScheme={!editId ? "cyan" : "whiteAlpha"}
+                                            variant={!editId ? "solid" : "outline"}
+                                            color={!editId ? "teal.900" : "white"}
+                                            fontWeight="bold"
+                                            leftIcon={<Icon as={FiPlus} />}
+                                            onClick={handleAddNew}
+                                        >
+                                            New Company (Clean Form)
+                                        </Button>
+                                    )}
                                     {companies.map(c => {
                                         const cCats = getCompanyCatalogs(c);
                                         const isSelected = editId === c._id;
@@ -803,7 +846,13 @@ const CompanyMaster = () => {
                                                 color={isSelected ? "gray.900" : "white"}
                                                 fontWeight="bold"
                                                 leftIcon={<Icon as={FaBuilding} />}
-                                                onClick={() => handleEdit(c)}
+                                                onClick={() => {
+                                                    if (canReadForm) {
+                                                        handleEdit(c);
+                                                    } else {
+                                                        setViewCompanyModal(c);
+                                                    }
+                                                }}
                                             >
                                                 {c.companyName} ({cCats.length} {cCats.length === 1 ? 'Catalog' : 'Catalogs'})
                                             </Button>
@@ -815,19 +864,29 @@ const CompanyMaster = () => {
                     </Box>
 
                     <CardBody p={{ base: 4, md: 8 }}>
-                        <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="teal" variant="soft-rounded">
-                            <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.200">
-                                <Tab fontWeight="bold" borderRadius="xl" px={8} py={3} _selected={{ color: 'white', bg: 'teal.600', shadow: 'md' }}>
-                                    📝 Company Form {editId ? `(Editing: ${formData.companyName || 'Company'})` : '(New Company)'}
-                                </Tab>
-                                <Tab fontWeight="bold" borderRadius="xl" px={8} py={3} _selected={{ color: 'white', bg: 'teal.600', shadow: 'md' }}>
-                                    👁️ View & Manage Companies ({companies.length})
-                                </Tab>
-                            </TabList>
+                        {tabConfig.length === 0 ? (
+                            <Center py={14} bg="white" borderRadius="2xl" border="1px dashed" borderColor="gray.200">
+                                <VStack spacing={3}>
+                                    <Icon as={FaBuilding} w={10} h={10} color="orange.400" />
+                                    <Text fontSize="md" fontWeight="bold" color="gray.600">No Authorized Sections Available</Text>
+                                    <Text fontSize="xs" color="gray.400">Please contact your administrator to grant access to company master features.</Text>
+                                </VStack>
+                            </Center>
+                        ) : (
+                            <Tabs index={activeTab} onChange={(idx) => setActiveTab(idx)} colorScheme="teal" variant="soft-rounded">
+                                <TabList mb={6} justifyContent="center" bg="gray.50" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.200">
+                                    {tabConfig.map((tab) => (
+                                        <Tab key={tab.id} fontWeight="bold" borderRadius="xl" px={8} py={3} _selected={{ color: 'white', bg: 'teal.600', shadow: 'md' }}>
+                                            {tab.label}
+                                        </Tab>
+                                    ))}
+                                </TabList>
 
                             <TabPanels>
-                                {/* ══════════════ TAB 1: FORM ══════════════ */}
-                                <TabPanel p={0}>
+                                {tabConfig.map((tab) => {
+                                    if (tab.id === 'form') {
+                                        return (
+                                            <TabPanel key="form" p={0}>
                                     {/* Mode Indicator Banner */}
                                     <Box
                                         mb={6} p={4} borderRadius="2xl" border="1px solid"
@@ -1285,6 +1344,7 @@ const CompanyMaster = () => {
                             borderRadius="lg"
                             leftIcon={<Icon as={FiPlus} />}
                             onClick={handleAddQueuedCatalog}
+                            isDisabled={!canWriteForm || !catalogInput.title || !catalogInput.file}
                         >
                             Add to List
                         </Button>
@@ -1294,19 +1354,32 @@ const CompanyMaster = () => {
 
             {/* Submit & Cancel Buttons */}
             <SimpleGrid columns={{ base: 1, md: editId ? 2 : 1 }} spacing={4} w="full">
-                <Button
-                    size="lg"
-                    colorScheme="teal"
-                    borderRadius="xl"
-                    h="56px"
-                    type="submit"
-                    leftIcon={<FaBuilding />}
-                    isLoading={isLoading}
-                    boxShadow="lg"
-                    fontWeight="bold"
-                >
-                    {editId ? 'Update Company Record & Catalogs' : 'Save New Company Record & Catalogs'}
-                </Button>
+                {canWriteForm ? (
+                    <Button
+                        size="lg"
+                        colorScheme="teal"
+                        borderRadius="xl"
+                        h="56px"
+                        type="submit"
+                        leftIcon={<FaBuilding />}
+                        isLoading={isLoading}
+                        boxShadow="lg"
+                        fontWeight="bold"
+                    >
+                        {editId ? 'Update Company Record & Catalogs' : 'Save New Company Record & Catalogs'}
+                    </Button>
+                ) : (
+                    <Button
+                        size="lg"
+                        colorScheme="gray"
+                        borderRadius="xl"
+                        h="56px"
+                        isDisabled
+                        leftIcon={<Icon as={FiLock} />}
+                    >
+                        Read-Only Access (Modifications Disabled)
+                    </Button>
+                )}
                 {editId && (
                     <Button
                         variant="outline"
@@ -1323,9 +1396,11 @@ const CompanyMaster = () => {
         </VStack>
     </form>
 </TabPanel>
-
-                                {/* ══════════════ TAB 2: VIEW COMPANIES & DOCUMENTS ══════════════ */}
-                                <TabPanel p={0}>
+                                        );
+                                    }
+                                    if (tab.id === 'view') {
+                                        return (
+                                            <TabPanel key="view" p={0}>
                                     <Box mt={2} overflowX="auto">
                                         <Table variant="simple" bg="white" borderRadius="2xl" overflow="hidden">
                                             <Thead bg="gray.100">
@@ -1460,22 +1535,26 @@ const CompanyMaster = () => {
                                                                         title="View Company Details"
                                                                         onClick={() => setViewCompanyModal(c)}
                                                                     />
-                                                                    <IconButton
-                                                                        size="sm"
-                                                                        colorScheme="blue"
-                                                                        variant="ghost"
-                                                                        icon={<Icon as={FaEdit} />}
-                                                                        title="Edit Company"
-                                                                        onClick={() => handleEdit(c)}
-                                                                    />
-                                                                    <IconButton
-                                                                        size="sm"
-                                                                        colorScheme="red"
-                                                                        variant="ghost"
-                                                                        icon={<Icon as={FaTrash} />}
-                                                                        title="Delete Company"
-                                                                        onClick={() => handleDelete(c._id)}
-                                                                    />
+                                                                    {canWriteForm && (
+                                                                        <IconButton
+                                                                            size="sm"
+                                                                            colorScheme="blue"
+                                                                            variant="ghost"
+                                                                            icon={<Icon as={FaEdit} />}
+                                                                            title="Edit Company"
+                                                                            onClick={() => handleEdit(c)}
+                                                                        />
+                                                                    )}
+                                                                    {canWriteView && (
+                                                                        <IconButton
+                                                                            size="sm"
+                                                                            colorScheme="red"
+                                                                            variant="ghost"
+                                                                            icon={<Icon as={FaTrash} />}
+                                                                            title="Delete Company"
+                                                                            onClick={() => handleDelete(c._id)}
+                                                                        />
+                                                                    )}
                                                                 </HStack>
                                                             </Td>
                                                         </Tr>
@@ -1485,10 +1564,15 @@ const CompanyMaster = () => {
                                         </Table>
                                     </Box>
                                 </TabPanel>
-                            </TabPanels>
-                        </Tabs>
-                    </CardBody>
-                </Card>
+                            );
+                        }
+                        return null;
+                    })}
+                </TabPanels>
+            </Tabs>
+        )}
+    </CardBody>
+</Card>
             </Container>
 
             {/* ── View Company Details Modal (Includes Company-Wise Catalogs & Multiple Docs) ── */}

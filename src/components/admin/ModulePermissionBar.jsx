@@ -25,12 +25,26 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
         subTabs: []
     };
 
+    const activeSubModule = subModuleFilterKey
+        ? moduleConfig.subTabs.find(s => s.key === subModuleFilterKey)
+        : null;
+    const titleLabel = activeSubModule ? activeSubModule.label : moduleConfig.label;
+
     // Modules where parent & child are fully independent — no linking at all
     const INDEPENDENT_GROUPS = ['dashboardGroup', 'productsGroup'];
     const isIndependentModule = INDEPENDENT_GROUPS.includes(moduleGroupKey);
 
+    const targetParentKey = subModuleFilterKey
+        ? moduleConfig.subTabs.find(s => s.key === subModuleFilterKey)?.parentKey
+        : null;
+
     const subTabsToRender = subModuleFilterKey
-        ? moduleConfig.subTabs.filter(s => s.key === subModuleFilterKey)
+        ? moduleConfig.subTabs.filter(s => {
+            if (s.key === subModuleFilterKey) return true;
+            if (targetParentKey && s.key === targetParentKey) return true;
+            if (moduleConfig.mainTabKey && s.key === moduleConfig.mainTabKey) return true;
+            return false;
+        })
         : moduleConfig.subTabs;
 
     useEffect(() => {
@@ -247,7 +261,8 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
     const renderPermissionTree = (items, parentKey = null, depth = 0) => {
         const levelItems = items.filter(s => {
             if (parentKey === null) {
-                return !s.parentKey;
+                // If s has no parentKey OR its parentKey is not in this rendered items list, treat as root item
+                return !s.parentKey || !items.some(other => other.key === s.parentKey);
             }
             return s.parentKey === parentKey;
         });
@@ -269,16 +284,19 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                 )}
                 {levelItems.map(item => {
                     const hasChildren = items.some(s => s.parentKey === item.key);
-                    const parentPerms = item.parentKey ? (permissions[item.parentKey] || {}) : null;
+                    const parentIsInList = item.parentKey && items.some(other => other.key === item.parentKey);
+                    const parentPerms = parentIsInList ? (permissions[item.parentKey] || {}) : null;
 
-                    // Gate model for independent modules: parent Read gates child Read, parent Write gates child Write
-                    const effectiveParentRead = isIndependentModule
-                        ? (parentPerms ? (parentPerms.read || false) : true)
-                        : (item.parentKey ? (permissions[item.parentKey]?.read || false) : true);
+                    // Gate model: if parent is in list, gate by parent. If parent is not in list (filtered single sub-module), allow independent control.
+                    const effectiveParentRead = parentIsInList
+                        ? (isIndependentModule
+                            ? (parentPerms ? (parentPerms.read || false) : true)
+                            : (permissions[item.parentKey]?.read || false))
+                        : true;
 
-                    const effectiveParentWrite = isIndependentModule
+                    const effectiveParentWrite = parentIsInList && isIndependentModule
                         ? (parentPerms ? (parentPerms.write || false) : true)
-                        : true; // not used for non-independent
+                        : true;
 
                     const isItemRead = permissions[item.key]?.read || false;
 
@@ -364,7 +382,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
             await api.patch(`/auth/admins/${selectedAdmin._id}/permissions`, { permissions });
             toast({
                 title: 'Permissions Synchronized!',
-                description: `Access rights for ${selectedAdmin.name} updated on ${moduleConfig.label}.`,
+                description: `Access rights for ${selectedAdmin.name} updated on ${titleLabel}.`,
                 status: 'success',
                 duration: 3000,
                 isClosable: true
@@ -405,7 +423,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                             <HStack>
                                 <Badge colorScheme="yellow" fontSize="10px" px={2} py={0.5} borderRadius="md">Super Admin Control</Badge>
                                 <Text fontWeight="bold" fontSize="sm" letterSpacing="wide">
-                                    {moduleConfig.label} Access Gating
+                                    {titleLabel} Access Gating
                                 </Text>
                             </HStack>
                             <Text fontSize="xs" color="purple.200" mt={0.5}>
@@ -435,7 +453,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                     <ModalHeader bgGradient="linear(to-r, purple.700, indigo.800)" color="white" py={4}>
                         <HStack>
                             <Icon as={FiSliders} />
-                            <Text fontSize="md">Module Permission Settings: {moduleConfig.label}</Text>
+                            <Text fontSize="md">Module Permission Settings: {titleLabel}</Text>
                         </HStack>
                     </ModalHeader>
                     <ModalCloseButton color="white" mt={1} />

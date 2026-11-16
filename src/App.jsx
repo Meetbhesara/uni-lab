@@ -20,6 +20,7 @@ import EmployeeExpensesModule from "./pages/EmployeeExpensesModule";
 import AdminWhatsappSettings from "./pages/admin/AdminWhatsappSettings";
 import AdminLoginReport from "./pages/admin/AdminLoginReport";
 import CompanyMaster from "./pages/admin/CompanyMaster";
+import EmployeeMaster from "./pages/admin/EmployeeMaster";
 import UniqueLabInstrumentsPage from "./pages/UniqueLabInstrumentsPage";
 import Login from "./pages/Login";
 import MyProfile from "./pages/MyProfile";
@@ -35,11 +36,13 @@ function App() {
         <Route path="/unique-lab-instruments" element={<UniqueLabInstrumentsPage />} />
         <Route path="/unique-lab-instrument" element={<Navigate to="/unique-lab-instruments" replace />} />
         <Route path="/lab-instruments" element={<Navigate to="/unique-lab-instruments" replace />} />
+        <Route path="/employee-master" element={<Navigate to="/admin/employee-master" replace />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="dashboard" />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="employee-master" element={<EmployeeMaster />} />
           <Route path="our-company" element={<CompanyMaster />} />
           <Route path="company-master" element={<CompanyMaster />} />
           <Route path="unique-lab-instruments" element={<Navigate to="/unique-lab-instruments" replace />} />

@@ -24,6 +24,10 @@ const PARENT_PERMISSIONS = {
     'employeeMaster_payment': 'employeeMaster',
     'employeeMaster_adminReport': 'employeeMaster',
 
+    // Company Master
+    'companyMaster_form': 'companyMaster',
+    'companyMaster_view': 'companyMaster',
+
     // Client Master
     'clientMaster_form': 'clientMaster',
     'clientMaster_view': 'clientMaster',
@@ -58,8 +62,7 @@ const PARENT_PERMISSIONS = {
 
     // Other Services Sub-modules
     'draftingWork': 'otherServices',
-    'invoiceReport': 'otherServices',
-    'companyMaster': 'otherServices'
+    'invoiceReport': 'otherServices'
 };
 
 export const hasPermission = (user, moduleName, action = 'read') => {

@@ -55,6 +55,16 @@ export const PERMISSION_MODULES = [
         ]
     },
     {
+        key: 'companyMasterGroup',
+        label: 'Company Master Module',
+        mainTabKey: 'companyMaster',
+        subTabs: [
+            { key: 'companyMaster', label: 'Main Tab Access' },
+            { key: 'companyMaster_form', label: 'Register Company Form', parentKey: 'companyMaster' },
+            { key: 'companyMaster_view', label: 'View Registered Companies', parentKey: 'companyMaster' }
+        ]
+    },
+    {
         key: 'clientMasterGroup',
         label: 'Client Master Module',
         mainTabKey: 'clientMaster',
@@ -120,8 +130,7 @@ export const PERMISSION_MODULES = [
         subTabs: [
             { key: 'otherServices', label: 'Main Tab Access' },
             { key: 'draftingWork', label: 'Drafting Work', parentKey: 'otherServices' },
-            { key: 'invoiceReport', label: 'Invoice Report', parentKey: 'otherServices' },
-            { key: 'companyMaster', label: 'Our Companies', parentKey: 'otherServices' }
+            { key: 'invoiceReport', label: 'Invoice Report', parentKey: 'otherServices' }
         ]
     }
 ];

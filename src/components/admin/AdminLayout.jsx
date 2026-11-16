@@ -8,11 +8,12 @@ import {
     FiGlobe, FiArrowLeft, FiFileText, FiLock, FiSettings, FiLayers, FiBriefcase,
     FiChevronDown, FiChevronRight
 } from 'react-icons/fi';
-import { FaBuilding } from 'react-icons/fa';
+import { FaBuilding, FaUserTie } from 'react-icons/fa';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
 import { useRealtimeSync } from '../../utils/useRealtimeSync';
+import Header from '../Header';
 
 const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: 'dashboard' },
@@ -45,14 +46,20 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
             bg={useColorModeValue('white', 'gray.900')}
             borderRight="1px"
             borderRightColor={useColorModeValue('gray.200', 'gray.700')}
-            w={{ base: 'full', md: 60 }}
-            pos="fixed"
-            h="full"
+            w={{ base: 'full', md: '240px' }}
+            h="100%"
+            zIndex={90}
+            flexShrink={0}
             display="flex"
             flexDirection="column"
+            overflowY="auto"
+            sx={{
+                scrollbarWidth: 'none',
+                '&::-webkit-scrollbar': { display: 'none' }
+            }}
             {...rest}>
-            <Flex h="16" alignItems="center" mx="6" justify="space-between">
-                <Text fontSize="xl" fontFamily="monospace" fontWeight="bold" color="brand.600">
+            <Flex h="14" alignItems="center" mx="4" justify="space-between" flexShrink={0}>
+                <Text fontSize="lg" fontFamily="monospace" fontWeight="bold" color="brand.600">
                     Admin Panel
                 </Text>
                 <IconButton
@@ -61,21 +68,22 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                     variant="ghost"
                     icon={<FiX />}
                     aria-label="Close"
+                    size="sm"
                 />
             </Flex>
 
             {/* User Info Section */}
-            <Box px="6" py="3" mb="2" borderBottom="1px" borderColor="gray.100">
+            <Box px="4" py="2.5" mb="1" borderBottom="1px" borderColor="gray.100" flexShrink={0}>
                 <Text fontSize="10px" color="gray.400" fontWeight="800" textTransform="uppercase" letterSpacing="wider">Logged in as</Text>
                 <Text fontWeight="bold" color="brand.600" fontSize="sm" noOfLines={1}>{user?.name || 'Admin'}</Text>
                 {!user?.isSuperAdmin && !user?.permissions && (
-                    <Text mt={2} color="red.500" fontSize="xs" fontWeight="bold" bg="red.50" p={2} borderRadius="md" border="1px solid" borderColor="red.200">
+                    <Text mt={1} color="red.500" fontSize="xs" fontWeight="bold" bg="red.50" p={1.5} borderRadius="md" border="1px solid" borderColor="red.200">
                         ⚠️ OUTDATED TOKEN.<br />Please log out and log in again!
                     </Text>
                 )}
             </Box>
 
-            <Box flex="1" overflowY="auto" py="2">
+            <Box flex="1" py="1.5" overflowY="auto" sx={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
                 {LinkItems.map((link) => {
                     if (link.permissionCheck && !link.permissionCheck(user)) return null;
                     if (link.permissionKey && !hasPermission(user, link.permissionKey, 'read')) return null;
@@ -95,6 +103,11 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                         Permissions
                     </NavItem>
                 )}
+                {(!user?.permissions || user?.permissions?.employeeMaster?.read !== false || user?.isSuperAdmin) && (
+                    <NavItem icon={FaUserTie} path="/admin/employee-master" onClose={onClose}>
+                        Employee Master
+                    </NavItem>
+                )}
                 {(!user?.permissions || user?.permissions?.companyMaster?.read !== false || user?.isSuperAdmin) && (
                     <NavItem icon={FaBuilding} path="/admin/our-company" onClose={onClose}>
                         Our Company
@@ -103,19 +116,20 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
             </Box>
 
             {/* Quick Links */}
-            <Box px="3" mt={2} borderTop="1px" borderColor="gray.100" pt={3} pb={1}>
-                <Text fontSize="10px" fontWeight="800" color="gray.400" mb={1} px={3} letterSpacing="wider">QUICK LINKS</Text>
+            <Box px="2" mt="auto" borderTop="1px" borderColor="gray.100" pt={2.5} pb={1} flexShrink={0}>
+                <Text fontSize="10px" fontWeight="800" color="gray.400" mb={1} px={2.5} letterSpacing="wider">QUICK LINKS</Text>
                 <NavItem icon={FiGlobe} path="/" onClose={onClose}>Home Page</NavItem>
                 <NavItem icon={FiBriefcase} path="/services?view=public" onClose={onClose}>Public Service</NavItem>
                 <NavItem icon={FiBox} path="/products" onClose={onClose}>Public Products</NavItem>
             </Box>
 
             {/* Logout/Exit Buttons */}
-            <Box mt="auto" p="3" mx="3" mb="4">
+            <Box p="2" mx="2" mb="2" borderTop="1px" borderColor="gray.100" flexShrink={0}>
                 <Flex
                     align="center"
-                    p="3"
-                    borderRadius="lg"
+                    py="2"
+                    px="3"
+                    borderRadius="md"
                     role="group"
                     cursor="pointer"
                     _hover={{ bg: 'gray.100' }}
@@ -125,8 +139,9 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                 </Flex>
                 <Flex
                     align="center"
-                    p="3"
-                    borderRadius="lg"
+                    py="2"
+                    px="3"
+                    borderRadius="md"
                     role="group"
                     cursor="pointer"
                     color="red.500"
@@ -242,8 +257,10 @@ const NavItem = ({ icon, children, path, onClose, ...rest }) => {
         <Link as={RouterLink} to={path} style={{ textDecoration: 'none' }} _focus={{ boxShadow: 'none' }} onClick={onClose}>
             <Flex
                 align="center"
-                p="3"
-                mx="3"
+                py="2"
+                px="3"
+                mx="2"
+                my="0.5"
                 borderRadius="lg"
                 role="group"
                 cursor="pointer"
@@ -253,9 +270,9 @@ const NavItem = ({ icon, children, path, onClose, ...rest }) => {
                 transition="all 0.15s"
                 {...rest}>
                 {icon && (
-                    <Icon mr="3" fontSize="16" as={icon} />
+                    <Icon mr="2.5" fontSize="15" as={icon} />
                 )}
-                <Text fontSize="sm" fontWeight={isActive ? '700' : '500'}>{children}</Text>
+                <Text fontSize="xs" fontWeight={isActive ? '700' : '600'}>{children}</Text>
             </Flex>
         </Link>
     );
@@ -369,6 +386,7 @@ const AdminLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const mainBg = useColorModeValue('gray.100', 'gray.900');
+    const contentRef = React.useRef(null);
 
     useEffect(() => {
         if (!loading && (!user || !user.isAdmin)) {
@@ -379,6 +397,9 @@ const AdminLayout = () => {
     // Live Background Sync
     useEffect(() => {
         if (refreshUser) refreshUser();
+        if (contentRef.current) {
+            contentRef.current.scrollTo({ top: 0, behavior: 'instant' });
+        }
     }, [location.pathname]);
 
     useRealtimeSync(user);
@@ -387,53 +408,71 @@ const AdminLayout = () => {
     if (!user || !user.isAdmin) return null;
 
     return (
-        <Box minH="100vh" bg={mainBg}>
-            {/* Sidebar — desktop only */}
-            <SidebarContent
-                user={user}
-                logout={logout}
-                navigate={navigate}
-                onClose={() => onClose}
-                display={{ base: 'none', md: 'block' }}
-            />
-
-            {/* Drawer — mobile sidebar overlay */}
-            <Drawer
-                autoFocus={false}
-                isOpen={isOpen}
-                placement="left"
-                onClose={onClose}
-                returnFocusOnClose={false}
-                onOverlayClick={onClose}
-                size="xs">
-                <DrawerContent>
-                    <SidebarContent
-                        user={user}
-                        logout={logout}
-                        navigate={navigate}
-                        onClose={onClose}
-                    />
-                </DrawerContent>
-            </Drawer>
-
-            {/* Mobile top header bar */}
-            <MobileTopBar onOpen={onOpen} />
-
-            {/* Main Content — extra bottom padding on mobile so bottom nav never covers content */}
-            <Box
-                ml={{ base: 0, md: 60 }}
-                p={{ base: 3, md: 5 }}
-                overflowX="hidden"
-                minH={{ base: 'auto', md: 'calc(100vh - 80px)' }}
-                pb={{ base: '80px', md: 5 }}>
-                <Box maxW="100%" overflowX="auto">
-                    <Outlet />
-                </Box>
+        <Flex direction="column" h="100vh" maxH="100vh" overflow="hidden" bg={mainBg}>
+            {/* Horizontal Header at top — flexShrink 0, zero gap */}
+            <Box flexShrink={0} zIndex={1000}>
+                <Header />
             </Box>
+
+            {/* Main Admin Area: Vertical Sidebar attached directly to horizontal header + independent scrollable content */}
+            <Flex flex="1" minH="0" overflow="hidden" position="relative">
+                {/* Vertical Sidebar — directly attached to horizontal header with 0 space */}
+                <SidebarContent
+                    user={user}
+                    logout={logout}
+                    navigate={navigate}
+                    onClose={() => onClose}
+                    display={{ base: 'none', md: 'flex' }}
+                />
+
+                {/* Drawer — mobile sidebar overlay */}
+                <Drawer
+                    autoFocus={false}
+                    isOpen={isOpen}
+                    placement="left"
+                    onClose={onClose}
+                    returnFocusOnClose={false}
+                    onOverlayClick={onClose}
+                    size="xs">
+                    <DrawerContent>
+                        <SidebarContent
+                            user={user}
+                            logout={logout}
+                            navigate={navigate}
+                            onClose={onClose}
+                        />
+                    </DrawerContent>
+                </Drawer>
+
+                {/* Main Content Area — scrolls independently */}
+                <Box
+                    ref={contentRef}
+                    flex="1"
+                    minW="0"
+                    h="100%"
+                    overflowY="auto"
+                    display="flex"
+                    flexDirection="column"
+                >
+                    {/* Mobile top header bar */}
+                    <MobileTopBar onOpen={onOpen} />
+
+                    {/* Main Content */}
+                    <Box
+                        p={{ base: 3, md: 5 }}
+                        pb={{ base: '90px', md: 6 }}
+                        flex="1"
+                    >
+                        <Box maxW="100%">
+                            <Outlet />
+                        </Box>
+                    </Box>
+                </Box>
+            </Flex>
 
             {/* Mobile bottom tab navigation */}
             <MobileBottomNav user={user} />
-        </Box>
+        </Flex>
     );
 };
 
