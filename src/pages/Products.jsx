@@ -943,7 +943,7 @@ const Products = () => {
                 "name": "How to request a quotation or technical datasheet for testing equipment?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Add desired instruments to your inquiry cart on uecivil.com, call +91 90991 60391, or send an email to atulkanak@uniquelabservices.com for immediate quotation and catalog delivery."
+                    "text": "Add desired instruments to your inquiry cart on uecivil.com, call +91 90991 60391, or send an email to info@uecivil.com for immediate quotation and catalog delivery."
                 }
             }
         ];

@@ -27,14 +27,14 @@ const LOCATIONS = [
         id: 'office',
         label: 'HEAD OFFICE',
         name: 'Unique Lab & Services — Office',
-        address: '123, Shyamal Cross Road, Satellite,\nAhmedabad, Gujarat – 380015',
-        hours: 'Mon – Sat: 9:00 AM – 6:00 PM',
+        address: 'A-206, INFINITY TOWER, NR. RAMADA HOTEL,\nPRAHLADNAGAR, AHMEDABAD 380015\nState Name : Gujarat, Code : 24',
+        hours: 'Open 24 Hours (24/7)',
         color: 'brand',
         accentColor: '#0066cc',
         bgGradient: 'linear(to-br, brand.700, brand.900)',
         icon: FiNavigation,
-        mapSrc: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3671.9!2d72.515!3d23.020!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjPCsDAxJzEyLjAiTiA3MsKwMzEnMDYuMCJF!5e0!3m2!1sen!2sin!4v1234567890',
-        mapsLink: 'https://maps.google.com/?q=Shyamal+Cross+Road+Satellite+Ahmedabad',
+        mapSrc: 'https://maps.google.com/maps?q=Infinity+Tower+Ramada+Hotel+Prahladnagar+Ahmedabad&output=embed',
+        mapsLink: 'https://maps.google.com/?q=Infinity+Tower+Nr+Ramada+Hotel+Prahladnagar+Ahmedabad+380015',
         badge: 'Main Office',
     },
     {
@@ -42,7 +42,7 @@ const LOCATIONS = [
         label: 'INSTRUMENT GODOWN',
         name: 'Unique Lab — Lab Instrument Store',
         address: 'Survey No. 123, Nr. Industrial Area,\nAhmedabad, Gujarat',
-        hours: 'Mon – Sat: 9:00 AM – 5:00 PM',
+        hours: 'Open 24 Hours (24/7)',
         color: 'orange',
         accentColor: '#FF8C00',
         bgGradient: 'linear(to-br, orange.500, orange.700)',
@@ -237,10 +237,11 @@ const Contact = () => {
                     "@type": "LocalBusiness",
                     "name": "Unique Engineering & Unique Survey",
                     "telephone": "+919099160391",
-                    "email": "atulkanak@uniquelabservices.com",
+                    "email": "info@uecivil.com",
+                    "openingHours": "Mo-Su 00:00-24:00",
                     "address": {
                         "@type": "PostalAddress",
-                        "streetAddress": "123, Shyamal Cross Road, Satellite",
+                        "streetAddress": "A-206, INFINITY TOWER, NR. RAMADA HOTEL, PRAHLADNAGAR",
                         "addressLocality": "Ahmedabad",
                         "addressRegion": "Gujarat",
                         "postalCode": "380015",
@@ -255,7 +256,7 @@ const Contact = () => {
         <Box bg="gray.50" minH="100vh">
             <SEO
                 title="Contact & Office Location Ahmedabad | Unique Engineering & Survey"
-                description="Get in touch with Unique Engineering and Unique Survey at Shyamal Cross Road, Satellite, Ahmedabad, Gujarat. Phone: +91 90991 60391. Inquire for civil lab instruments and land surveying quotes."
+                description="Get in touch with Unique Engineering and Unique Survey at A-206, INFINITY TOWER, NR. RAMADA HOTEL, PRAHLADNAGAR, AHMEDABAD 380015. Phone: +91 90991 60391. Inquire for civil lab instruments and land surveying quotes."
                 keywords="contact unique engineering, land survey office ahmedabad, unique lab services contact, uecivil phone number"
                 canonical="https://uecivil.com/contact"
                 schema={contactSchema}
@@ -396,8 +397,8 @@ const Contact = () => {
                                 />
                                 <InfoRow
                                     icon={FiClock}
-                                    label="Availability"
-                                    value="Monday – Saturday, 9:00 AM – 6:00 PM"
+                                    label="Working Hours"
+                                    value="Open 24 Hours / 7 Days (24/7 Available)"
                                 />
                             </VStack>
 

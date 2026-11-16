@@ -54,7 +54,7 @@ const Home = () => {
                         "name": "Where is Unique Engineering located?",
                         "acceptedAnswer": {
                             "@type": "Answer",
-                            "text": "Unique Engineering is located at 123, Shyamal Cross Road, Satellite, Ahmedabad, Gujarat 380015, India. Contact: +91 90991 60391, Email: atulkanak@uniquelabservices.com."
+                            "text": "Unique Engineering is located at A-206, INFINITY TOWER, NR. RAMADA HOTEL, PRAHLADNAGAR, AHMEDABAD 380015 State Name : Gujarat, Code : 24. Contact: +91 90991 60391, Email: info@uecivil.com."
                         }
                     }
                 ]

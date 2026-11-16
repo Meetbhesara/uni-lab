@@ -17,7 +17,7 @@ import {
     ListItem,
     ListIcon
 } from '@chakra-ui/react';
-import { FiPhone, FiUser, FiShield, FiCpu, FiCheckSquare, FiCheckCircle, FiShoppingCart } from 'react-icons/fi';
+import { FiPhone, FiMail, FiUser, FiShield, FiCpu, FiCheckSquare, FiCheckCircle, FiShoppingCart } from 'react-icons/fi';
 import { Link as RouterLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import SEO from '../components/SEO';
@@ -300,7 +300,7 @@ const About = () => {
                                     >
                                         <Button 
                                             as="a"
-                                            href="tel:9099160391"
+                                            href="tel:+919099160391"
                                             variant="solid" 
                                             leftIcon={<Icon as={FiPhone} />}
                                             px={6}
@@ -309,6 +309,19 @@ const About = () => {
                                             _hover={{ bg: "brand.600" }}
                                         >
                                             +91 90991 60391
+                                        </Button>
+                                        <Button 
+                                            as="a"
+                                            href="mailto:info@uecivil.com"
+                                            variant="outline" 
+                                            leftIcon={<Icon as={FiMail} />}
+                                            px={6}
+                                            borderRadius="xl"
+                                            borderColor="brand.500"
+                                            color="brand.600"
+                                            _hover={{ bg: "brand.50" }}
+                                        >
+                                            info@uecivil.com
                                         </Button>
                                     </Flex>
                                 </VStack>

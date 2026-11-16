@@ -244,12 +244,12 @@ const Header = () => {
             <Box bg="brand.900" color="gray.300" py={2} px={{ base: 4, md: 8 }} fontSize="sm" display={{ base: 'none', md: 'block' }}>
                 <Flex justify="space-between" align="center">
                     <Flex gap={6}>
-                        <Flex align="center" gap={2}>
-                            <FaEnvelope /> <Text>contact@uniqueengineering.com</Text>
-                        </Flex>
-                        <Flex align="center" gap={2}>
-                            <FaPhone /> <Text>+91 98765 43210</Text>
-                        </Flex>
+                        <Link as="a" href="mailto:info@uecivil.com" display="flex" align="center" gap={2} color="gray.300" _hover={{ color: "white", textDecoration: "none" }}>
+                            <FaEnvelope /> <Text>info@uecivil.com</Text>
+                        </Link>
+                        <Link as="a" href="tel:+919099160391" display="flex" align="center" gap={2} color="gray.300" _hover={{ color: "white", textDecoration: "none" }}>
+                            <FaPhone /> <Text>+91 90991 60391</Text>
+                        </Link>
                     </Flex>
                     <Flex align="center" gap={4}>
                         <Text fontSize="xs" color="gray.300">GST: 22AAAAA0000A1Z5</Text>

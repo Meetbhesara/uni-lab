@@ -27,9 +27,9 @@ const Footer = () => {
                             Premier civil engineering testing equipment provider and certified land surveying consultancy based in Ahmedabad, Gujarat. Operating across India.
                         </Text>
                         <VStack spacing={2} align="flex-start" pt={1}>
-                            <HStack spacing={2} fontSize="xs" color="gray.300">
-                                <Icon as={FaMapMarkerAlt} color="orange.400" />
-                                <Text>Shyamal Cross Road, Satellite, Ahmedabad, Gujarat</Text>
+                            <HStack spacing={2} fontSize="xs" color="gray.300" align="flex-start">
+                                <Icon as={FaMapMarkerAlt} color="orange.400" mt={0.5} flexShrink={0} />
+                                <Text>A-206, INFINITY TOWER, NR. RAMADA HOTEL, PRAHLADNAGAR, AHMEDABAD 380015 State Name : Gujarat, Code : 24</Text>
                             </HStack>
                             <HStack spacing={2} fontSize="xs" color="gray.300">
                                 <Icon as={FaPhoneAlt} color="green.400" />
@@ -37,7 +37,7 @@ const Footer = () => {
                             </HStack>
                             <HStack spacing={2} fontSize="xs" color="gray.300">
                                 <Icon as={FaEnvelope} color="blue.400" flexShrink={0} />
-                                <Link href="mailto:atulkanak@uniquelabservices.com" wordBreak="break-all" _hover={{ color: "white" }}>atulkanak@uniquelabservices.com</Link>
+                                <Link href="mailto:info@uecivil.com" wordBreak="break-all" _hover={{ color: "white" }}>info@uecivil.com</Link>
                             </HStack>
                         </VStack>
                     </Stack>
