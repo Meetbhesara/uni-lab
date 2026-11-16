@@ -147,7 +147,7 @@ const ProductSlider = ({ products }) => {
                                 boxShadow: '2xl',
                                 borderColor: 'brand.400'
                             }}
-                            onClick={() => navigate(`/products?category=${encodeURIComponent(product.category || '')}&highlight=${productId}`)}
+                            onClick={() => navigate(`/products?category=${encodeURIComponent(product.category || '')}&highlight=${product.slug || productId}`)}
                         >
                             <Image
                                 src={imgSrc}
@@ -615,7 +615,7 @@ const Products = () => {
         }
 
         // Check if product is already in memory
-        const foundInList = products.find(p => (p._id === highlightId || p.id === highlightId));
+        const foundInList = products.find(p => (p._id === highlightId || p.id === highlightId || (p.slug && p.slug.toLowerCase() === highlightId.toLowerCase())));
         if (foundInList) {
             setHighlightProduct(foundInList);
         }
@@ -668,7 +668,7 @@ const Products = () => {
     // If highlightId is present, ensure visibleCount expands to show the highlighted item, scroll to it, and open inquiry
     useEffect(() => {
         if (highlightId && products.length > 0) {
-            const targetIndex = products.findIndex(p => (p._id === highlightId || p.id === highlightId));
+            const targetIndex = products.findIndex(p => (p._id === highlightId || p.id === highlightId || (p.slug && p.slug.toLowerCase() === highlightId.toLowerCase())));
             if (targetIndex >= 0) {
                 if (targetIndex >= visibleCount) {
                     setVisibleCount(targetIndex + 4);
@@ -735,7 +735,7 @@ const Products = () => {
             let finalData = Array.isArray(res.data) ? res.data : (res.data.data || []);
 
             // If highlightId is present and not in finalData, fetch single product and prepend it
-            if (highlightId && !finalData.some(p => (p._id === highlightId || p.id === highlightId))) {
+            if (highlightId && !finalData.some(p => (p._id === highlightId || p.id === highlightId || (p.slug && p.slug.toLowerCase() === highlightId.toLowerCase())))) {
                 try {
                     const singleRes = await api.get(`/products/${highlightId}`);
                     if (singleRes.data && singleRes.data._id) {
@@ -820,8 +820,9 @@ const Products = () => {
         : currentCategoryObj
         ? `${currentCategoryObj.seoKeywords}, uecivil, unique lab instruments`
         : `civil lab instruments ahmedabad, concrete testing equipment, soil testing apparatus, bitumen testing machine, total station gujarat, uecivil`;
+    const activeProductSlug = highlightProduct?.slug || highlightProduct?._id;
     const seoCanonical = highlightProduct
-        ? `https://uecivil.com/products/${highlightProduct._id}`
+        ? `https://uecivil.com/products/${activeProductSlug}`
         : currentCategoryObj
         ? `https://uecivil.com/products?category=${currentCategoryObj.slug}`
         : `https://uecivil.com/products`;
@@ -834,6 +835,7 @@ const Products = () => {
     // Dynamic JSON-LD schema for Google AI, Gemini, and SEO rich snippets (Unconditional Hook)
     const productSchema = useMemo(() => {
         if (highlightProduct) {
+            const activeProductSlug = highlightProduct.slug || highlightProduct._id;
             let details = highlightProduct.details;
             if (typeof details === 'string') {
                 try { details = JSON.parse(details); } catch (e) {}
@@ -863,14 +865,14 @@ const Products = () => {
                     "@type": "ListItem",
                     "position": 4,
                     "name": highlightProduct.name.trim(),
-                    "item": `https://uecivil.com/products/${highlightProduct._id}`
+                    "item": `https://uecivil.com/products/${activeProductSlug}`
                 });
             } else {
                 breadcrumbs.push({
                     "@type": "ListItem",
                     "position": 3,
                     "name": highlightProduct.name.trim(),
-                    "item": `https://uecivil.com/products/${highlightProduct._id}`
+                    "item": `https://uecivil.com/products/${activeProductSlug}`
                 });
             }
 
@@ -879,7 +881,7 @@ const Products = () => {
                 "@graph": [
                     {
                         "@type": "Product",
-                        "@id": `https://uecivil.com/products/${highlightProduct._id}#product`,
+                        "@id": `https://uecivil.com/products/${activeProductSlug}#product`,
                         "name": highlightProduct.name.trim(),
                         ...(altNames.length > 0 ? { "alternateName": altNames } : {}),
                         "description": highlightProduct.description || `${highlightProduct.name.trim()} - Civil engineering testing instrument by Unique Lab Instruments`,
@@ -896,7 +898,7 @@ const Products = () => {
                         },
                         "offers": {
                             "@type": "Offer",
-                            "url": `https://uecivil.com/products/${highlightProduct._id}`,
+                            "url": `https://uecivil.com/products/${activeProductSlug}`,
                             "availability": "https://schema.org/InStock",
                             "itemCondition": "https://schema.org/NewCondition",
                             "priceCurrency": "INR"
@@ -1202,7 +1204,7 @@ const Products = () => {
                                                                             colorScheme="orange"
                                                                             title="Copy Direct Product Link"
                                                                             onClick={() => {
-                                                                                const prodUrl = `${window.location.origin}/products/${product._id}`;
+                                                                                const prodUrl = `${window.location.origin}/products/${product.slug || product._id}`;
                                                                                 navigator.clipboard.writeText(prodUrl);
                                                                                 toast({
                                                                                     title: "Link Copied!",

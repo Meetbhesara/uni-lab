@@ -1064,8 +1064,8 @@ const VehicleMasterForm = () => {
     const cancelRef = React.useRef();
     const [activeTab, setActiveTab] = useState(0);
     const [viewFromTab, setViewFromTab] = useState('reserved'); // 'reserved' | 'sold' | 'pending'
-    // Section open/close for accordion feel
-    const [purchaseSectionOpen, setPurchaseSectionOpen] = useState(true);
+    // Section open/close for accordion feel (collapsed by default)
+    const [purchaseSectionOpen, setPurchaseSectionOpen] = useState(false);
     const [sellSectionOpen, setSellSectionOpen] = useState(false);
 
     // --- Vehicle Report state ---
@@ -1855,9 +1855,14 @@ const VehicleMasterForm = () => {
         barcode: '',
         vehicleNumber: '',
         vehicleName: '',
+        vehicleNickName: '',
         rcBookNumber: '',
+        rcBookStartDate: '',
+        rcBookExpiryDate: '',
+        insurancePolicyNumber: '',
         insuranceStartDate: '',
         insuranceDate: '',
+        pucNumber: '',
         pucStartDate: '',
         pucDate: '',
         serviceDate: '',
@@ -1973,7 +1978,11 @@ const VehicleMasterForm = () => {
         setRenewType(type);
         setRenewStartDate('');
         setRenewExpiryDate('');
-        setRenewPolicyNumber(viewVehicle.rcBookNumber || '');
+        if (type === 'insurance') {
+            setRenewPolicyNumber(viewVehicle.insurancePolicyNumber || viewVehicle.rcBookNumber || '');
+        } else {
+            setRenewPolicyNumber(viewVehicle.pucNumber || '');
+        }
         setRenewRemarks('');
         setRenewFile(null);
         setRenewModalOpen(true);
@@ -1997,6 +2006,10 @@ const VehicleMasterForm = () => {
             if (renewExpiryDate) data.append('expiryDate', renewExpiryDate);
             if (renewRemarks) data.append('remarks', renewRemarks);
             if (renewType === 'puc') {
+                if (renewPolicyNumber) {
+                    data.append('pucNumber', renewPolicyNumber.trim());
+                    data.append('certificateNumber', renewPolicyNumber.trim());
+                }
                 data.append('pucPhoto', renewFile);
                 const res = await api.post(`/vehicle-master/${viewVehicle._id}/renew-puc`, data);
                 if (res.data?.success) {
@@ -2006,7 +2019,7 @@ const VehicleMasterForm = () => {
                     setRenewModalOpen(false);
                 }
             } else {
-                if (renewPolicyNumber) data.append('policyNumber', renewPolicyNumber);
+                if (renewPolicyNumber) data.append('policyNumber', renewPolicyNumber.trim());
                 data.append('insurancePhoto', renewFile);
                 const res = await api.post(`/vehicle-master/${viewVehicle._id}/renew-insurance`, data);
                 if (res.data?.success) {
@@ -2097,9 +2110,14 @@ const VehicleMasterForm = () => {
             barcode: '',
             vehicleNumber: '',
             vehicleName: '',
+            vehicleNickName: '',
             rcBookNumber: '',
+            rcBookStartDate: '',
+            rcBookExpiryDate: '',
+            insurancePolicyNumber: '',
             insuranceStartDate: '',
             insuranceDate: '',
+            pucNumber: '',
             pucStartDate: '',
             pucDate: '',
             serviceDate: '',
@@ -2135,6 +2153,8 @@ const VehicleMasterForm = () => {
         setNewVehiclePhotos([]);
         setPrimaryType('existing');
         setEditId(null);
+        setPurchaseSectionOpen(false);
+        setSellSectionOpen(false);
     };
 
     const handleSubmit = async (e) => {
@@ -2167,11 +2187,16 @@ const VehicleMasterForm = () => {
             if (formData.barcode) data.append('barcode', formData.barcode);
             data.append('vehicleNumber', formData.vehicleNumber);
             data.append('vehicleName', formData.vehicleName);
+            data.append('vehicleNickName', formData.vehicleNickName || '');
             data.append('rcBookNumber', formData.rcBookNumber || '');
+            data.append('rcBookStartDate', formData.rcBookStartDate || '');
+            data.append('rcBookExpiryDate', formData.rcBookExpiryDate || '');
+            data.append('insurancePolicyNumber', formData.insurancePolicyNumber || '');
             data.append('insuranceStartDate', formData.insuranceStartDate || '');
-            data.append('insuranceDate', formData.insuranceDate);
+            data.append('insuranceDate', formData.insuranceDate || '');
+            data.append('pucNumber', formData.pucNumber || '');
             data.append('pucStartDate', formData.pucStartDate || '');
-            data.append('pucDate', formData.pucDate);
+            data.append('pucDate', formData.pucDate || '');
             data.append('serviceDate', formData.serviceDate);
             data.append('logInName', formData.logInName);
             data.append('isSold', String(formData.isSold));
@@ -2277,9 +2302,14 @@ const VehicleMasterForm = () => {
             barcode: v.barcode || '',
             vehicleNumber: v.vehicleNumber || '',
             vehicleName: v.vehicleName || '',
+            vehicleNickName: v.vehicleNickName || '',
             rcBookNumber: v.rcBookNumber || '',
+            rcBookStartDate: v.rcBookStartDate ? v.rcBookStartDate.substring(0, 10) : '',
+            rcBookExpiryDate: v.rcBookExpiryDate ? v.rcBookExpiryDate.substring(0, 10) : '',
+            insurancePolicyNumber: v.insurancePolicyNumber || '',
             insuranceStartDate: v.insuranceStartDate ? v.insuranceStartDate.substring(0, 10) : '',
             insuranceDate: v.insuranceDate ? v.insuranceDate.substring(0, 10) : '',
+            pucNumber: v.pucNumber || '',
             pucStartDate: v.pucStartDate ? v.pucStartDate.substring(0, 10) : '',
             pucDate: v.pucDate ? v.pucDate.substring(0, 10) : '',
             serviceDate: v.serviceDate ? v.serviceDate.substring(0, 10) : '',
@@ -2358,8 +2388,8 @@ const VehicleMasterForm = () => {
         setNewVehiclePhotos([]);
         setPrimaryType('existing');
         setActiveTab(0);
-        setSellSectionOpen(v.isSold || false);
-        setPurchaseSectionOpen(true);
+        setSellSectionOpen(false);
+        setPurchaseSectionOpen(false);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -2529,12 +2559,12 @@ const VehicleMasterForm = () => {
 
                                                                 <FormControl>
                                                                     <FormLabel fontSize="11px" fontWeight="bold" color="gray.700" mb={1}>
-                                                                        RC Book Number
+                                                                        Vehicle Nick Name
                                                                     </FormLabel>
                                                                     <Input
-                                                                        name="rcBookNumber"
-                                                                        placeholder="e.g. RC-9876543210"
-                                                                        value={formData.rcBookNumber || ''}
+                                                                        name="vehicleNickName"
+                                                                        placeholder="e.g. White Bullet / Tipper 1"
+                                                                        value={formData.vehicleNickName || ''}
                                                                         onChange={handleChange}
                                                                         borderRadius="md"
                                                                         size="sm"
@@ -2583,19 +2613,22 @@ const VehicleMasterForm = () => {
                                                                 <Table size="sm" variant="simple">
                                                                     <Thead bg="gray.50">
                                                                         <Tr>
-                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="18%">
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="16%">
                                                                                 Document Type
                                                                             </Th>
-                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="16%">
-                                                                                Start Date
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="18%">
+                                                                                Doc / Policy / Cert No.
                                                                             </Th>
-                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="16%">
-                                                                                Expiry Date
-                                                                            </Th>
-                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="36%">
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="28%">
                                                                                 Document File (PDF / Image)
                                                                             </Th>
-                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} textAlign="center" w="14%">
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="13%">
+                                                                                Start Date
+                                                                            </Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} w="13%">
+                                                                                End Date (Expiry)
+                                                                            </Th>
+                                                                            <Th fontSize="10px" color="gray.700" fontWeight="black" textTransform="uppercase" py={2.5} textAlign="center" w="12%">
                                                                                 Action / Status
                                                                             </Th>
                                                                         </Tr>
@@ -2614,12 +2647,24 @@ const VehicleMasterForm = () => {
                                                                                     </Box>
                                                                                 </HStack>
                                                                             </Td>
-                                                                            <Td py={2.5} color="gray.400" fontSize="xs" fontStyle="italic">
-                                                                                — (Registration)
+                                                                            {/* Left side of uploader: RC Book Number */}
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="rcBookNumber"
+                                                                                    placeholder="e.g. RC-9876543210"
+                                                                                    value={formData.rcBookNumber || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                    fontFamily="monospace"
+                                                                                    fontWeight="bold"
+                                                                                    _focus={{ borderColor: "purple.500", boxShadow: "0 0 0 1px #805AD5" }}
+                                                                                />
                                                                             </Td>
-                                                                            <Td py={2.5} color="gray.400" fontSize="xs" fontStyle="italic">
-                                                                                — (Lifetime)
-                                                                            </Td>
+                                                                            {/* Center: Document File Uploader */}
                                                                             <Td py={2.5}>
                                                                                 <input type="file" id="rc-upload" hidden onChange={handleFileChange} accept="image/*,.pdf" />
                                                                                 {rcFile ? (
@@ -2710,6 +2755,33 @@ const VehicleMasterForm = () => {
                                                                                     </Button>
                                                                                 )}
                                                                             </Td>
+                                                                            {/* Right side of uploader: Start Date & Expiry Date */}
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="rcBookStartDate"
+                                                                                    value={formData.rcBookStartDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="rcBookExpiryDate"
+                                                                                    value={formData.rcBookExpiryDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
                                                                             <Td py={2.5} textAlign="center">
                                                                                 <Badge colorScheme={hasDoc(existingRcDoc) && !deleteRcBook ? "green" : rcFile ? "blue" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
                                                                                     {hasDoc(existingRcDoc) && !deleteRcBook ? 'VERIFIED' : rcFile ? 'NEW FILE' : 'PENDING'}
@@ -2730,32 +2802,24 @@ const VehicleMasterForm = () => {
                                                                                     </Box>
                                                                                 </HStack>
                                                                             </Td>
+                                                                            {/* Left side of uploader: Insurance Policy Number */}
                                                                             <Td py={2.5}>
                                                                                 <Input
-                                                                                    type="date"
                                                                                     size="xs"
                                                                                     h="32px"
                                                                                     borderRadius="md"
-                                                                                    name="insuranceStartDate"
-                                                                                    value={formData.insuranceStartDate || ''}
+                                                                                    name="insurancePolicyNumber"
+                                                                                    placeholder="e.g. POL-88234190"
+                                                                                    value={formData.insurancePolicyNumber || ''}
                                                                                     onChange={handleChange}
                                                                                     bg="white"
                                                                                     borderColor="gray.300"
+                                                                                    fontFamily="monospace"
+                                                                                    fontWeight="bold"
+                                                                                    _focus={{ borderColor: "teal.500", boxShadow: "0 0 0 1px #319795" }}
                                                                                 />
                                                                             </Td>
-                                                                            <Td py={2.5}>
-                                                                                <Input
-                                                                                    type="date"
-                                                                                    size="xs"
-                                                                                    h="32px"
-                                                                                    borderRadius="md"
-                                                                                    name="insuranceDate"
-                                                                                    value={formData.insuranceDate || ''}
-                                                                                    onChange={handleChange}
-                                                                                    bg="white"
-                                                                                    borderColor="gray.300"
-                                                                                />
-                                                                            </Td>
+                                                                            {/* Center: Document File Uploader */}
                                                                             <Td py={2.5}>
                                                                                 <input type="file" id="ins-upload" hidden onChange={(e) => setInsuranceFile(e.target.files[0])} accept="image/*,.pdf" />
                                                                                 {insuranceFile ? (
@@ -2846,6 +2910,33 @@ const VehicleMasterForm = () => {
                                                                                     </Button>
                                                                                 )}
                                                                             </Td>
+                                                                            {/* Right side of uploader: Start Date & End Date */}
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="insuranceStartDate"
+                                                                                    value={formData.insuranceStartDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="insuranceDate"
+                                                                                    value={formData.insuranceDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
                                                                             <Td py={2.5} textAlign="center">
                                                                                 <Badge colorScheme={hasDoc(existingInsuranceDoc) && !deleteInsurancePhoto ? "teal" : insuranceFile ? "blue" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
                                                                                     {hasDoc(existingInsuranceDoc) && !deleteInsurancePhoto ? 'ATTACHED' : insuranceFile ? 'NEW FILE' : 'PENDING'}
@@ -2866,32 +2957,24 @@ const VehicleMasterForm = () => {
                                                                                     </Box>
                                                                                 </HStack>
                                                                             </Td>
+                                                                            {/* Left side of uploader: PUC Certificate Number */}
                                                                             <Td py={2.5}>
                                                                                 <Input
-                                                                                    type="date"
                                                                                     size="xs"
                                                                                     h="32px"
                                                                                     borderRadius="md"
-                                                                                    name="pucStartDate"
-                                                                                    value={formData.pucStartDate || ''}
+                                                                                    name="pucNumber"
+                                                                                    placeholder="e.g. PUC-6623190"
+                                                                                    value={formData.pucNumber || ''}
                                                                                     onChange={handleChange}
                                                                                     bg="white"
                                                                                     borderColor="gray.300"
+                                                                                    fontFamily="monospace"
+                                                                                    fontWeight="bold"
+                                                                                    _focus={{ borderColor: "green.500", boxShadow: "0 0 0 1px #38A169" }}
                                                                                 />
                                                                             </Td>
-                                                                            <Td py={2.5}>
-                                                                                <Input
-                                                                                    type="date"
-                                                                                    size="xs"
-                                                                                    h="32px"
-                                                                                    borderRadius="md"
-                                                                                    name="pucDate"
-                                                                                    value={formData.pucDate || ''}
-                                                                                    onChange={handleChange}
-                                                                                    bg="white"
-                                                                                    borderColor="gray.300"
-                                                                                />
-                                                                            </Td>
+                                                                            {/* Center: Document File Uploader */}
                                                                             <Td py={2.5}>
                                                                                 <input type="file" id="puc-upload" hidden onChange={(e) => setPucFile(e.target.files[0])} accept="image/*,.pdf" />
                                                                                 {pucFile ? (
@@ -2982,6 +3065,33 @@ const VehicleMasterForm = () => {
                                                                                     </Button>
                                                                                 )}
                                                                             </Td>
+                                                                            {/* Right side of uploader: Start Date & End Date */}
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="pucStartDate"
+                                                                                    value={formData.pucStartDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
+                                                                            <Td py={2.5}>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    size="xs"
+                                                                                    h="32px"
+                                                                                    borderRadius="md"
+                                                                                    name="pucDate"
+                                                                                    value={formData.pucDate || ''}
+                                                                                    onChange={handleChange}
+                                                                                    bg="white"
+                                                                                    borderColor="gray.300"
+                                                                                />
+                                                                            </Td>
                                                                             <Td py={2.5} textAlign="center">
                                                                                 <Badge colorScheme={hasDoc(existingPucDoc) && !deletePucPhoto ? "green" : pucFile ? "blue" : "gray"} fontSize="9px" px={2} py={0.5} borderRadius="sm">
                                                                                     {hasDoc(existingPucDoc) && !deletePucPhoto ? 'ATTACHED' : pucFile ? 'NEW FILE' : 'PENDING'}
@@ -2990,6 +3100,235 @@ const VehicleMasterForm = () => {
                                                                         </Tr>
                                                                     </Tbody>
                                                                 </Table>
+                                                            </Box>
+                                                        </Box>
+
+                                                        {/* 3. Vehicle Photographs Gallery (Multi-Image Upload & Primary Image Selector) */}
+                                                        <Box bg="white" borderRadius="lg" border="1px solid" borderColor="gray.300" overflow="hidden">
+                                                            <Flex px={3.5} py={2} bg="gray.100" justify="space-between" align="center" borderBottom="1px solid" borderColor="gray.200" wrap="wrap" gap={2}>
+                                                                <HStack spacing={2}>
+                                                                    <Icon as={FaCamera} color="purple.600" />
+                                                                    <Text fontSize="11px" fontWeight="black" color="gray.800" textTransform="uppercase" letterSpacing="wider">
+                                                                        3. Vehicle Photographs Gallery
+                                                                    </Text>
+                                                                    <Badge colorScheme="purple" fontSize="9px" px={2} py={0.5} borderRadius="full">
+                                                                        {existingVehiclePhotos.length + newVehiclePhotos.length} Images Uploaded
+                                                                    </Badge>
+                                                                </HStack>
+                                                                <HStack spacing={2}>
+                                                                    <input
+                                                                        type="file"
+                                                                        id="vehicle-multi-photos-upload"
+                                                                        hidden
+                                                                        multiple
+                                                                        accept="image/*"
+                                                                        onChange={handleVehiclePhotoChange}
+                                                                    />
+                                                                    <Button
+                                                                        size="xs"
+                                                                        h="28px"
+                                                                        colorScheme="purple"
+                                                                        variant="solid"
+                                                                        leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                        borderRadius="md"
+                                                                        onClick={() => document.getElementById('vehicle-multi-photos-upload').click()}
+                                                                    >
+                                                                        Upload Vehicle Photos (Multiple)
+                                                                    </Button>
+                                                                </HStack>
+                                                            </Flex>
+
+                                                            <Box p={3.5}>
+                                                                {existingVehiclePhotos.length === 0 && newVehiclePhotos.length === 0 ? (
+                                                                    <Center
+                                                                        py={6}
+                                                                        border="2px dashed"
+                                                                        borderColor="gray.200"
+                                                                        borderRadius="md"
+                                                                        bg="gray.50"
+                                                                        cursor="pointer"
+                                                                        onClick={() => document.getElementById('vehicle-multi-photos-upload').click()}
+                                                                        _hover={{ bg: "purple.50", borderColor: "purple.300" }}
+                                                                        transition="all 0.15s"
+                                                                    >
+                                                                        <VStack spacing={1.5}>
+                                                                            <Icon as={FaCamera} color="gray.400" boxSize={6} />
+                                                                            <Text fontSize="xs" fontWeight="bold" color="gray.700">
+                                                                                Click here to select and upload multiple vehicle photos
+                                                                            </Text>
+                                                                            <Text fontSize="10px" color="gray.500">
+                                                                                Supports multiple files at once (JPG, PNG). The first photo will be used as the primary display image.
+                                                                            </Text>
+                                                                        </VStack>
+                                                                    </Center>
+                                                                ) : (
+                                                                    <VStack spacing={3} align="stretch">
+                                                                        <Flex justify="space-between" align="center">
+                                                                            <Text fontSize="10px" color="gray.500" fontStyle="italic">
+                                                                                ★ The first photo is the Primary Display Image. Click "Set Primary" on any other photo to make it primary.
+                                                                            </Text>
+                                                                            <Button
+                                                                                size="2xs"
+                                                                                variant="outline"
+                                                                                colorScheme="purple"
+                                                                                leftIcon={<Icon as={FaPlus} />}
+                                                                                onClick={() => document.getElementById('vehicle-multi-photos-upload').click()}
+                                                                            >
+                                                                                Add More Photos
+                                                                            </Button>
+                                                                        </Flex>
+
+                                                                        <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing={3}>
+                                                                            {/* Existing Photos from server */}
+                                                                            {existingVehiclePhotos.map((photoUrl, idx) => {
+                                                                                const isPrimary = (primaryType === 'existing' && idx === 0);
+                                                                                const fullUrl = getFileUrl(photoUrl);
+                                                                                return (
+                                                                                    <Box
+                                                                                        key={`existing-${idx}`}
+                                                                                        position="relative"
+                                                                                        borderRadius="md"
+                                                                                        overflow="hidden"
+                                                                                        border="2px solid"
+                                                                                        borderColor={isPrimary ? "green.500" : "gray.200"}
+                                                                                        bg="gray.50"
+                                                                                        boxShadow={isPrimary ? "sm" : "none"}
+                                                                                    >
+                                                                                        <Box h="100px" w="full" overflow="hidden" bg="blackAlpha.100">
+                                                                                            <Image
+                                                                                                src={fullUrl}
+                                                                                                alt={`Vehicle photo ${idx + 1}`}
+                                                                                                w="full"
+                                                                                                h="full"
+                                                                                                objectFit="cover"
+                                                                                            />
+                                                                                        </Box>
+                                                                                        {isPrimary && (
+                                                                                            <Badge
+                                                                                                position="absolute"
+                                                                                                top={1}
+                                                                                                left={1}
+                                                                                                colorScheme="green"
+                                                                                                fontSize="8px"
+                                                                                                px={1.5}
+                                                                                                py={0.2}
+                                                                                                borderRadius="sm"
+                                                                                                fontWeight="black"
+                                                                                            >
+                                                                                                ★ PRIMARY
+                                                                                            </Badge>
+                                                                                        )}
+                                                                                        <IconButton
+                                                                                            position="absolute"
+                                                                                            top={1}
+                                                                                            right={1}
+                                                                                            size="2xs"
+                                                                                            colorScheme="red"
+                                                                                            variant="solid"
+                                                                                            icon={<Icon as={FaTrash} />}
+                                                                                            onClick={() => removeExistingVehiclePhoto(idx)}
+                                                                                            aria-label="Remove photo"
+                                                                                            title="Remove photo"
+                                                                                        />
+                                                                                        <Box p={1.5} bg="white" borderTop="1px solid" borderColor="gray.200">
+                                                                                            {!isPrimary ? (
+                                                                                                <Button
+                                                                                                    size="2xs"
+                                                                                                    w="full"
+                                                                                                    variant="outline"
+                                                                                                    colorScheme="blue"
+                                                                                                    fontSize="9px"
+                                                                                                    h="20px"
+                                                                                                    leftIcon={<Icon as={FaStar} />}
+                                                                                                    onClick={() => setPrimaryExistingPhoto(idx)}
+                                                                                                >
+                                                                                                    Set Primary
+                                                                                                </Button>
+                                                                                            ) : (
+                                                                                                <Text fontSize="9px" color="green.600" fontWeight="bold" textAlign="center">
+                                                                                                    Main Image
+                                                                                                </Text>
+                                                                                            )}
+                                                                                        </Box>
+                                                                                    </Box>
+                                                                                );
+                                                                            })}
+
+                                                                            {/* New Photos selected for upload */}
+                                                                            {newVehiclePhotos.map((file, idx) => {
+                                                                                const isPrimary = (primaryType === 'new' && idx === 0) || (existingVehiclePhotos.length === 0 && idx === 0);
+                                                                                const previewUrl = URL.createObjectURL(file);
+                                                                                return (
+                                                                                    <Box
+                                                                                        key={`new-${idx}`}
+                                                                                        position="relative"
+                                                                                        borderRadius="md"
+                                                                                        overflow="hidden"
+                                                                                        border="2px solid"
+                                                                                        borderColor={isPrimary ? "green.500" : "blue.300"}
+                                                                                        bg="gray.50"
+                                                                                        boxShadow={isPrimary ? "sm" : "none"}
+                                                                                    >
+                                                                                        <Box h="100px" w="full" overflow="hidden" bg="blackAlpha.100">
+                                                                                            <Image
+                                                                                                src={previewUrl}
+                                                                                                alt={file.name}
+                                                                                                w="full"
+                                                                                                h="full"
+                                                                                                objectFit="cover"
+                                                                                            />
+                                                                                        </Box>
+                                                                                        <Badge
+                                                                                            position="absolute"
+                                                                                            top={1}
+                                                                                            left={1}
+                                                                                            colorScheme={isPrimary ? "green" : "blue"}
+                                                                                            fontSize="8px"
+                                                                                            px={1.5}
+                                                                                            py={0.2}
+                                                                                            borderRadius="sm"
+                                                                                            fontWeight="black"
+                                                                                        >
+                                                                                            {isPrimary ? '★ PRIMARY (NEW)' : 'NEW FILE'}
+                                                                                        </Badge>
+                                                                                        <IconButton
+                                                                                            position="absolute"
+                                                                                            top={1}
+                                                                                            right={1}
+                                                                                            size="2xs"
+                                                                                            colorScheme="red"
+                                                                                            variant="solid"
+                                                                                            icon={<Icon as={FaTrash} />}
+                                                                                            onClick={() => removeNewVehiclePhoto(idx)}
+                                                                                            aria-label="Remove photo"
+                                                                                            title="Remove photo"
+                                                                                        />
+                                                                                        <Box p={1.5} bg="white" borderTop="1px solid" borderColor="gray.200">
+                                                                                            {!isPrimary ? (
+                                                                                                <Button
+                                                                                                    size="2xs"
+                                                                                                    w="full"
+                                                                                                    variant="outline"
+                                                                                                    colorScheme="blue"
+                                                                                                    fontSize="9px"
+                                                                                                    h="20px"
+                                                                                                    leftIcon={<Icon as={FaStar} />}
+                                                                                                    onClick={() => setPrimaryNewPhoto(idx)}
+                                                                                                >
+                                                                                                    Set Primary
+                                                                                                </Button>
+                                                                                            ) : (
+                                                                                                <Text fontSize="9px" color="green.600" fontWeight="bold" textAlign="center">
+                                                                                                    Main Image
+                                                                                                </Text>
+                                                                                            )}
+                                                                                        </Box>
+                                                                                    </Box>
+                                                                                );
+                                                                            })}
+                                                                        </SimpleGrid>
+                                                                    </VStack>
+                                                                )}
                                                             </Box>
                                                         </Box>
                                                     </VStack>
@@ -4809,8 +5148,8 @@ const VehicleMasterForm = () => {
                                                     {viewVehicle.vehicleNumber}
                                                 </Text>
                                             </Box>
-                                            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2.5} w="full" pt={0.5}>
-                                                <Box bg="gray.50" px={2.5} py={1} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                            <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={2} w="full" pt={0.5}>
+                                                <Box bg="gray.50" px={2} py={1} borderRadius="lg" border="1px solid" borderColor="gray.200">
                                                     <Text fontSize="8px" fontWeight="black" color="gray.400" textTransform="uppercase" letterSpacing="wider">
                                                         VEHICLE NAME
                                                     </Text>
@@ -4818,12 +5157,20 @@ const VehicleMasterForm = () => {
                                                         {viewVehicle.vehicleName?.split(' ')[0] || viewVehicle.vehicleName || 'Fleet Vehicle'}
                                                     </Text>
                                                 </Box>
-                                                <Box bg="purple.50" px={2.5} py={1} borderRadius="lg" border="1px solid" borderColor="purple.200">
+                                                <Box bg="purple.50" px={2} py={1} borderRadius="lg" border="1px solid" borderColor="purple.200">
                                                     <Text fontSize="8px" fontWeight="black" color="purple.500" textTransform="uppercase" letterSpacing="wider">
                                                         MODEL NAME
                                                     </Text>
                                                     <Text fontSize="xs" fontWeight="bold" color="purple.800" textTransform="uppercase" noOfLines={1}>
-                                                        {viewVehicle.vehicleName?.split(' ').slice(1).join(' ') || viewVehicle.rcBookNumber || viewVehicle.vehicleName || 'Standard'}
+                                                        {viewVehicle.vehicleName?.split(' ').slice(1).join(' ') || viewVehicle.vehicleName || 'Standard'}
+                                                    </Text>
+                                                </Box>
+                                                <Box bg="blue.50" px={2} py={1} borderRadius="lg" border="1px solid" borderColor="blue.200">
+                                                    <Text fontSize="8px" fontWeight="black" color="blue.500" textTransform="uppercase" letterSpacing="wider">
+                                                        NICK NAME
+                                                    </Text>
+                                                    <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" noOfLines={1}>
+                                                        {viewVehicle.vehicleNickName || '—'}
                                                     </Text>
                                                 </Box>
                                             </SimpleGrid>
@@ -5043,23 +5390,35 @@ const VehicleMasterForm = () => {
                                         <VStack spacing={4} align="stretch">
                                             {/* Top horizontal row: RC Book number | Vehicle number | Vehicle model or name */}
                                             <Box bg="white" p={4} borderRadius="2xl" border="1.5px solid" borderColor="blue.200" boxShadow="xs">
-                                                <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} textAlign={{ base: 'left', sm: 'center' }}>
+                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 5 }} spacing={3} textAlign={{ base: 'left', sm: 'center' }}>
                                                     <Box>
                                                         <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">RC Book Number</Text>
-                                                        <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="blue.900" fontFamily="monospace" mt={0.5}>
+                                                        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="blue.900" fontFamily="monospace" mt={0.5}>
                                                             {viewVehicle.rcBookNumber || 'Not Specified'}
                                                         </Text>
                                                     </Box>
-                                                    <Box borderLeft={{ sm: '1px solid' }} borderRight={{ sm: '1px solid' }} borderColor={{ sm: 'gray.200' }} px={2}>
+                                                    <Box borderLeft={{ md: '1px solid' }} borderColor={{ md: 'gray.200' }} px={2}>
                                                         <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">Vehicle Number</Text>
-                                                        <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="blue.900" fontFamily="monospace" mt={0.5}>
+                                                        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="blue.900" fontFamily="monospace" mt={0.5}>
                                                             {viewVehicle.vehicleNumber}
                                                         </Text>
                                                     </Box>
-                                                    <Box>
-                                                        <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">Vehicle Model / Name</Text>
-                                                        <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="bold" color="blue.900" mt={0.5} noOfLines={1}>
-                                                            {viewVehicle.vehicleName || 'Fleet Vehicle'}
+                                                    <Box borderLeft={{ md: '1px solid' }} borderColor={{ md: 'gray.200' }} px={2}>
+                                                        <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">Nick Name</Text>
+                                                        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="bold" color="blue.900" mt={0.5} noOfLines={1}>
+                                                            {viewVehicle.vehicleNickName || '—'}
+                                                        </Text>
+                                                    </Box>
+                                                    <Box borderLeft={{ md: '1px solid' }} borderColor={{ md: 'gray.200' }} px={2}>
+                                                        <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">Issue / Start Date</Text>
+                                                        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="bold" color="gray.700" mt={0.5}>
+                                                            {viewVehicle.rcBookStartDate ? toExcelDate(viewVehicle.rcBookStartDate) : 'Not Set'}
+                                                        </Text>
+                                                    </Box>
+                                                    <Box borderLeft={{ md: '1px solid' }} borderColor={{ md: 'gray.200' }} px={2}>
+                                                        <Text fontSize="10px" fontWeight="black" color="blue.600" textTransform="uppercase" letterSpacing="wider">Expiry / Fitness</Text>
+                                                        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="bold" color="gray.700" mt={0.5}>
+                                                            {viewVehicle.rcBookExpiryDate ? toExcelDate(viewVehicle.rcBookExpiryDate) : 'Lifetime / Not Set'}
                                                         </Text>
                                                     </Box>
                                                 </SimpleGrid>
@@ -5497,20 +5856,26 @@ const VehicleMasterForm = () => {
                                                         </HStack>
                                                     </HStack>
 
-                                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} textAlign="center">
-                                                        <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                                    <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3} textAlign="center">
+                                                        <Box bg="teal.50" p={3} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                                            <Text fontSize="10px" color="teal.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Policy Number</Text>
+                                                            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5} noOfLines={1}>
+                                                                {viewVehicle.insurancePolicyNumber || viewVehicle.rcBookNumber || 'Not Specified'}
+                                                            </Text>
+                                                        </Box>
+                                                        <Box bg="teal.50" p={3} borderRadius="xl" border="1px solid" borderColor="teal.100">
                                                             <Text fontSize="10px" color="teal.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Start Date</Text>
-                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
                                                                 {viewVehicle.insuranceStartDate ? toExcelDate(viewVehicle.insuranceStartDate) : 'Not Set'}
                                                             </Text>
                                                         </Box>
-                                                        <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                                        <Box bg="teal.50" p={3} borderRadius="xl" border="1px solid" borderColor="teal.100">
                                                             <Text fontSize="10px" color="teal.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">End Date (Expiry)</Text>
-                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
                                                                 {viewVehicle.insuranceDate ? toExcelDate(viewVehicle.insuranceDate) : 'Not Set'}
                                                             </Text>
                                                         </Box>
-                                                        <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                                        <Box bg="teal.50" p={3} borderRadius="xl" border="1px solid" borderColor="teal.100">
                                                             <Text fontSize="10px" color="teal.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Insurance Status</Text>
                                                             <Badge colorScheme={validity.colorScheme} bg={validity.bg} color="white" px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black" mt={1}>
                                                                 {validity.status === 'expired' ? 'EXPIRED' : validity.status === 'expiring_soon' ? 'EXPIRING SOON' : validity.status === 'active' ? 'ACTIVE' : 'NOT SET'}
@@ -5676,20 +6041,26 @@ const VehicleMasterForm = () => {
                                                         </HStack>
                                                     </HStack>
 
-                                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} textAlign="center">
-                                                        <Box bg="green.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="green.100">
+                                                    <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3} textAlign="center">
+                                                        <Box bg="green.50" p={3} borderRadius="xl" border="1px solid" borderColor="green.100">
+                                                            <Text fontSize="10px" color="green.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Certificate Number</Text>
+                                                            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5} noOfLines={1}>
+                                                                {viewVehicle.pucNumber || 'Not Specified'}
+                                                            </Text>
+                                                        </Box>
+                                                        <Box bg="green.50" p={3} borderRadius="xl" border="1px solid" borderColor="green.100">
                                                             <Text fontSize="10px" color="green.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">Start Date</Text>
-                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
                                                                 {viewVehicle.pucStartDate ? toExcelDate(viewVehicle.pucStartDate) : 'Not Set'}
                                                             </Text>
                                                         </Box>
-                                                        <Box bg="green.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="green.100">
+                                                        <Box bg="green.50" p={3} borderRadius="xl" border="1px solid" borderColor="green.100">
                                                             <Text fontSize="10px" color="green.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">End Date (Expiry)</Text>
-                                                            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
+                                                            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="black" color="gray.800" fontFamily="monospace" mt={0.5}>
                                                                 {viewVehicle.pucDate ? toExcelDate(viewVehicle.pucDate) : 'Not Set'}
                                                             </Text>
                                                         </Box>
-                                                        <Box bg="green.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="green.100">
+                                                        <Box bg="green.50" p={3} borderRadius="xl" border="1px solid" borderColor="green.100">
                                                             <Text fontSize="10px" color="green.600" fontWeight="black" textTransform="uppercase" letterSpacing="wider">PUC Status</Text>
                                                             <Badge colorScheme={validity.colorScheme} bg={validity.bg} color="white" px={3} py={1} borderRadius="lg" fontSize="xs" fontWeight="black" mt={1}>
                                                                 {validity.status === 'expired' ? 'EXPIRED' : validity.status === 'expiring_soon' ? 'EXPIRING SOON' : validity.status === 'valid' ? 'VALID' : 'NOT SET'}
@@ -5739,7 +6110,7 @@ const VehicleMasterForm = () => {
                                                                     <Tr>
                                                                         <Th fontSize="10px" color="green.800" py={2.5}>#</Th>
                                                                         <Th fontSize="10px" color="green.800" py={2.5}>Period (Start - Expiry)</Th>
-                                                                        <Th fontSize="10px" color="green.800" py={2.5}>Remarks</Th>
+                                                                        <Th fontSize="10px" color="green.800" py={2.5}>Cert No / Remarks</Th>
                                                                         <Th fontSize="10px" color="green.800" py={2.5}>Uploaded On</Th>
                                                                         <Th fontSize="10px" color="green.800" py={2.5} textAlign="center">Status</Th>
                                                                         <Th fontSize="10px" color="green.800" py={2.5} textAlign="right">Document</Th>
@@ -5756,7 +6127,7 @@ const VehicleMasterForm = () => {
                                                                                     {h.startDate ? toExcelDate(h.startDate) : '—'} → {h.expiryDate ? toExcelDate(h.expiryDate) : '—'}
                                                                                 </Td>
                                                                                 <Td fontSize="xs" color="gray.700">
-                                                                                    <Text fontWeight="bold" noOfLines={1}>{h.remarks || 'Emission Compliance'}</Text>
+                                                                                    <Text fontWeight="bold" noOfLines={1}>{h.certificateNumber || h.remarks || 'Emission Compliance'}</Text>
                                                                                 </Td>
                                                                                 <Td fontSize="xs" color="gray.500" whiteSpace="nowrap">
                                                                                     {h.uploadedAt ? toExcelDate(h.uploadedAt) : '—'}
@@ -6497,11 +6868,23 @@ const VehicleMasterForm = () => {
                                 </Text>
                             </Box>
 
-                            {renewType === 'insurance' && (
+                            {renewType === 'insurance' ? (
                                 <FormControl>
                                     <FormLabel fontSize="xs" fontWeight="bold">Policy Number (Optional)</FormLabel>
                                     <Input
                                         placeholder="e.g. POL-98765432"
+                                        value={renewPolicyNumber}
+                                        onChange={(e) => setRenewPolicyNumber(e.target.value)}
+                                        borderRadius="xl"
+                                        size="sm"
+                                        bg="white"
+                                    />
+                                </FormControl>
+                            ) : (
+                                <FormControl>
+                                    <FormLabel fontSize="xs" fontWeight="bold">PUC Certificate Number (Optional)</FormLabel>
+                                    <Input
+                                        placeholder="e.g. PUC-98765432"
                                         value={renewPolicyNumber}
                                         onChange={(e) => setRenewPolicyNumber(e.target.value)}
                                         borderRadius="xl"
