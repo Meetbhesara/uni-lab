@@ -28,6 +28,13 @@ const PARENT_PERMISSIONS = {
     'companyMaster_form': 'companyMaster',
     'companyMaster_view': 'companyMaster',
 
+    // Login Report
+    'loginReport_attendance': 'loginReport',
+    'loginReport_createAdmin': 'loginReport',
+    'loginReport_accounts': 'loginReport',
+    'loginReport_admins': 'loginReport',
+    'loginReport_users': 'loginReport',
+
     // Client Master
     'clientMaster_form': 'clientMaster',
     'clientMaster_view': 'clientMaster',

@@ -559,12 +559,13 @@ const CartSidebar = ({ onOpenCart }) => {
 const Products = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { id: routeProductId } = useParams();
+    const { id: routeProductId, categorySlug, productSlug } = useParams();
     const { user } = useAuth();
     const searchParams = new URLSearchParams(location.search);
     const searchQuery = searchParams.get('search') || '';
-    const urlCategory = searchParams.get('category') || '';
-    const highlightId = routeProductId || searchParams.get('highlight') || '';
+    const effectiveSlug = productSlug || routeProductId || '';
+    const urlCategory = categorySlug || searchParams.get('category') || '';
+    const highlightId = effectiveSlug || searchParams.get('highlight') || '';
     const { addToCart, cart } = useCart();
     const toast = useToast();
     const [products, setProducts] = useState([]);
@@ -795,31 +796,44 @@ const Products = () => {
 
     // Compute dynamic SEO metadata for product, category, or search (Called unconditionally before any return)
     const currentCategoryObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory || c.slug === activeCategory);
+    const pName = highlightProduct ? highlightProduct.name.trim() : '';
+    const altNamesStr = altNames.length > 0 ? ` (${altNames.slice(0, 2).join(', ')})` : '';
+    const altNamesTag = altNames.length > 0 ? ` [Also: ${altNames.join(', ')}]` : '';
+
     const seoTitle = highlightProduct
-        ? `${highlightProduct.name.trim()}${altNames.length > 0 ? ` (${altNames.slice(0, 2).join(', ')})` : ''} | Unique Lab Instruments`
+        ? `${pName}${altNamesStr} - Price, Manufacturer & Supplier Ahmedabad | Unique Engineering`
         : currentCategoryObj
-        ? `${currentCategoryObj.title} | Civil Lab Equipment Ahmedabad`
+        ? `${currentCategoryObj.title} Manufacturer & Supplier Ahmedabad, Gujarat | Unique Engineering`
         : searchQuery
-        ? `Search: "${searchQuery}" | Civil Lab Equipment`
-        : `Civil Lab Testing Instruments & Survey Equipment Catalog`;
+        ? `Search: "${searchQuery}" | Civil Lab Equipment Ahmedabad — uecivil.com`
+        : `Civil Engineering Lab Testing Instruments & Survey Equipment Ahmedabad | Unique Engineering`;
+
     const seoDescription = highlightProduct
-        ? `${highlightProduct.name.trim()}${altNames.length > 0 ? ` [Also: ${altNames.join(', ')}]` : ''} - ${highlightProduct.description || 'Civil engineering testing instrument by Unique Lab Instruments Ahmedabad'}. Certified standard quality with PAN India delivery, warranty & calibration.`
+        ? `Buy ${pName}${altNamesTag} at best price from Unique Engineering, Ahmedabad. Certified IS/ASTM standards, warranty, calibration & PAN India delivery. Call +91 90991 60391 | uecivil.com`
         : currentCategoryObj
-        ? `Explore high-precision ${currentCategoryObj.title} by Unique Engineering (uecivil.com). Certified civil laboratory testing instruments, brochures & quotations in Gujarat.`
-        : `Complete catalog of civil engineering testing instruments in Ahmedabad: Concrete, Soil, Bitumen, Construction Machinery, Survey Total Stations & PPE safety equipment.`;
+        ? `Explore certified ${currentCategoryObj.title} from Unique Engineering, Ahmedabad. ISI/ASTM compliant civil lab testing equipment, CTM, moulds, direct shear, penetrometer. PAN India delivery. Call +91 90991 60391.`
+        : `Unique Engineering (uecivil.com) — Premier manufacturer & supplier of civil engineering testing instruments in Ahmedabad, Gujarat: CTM 2000kN, Cube Moulds, Soil, Bitumen, Auto Level & Survey Equipment. Call +91 90991 60391.`;
+
     const seoKeywords = highlightProduct
         ? [
-            highlightProduct.name.trim(),
+            pName,
+            `${pName} price`,
+            `${pName} manufacturer`,
+            `${pName} supplier ahmedabad`,
+            `${pName} gujarat`,
+            `${pName} india`,
             ...altNames,
             highlightProduct.category,
+            'Unique Engineering',
             'Unique Lab Instruments',
             'uecivil',
-            'civil testing equipment ahmedabad',
-            'buy lab testing equipment'
+            'civil lab testing equipment ahmedabad',
+            'civil testing equipment price india'
           ].filter(Boolean).join(', ')
         : currentCategoryObj
-        ? `${currentCategoryObj.seoKeywords}, uecivil, unique lab instruments`
-        : `civil lab instruments ahmedabad, concrete testing equipment, soil testing apparatus, bitumen testing machine, total station gujarat, uecivil`;
+        ? `${currentCategoryObj.seoKeywords}, ${currentCategoryObj.title} manufacturer ahmedabad, uecivil, unique engineering`
+        : `civil lab instruments ahmedabad, concrete testing equipment, soil testing apparatus, bitumen testing machine, total station gujarat, uecivil, unique engineering`;
+
     const activeProductSlug = highlightProduct?.slug || highlightProduct?._id;
     const seoCanonical = highlightProduct
         ? `https://uecivil.com/products/${activeProductSlug}`
@@ -889,7 +903,8 @@ const Products = () => {
                         "category": highlightProduct.category || "Civil Engineering Testing Equipment",
                         "brand": {
                             "@type": "Brand",
-                            "name": "Unique Lab Instruments"
+                            "name": "Unique Engineering",
+                            "alternateName": "Unique Lab Instruments"
                         },
                         "manufacturer": {
                             "@type": "Organization",
@@ -901,7 +916,13 @@ const Products = () => {
                             "url": `https://uecivil.com/products/${activeProductSlug}`,
                             "availability": "https://schema.org/InStock",
                             "itemCondition": "https://schema.org/NewCondition",
-                            "priceCurrency": "INR"
+                            "priceCurrency": "INR",
+                            "price": highlightProduct.sellingPriceStart || "0",
+                            "seller": {
+                                "@type": "Organization",
+                                "name": "Unique Engineering",
+                                "url": "https://uecivil.com"
+                            }
                         },
                         ...(specsProperties.length > 0 ? { "additionalProperty": specsProperties } : {})
                     },

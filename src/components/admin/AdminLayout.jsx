@@ -6,7 +6,7 @@ import {
 import {
     FiHome, FiBox, FiMessageSquare, FiMenu, FiX, FiLogOut,
     FiGlobe, FiArrowLeft, FiFileText, FiLock, FiSettings, FiLayers, FiBriefcase,
-    FiChevronDown, FiChevronRight
+    FiChevronDown, FiChevronRight, FiClock
 } from 'react-icons/fi';
 import { FaBuilding, FaUserTie } from 'react-icons/fa';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -98,6 +98,11 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                         </NavItem>
                     );
                 })}
+                {(!user?.permissions || user?.permissions?.loginReport?.read !== false || user?.isSuperAdmin) && (
+                    <NavItem icon={FiClock} path="/admin/login-report" onClose={onClose}>
+                        Login Report
+                    </NavItem>
+                )}
                 {user?.isSuperAdmin && (
                     <NavItem icon={FiLock} path="/admin/permissions" onClose={onClose}>
                         Permissions
@@ -115,16 +120,8 @@ const SidebarContent = ({ onClose, user, logout, navigate, ...rest }) => {
                 )}
             </Box>
 
-            {/* Quick Links */}
-            <Box px="2" mt="auto" borderTop="1px" borderColor="gray.100" pt={2.5} pb={1} flexShrink={0}>
-                <Text fontSize="10px" fontWeight="800" color="gray.400" mb={1} px={2.5} letterSpacing="wider">QUICK LINKS</Text>
-                <NavItem icon={FiGlobe} path="/" onClose={onClose}>Home Page</NavItem>
-                <NavItem icon={FiBriefcase} path="/services?view=public" onClose={onClose}>Public Service</NavItem>
-                <NavItem icon={FiBox} path="/products" onClose={onClose}>Public Products</NavItem>
-            </Box>
-
             {/* Logout/Exit Buttons */}
-            <Box p="2" mx="2" mb="2" borderTop="1px" borderColor="gray.100" flexShrink={0}>
+            <Box p="2" mx="2" mb="2" mt="auto" borderTop="1px" borderColor="gray.100" flexShrink={0}>
                 <Flex
                     align="center"
                     py="2"

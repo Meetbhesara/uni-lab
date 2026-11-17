@@ -5,474 +5,474 @@
                             http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
     <url>
         <loc>https://uecivil.com/</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>daily</changefreq>
         <priority>1.00</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>daily</changefreq>
         <priority>0.95</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>daily</changefreq>
         <priority>0.95</priority>
     </url>
     <url>
         <loc>https://uecivil.com/about</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.80</priority>
     </url>
     <url>
         <loc>https://uecivil.com/contact</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/unique-lab-instruments</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>daily</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=contour-survey</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=topography-survey</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=point-marking</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=dgps-survey</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=drone-survey</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=layout-demarcation</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/services?survey=road-alignment</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=cement-concrete</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=soil-testing</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=bitumen-testing</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=survey-instruments</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=construction-machinery</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
         <loc>https://uecivil.com/products?category=safety-products</loc>
-        <lastmod>2026-11-07</lastmod>
+        <lastmod>2026-11-17</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.90</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69986e98b856db6a130424a5</loc>
+        <loc>https://uecivil.com/products/auto-level-sokkia-set</loc>
         <lastmod>2026-02-20</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69986f56b856db6a13042505</loc>
+        <loc>https://uecivil.com/products/compression-testing-machine</loc>
         <lastmod>2026-02-20</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699afa0ac3dab485ce61d27e</loc>
+        <loc>https://uecivil.com/products/aggregate-impect-velus</loc>
         <lastmod>2026-02-22</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699c329ec14b57aa5662eb4d</loc>
+        <loc>https://uecivil.com/products/auto-level-bosch-set</loc>
         <lastmod>2026-02-23</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d7bc6d6d939496ce3d54c</loc>
+        <loc>https://uecivil.com/products/slump-cone-apparatus-slump-cone-apparatus</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d7db7d6d939496ce3d55b</loc>
+        <loc>https://uecivil.com/products/compression-testing-machine-1</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d8200d6d939496ce3d5c1</loc>
+        <loc>https://uecivil.com/products/compression-testing-machine-2</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d83b1d6d939496ce3d5cb</loc>
+        <loc>https://uecivil.com/products/motor-cube-vibrating-machine</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d84fbd6d939496ce3d5d5</loc>
+        <loc>https://uecivil.com/products/digital-compression-testing-machine-1500kn</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d8680d6d939496ce3d5f4</loc>
+        <loc>https://uecivil.com/products/cube-testing-machine-1000-kn-with-challen</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d8746d6d939496ce3d5fe</loc>
+        <loc>https://uecivil.com/products/laboratory-hot-air-oven-size-14-x-14</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d88cad6d939496ce3d608</loc>
+        <loc>https://uecivil.com/products/hot-air-oven-with-digital-display-oven-size-18-x-18</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d8c9fd6d939496ce3d677</loc>
+        <loc>https://uecivil.com/products/flexural-testing-machine-hand-opp</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d8d08d6d939496ce3d681</loc>
+        <loc>https://uecivil.com/products/flexural-testing-machine-digital</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d8f4ed6d939496ce3d68d</loc>
+        <loc>https://uecivil.com/products/concrete-moulds-vibrating-table</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d90a2d6d939496ce3d6b9</loc>
+        <loc>https://uecivil.com/products/stainless-steels-scoop-1-kg</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9117d6d939496ce3d6c3</loc>
+        <loc>https://uecivil.com/products/stainless-steels-scoop-2kg</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9218d6d939496ce3d6cd</loc>
+        <loc>https://uecivil.com/products/cube-mould-isi</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d93b1d6d939496ce3d6f6</loc>
+        <loc>https://uecivil.com/products/marsh-cone-ms</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9423d6d939496ce3d700</loc>
+        <loc>https://uecivil.com/products/flow-table-700-x-700-ms</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d96ecd6d939496ce3d70a</loc>
+        <loc>https://uecivil.com/products/l-box-test-apparatus</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9886d6d939496ce3d714</loc>
+        <loc>https://uecivil.com/products/automatic-compression-testing-machine-1000kkn</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9a1ad6d939496ce3d71e</loc>
+        <loc>https://uecivil.com/products/automatic-compression-testing-machine-1500kn</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9ad5d6d939496ce3d740</loc>
+        <loc>https://uecivil.com/products/automatic-compression-testing-machine-2000kn</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9c46d6d939496ce3d756</loc>
+        <loc>https://uecivil.com/products/lose-angeles-brande-moter</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9eb5d6d939496ce3d760</loc>
+        <loc>https://uecivil.com/products/digital-penetro-meter</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699d9f5ed6d939496ce3d76a</loc>
+        <loc>https://uecivil.com/products/bitumen-extractor-electrical-hand-opp</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da0a3d6d939496ce3d774</loc>
+        <loc>https://uecivil.com/products/bitumen-extractor-electrical</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da1dcd6d939496ce3d77e</loc>
+        <loc>https://uecivil.com/products/bitumen-penetrometer</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da272d6d939496ce3d788</loc>
+        <loc>https://uecivil.com/products/bitumen-ductility-testing</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da314d6d939496ce3d792</loc>
+        <loc>https://uecivil.com/products/digital-ductility-testing-machine</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da3afd6d939496ce3d79c</loc>
+        <loc>https://uecivil.com/products/eleastic-recovery-mould</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da43cd6d939496ce3d7a6</loc>
+        <loc>https://uecivil.com/products/marshall-stability-testing-machine</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da70cd6d939496ce3d7b0</loc>
+        <loc>https://uecivil.com/products/ring-and-ball-apparatus</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/699da761d6d939496ce3d7ba</loc>
+        <loc>https://uecivil.com/products/rain-gauge-cylindrical</loc>
         <lastmod>2026-02-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a13f6ec047b67515216ae5</loc>
+        <loc>https://uecivil.com/products/loss-on-heating-test-oven</loc>
         <lastmod>2026-02-27</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a14424477e76ce79551544</loc>
+        <loc>https://uecivil.com/products/depth-gauge</loc>
         <lastmod>2026-02-27</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a1450f477e76ce7955155a</loc>
+        <loc>https://uecivil.com/products/kinematic-viscosity</loc>
         <lastmod>2026-02-27</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a1456f477e76ce79551564</loc>
+        <loc>https://uecivil.com/products/bod-cod-incubators</loc>
         <lastmod>2026-02-27</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a145d3477e76ce7955156e</loc>
+        <loc>https://uecivil.com/products/vaccum-pump</loc>
         <lastmod>2026-02-27</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a146aa477e76ce79551578</loc>
+        <loc>https://uecivil.com/products/asphalt-ignition-oven</loc>
         <lastmod>2026-02-27</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a151866cf3f348b3e4ac4f</loc>
+        <loc>https://uecivil.com/products/thedolight-digital</loc>
         <lastmod>2026-02-27</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a2e172f0b3485d82dd8217</loc>
+        <loc>https://uecivil.com/products/thedolight-digital-1</loc>
         <lastmod>2026-02-28</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a2e20ef0b3485d82dd8221</loc>
+        <loc>https://uecivil.com/products/thedolight-digital-2</loc>
         <lastmod>2026-02-28</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a2e49df0b3485d82dd822b</loc>
+        <loc>https://uecivil.com/products/rodo-meter</loc>
         <lastmod>2026-02-28</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a52b20d633800a5e5d794c</loc>
+        <loc>https://uecivil.com/products/cube-mould-non-isi</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a52d31d633800a5e5d7956</loc>
+        <loc>https://uecivil.com/products/auto-level-leica</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a536ae89b57467096a15f4</loc>
+        <loc>https://uecivil.com/products/auto-level-south</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a567efb8a29ab631750079</loc>
+        <loc>https://uecivil.com/products/empty-box-level-machine</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a56a64b8a29ab631750084</loc>
+        <loc>https://uecivil.com/products/prisem</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a56aebb8a29ab63175008f</loc>
+        <loc>https://uecivil.com/products/mini-pricem</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a56b75b8a29ab63175009a</loc>
+        <loc>https://uecivil.com/products/prisem-pole</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/69a56cbfb8a29ab6317500a5</loc>
+        <loc>https://uecivil.com/products/cable-locator</loc>
         <lastmod>2026-03-02</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/6a0e8963c2be3149a4fc6de6</loc>
+        <loc>https://uecivil.com/products/meet</loc>
         <lastmod>2026-05-21</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/6a33ce3fd222bb53f0ab26b6</loc>
+        <loc>https://uecivil.com/products/f</loc>
         <lastmod>2026-06-18</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/6a3bb897f7bd982372bfc155</loc>
+        <loc>https://uecivil.com/products/industrial-high-pressure-pump</loc>
         <lastmod>2026-06-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/6a3bc0760233854f6f5f40d7</loc>
+        <loc>https://uecivil.com/products/mit-manojbhai-bhesara</loc>
         <lastmod>2026-06-24</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/6a4236382cf77b1bd1686cca</loc>
+        <loc>https://uecivil.com/products/hello</loc>
         <lastmod>2026-06-29</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/6a6ca02b8ce102855686dce8</loc>
+        <loc>https://uecivil.com/products/meet-1</loc>
         <lastmod>2026-07-31</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/products/6a79679067a574cea8217465</loc>
+        <loc>https://uecivil.com/products/ds</loc>
         <lastmod>2026-08-10</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>

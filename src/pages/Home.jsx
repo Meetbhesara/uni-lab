@@ -30,6 +30,49 @@ const Home = () => {
                 "description": "Premier civil engineering lab testing equipment and land surveying solutions in Ahmedabad, Gujarat."
             },
             {
+                "@type": "ItemList",
+                "@id": "https://uecivil.com/#featured-products",
+                "name": "Civil Engineering Lab Testing Equipment by Unique Engineering",
+                "itemListElement": [
+                    {
+                        "@type": "ListItem",
+                        "position": 1,
+                        "name": "Compression Testing Machine (CTM 2000kN)",
+                        "url": "https://uecivil.com/products/compression-testing-machine"
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 2,
+                        "name": "Auto Level Sokkia B40A Survey Set",
+                        "url": "https://uecivil.com/products/auto-level-sokkia-set"
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 3,
+                        "name": "Slump Cone Apparatus (IS:7320)",
+                        "url": "https://uecivil.com/products/slump-cone-apparatus-slump-cone-apparatus"
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 4,
+                        "name": "Aggregate Impact Value Apparatus",
+                        "url": "https://uecivil.com/products/aggregate-impect-velus"
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 5,
+                        "name": "Soil Testing Equipment (Direct Shear & CBR)",
+                        "url": "https://uecivil.com/products?category=soil-testing"
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 6,
+                        "name": "Bitumen Testing Equipment (Penetrometer & Ductility)",
+                        "url": "https://uecivil.com/products?category=bitumen-testing"
+                    }
+                ]
+            },
+            {
                 "@type": "FAQPage",
                 "@id": "https://uecivil.com/#home-faq",
                 "mainEntity": [
@@ -377,6 +420,152 @@ const Home = () => {
                             </Card>
                         ))}
                     </SimpleGrid>
+                </Container>
+            </Box>
+
+            {/* Featured Civil Laboratory Testing Instruments (SEO Product Showcase) */}
+            <Box bg="white" py={{ base: 10, sm: 14, md: 20 }} borderTop="1px" borderColor="gray.200">
+                <Container maxW="6xl" px={{ base: 4, sm: 6, md: 8 }}>
+                    <Flex direction="column" align="center" textAlign="center" mb={{ base: 8, md: 12 }}>
+                        <Badge colorScheme="orange" px={3} py={1} borderRadius="full" mb={3} textTransform="uppercase" fontWeight="bold">
+                            Civil Testing Equipment
+                        </Badge>
+                        <Heading fontSize={{ base: '22px', sm: '28px', md: '34px' }} fontWeight="900" color="gray.800" mb={4} wordBreak="break-word">
+                            Featured Civil Lab Testing Instruments
+                        </Heading>
+                        <Text color="gray.600" maxW="2xl" fontSize={{ base: 'sm', md: 'md' }} px={{ base: 2, md: 0 }}>
+                            Direct manufacturer and certified supplier of concrete, soil, bitumen, aggregate, and survey equipment in Ahmedabad, Gujarat. PAN India delivery with calibration warranty.
+                        </Text>
+                    </Flex>
+
+                    <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={{ base: 4, md: 6 }}>
+                        {[
+                            {
+                                name: "Compression Testing Machine",
+                                subtitle: "CTM 2000kN / 3000kN",
+                                desc: "Digital & Analogue concrete cube compressive strength tester compliant with IS:14858 & IS:516.",
+                                url: "/products/compression-testing-machine",
+                                badge: "IS Certified",
+                                badgeColor: "green"
+                            },
+                            {
+                                name: "Auto Level Sokkia Set",
+                                subtitle: "B40A Optical Level",
+                                desc: "High-precision dumpy levelling instrument kit with heavy-duty aluminum tripod and 5m levelling staff.",
+                                url: "/products/auto-level-sokkia-set",
+                                badge: "Top Seller",
+                                badgeColor: "blue"
+                            },
+                            {
+                                name: "Slump Cone Apparatus",
+                                subtitle: "IS:7320 Workability",
+                                desc: "Complete concrete workability test set with graduated tamping rod, base plate, and steel scoop.",
+                                url: "/products/slump-cone-apparatus-slump-cone-apparatus",
+                                badge: "In Stock",
+                                badgeColor: "orange"
+                            },
+                            {
+                                name: "Aggregate Impact Value",
+                                subtitle: "AIV Apparatus",
+                                desc: "Determination of aggregate impact value and toughness with blow counter and standard cup.",
+                                url: "/products/aggregate-impect-velus",
+                                badge: "Quality Tested",
+                                badgeColor: "purple"
+                            },
+                            {
+                                name: "Soil Testing Equipment",
+                                subtitle: "Direct Shear & CBR",
+                                desc: "Direct Shear Apparatus, California Bearing Ratio (CBR), Casagrande liquid limit, and core cutters.",
+                                url: "/products?category=soil-testing",
+                                badge: "Lab Essential",
+                                badgeColor: "teal"
+                            },
+                            {
+                                name: "Bitumen Testing Equipment",
+                                subtitle: "Penetrometer & Ductility",
+                                desc: "Standard Bitumen Penetrometer, Ductility Machine, Ring & Ball Softening Point, and Marshall Stability.",
+                                url: "/products?category=bitumen-testing",
+                                badge: "Certified",
+                                badgeColor: "orange"
+                            },
+                            {
+                                name: "Survey & Total Stations",
+                                subtitle: "DGPS & Digital Levels",
+                                desc: "Total Stations, RTK GNSS DGPS receivers, digital theodolites, prisms, and survey measuring tools.",
+                                url: "/products?category=survey-instruments",
+                                badge: "Survey Grade",
+                                badgeColor: "blue"
+                            },
+                            {
+                                name: "Construction Machinery",
+                                subtitle: "Sieve Shakers & Mixers",
+                                desc: "Motorized Sieve Shakers, laboratory concrete mixers, core cutting machines, and cube curing tanks.",
+                                url: "/products?category=construction-machinery",
+                                badge: "Heavy Duty",
+                                badgeColor: "red"
+                            }
+                        ].map((prod, pIdx) => (
+                            <Card
+                                key={pIdx}
+                                borderRadius="2xl"
+                                bg="gray.50"
+                                shadow="sm"
+                                _hover={{ shadow: 'lg', transform: 'translateY(-4px)', bg: 'white', borderColor: 'orange.300' }}
+                                transition="all 0.25s"
+                                border="1px solid"
+                                borderColor="gray.200"
+                            >
+                                <CardBody p={{ base: 5, md: 6 }} display="flex" flexDirection="column" justifyContent="space-between">
+                                    <Box>
+                                        <Flex justify="space-between" align="center" mb={3}>
+                                            <Badge colorScheme={prod.badgeColor} variant="subtle" borderRadius="full" px={2.5} py={0.5} fontSize="2xs" fontWeight="bold">
+                                                {prod.badge}
+                                            </Badge>
+                                            <Icon as={FiBox} color="orange.500" boxSize={4} />
+                                        </Flex>
+                                        <Heading size="xs" color="gray.900" mb={1} lineHeight="1.3">
+                                            {prod.name}
+                                        </Heading>
+                                        <Text fontSize="2xs" color="orange.600" fontWeight="700" mb={2}>
+                                            {prod.subtitle}
+                                        </Text>
+                                        <Text fontSize="xs" color="gray.600" lineHeight={1.5} mb={4}>
+                                            {prod.desc}
+                                        </Text>
+                                    </Box>
+                                    <Button
+                                        as={RouterLink}
+                                        to={prod.url}
+                                        size="xs"
+                                        colorScheme="orange"
+                                        variant="outline"
+                                        borderRadius="lg"
+                                        rightIcon={<Icon as={FiArrowRight} />}
+                                        w="full"
+                                        fontWeight="bold"
+                                        py={3}
+                                    >
+                                        View Details & Quote
+                                    </Button>
+                                </CardBody>
+                            </Card>
+                        ))}
+                    </SimpleGrid>
+
+                    <Flex justify="center" mt={8}>
+                        <Button
+                            as={RouterLink}
+                            to="/products"
+                            size="md"
+                            colorScheme="orange"
+                            borderRadius="xl"
+                            rightIcon={<Icon as={FiArrowRight} />}
+                            fontWeight="bold"
+                            px={8}
+                        >
+                            View Complete 60+ Products Catalog
+                        </Button>
+                    </Flex>
                 </Container>
             </Box>
 

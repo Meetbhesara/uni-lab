@@ -76,6 +76,8 @@ function App() {
         <Route path="/products" element={<Layout><Products /></Layout>} />
         <Route path="/product/:id" element={<Layout><Products /></Layout>} />
         <Route path="/products/:id" element={<Layout><Products /></Layout>} />
+        <Route path="/products/:categorySlug/:productSlug" element={<Layout><Products /></Layout>} />
+        <Route path="/product/:categorySlug/:productSlug" element={<Layout><Products /></Layout>} />
         <Route path="/services" element={<Layout><Services /></Layout>} />
         <Route path="/about" element={<Layout><About /></Layout>} />
         <Route path="/contact" element={<Layout><Contact /></Layout>} />

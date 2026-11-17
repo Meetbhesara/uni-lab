@@ -4,9 +4,19 @@ export const PERMISSION_MODULES = [
         label: 'Dashboard Module',
         mainTabKey: 'dashboard',
         subTabs: [
-            { key: 'dashboard', label: 'Main Tab Access (Dashboard Overview & Stats)' },
-            { key: 'dashboard_admins', label: 'Admin Accounts View/Manage', parentKey: 'dashboard' },
-            { key: 'dashboard_users', label: 'Registered Users View/Manage', parentKey: 'dashboard' }
+            { key: 'dashboard', label: 'Main Tab Access (Dashboard Overview & Stats)' }
+        ]
+    },
+    {
+        key: 'loginReportGroup',
+        label: 'Login Report & Admin Management',
+        mainTabKey: 'loginReport',
+        subTabs: [
+            { key: 'loginReport', label: 'Main Tab Access' },
+            { key: 'loginReport_attendance', label: 'My Login & Attendance Report', parentKey: 'loginReport' },
+            { key: 'loginReport_createAdmin', label: 'Create Admin User', parentKey: 'loginReport' },
+            { key: 'loginReport_admins', label: 'Admin Accounts View/Manage', parentKey: 'loginReport' },
+            { key: 'loginReport_users', label: 'Registered Users View/Manage', parentKey: 'loginReport' }
         ]
     },
     {
