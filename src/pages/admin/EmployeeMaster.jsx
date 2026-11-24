@@ -3973,101 +3973,203 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                         {/* Standardized Employee Detail View Modal */}
                         <Modal isOpen={!!viewEmployee} onClose={() => setViewEmployee(null)} size="5xl" isCentered motionPreset="slideInBottom" scrollBehavior="inside">
                             <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
-                            <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300" m={{ base: 3, md: 6 }}>
+                            <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="gray.200" m={{ base: 3, md: 6 }}>
                                 <ModalHeader p={0}>
-                                    {/* ── Top Profile Header: Photo, ID, Company Name, Branch, Employee Name, Phone No ── */}
-                                    <Box bgGradient="linear(to-r, blue.800, blue.600)" p={{ base: 4, md: 5 }} color="white">
-                                        <Flex justify="space-between" align={{ base: "start", md: "center" }} wrap="wrap" gap={3}>
-                                            <HStack spacing={4} align="center">
+                                    {/* ── Top Profile Header: Deep Slate-Navy Executive Banner ── */}
+                                    <Box bgGradient="linear(to-r, #0F172A, #1E3A8A)" p={{ base: 4, md: 5 }} color="white">
+                                        <Flex justify="space-between" align="flex-start" gap={4}>
+                                            <HStack spacing={4} align="center" flex={1}>
                                                 <Avatar
-                                                    size="xl"
+                                                    size="lg"
+                                                    w="70px"
+                                                    h="70px"
                                                     src={viewEmployee?.photo ? getFileUrl(viewEmployee.photo) : undefined}
                                                     name={viewEmployee?.name}
-                                                    borderRadius="2xl"
-                                                    border="3px solid white"
-                                                    boxShadow="md"
+                                                    bg="blue.500"
+                                                    color="white"
+                                                    fontWeight="800"
+                                                    borderRadius="xl"
+                                                    border="2px solid"
+                                                    borderColor="blue.300"
+                                                    boxShadow="0 4px 12px rgba(0, 0, 0, 0.25)"
                                                 />
-                                                <VStack align="start" spacing={1}>
-                                                    <HStack spacing={2} wrap="wrap" align="center">
-                                                        <Heading size="md" fontWeight="800" letterSpacing="0.3px">
+                                                <VStack align="start" spacing={2} flex={1}>
+                                                    {/* Row 1: Name, Highlighted ID Pill, Designation */}
+                                                    <HStack spacing={2.5} wrap="wrap" align="center">
+                                                        <Heading size="md" fontWeight="800" color="white" letterSpacing="0.2px" textTransform="capitalize">
                                                             {viewEmployee?.name}
                                                         </Heading>
-                                                        <Badge colorScheme="whiteAlpha" bg="whiteAlpha.300" color="white" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                        <Badge
+                                                            bg="blue.500"
+                                                            color="white"
+                                                            border="1px solid"
+                                                            borderColor="blue.300"
+                                                            fontSize="11px"
+                                                            px={2.5}
+                                                            py={0.5}
+                                                            borderRadius="md"
+                                                            fontFamily="mono"
+                                                            fontWeight="800"
+                                                            letterSpacing="0.5px"
+                                                            boxShadow="sm"
+                                                        >
                                                             ID: {viewEmployee?.empId || 'EMP'}
                                                         </Badge>
-                                                        <Badge colorScheme="blue" bg="blue.400" color="white" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                        <Badge
+                                                            bg="whiteAlpha.200"
+                                                            color="blue.100"
+                                                            border="1px solid"
+                                                            borderColor="whiteAlpha.300"
+                                                            fontSize="11px"
+                                                            px={2.5}
+                                                            py={0.5}
+                                                            borderRadius="md"
+                                                            fontWeight="700"
+                                                            textTransform="capitalize"
+                                                        >
                                                             {viewEmployee?.designation || 'Staff'}
                                                         </Badge>
                                                     </HStack>
 
-                                                    <HStack spacing={2} wrap="wrap" pt={0.5}>
-                                                        <Badge colorScheme="teal" bg="teal.400" color="gray.900" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
-                                                            🏢 Company: {viewEmployee?.company || 'N/A'}
-                                                        </Badge>
-                                                        <Badge colorScheme="purple" bg="purple.400" color="white" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
-                                                            📍 Branch: {viewEmployee?.branch || 'N/A'}
-                                                        </Badge>
-                                                    </HStack>
+                                                    {/* Row 2: Company, Branch, Phone, Email interactive glass pills */}
+                                                    <Flex wrap="wrap" align="center" gap={2} fontSize="xs">
+                                                        <HStack
+                                                            spacing={1.5}
+                                                            bg="whiteAlpha.150"
+                                                            px={2.5}
+                                                            py={1}
+                                                            borderRadius="md"
+                                                            border="1px solid"
+                                                            borderColor="whiteAlpha.200"
+                                                            _hover={{ bg: "whiteAlpha.250" }}
+                                                            transition="all 0.15s"
+                                                        >
+                                                            <Icon as={FaBuilding} fontSize="11px" color="blue.200" />
+                                                            <Text color="blue.100" fontSize="11px">Company:</Text>
+                                                            <Text fontWeight="700" color="white">{viewEmployee?.company || 'N/A'}</Text>
+                                                        </HStack>
 
-                                                    <HStack spacing={1.5} pt={0.5} fontSize="xs">
-                                                        <Icon as={FaPhoneAlt} fontSize="11px" opacity={0.85} />
-                                                        <Text fontWeight="600" opacity={0.95}>
-                                                            Phone: {viewEmployee?.phone || '—'}
-                                                        </Text>
+                                                        <HStack
+                                                            spacing={1.5}
+                                                            bg="whiteAlpha.150"
+                                                            px={2.5}
+                                                            py={1}
+                                                            borderRadius="md"
+                                                            border="1px solid"
+                                                            borderColor="whiteAlpha.200"
+                                                            _hover={{ bg: "whiteAlpha.250" }}
+                                                            transition="all 0.15s"
+                                                        >
+                                                            <Icon as={FaCodeBranch} fontSize="11px" color="blue.200" />
+                                                            <Text color="blue.100" fontSize="11px">Branch:</Text>
+                                                            <Text fontWeight="700" color="white">{viewEmployee?.branch || 'N/A'}</Text>
+                                                        </HStack>
+
+                                                        <HStack
+                                                            spacing={1.5}
+                                                            bg="whiteAlpha.150"
+                                                            px={2.5}
+                                                            py={1}
+                                                            borderRadius="md"
+                                                            border="1px solid"
+                                                            borderColor="whiteAlpha.200"
+                                                            _hover={{ bg: "whiteAlpha.250" }}
+                                                            transition="all 0.15s"
+                                                        >
+                                                            <Icon as={FaPhoneAlt} fontSize="10px" color="green.300" />
+                                                            <Text fontWeight="700" color="white" fontFamily="mono">
+                                                                {viewEmployee?.phone || '—'}
+                                                            </Text>
+                                                        </HStack>
+
                                                         {viewEmployee?.email && (
-                                                            <>
-                                                                <Text opacity={0.6}>•</Text>
-                                                                <Icon as={FaEnvelope} fontSize="11px" opacity={0.85} />
-                                                                <Text fontWeight="500" opacity={0.9}>
-                                                                    {viewEmployee.email}
-                                                                </Text>
-                                                            </>
+                                                            <HStack
+                                                                spacing={1.5}
+                                                                bg="whiteAlpha.150"
+                                                                px={2.5}
+                                                                py={1}
+                                                                borderRadius="md"
+                                                                border="1px solid"
+                                                                borderColor="whiteAlpha.200"
+                                                                _hover={{ bg: "whiteAlpha.250" }}
+                                                                transition="all 0.15s"
+                                                            >
+                                                                <Icon as={FaEnvelope} fontSize="10px" color="blue.200" />
+                                                                <Text color="white" fontWeight="500">{viewEmployee.email}</Text>
+                                                            </HStack>
                                                         )}
-                                                    </HStack>
+                                                    </Flex>
                                                 </VStack>
                                             </HStack>
 
-                                            <ModalCloseButton position="static" borderRadius="full" color="white" _hover={{ bg: "whiteAlpha.300" }} />
+                                            <ModalCloseButton
+                                                position="static"
+                                                borderRadius="full"
+                                                bg="whiteAlpha.200"
+                                                color="white"
+                                                _hover={{ bg: "whiteAlpha.300" }}
+                                            />
                                         </Flex>
 
-                                        {/* ── Below: Food status of employee and food ── */}
-                                        <Box mt={3.5} p={2.5} bg="whiteAlpha.200" borderRadius="xl" backdropFilter="blur(6px)" border="1px solid" borderColor="whiteAlpha.300">
-                                            <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={2.5} alignItems="center">
+                                        {/* ── Status Strip: Food Allowance, Employee Status, Reported To ── */}
+                                        <Box
+                                            mt={3.5}
+                                            px={3.5}
+                                            py={2}
+                                            bg="blackAlpha.300"
+                                            borderRadius="lg"
+                                            border="1px solid"
+                                            borderColor="whiteAlpha.200"
+                                        >
+                                            <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3} alignItems="center">
                                                 <HStack spacing={2}>
-                                                    <Text fontSize="xs" fontWeight="bold" opacity={0.9}>🍽️ Food Allowance:</Text>
+                                                    <Text fontSize="11px" fontWeight="600" color="blue.100" textTransform="uppercase">
+                                                        Food Allowance:
+                                                    </Text>
                                                     <Badge
-                                                        colorScheme={viewEmployee?.foodAllowance === 'Without Food' ? 'gray' : 'green'}
-                                                        bg={viewEmployee?.foodAllowance === 'Without Food' ? 'gray.200' : 'green.400'}
-                                                        color={viewEmployee?.foodAllowance === 'Without Food' ? 'gray.800' : 'gray.900'}
-                                                        fontSize="2xs"
-                                                        px={2}
+                                                        bg={viewEmployee?.foodAllowance === 'Without Food' ? 'gray.600' : 'green.500'}
+                                                        color="white"
+                                                        fontSize="10px"
+                                                        px={2.5}
                                                         py={0.5}
                                                         borderRadius="full"
-                                                        fontWeight="bold"
+                                                        fontWeight="700"
                                                     >
-                                                        {viewEmployee?.foodAllowance === 'Without Food' ? 'Without Food (No Food)' : 'Food Included (Food)'}
+                                                        {viewEmployee?.foodAllowance === 'Without Food' ? 'Without Food' : 'Food Included'}
                                                     </Badge>
                                                 </HStack>
+
                                                 <HStack spacing={2}>
-                                                    <Text fontSize="xs" fontWeight="bold" opacity={0.9}>🟢 Employee Status:</Text>
+                                                    <Text fontSize="11px" fontWeight="600" color="blue.100" textTransform="uppercase">
+                                                        Status:
+                                                    </Text>
                                                     <Badge
-                                                        colorScheme={viewEmployee?.status === 'Active' ? 'green' : 'red'}
-                                                        bg={viewEmployee?.status === 'Active' ? 'green.400' : 'red.400'}
-                                                        color={viewEmployee?.status === 'Active' ? 'gray.900' : 'white'}
-                                                        fontSize="2xs"
-                                                        px={2}
+                                                        bg={viewEmployee?.status === 'Active' ? 'green.500' : 'red.500'}
+                                                        color="white"
+                                                        fontSize="10px"
+                                                        px={2.5}
                                                         py={0.5}
                                                         borderRadius="full"
-                                                        fontWeight="bold"
+                                                        fontWeight="700"
+                                                        display="inline-flex"
+                                                        alignItems="center"
+                                                        gap={1.5}
                                                     >
+                                                        <Box w={1.5} h={1.5} borderRadius="full" bg="white" />
                                                         {viewEmployee?.status || 'Active'}
                                                     </Badge>
                                                 </HStack>
+
                                                 <HStack spacing={2}>
-                                                    <Text fontSize="xs" fontWeight="bold" opacity={0.9}>👔 Reported To:</Text>
-                                                    <Text fontSize="xs" fontWeight="600" opacity={0.95} isTruncated maxW="180px">
-                                                        {viewEmployee?.reportedTo || 'Top Management'}
+                                                    <Text fontSize="11px" fontWeight="600" color="blue.100" textTransform="uppercase">
+                                                        Report To:
                                                     </Text>
+                                                    <HStack spacing={1.5}>
+                                                        <Icon as={FaSitemap} fontSize="11px" color="blue.200" />
+                                                        <Text fontSize="xs" fontWeight="700" color="white" isTruncated maxW="180px">
+                                                            {viewEmployee?.reportedTo || 'Top Management'}
+                                                        </Text>
+                                                    </HStack>
                                                 </HStack>
                                             </SimpleGrid>
                                         </Box>
@@ -4342,64 +4444,6 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                             </Box>
                                                         </SimpleGrid>
                                                     </Box>
-
-                                                    {/* ── Organization & Branch Details ── */}
-                                                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
-                                                        {/* Company & Branch Card */}
-                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
-                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
-                                                                Company &amp; Branch
-                                                            </Text>
-                                                            <VStack align="start" spacing={2} fontSize="xs">
-                                                                <Box>
-                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">COMPANY</Text>
-                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.company || '—'}</Text>
-                                                                </Box>
-                                                                <Box>
-                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">BRANCH / LOCATION</Text>
-                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.branch || '—'}</Text>
-                                                                </Box>
-                                                            </VStack>
-                                                        </Box>
-
-                                                        {/* Insurance Card */}
-                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
-                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
-                                                                Corporate Insurance
-                                                            </Text>
-                                                            <VStack align="start" spacing={2} fontSize="xs">
-                                                                <Box>
-                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">POLICY NUMBER</Text>
-                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.companyItems?.insuranceNumber || '—'}</Text>
-                                                                </Box>
-                                                                <Box>
-                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">PROVIDER / EXPIRY</Text>
-                                                                    <Text fontWeight="600" color="gray.700">
-                                                                        {viewEmployee.companyItems?.insuranceProvider || '—'} {viewEmployee.companyItems?.insuranceExpiry ? `• Exp: ${viewEmployee.companyItems.insuranceExpiry}` : ''}
-                                                                    </Text>
-                                                                </Box>
-                                                            </VStack>
-                                                        </Box>
-
-                                                        {/* Mediclaim Card */}
-                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
-                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
-                                                                Mediclaim &amp; TPA
-                                                            </Text>
-                                                            <VStack align="start" spacing={2} fontSize="xs">
-                                                                <Box>
-                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">CARD / POLICY NUMBER</Text>
-                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.companyItems?.mediclaimNumber || '—'}</Text>
-                                                                </Box>
-                                                                <Box>
-                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">PROVIDER / EXPIRY</Text>
-                                                                    <Text fontWeight="600" color="gray.700">
-                                                                        {viewEmployee.companyItems?.mediclaimProvider || '—'} {viewEmployee.companyItems?.mediclaimExpiry ? `• Exp: ${viewEmployee.companyItems.mediclaimExpiry}` : ''}
-                                                                    </Text>
-                                                                </Box>
-                                                            </VStack>
-                                                        </Box>
-                                                    </SimpleGrid>
 
                                                     {/* Issued Assets / Hardware */}
                                                     <Box p={3.5} bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200">
@@ -5074,94 +5118,6 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                         </SimpleGrid>
                                                     </Box>
 
-                                                    {/* ── Other Associated Documents (Statutory KYC & Banking) ── */}
-                                                    <Box bg="white" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                                        <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
-                                                            Other Statutory KYC &amp; Bank Attachments
-                                                        </Text>
-                                                        <Wrap spacing={2}>
-                                                            {/* KYC Docs */}
-                                                            {[
-                                                                { field: 'aadharCard', label: 'Aadhaar Card', icon: FaIdCard },
-                                                                { field: 'panCard', label: 'PAN Card', icon: FaIdCard },
-                                                                { field: 'voterId', label: 'Voter ID', icon: FaIdBadge },
-                                                                { field: 'drivingLicense', label: 'Driving License', icon: FaCar }
-                                                            ].map(({ field, label, icon: DocIcon }) => {
-                                                                const docData = viewEmployee[field];
-                                                                const docUrl = getFileUrl(docData);
-                                                                if (!docUrl) return null;
-                                                                return (
-                                                                    <Button
-                                                                        key={field}
-                                                                        as="a"
-                                                                        href={docUrl}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        size="xs"
-                                                                        variant="outline"
-                                                                        colorScheme="gray"
-                                                                        borderColor="gray.300"
-                                                                        leftIcon={<Icon as={DocIcon} fontSize="10px" color="gray.600" />}
-                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" color="gray.400" />}
-                                                                        borderRadius="md"
-                                                                        fontWeight="600"
-                                                                    >
-                                                                        {label}
-                                                                    </Button>
-                                                                );
-                                                            })}
-
-                                                            {/* Bank Documents */}
-                                                            {Array.isArray(viewEmployee.bankDetails?.documents) && viewEmployee.bankDetails.documents.map((doc, idx) => {
-                                                                const docUrl = getFileUrl(doc);
-                                                                if (!docUrl) return null;
-                                                                return (
-                                                                    <Button
-                                                                        key={`bank-doc-${idx}`}
-                                                                        as="a"
-                                                                        href={docUrl}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        size="xs"
-                                                                        variant="outline"
-                                                                        colorScheme="gray"
-                                                                        borderColor="gray.300"
-                                                                        leftIcon={<Icon as={FaFilePdf} fontSize="10px" color="gray.600" />}
-                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" color="gray.400" />}
-                                                                        borderRadius="md"
-                                                                        fontWeight="600"
-                                                                    >
-                                                                        Bank Proof #{idx + 1}
-                                                                    </Button>
-                                                                );
-                                                            })}
-
-                                                            {/* Company Item Docs */}
-                                                            {Array.isArray(viewEmployee.companyItemDocs) && viewEmployee.companyItemDocs.map((doc, idx) => {
-                                                                const docUrl = getFileUrl(doc);
-                                                                if (!docUrl) return null;
-                                                                return (
-                                                                    <Button
-                                                                        key={`item-doc-${idx}`}
-                                                                        as="a"
-                                                                        href={docUrl}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        size="xs"
-                                                                        variant="outline"
-                                                                        colorScheme="gray"
-                                                                        borderColor="gray.300"
-                                                                        leftIcon={<Icon as={FaLaptop} fontSize="10px" color="gray.600" />}
-                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" color="gray.400" />}
-                                                                        borderRadius="md"
-                                                                        fontWeight="600"
-                                                                    >
-                                                                        Asset Slip #{idx + 1}
-                                                                    </Button>
-                                                                );
-                                                            })}
-                                                        </Wrap>
-                                                    </Box>
                                                 </VStack>
                                             )}
 
