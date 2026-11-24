@@ -6,13 +6,16 @@ import {
     Tooltip, Progress, Skeleton,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner, Select, Center, Divider, Avatar
+    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner, Select, Center, Divider, Avatar,
+    Textarea
 } from '@chakra-ui/react';
 import {
     FaUserTie, FaBuilding, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaEye, FaPlus,
     FaCamera, FaMoneyBillWave, FaIdBadge, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt,
     FaIdCard, FaTrash, FaCheckCircle, FaTimes, FaThLarge, FaList, FaEdit, FaUsers,
-    FaFileExcel, FaCopy, FaPrint, FaCar, FaExternalLinkAlt
+    FaFileExcel, FaCopy, FaPrint, FaCar, FaExternalLinkAlt, FaHeartbeat, FaBriefcase,
+    FaFileAlt, FaShieldAlt, FaMedkit, FaRing, FaBirthdayCake, FaTint, FaVenusMars, FaCodeBranch,
+    FaSitemap, FaLaptop, FaUserShield, FaCalendarAlt, FaChartLine, FaCalendarCheck, FaMoneyCheckAlt, FaDownload
 } from 'react-icons/fa';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
@@ -54,6 +57,23 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         name: '',
         email: '',
         phone: '',
+        company: '',
+        branch: '',
+        dob: '',
+        bloodGroup: '',
+        gender: '',
+        maritalStatus: 'Single',
+        marriageDate: '',
+        joiningDate: '',
+        reportedTo: '',
+        insuranceNumber: '',
+        insuranceProvider: '',
+        insuranceExpiry: '',
+        mediclaimNumber: '',
+        mediclaimProvider: '',
+        mediclaimExpiry: '',
+        issuedItems: '',
+        companyRemarks: '',
         addressLine1: { street: '', city: '', pincode: '' },
         addressLine2: { street: '', city: '', pincode: '' },
         emergencyContact: { name: '', phone: '' },
@@ -63,11 +83,20 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         confirmAccountNumber: '',
         ifscCode: '',
         salary: '',
+        salaryDate: '',
+        salaryStartDate: '',
+        salaryEndDate: '',
+        salaryIncrementDate: '',
+        previousSalary: '',
         designation: '',
         paymentMode: 'Cash',
         paymentStatus: 'Pending',
         foodAllowance: 'Food',
         status: 'Active',
+        aadharNumber: '',
+        panNumber: '',
+        voterIdNumber: '',
+        drivingLicenseNumber: '',
     });
     const [files, setFiles] = useState({
         photo: null,
@@ -75,7 +104,13 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         panCard: null,
         voterId: null,
         drivingLicense: null,
-        bankDocuments: []
+        resume: null,
+        joiningLetter: null,
+        salarySlips: [],
+        bankDocuments: [],
+        insuranceDocs: [],
+        mediclaimDocs: [],
+        companyItemDocs: []
     });
     const [photoPreview, setPhotoPreview] = useState(null);
     const [existingDocs, setExistingDocs] = useState({
@@ -83,8 +118,37 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         panCard: null,
         voterId: null,
         drivingLicense: null,
-        bankDocuments: []
+        resume: null,
+        resumes: [],
+        joiningLetter: null,
+        joiningLetters: [],
+        salarySlips: [],
+        bankDocuments: [],
+        insuranceDocs: [],
+        mediclaimDocs: [],
+        companyItemDocs: []
     });
+    const [companyList, setCompanyList] = useState([]);
+    const [branchList, setBranchList] = useState([
+        'Head Office', 'Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Gandhinagar', 'Mumbai', 'Site Office'
+    ]);
+    const [isAddCompanyOpen, setIsAddCompanyOpen] = useState(false);
+    const [newCompanyName, setNewCompanyName] = useState('');
+    const [isAddBranchOpen, setIsAddBranchOpen] = useState(false);
+    const [newBranchName, setNewBranchName] = useState('');
+
+    const calculateAge = (dobString) => {
+        if (!dobString) return null;
+        const dob = new Date(dobString);
+        if (isNaN(dob.getTime())) return null;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+            age--;
+        }
+        return age >= 0 ? age : null;
+    };
     const [sameAsAddress, setSameAsAddress] = useState(false);
     const [bankVerified, setBankVerified] = useState(false);
     const [bankVerifying, setBankVerifying] = useState(false);
@@ -93,7 +157,329 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
     const [employees, setEmployees] = useState([]);
     const [editId, setEditId] = useState('');
     const [viewEmployee, setViewEmployee] = useState(null);
+    const [activeProfileTab, setActiveProfileTab] = useState('personal');
+    const salarySlipInputRef = useRef(null);
+    const [isIncrementModalOpen, setIsIncrementModalOpen] = useState(false);
+    const [incrementForm, setIncrementForm] = useState({
+        newSalary: '',
+        incrementAmount: '',
+        incrementDate: new Date().toISOString().split('T')[0],
+        remarks: ''
+    });
+    const [isSubmittingIncrement, setIsSubmittingIncrement] = useState(false);
+    const [isUpdatingSalaryDate, setIsUpdatingSalaryDate] = useState(false);
+    const [isUploadingSlip, setIsUploadingSlip] = useState(false);
+    const [isSavingSalaryPeriod, setIsSavingSalaryPeriod] = useState(false);
+    const [isUpdatingCurrentPayout, setIsUpdatingCurrentPayout] = useState(false);
+    const [salaryPeriodState, setSalaryPeriodState] = useState({
+        startDate: '',
+        endDate: '',
+        disbursementDate: ''
+    });
+
+    useEffect(() => {
+        if (viewEmployee) {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const lastDay = new Date(year, today.getMonth() + 1, 0).getDate();
+            const defaultStart = `${year}-${month}-01`;
+            const defaultEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+            const defaultDisburse = `${year}-${month}-05`;
+
+            setSalaryPeriodState({
+                startDate: viewEmployee.salaryStartDate || defaultStart,
+                endDate: viewEmployee.salaryEndDate || defaultEnd,
+                disbursementDate: viewEmployee.salaryDate || defaultDisburse
+            });
+        }
+    }, [viewEmployee?._id, viewEmployee?.salaryStartDate, viewEmployee?.salaryEndDate, viewEmployee?.salaryDate]);
+
+    // Calculate active salary period where deactive dates are excluded from service
+    const calculateActiveSalaryPeriod = (emp, customStart, customEnd) => {
+        if (!emp) return { startDate: '', endDate: '', totalDays: 0, deactiveDays: 0, activeDays: 0, baseSalary: 0, payableSalary: 0 };
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const lastDay = new Date(year, today.getMonth() + 1, 0).getDate();
+
+        const startStr = customStart || emp.salaryStartDate || `${year}-${month}-01`;
+        const endStr = customEnd || emp.salaryEndDate || `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
+        const startDate = new Date(startStr);
+        const endDate = new Date(endStr);
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate > endDate) {
+            const base = Number(emp.salary) || 0;
+            return {
+                startDate: startStr,
+                endDate: endStr,
+                totalDays: 30,
+                deactiveDays: 0,
+                activeDays: 30,
+                baseSalary: base,
+                payableSalary: base
+            };
+        }
+
+        const diffTime = Math.abs(endDate - startDate);
+        const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+        const history = Array.isArray(emp.statusHistory) && emp.statusHistory.length > 0
+            ? [...emp.statusHistory].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+            : [];
+
+        let deactiveDays = 0;
+        const cur = new Date(startDate);
+        while (cur <= endDate) {
+            let dayStatus = emp.status || 'Active';
+            if (history.length > 0) {
+                const curEndOfDay = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), 23, 59, 59);
+                const applicable = history.filter(h => new Date(h.timestamp) <= curEndOfDay);
+                if (applicable.length > 0) {
+                    dayStatus = applicable[applicable.length - 1].status;
+                } else {
+                    dayStatus = history[0].status;
+                }
+            }
+            if (dayStatus === 'Deactive') {
+                deactiveDays++;
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+
+        const activeDays = Math.max(0, totalDays - deactiveDays);
+        const baseSalary = Number(emp.salary) || 0;
+        const payableSalary = totalDays > 0 ? Math.round((baseSalary / totalDays) * activeDays) : 0;
+
+        return {
+            startDate: startStr,
+            endDate: endStr,
+            totalDays,
+            deactiveDays,
+            activeDays,
+            baseSalary,
+            payableSalary
+        };
+    };
+
+    const calculateTotalPayAmount = (emp) => {
+        if (!emp) return { totalPaid: 0, paidMonthsCount: 0, pendingAmount: 0, pendingMonthsCount: 0 };
+        const payments = Array.isArray(emp.monthlyPayments) ? emp.monthlyPayments : [];
+        let totalPaid = 0;
+        let paidMonthsCount = 0;
+        let pendingAmount = 0;
+        let pendingMonthsCount = 0;
+
+        payments.forEach(p => {
+            const base = Number(emp.salary || 0);
+            const present = p.presentDays !== null && p.presentDays !== undefined ? Number(p.presentDays) : null;
+            const upad = Number(p.upad || 0);
+            const incentive = Number(p.incentive || 0);
+            let amount = 0;
+            if (p.payableAmount !== undefined && p.payableAmount !== null) {
+                amount = Number(p.payableAmount);
+            } else if (present !== null) {
+                amount = Math.round((base / 30) * present) - upad + incentive;
+            } else {
+                amount = base - upad + incentive;
+            }
+
+            if (p.paymentStatus === 'Done') {
+                totalPaid += Math.max(0, amount);
+                paidMonthsCount++;
+            } else {
+                pendingAmount += Math.max(0, amount);
+                pendingMonthsCount++;
+            }
+        });
+
+        return { totalPaid, paidMonthsCount, pendingAmount, pendingMonthsCount };
+    };
+
+    const handleSaveSalaryPeriod = async () => {
+        if (!viewEmployee?._id) return;
+        setIsSavingSalaryPeriod(true);
+        try {
+            const res = await api.put(`/employee-master/${viewEmployee._id}/salary-date`, {
+                salaryStartDate: salaryPeriodState.startDate,
+                salaryEndDate: salaryPeriodState.endDate,
+                salaryDate: salaryPeriodState.disbursementDate
+            });
+            if (res.data.success) {
+                toast({
+                    title: "Salary Period Saved",
+                    description: `Period: ${salaryPeriodState.startDate} to ${salaryPeriodState.endDate} | Disbursement Date: ${salaryPeriodState.disbursementDate}`,
+                    status: "success",
+                    duration: 3000
+                });
+                setViewEmployee(prev => ({
+                    ...prev,
+                    salaryStartDate: salaryPeriodState.startDate,
+                    salaryEndDate: salaryPeriodState.endDate,
+                    salaryDate: salaryPeriodState.disbursementDate
+                }));
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({
+                title: "Error",
+                description: err.response?.data?.message || "Failed to save salary period",
+                status: "error",
+                duration: 3000
+            });
+        } finally {
+            setIsSavingSalaryPeriod(false);
+        }
+    };
+
+    const handleToggleCurrentMonthPayout = async (currentStatus, targetMode) => {
+        if (!viewEmployee?._id) return;
+        setIsUpdatingCurrentPayout(true);
+        const today = new Date();
+        const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const nextStatus = currentStatus === 'Done' ? 'Pending' : 'Done';
+        const mode = targetMode || viewEmployee.paymentMode || 'Cash';
+
+        try {
+            const res = await api.put(`/employee-master/${viewEmployee._id}/monthly-payment`, {
+                month: currentMonthKey,
+                paymentStatus: nextStatus,
+                paymentMode: mode
+            });
+            if (res.data.success) {
+                toast({
+                    title: nextStatus === 'Done' ? "Marked as Paid" : "Marked as Pending",
+                    description: `Payout status for ${currentMonthKey} updated to ${nextStatus}`,
+                    status: nextStatus === 'Done' ? "success" : "info",
+                    duration: 2500
+                });
+                setViewEmployee(prev => {
+                    if (!prev) return prev;
+                    const payments = Array.isArray(prev.monthlyPayments) ? [...prev.monthlyPayments] : [];
+                    const idx = payments.findIndex(p => p.month === currentMonthKey);
+                    if (idx > -1) {
+                        payments[idx] = { ...payments[idx], paymentStatus: nextStatus, paymentMode: mode };
+                    } else {
+                        payments.push({
+                            month: currentMonthKey,
+                            paymentStatus: nextStatus,
+                            paymentMode: mode,
+                            presentDays: null,
+                            absentDays: null,
+                            upad: 0,
+                            incentive: 0
+                        });
+                    }
+                    return { ...prev, monthlyPayments: payments, paymentStatus: nextStatus };
+                });
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({
+                title: "Error",
+                description: err.response?.data?.message || "Failed to update payout status",
+                status: "error",
+                duration: 3000
+            });
+        } finally {
+            setIsUpdatingCurrentPayout(false);
+        }
+    };
+
+    const handleAddSalaryIncrement = async () => {
+        if (!viewEmployee?._id) return;
+        if (!incrementForm.newSalary && !incrementForm.incrementAmount) {
+            toast({ title: "Validation Error", description: "Please enter new salary or increment amount", status: "warning", duration: 2500 });
+            return;
+        }
+        setIsSubmittingIncrement(true);
+        try {
+            const res = await api.put(`/employee-master/${viewEmployee._id}/salary-increment`, incrementForm);
+            if (res.data.success) {
+                toast({ title: "Salary Revised", description: res.data.message || "Increment recorded successfully", status: "success", duration: 3000 });
+                setViewEmployee(res.data.data);
+                setIsIncrementModalOpen(false);
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({ title: "Error", description: err.response?.data?.message || "Failed to revise salary", status: "error", duration: 3000 });
+        } finally {
+            setIsSubmittingIncrement(false);
+        }
+    };
+
+    const handleQuickUpdateSalaryDate = async (newDate) => {
+        if (!viewEmployee?._id || !newDate) return;
+        setIsUpdatingSalaryDate(true);
+        try {
+            const res = await api.put(`/employee-master/${viewEmployee._id}/salary-date`, { salaryDate: newDate });
+            if (res.data.success) {
+                toast({ title: "Salary Date Updated", description: `Disbursement date set to "${newDate}"`, status: "success", duration: 2000 });
+                setViewEmployee(prev => ({ ...prev, salaryDate: newDate }));
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({ title: "Error", description: err.response?.data?.message || "Failed to update salary date", status: "error", duration: 3000 });
+        } finally {
+            setIsUpdatingSalaryDate(false);
+        }
+    };
+
+    const handleQuickUploadSalarySlip = async (e) => {
+        const selectedFiles = e.target.files;
+        if (!selectedFiles || selectedFiles.length === 0 || !viewEmployee?._id) return;
+        setIsUploadingSlip(true);
+        const slipData = new FormData();
+        Array.from(selectedFiles).forEach(f => {
+            slipData.append('salarySlips', f);
+        });
+        slipData.append('empId', viewEmployee.empId || '');
+        try {
+            const res = await api.post(`/employee-master/${viewEmployee._id}/salary-slips`, slipData);
+            if (res.data.success) {
+                toast({ title: "Salary Slip Uploaded", description: res.data.message || "Slip added successfully", status: "success", duration: 3000 });
+                setViewEmployee(res.data.data);
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({ title: "Upload Failed", description: err.response?.data?.message || "Could not upload salary slip", status: "error", duration: 3000 });
+        } finally {
+            setIsUploadingSlip(false);
+            if (salarySlipInputRef.current) salarySlipInputRef.current.value = '';
+        }
+    };
+
+    const joiningLetterInputRef = useRef(null);
+    const [isUploadingJoiningLetter, setIsUploadingJoiningLetter] = useState(false);
+
+    const handleQuickUploadJoiningLetter = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !viewEmployee?._id) return;
+        setIsUploadingJoiningLetter(true);
+        const data = new FormData();
+        data.append('joiningLetter', file);
+        data.append('empId', viewEmployee.empId || '');
+        try {
+            const res = await api.post(`/employee-master/${viewEmployee._id}/joining-letter`, data);
+            if (res.data.success) {
+                toast({ title: "Joining Letter Uploaded", description: "Official joining letter attached successfully", status: "success", duration: 3000 });
+                setViewEmployee(res.data.data);
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({ title: "Upload Failed", description: err.response?.data?.message || "Could not upload joining letter", status: "error", duration: 3000 });
+        } finally {
+            setIsUploadingJoiningLetter(false);
+            if (joiningLetterInputRef.current) joiningLetterInputRef.current.value = '';
+        }
+    };
     const [selectedReportEmployee, setSelectedReportEmployee] = useState(null);
+
+    const handleOpenEmployeeDetail = (emp) => {
+        setViewEmployee(emp);
+        setActiveProfileTab('personal');
+    };
     const [attendanceDetailList, setAttendanceDetailList] = useState([]);
     const [attendanceDetailLoading, setAttendanceDetailLoading] = useState(false);
 
@@ -208,10 +594,36 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         } catch (err) { console.error(err); }
     };
 
+    const fetchCompanies = async () => {
+        try {
+            const res = await api.get('/company-master');
+            if (res.data?.success && Array.isArray(res.data.data)) {
+                const names = res.data.data.map(c => c.companyName).filter(Boolean);
+                setCompanyList(prev => Array.from(new Set([...prev, ...names])));
+            }
+        } catch (err) {
+            console.error('Failed to fetch companies for employee dropdown:', err);
+        }
+    };
+
     useEffect(() => {
         fetchNextEmpId();
         fetchEmployees();
+        fetchCompanies();
     }, []);
+
+    useEffect(() => {
+        if (employees?.length > 0) {
+            const empCompanies = employees.map(e => e.company).filter(Boolean);
+            if (empCompanies.length > 0) {
+                setCompanyList(prev => Array.from(new Set([...prev, ...empCompanies])));
+            }
+            const empBranches = employees.map(e => e.branch).filter(Boolean);
+            if (empBranches.length > 0) {
+                setBranchList(prev => Array.from(new Set([...prev, ...empBranches])));
+            }
+        }
+    }, [employees]);
 
     useEffect(() => {
         if (employees.length > 0 && reportMonthFilter) {
@@ -219,25 +631,74 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         }
     }, [employees, reportMonthFilter]);
 
+    const handleAddCompany = () => {
+        const trimmed = (newCompanyName || '').trim();
+        if (!trimmed) {
+            toast({ title: 'Please enter company name', status: 'warning', duration: 2000 });
+            return;
+        }
+        setCompanyList(prev => Array.from(new Set([...prev, trimmed])));
+        setFormData(prev => ({ ...prev, company: trimmed }));
+        setNewCompanyName('');
+        setIsAddCompanyOpen(false);
+        toast({ title: 'Company Added & Selected', description: `"${trimmed}"`, status: 'success', duration: 2000 });
+    };
+
+    const handleAddBranch = () => {
+        const trimmed = (newBranchName || '').trim();
+        if (!trimmed) {
+            toast({ title: 'Please enter branch name', status: 'warning', duration: 2000 });
+            return;
+        }
+        setBranchList(prev => Array.from(new Set([...prev, trimmed])));
+        setFormData(prev => ({ ...prev, branch: trimmed }));
+        setNewBranchName('');
+        setIsAddBranchOpen(false);
+        toast({ title: 'Branch Added & Selected', description: `"${trimmed}"`, status: 'success', duration: 2000 });
+    };
+
     const handleSelectEmployee = (e) => {
         const id = e.target.value;
         setEditId(id);
         if (!id) {
             setFormData({
                 name: '', email: '', phone: '',
+                company: '', branch: '',
+                dob: '', bloodGroup: '', gender: '',
+                maritalStatus: 'Single', marriageDate: '',
+                joiningDate: '',
+                reportedTo: '',
+                insuranceNumber: '', insuranceProvider: '', insuranceExpiry: '',
+                mediclaimNumber: '', mediclaimProvider: '', mediclaimExpiry: '',
+                issuedItems: '', companyRemarks: '',
                 addressLine1: { street: '', city: '', pincode: '' },
                 addressLine2: { street: '', city: '', pincode: '' },
                 emergencyContact: { name: '', phone: '' },
                 bankName: '', accountName: '', accountNumber: '', confirmAccountNumber: '', ifscCode: '',
                 salary: '',
+                salaryDate: '',
+                salaryStartDate: '',
+                salaryEndDate: '',
+                salaryIncrementDate: '',
+                previousSalary: '',
                 designation: '',
                 paymentMode: 'Cash',
                 paymentStatus: 'Pending',
                 foodAllowance: 'Food',
                 status: 'Active',
+                aadharNumber: '',
+                panNumber: '',
+                voterIdNumber: '',
+                drivingLicenseNumber: '',
             });
-            setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
-            setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
+            setFiles({
+                photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null,
+                resume: null, joiningLetter: null, salarySlips: [], bankDocuments: [], insuranceDocs: [], mediclaimDocs: [], companyItemDocs: []
+            });
+            setExistingDocs({
+                aadharCard: null, panCard: null, voterId: null, drivingLicense: null,
+                resume: null, resumes: [], joiningLetter: null, joiningLetters: [], salarySlips: [], bankDocuments: [], insuranceDocs: [], mediclaimDocs: [], companyItemDocs: []
+            });
             setPhotoPreview(null);
             setSameAsAddress(false);
             setBankVerified(false);
@@ -252,6 +713,23 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                 name: emp.name || '',
                 email: emp.email || '',
                 phone: emp.phone || '',
+                company: emp.company || '',
+                branch: emp.branch || '',
+                dob: emp.dob || '',
+                bloodGroup: emp.bloodGroup || '',
+                gender: emp.gender || '',
+                maritalStatus: emp.maritalStatus || 'Single',
+                marriageDate: emp.marriageDate || '',
+                joiningDate: emp.joiningDate || '',
+                reportedTo: emp.reportedTo || '',
+                insuranceNumber: emp.companyItems?.insuranceNumber || '',
+                insuranceProvider: emp.companyItems?.insuranceProvider || '',
+                insuranceExpiry: emp.companyItems?.insuranceExpiry || '',
+                mediclaimNumber: emp.companyItems?.mediclaimNumber || '',
+                mediclaimProvider: emp.companyItems?.mediclaimProvider || '',
+                mediclaimExpiry: emp.companyItems?.mediclaimExpiry || '',
+                issuedItems: emp.companyItems?.issuedItems || '',
+                companyRemarks: emp.companyItems?.remarks || '',
                 addressLine1: emp.addressLine1 || { street: '', city: '', pincode: '' },
                 addressLine2: emp.addressLine2 || { street: '', city: '', pincode: '' },
                 emergencyContact: emp.emergencyContact || { name: '', phone: '' },
@@ -261,20 +739,40 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                 confirmAccountNumber: emp.bankDetails?.accountNumber || '',
                 ifscCode: emp.bankDetails?.ifscCode || '',
                 salary: emp.salary || '',
+                salaryDate: emp.salaryDate || '',
+                salaryStartDate: emp.salaryStartDate || '',
+                salaryEndDate: emp.salaryEndDate || '',
+                salaryIncrementDate: emp.salaryIncrementDate || '',
+                previousSalary: emp.previousSalary || '',
                 designation: emp.designation || '',
                 paymentMode: emp.paymentMode || 'Cash',
                 paymentStatus: emp.paymentStatus || 'Pending',
                 foodAllowance: emp.foodAllowance || 'Food',
                 status: emp.status || 'Active',
+                aadharNumber: emp.aadharNumber || '',
+                panNumber: emp.panNumber || '',
+                voterIdNumber: emp.voterIdNumber || '',
+                drivingLicenseNumber: emp.drivingLicenseNumber || '',
             });
             setPhotoPreview(emp.photo?.url ? `${API_BASE_URL}${emp.photo.url}` : null);
-            setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
+            setFiles({
+                photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null,
+                resume: null, joiningLetter: null, salarySlips: [], bankDocuments: [], insuranceDocs: [], mediclaimDocs: [], companyItemDocs: []
+            });
             setExistingDocs({
                 aadharCard: emp.aadharCard || null,
                 panCard: emp.panCard || null,
                 voterId: emp.voterId || null,
                 drivingLicense: emp.drivingLicense || null,
-                bankDocuments: emp.bankDetails?.documents || []
+                resume: emp.resume || null,
+                resumes: emp.resumes || [],
+                joiningLetter: emp.joiningLetter || null,
+                joiningLetters: emp.joiningLetters || [],
+                salarySlips: emp.salarySlips || [],
+                bankDocuments: emp.bankDetails?.documents || [],
+                insuranceDocs: emp.insuranceDocs || [],
+                mediclaimDocs: emp.mediclaimDocs || [],
+                companyItemDocs: emp.companyItemDocs || []
             });
             if (emp.bankDetails?.ifscCode) setBankVerified(true);
             const formIdx = tabConfig.findIndex(t => t.id === 'form');
@@ -334,7 +832,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
     };
 
     const handleFileChange = (e, field) => {
-        if (field === 'bankDocuments') {
+        if (['bankDocuments', 'salarySlips', 'insuranceDocs', 'mediclaimDocs', 'companyItemDocs'].includes(field)) {
             const selectedFiles = Array.from(e.target.files);
             setFiles(prev => ({ ...prev, [field]: [...(prev[field] || []), ...selectedFiles] }));
         } else {
@@ -348,21 +846,32 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         }
     };
 
-    const removeBankDocument = (index) => {
+    const removeFileItem = (field, index) => {
         setFiles(prev => {
-            const newDocs = [...(prev.bankDocuments || [])];
-            newDocs.splice(index, 1);
-            return { ...prev, bankDocuments: newDocs };
+            const newArr = [...(prev[field] || [])];
+            newArr.splice(index, 1);
+            return { ...prev, [field]: newArr };
         });
     };
 
-    const removeExistingBankDoc = (index) => {
+    const removeExistingDocItem = (field, index) => {
         setExistingDocs(prev => {
-            const newDocs = [...(prev.bankDocuments || [])];
-            newDocs.splice(index, 1);
-            return { ...prev, bankDocuments: newDocs };
+            const newArr = [...(prev[field] || [])];
+            newArr.splice(index, 1);
+            return { ...prev, [field]: newArr };
         });
     };
+
+    const removeSingleExistingDoc = (field) => {
+        setExistingDocs(prev => ({ ...prev, [field]: null }));
+    };
+
+    const removeSingleNewFile = (field) => {
+        setFiles(prev => ({ ...prev, [field]: null }));
+    };
+
+    const removeBankDocument = (index) => removeFileItem('bankDocuments', index);
+    const removeExistingBankDoc = (index) => removeExistingDocItem('bankDocuments', index);
 
     const handleCheckboxChange = (e) => {
         const checked = e.target.checked;
@@ -446,6 +955,25 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
             uploadData.append('name', formData.name);
             uploadData.append('email', formData.email);
             uploadData.append('phone', formData.phone);
+            uploadData.append('company', formData.company || '');
+            uploadData.append('branch', formData.branch || '');
+            uploadData.append('dob', formData.dob || '');
+            uploadData.append('bloodGroup', formData.bloodGroup || '');
+            uploadData.append('gender', formData.gender || '');
+            uploadData.append('maritalStatus', formData.maritalStatus || 'Single');
+            uploadData.append('marriageDate', formData.marriageDate || '');
+            uploadData.append('joiningDate', formData.joiningDate || '');
+            uploadData.append('reportedTo', formData.reportedTo || '');
+            uploadData.append('companyItems', JSON.stringify({
+                insuranceNumber: formData.insuranceNumber || '',
+                insuranceProvider: formData.insuranceProvider || '',
+                insuranceExpiry: formData.insuranceExpiry || '',
+                mediclaimNumber: formData.mediclaimNumber || '',
+                mediclaimProvider: formData.mediclaimProvider || '',
+                mediclaimExpiry: formData.mediclaimExpiry || '',
+                issuedItems: formData.issuedItems || '',
+                remarks: formData.companyRemarks || '',
+            }));
             uploadData.append('addressLine1', JSON.stringify(formData.addressLine1));
             uploadData.append('addressLine2', JSON.stringify(formData.addressLine2));
             uploadData.append('emergencyContact', JSON.stringify(formData.emergencyContact));
@@ -457,11 +985,20 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                 ifscCode: formData.ifscCode,
             }));
             uploadData.append('salary', formData.salary);
+            uploadData.append('salaryDate', formData.salaryDate || '');
+            uploadData.append('salaryStartDate', formData.salaryStartDate || '');
+            uploadData.append('salaryEndDate', formData.salaryEndDate || '');
+            uploadData.append('salaryIncrementDate', formData.salaryIncrementDate || '');
+            uploadData.append('previousSalary', formData.previousSalary || '');
             uploadData.append('designation', formData.designation);
             uploadData.append('paymentMode', formData.paymentMode || 'Cash');
             uploadData.append('paymentStatus', formData.paymentStatus || 'Pending');
             uploadData.append('foodAllowance', formData.foodAllowance || 'Food');
             uploadData.append('status', formData.status || 'Active');
+            uploadData.append('aadharNumber', formData.aadharNumber || '');
+            uploadData.append('panNumber', formData.panNumber || '');
+            uploadData.append('voterIdNumber', formData.voterIdNumber || '');
+            uploadData.append('drivingLicenseNumber', formData.drivingLicenseNumber || '');
 
             Object.keys(files).forEach(key => {
                 if (Array.isArray(files[key])) {
@@ -473,6 +1010,14 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
 
             if (editId) {
                 uploadData.append('existingBankDocuments', JSON.stringify(existingDocs.bankDocuments || []));
+                uploadData.append('existingResume', JSON.stringify(existingDocs.resume || null));
+                uploadData.append('existingResumes', JSON.stringify(existingDocs.resumes || []));
+                uploadData.append('existingJoiningLetter', JSON.stringify(existingDocs.joiningLetter || null));
+                uploadData.append('existingJoiningLetters', JSON.stringify(existingDocs.joiningLetters || []));
+                uploadData.append('existingSalarySlips', JSON.stringify(existingDocs.salarySlips || []));
+                uploadData.append('existingInsuranceDocs', JSON.stringify(existingDocs.insuranceDocs || []));
+                uploadData.append('existingMediclaimDocs', JSON.stringify(existingDocs.mediclaimDocs || []));
+                uploadData.append('existingCompanyItemDocs', JSON.stringify(existingDocs.companyItemDocs || []));
             }
 
             let response;
@@ -488,22 +1033,55 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                     name: '',
                     email: '',
                     phone: '',
+                    company: '',
+                    branch: '',
+                    dob: '',
+                    bloodGroup: '',
+                    gender: '',
+                    maritalStatus: 'Single',
+                    marriageDate: '',
+                    joiningDate: '',
+                    reportedTo: '',
+                    insuranceNumber: '',
+                    insuranceProvider: '',
+                    insuranceExpiry: '',
+                    mediclaimNumber: '',
+                    mediclaimProvider: '',
+                    mediclaimExpiry: '',
+                    issuedItems: '',
+                    companyRemarks: '',
                     addressLine1: { street: '', city: '', pincode: '' },
                     addressLine2: { street: '', city: '', pincode: '' },
                     emergencyContact: { name: '', phone: '' },
                     bankName: '',
                     accountName: '',
                     accountNumber: '',
+                    confirmAccountNumber: '',
                     ifscCode: '',
                     salary: '',
+                    salaryDate: '',
+                    salaryStartDate: '',
+                    salaryEndDate: '',
+                    salaryIncrementDate: '',
+                    previousSalary: '',
                     designation: '',
                     paymentMode: 'Cash',
                     paymentStatus: 'Pending',
                     foodAllowance: 'Food',
                     status: 'Active',
+                    aadharNumber: '',
+                    panNumber: '',
+                    voterIdNumber: '',
+                    drivingLicenseNumber: '',
                 });
-                setFiles({ photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
-                setExistingDocs({ aadharCard: null, panCard: null, voterId: null, drivingLicense: null, bankDocuments: [] });
+                setFiles({
+                    photo: null, aadharCard: null, panCard: null, voterId: null, drivingLicense: null,
+                    resume: null, joiningLetter: null, salarySlips: [], bankDocuments: [], insuranceDocs: [], mediclaimDocs: [], companyItemDocs: []
+                });
+                setExistingDocs({
+                    aadharCard: null, panCard: null, voterId: null, drivingLicense: null,
+                    resume: null, resumes: [], joiningLetter: null, joiningLetters: [], salarySlips: [], bankDocuments: [], insuranceDocs: [], mediclaimDocs: [], companyItemDocs: []
+                });
                 setPhotoPreview(null);
                 setSameAsAddress(false);
                 setBankVerified(false);
@@ -526,52 +1104,59 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
 
         return (
             <FormControl>
-                <FormLabel fontWeight="bold" fontSize="sm">{label}</FormLabel>
-                <VStack align="stretch" spacing={2}>
+                <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1} noOfLines={1}>{label}</FormLabel>
+                <VStack align="stretch" spacing={1.5}>
                     <Box
-                        p={4}
-                        border="2px dashed"
-                        borderColor={files[field] ? "green.200" : hasExisting ? "purple.200" : "blue.100"}
-                        borderRadius="xl"
-                        bg={files[field] ? "green.50" : hasExisting ? "purple.50" : "blue.50"}
-                        textAlign="center"
+                        h="36px"
+                        px={2.5}
+                        border="1px dashed"
+                        borderColor={files[field] ? "blue.400" : hasExisting ? "green.300" : "gray.300"}
+                        borderRadius="md"
+                        bg={files[field] ? "blue.50" : hasExisting ? "green.50" : "white"}
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
                         cursor="pointer"
                         onClick={() => document.getElementById(`${field}-upload`).click()}
-                        _hover={{ bg: files[field] ? "green.100" : hasExisting ? "purple.100" : "blue.100", borderColor: "blue.300" }}
-                        transition="all 0.2s"
+                        _hover={{ bg: "gray.50", borderColor: "blue.400" }}
+                        transition="all 0.15s"
                     >
                         <input type="file" id={`${field}-upload`} hidden onChange={(e) => handleFileChange(e, field)} accept="image/*,.pdf" />
-                        <Icon as={icon || FaCloudUploadAlt} w={6} h={6} color={files[field] ? "green.500" : hasExisting ? "purple.500" : "blue.500"} mb={2} />
-                        <Text fontSize="xs" fontWeight="bold" color={files[field] ? "green.700" : hasExisting ? "purple.700" : "blue.700"} noOfLines={1}>
-                            {files[field] ? `✓ ${files[field].name}` : hasExisting ? `Replace ${label}` : `Upload ${label}`}
-                        </Text>
+                        <HStack spacing={1.5} justify="center" maxW="full">
+                            <Icon as={icon || FaCloudUploadAlt} w={3.5} h={3.5} color={files[field] ? "blue.500" : hasExisting ? "green.600" : "gray.500"} flexShrink={0} />
+                            <Text fontSize="xs" fontWeight="500" color={files[field] ? "blue.700" : hasExisting ? "green.700" : "gray.600"} noOfLines={1}>
+                                {files[field] ? files[field].name : hasExisting ? `Replace ${label}` : `Upload ${label}`}
+                            </Text>
+                        </HStack>
                     </Box>
 
                     {hasExisting && !files[field] && (
                         <Box 
-                            p={2} 
-                            bg="white" 
-                            borderRadius="xl" 
+                            px={2}
+                            py={1}
+                            bg="gray.50" 
+                            borderRadius="md" 
                             border="1px solid" 
-                            borderColor="purple.100" 
-                            boxShadow="xs"
+                            borderColor="gray.200" 
                             display="flex"
                             alignItems="center"
                             justifyContent="space-between"
                         >
-                            <HStack spacing={2} minW={0}>
-                                <Icon as={isPdf ? FaFilePdf : FaFileImage} color={isPdf ? "red.400" : "purple.400"} />
-                                <Text fontSize="10px" fontWeight="bold" color="gray.600" isTruncated maxW="120px">
-                                    {existingDocs[field].name || `Current ${label}`}
+                            <HStack spacing={1.5} minW={0}>
+                                <Icon as={isPdf ? FaFilePdf : FaFileImage} color={isPdf ? "red.500" : "blue.500"} fontSize="xs" flexShrink={0} />
+                                <Text fontSize="2xs" fontWeight="500" color="gray.700" isTruncated maxW="110px">
+                                    {existingDocs[field].name || `${label}`}
                                 </Text>
                             </HStack>
                             <Button 
                                 size="xs" 
-                                colorScheme="purple" 
+                                colorScheme="gray" 
                                 variant="outline" 
-                                h="24px"
-                                borderRadius="lg"
-                                leftIcon={<Icon as={FaEye} />}
+                                h="20px"
+                                px={1.5}
+                                fontSize="2xs"
+                                borderRadius="md"
+                                leftIcon={<Icon as={FaEye} fontSize="10px" />}
                                 onClick={(e) => { 
                                     e.stopPropagation(); 
                                     const docUrl = getFileUrl(existingDocs[field]);
@@ -584,6 +1169,338 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                     )}
                 </VStack>
             </FormControl>
+        );
+    };
+
+    const MultiDocUploader = ({ label, field, icon, colorScheme = "blue", accept = ".pdf,image/*" }) => {
+        const newFilesList = files[field] || [];
+        const existingList = existingDocs[field] || [];
+        const totalCount = existingList.length + newFilesList.length;
+
+        return (
+            <FormControl>
+                <Flex justify="space-between" align="center" mb={1} minH="18px">
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={0} noOfLines={1}>
+                        {label}
+                    </FormLabel>
+                    {totalCount > 0 && (
+                        <Badge colorScheme={colorScheme} variant="subtle" fontSize="2xs" px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
+                            {totalCount} {totalCount === 1 ? 'file' : 'files'}
+                        </Badge>
+                    )}
+                </Flex>
+                <Box
+                    h="36px"
+                    px={2.5}
+                    border="1px dashed"
+                    borderColor={totalCount > 0 ? `${colorScheme}.300` : `${colorScheme}.200`}
+                    borderRadius="md"
+                    bg="white"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    cursor="pointer"
+                    onClick={() => document.getElementById(`${field}-upload`).click()}
+                    _hover={{ bg: `${colorScheme}.50`, borderColor: `${colorScheme}.400` }}
+                    transition="all 0.15s"
+                >
+                    <input
+                        type="file"
+                        id={`${field}-upload`}
+                        multiple
+                        hidden
+                        onChange={(e) => handleFileChange(e, field)}
+                        accept={accept}
+                    />
+                    <HStack justify="center" spacing={1.5} maxW="full">
+                        <Icon as={icon || FaCloudUploadAlt} w={3.5} h={3.5} color={`${colorScheme}.500`} flexShrink={0} />
+                        <Text fontSize="xs" fontWeight="500" color="gray.600" noOfLines={1}>
+                            {totalCount > 0 ? `+ Add More Files` : `Upload ${label}`}
+                        </Text>
+                    </HStack>
+                </Box>
+
+                {totalCount > 0 && (
+                    <Wrap mt={1.5} spacing={1.5}>
+                        {existingList.map((doc, idx) => {
+                            const docUrl = getFileUrl(doc);
+                            return (
+                                <HStack
+                                    key={'ex-' + idx}
+                                    px={2}
+                                    py={0.5}
+                                    h="24px"
+                                    bg="white"
+                                    borderRadius="md"
+                                    borderWidth="1px"
+                                    borderColor="gray.200"
+                                    spacing={1}
+                                >
+                                    <Icon as={FaFilePdf} color="red.500" fontSize="10px" flexShrink={0} />
+                                    <Text fontSize="2xs" fontWeight="500" color="gray.700" noOfLines={1} maxW="110px">
+                                        {doc.name || `File ${idx + 1}`}
+                                    </Text>
+                                    {docUrl && (
+                                        <IconButton
+                                            aria-label="View doc"
+                                            size="xs"
+                                            colorScheme="gray"
+                                            variant="ghost"
+                                            h="16px"
+                                            w="16px"
+                                            minW="16px"
+                                            p={0}
+                                            icon={<FaEye size="9px" />}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                window.open(docUrl, '_blank', 'noopener,noreferrer');
+                                            }}
+                                        />
+                                    )}
+                                    <IconButton
+                                        aria-label="Remove doc"
+                                        size="xs"
+                                        colorScheme="red"
+                                        variant="ghost"
+                                        h="16px"
+                                        w="16px"
+                                        minW="16px"
+                                        p={0}
+                                        icon={<FaTrash size="9px" />}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeExistingDocItem(field, idx);
+                                        }}
+                                    />
+                                </HStack>
+                            );
+                        })}
+                        {newFilesList.map((file, idx) => (
+                            <HStack
+                                key={'new-' + idx}
+                                px={2}
+                                py={0.5}
+                                h="24px"
+                                bg={`${colorScheme}.50`}
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor={`${colorScheme}.200`}
+                                spacing={1}
+                            >
+                                <Icon as={FaCheckCircle} color={`${colorScheme}.500`} fontSize="10px" flexShrink={0} />
+                                <Text fontSize="2xs" fontWeight="500" color={`${colorScheme}.700`} noOfLines={1} maxW="110px">
+                                    {file.name}
+                                </Text>
+                                <IconButton
+                                    aria-label="Remove new file"
+                                    size="xs"
+                                    colorScheme="red"
+                                    variant="ghost"
+                                    h="16px"
+                                    w="16px"
+                                    minW="16px"
+                                    p={0}
+                                    icon={<FaTrash size="9px" />}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeFileItem(field, idx);
+                                    }}
+                                />
+                            </HStack>
+                        ))}
+                    </Wrap>
+                )}
+            </FormControl>
+        );
+    };
+
+    const ResumeUploadBlock = () => {
+        const hasExisting = existingDocs?.resume && existingDocs.resume.url;
+        const isNew = files?.resume;
+        const docUrl = hasExisting ? getFileUrl(existingDocs.resume) : null;
+
+        return (
+            <FormControl>
+                <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1} noOfLines={1}>
+                    📄 Resume / Curriculum Vitae
+                </FormLabel>
+                <Box
+                    h="36px"
+                    px={2.5}
+                    border="1px dashed"
+                    borderColor={isNew ? "green.300" : hasExisting ? "blue.300" : "blue.200"}
+                    borderRadius="md"
+                    bg={isNew ? "green.50" : "white"}
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    cursor="pointer"
+                    onClick={() => document.getElementById('resume-upload').click()}
+                    _hover={{ bg: "blue.50", borderColor: "blue.400" }}
+                    transition="all 0.15s"
+                >
+                    <input
+                        type="file"
+                        id="resume-upload"
+                        hidden
+                        onChange={(e) => handleFileChange(e, 'resume')}
+                        accept=".pdf,.doc,.docx,image/*"
+                    />
+                    <HStack justify="center" spacing={1.5} maxW="full">
+                        <Icon as={FaFileAlt} w={3.5} h={3.5} color={isNew ? "green.500" : "blue.500"} flexShrink={0} />
+                        <Text fontSize="xs" fontWeight="500" color={isNew ? "green.700" : "gray.600"} noOfLines={1}>
+                            {isNew ? files.resume.name : hasExisting ? (existingDocs.resume.name || 'Current Resume') : 'Upload Resume (PDF / Word)'}
+                        </Text>
+                    </HStack>
+                </Box>
+
+                {(hasExisting || isNew) && (
+                    <Wrap mt={1.5} spacing={1.5}>
+                        {hasExisting && !isNew && (
+                            <HStack px={2} py={0.5} h="24px" bg="white" borderRadius="md" borderWidth="1px" borderColor="gray.200" spacing={1}>
+                                <Icon as={FaFilePdf} color="red.500" fontSize="10px" flexShrink={0} />
+                                <Text fontSize="2xs" fontWeight="500" color="gray.700" noOfLines={1} maxW="130px">
+                                    {existingDocs.resume.name || 'Current_Resume.pdf'}
+                                </Text>
+                                {docUrl && (
+                                    <Button
+                                        size="xs"
+                                        colorScheme="blue"
+                                        variant="outline"
+                                        h="16px"
+                                        px={1.5}
+                                        fontSize="2xs"
+                                        leftIcon={<FaEye size="9px" />}
+                                        onClick={() => window.open(docUrl, '_blank', 'noopener,noreferrer')}
+                                    >
+                                        View
+                                    </Button>
+                                )}
+                                <IconButton
+                                    aria-label="Delete resume"
+                                    size="xs"
+                                    colorScheme="red"
+                                    variant="ghost"
+                                    h="16px"
+                                    w="16px"
+                                    minW="16px"
+                                    p={0}
+                                    icon={<FaTrash size="9px" />}
+                                    onClick={() => removeSingleExistingDoc('resume')}
+                                />
+                            </HStack>
+                        )}
+                        {isNew && (
+                            <HStack px={2} py={0.5} h="24px" bg="green.50" borderRadius="md" borderWidth="1px" borderColor="green.200" spacing={1}>
+                                <Icon as={FaCheckCircle} color="green.500" fontSize="10px" flexShrink={0} />
+                                <Text fontSize="2xs" fontWeight="500" color="green.700" noOfLines={1} maxW="130px">
+                                    {files.resume.name}
+                                </Text>
+                                <IconButton
+                                    aria-label="Remove new resume"
+                                    size="xs"
+                                    colorScheme="red"
+                                    variant="ghost"
+                                    h="16px"
+                                    w="16px"
+                                    minW="16px"
+                                    p={0}
+                                    icon={<FaTrash size="9px" />}
+                                    onClick={() => removeSingleNewFile('resume')}
+                                />
+                            </HStack>
+                        )}
+                    </Wrap>
+                )}
+            </FormControl>
+        );
+    };
+
+    const renderKycViewCard = ({ itemNumber, title, cardNo, doc, icon }) => {
+        const docUrl = getFileUrl(doc);
+        const fileName = doc?.name || (typeof doc === 'string' ? doc.split('/').pop() : '');
+        const isPdf = fileName.toLowerCase().endsWith('.pdf') || (docUrl && docUrl.toLowerCase().includes('.pdf'));
+
+        return (
+            <Box 
+                p={3.5} 
+                bg="white" 
+                borderRadius="xl" 
+                border="1px solid" 
+                borderColor="gray.200"
+                display="flex"
+                flexDirection="column"
+                justifyContent="space-between"
+            >
+                <Box>
+                    <Flex justify="space-between" align="center" mb={2}>
+                        <HStack spacing={1.5}>
+                            <Icon as={icon} color="gray.600" fontSize="xs" />
+                            <Text fontSize="xs" fontWeight="700" color="gray.800">
+                                {itemNumber}. {title}
+                            </Text>
+                        </HStack>
+                        <Badge colorScheme="gray" variant="subtle" fontSize="2xs" px={1.5} py={0.5} borderRadius="md">
+                            KYC
+                        </Badge>
+                    </Flex>
+
+                    <Box mb={2.5} p={2} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                        <Text fontSize="9px" color="gray.500" fontWeight="bold" textTransform="uppercase">
+                            DOCUMENT NUMBER:
+                        </Text>
+                        <Text fontSize="xs" fontWeight="700" color="gray.800" fontFamily="mono" letterSpacing="0.5px">
+                            {cardNo || 'Not entered'}
+                        </Text>
+                    </Box>
+                </Box>
+
+                <Box pt={1}>
+                    {docUrl ? (
+                        <VStack align="stretch" spacing={2}>
+                            {!isPdf && (
+                                <Box 
+                                    h="70px" 
+                                    borderRadius="md" 
+                                    overflow="hidden" 
+                                    border="1px solid" 
+                                    borderColor="gray.200"
+                                    bg="gray.50"
+                                    cursor="pointer"
+                                    onClick={() => window.open(docUrl, '_blank', 'noopener,noreferrer')}
+                                    _hover={{ opacity: 0.85 }}
+                                    title="Click to view full image"
+                                >
+                                    <Image src={docUrl} alt={title} w="full" h="full" objectFit="cover" />
+                                </Box>
+                            )}
+                            <Button
+                                as="a"
+                                href={docUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                size="xs"
+                                h="28px"
+                                colorScheme="blue"
+                                variant="outline"
+                                borderRadius="md"
+                                fontWeight="600"
+                                leftIcon={<Icon as={isPdf ? FaFilePdf : FaEye} fontSize="11px" />}
+                                rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
+                                w="full"
+                            >
+                                View {isPdf ? 'PDF' : 'Image'}
+                            </Button>
+                        </VStack>
+                    ) : (
+                        <Box py={2} textAlign="center" bg="gray.50" borderRadius="md" border="1px dashed" borderColor="gray.200">
+                            <Text fontSize="2xs" color="gray.400" fontWeight="500">
+                                No file attached
+                            </Text>
+                        </Box>
+                    )}
+                </Box>
+            </Box>
         );
     };
 
@@ -1172,7 +2089,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                     <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
     <VStack spacing={5} align="stretch">
 
-        {/* ── Desktop GroupBox 1: Personal Particulars & Photo ── */}
+        {/* ── GroupBox 1: Core Identity & Work Assignment ── */}
         <Box 
             bg="white" 
             borderWidth="1px" 
@@ -1183,36 +2100,35 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         >
             <Flex align="center" justify="space-between" mb={4} pb={2} borderBottom="1px solid" borderColor="gray.100">
                 <HStack spacing={2.5}>
-                    <Flex w="28px" h="28px" bg="blue.50" color="blue.600" borderRadius="md" align="center" justifyContent="center">
+                    <Flex w="30px" h="30px" bg="blue.50" color="blue.600" borderRadius="lg" align="center" justifyContent="center">
                         <Icon as={FaUserTie} fontSize="sm" />
                     </Flex>
                     <Box>
-                        <Heading size="xs" color="gray.800" textTransform="uppercase" letterSpacing="0.5px">
-                            1. Employee Particulars &amp; Profile
+                        <Heading size="xs" color="gray.800" fontWeight="700" letterSpacing="0.3px">
+                            1. Employee Particulars &amp; Work Assignment
                         </Heading>
-                        <Text fontSize="2xs" color="gray.500">Core identity, designation, compensation &amp; residential location</Text>
                     </Box>
                 </HStack>
                 {editId && (
-                    <Badge colorScheme="purple" px={2.5} py={0.5} borderRadius="md" fontSize="xs">
+                    <Badge colorScheme="blue" variant="subtle" px={2.5} py={0.5} borderRadius="md" fontSize="xs">
                         Editing: {formData.name || 'Employee'}
                     </Badge>
                 )}
             </Flex>
 
             <SimpleGrid columns={{ base: 1, md: 4 }} spacing={5} alignItems="flex-start">
-                {/* ── Photo Upload Column (EXACT SAME POSITION PRESERVED) ── */}
+                {/* ── Photo Upload Column ── */}
                 <Box textAlign="center" pt={1}>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" textAlign="center" mb={2}>
-                        Employee Photo
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.600" textAlign="center" mb={2}>
+                        📷 Employee Photo
                     </FormLabel>
                     <Box
                         w="115px"
                         h="145px"
                         mx="auto"
-                        borderRadius="xl"
-                        border="2px dashed"
-                        borderColor={photoPreview ? "green.400" : "blue.300"}
+                        borderRadius="md"
+                        border="1px dashed"
+                        borderColor={photoPreview ? "blue.400" : "blue.200"}
                         bg={photoPreview ? "transparent" : "blue.50"}
                         display="flex"
                         alignItems="center"
@@ -1221,32 +2137,31 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                         overflow="hidden"
                         position="relative"
                         onClick={() => document.getElementById('photo-upload').click()}
-                        _hover={{ borderColor: "blue.500", bg: "blue.100", transform: "scale(1.02)" }}
-                        transition="all 0.2s"
-                        boxShadow="xs"
+                        _hover={{ borderColor: "blue.500", bg: "blue.100" }}
+                        transition="all 0.15s"
                     >
                         <input type="file" id="photo-upload" hidden onChange={(e) => handleFileChange(e, 'photo')} accept="image/*" />
                         {photoPreview ? (
                             <Image src={photoPreview} alt="Preview" w="full" h="full" objectFit="cover" />
                         ) : (
                             <VStack spacing={1.5}>
-                                <Icon as={FaCamera} w={6} h={6} color="blue.500" />
-                                <Text fontSize="10px" color="blue.600" fontWeight="bold">Upload Photo</Text>
+                                <Icon as={FaCamera} w={5} h={5} color="blue.500" />
+                                <Text fontSize="10px" color="blue.600" fontWeight="600">Upload Photo</Text>
                             </VStack>
                         )}
                     </Box>
                     <Box mt={2}>
-                        <Badge colorScheme="purple" variant="subtle" px={2} py={0.5} borderRadius="md" fontSize="xs" fontWeight="bold">
+                        <Badge colorScheme="purple" variant="subtle" px={2} py={0.5} borderRadius="md" fontSize="xs" fontWeight="600">
                             ID: {nextEmpId || '####'}
                         </Badge>
                     </Box>
                 </Box>
 
-                {/* ── Right Column: Aligned Desktop Fields ── */}
+                {/* ── Right Column: Fields ── */}
                 <Box gridColumn={{ md: 'span 3' }}>
-                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={3}>
+                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} mb={3}>
                         <FormControl isRequired>
-                            <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Employee Full Name</FormLabel>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>👤 Employee Full Name</FormLabel>
                             <InputGroup size="sm">
                                 <InputLeftElement pointerEvents="none">
                                     <Icon as={FaUserTie} color="blue.500" />
@@ -1257,14 +2172,13 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                     bg="white"
                                     _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
                                     h="36px"
-                                    placeholder="Enter full name" 
                                     value={formData.name} 
                                     onChange={(e) => handleChange(e, 'name')} 
                                 />
                             </InputGroup>
                         </FormControl>
                         <FormControl isRequired>
-                            <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Monthly Salary (₹)</FormLabel>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>💰 Monthly Salary (₹)</FormLabel>
                             <InputGroup size="sm">
                                 <InputLeftElement pointerEvents="none">
                                     <Icon as={FaMoneyBillWave} color="green.500" />
@@ -1276,20 +2190,33 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                     _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
                                     h="36px"
                                     type="number" 
-                                    placeholder="e.g. 25000" 
                                     value={formData.salary} 
                                     onChange={(e) => handleChange(e, 'salary')} 
                                 />
                             </InputGroup>
                         </FormControl>
+                        <FormControl>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>🗓️ Salary Date (Disbursement)</FormLabel>
+                            <Input
+                                type="date"
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                borderColor="gray.300"
+                                bg="white"
+                                _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                                value={formData.salaryDate || ''}
+                                onChange={(e) => handleChange(e, 'salaryDate')}
+                            />
+                        </FormControl>
                     </SimpleGrid>
 
                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={3}>
                         <FormControl>
-                            <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Designation / Role</FormLabel>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>💼 Designation / Role</FormLabel>
                             <InputGroup size="sm">
                                 <InputLeftElement pointerEvents="none">
-                                    <Icon as={FaIdBadge} color="blue.500" />
+                                    <Icon as={FaIdBadge} color="purple.500" />
                                 </InputLeftElement>
                                 <Input 
                                     borderRadius="md" 
@@ -1297,17 +2224,16 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                     bg="white"
                                     _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
                                     h="36px"
-                                    placeholder="e.g. Site Engineer / Surveyor" 
                                     value={formData.designation} 
                                     onChange={(e) => handleChange(e, 'designation')} 
                                 />
                             </InputGroup>
                         </FormControl>
                         <FormControl isRequired>
-                            <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Mobile Phone Number</FormLabel>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>📱 Mobile Phone Number</FormLabel>
                             <InputGroup size="sm">
                                 <InputLeftElement pointerEvents="none">
-                                    <Icon as={FaPhoneAlt} color="blue.500" />
+                                    <Icon as={FaPhoneAlt} color="teal.500" />
                                 </InputLeftElement>
                                 <Input 
                                     borderRadius="md" 
@@ -1315,7 +2241,6 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                     bg="white"
                                     _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
                                     h="36px"
-                                    placeholder="10-digit mobile number" 
                                     value={formData.phone} 
                                     onChange={(e) => handleChange(e, 'phone')} 
                                 />
@@ -1325,10 +2250,10 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
 
                     <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3} mb={3}>
                         <FormControl>
-                            <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Email Address</FormLabel>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>✉️ Email Address</FormLabel>
                             <InputGroup size="sm">
                                 <InputLeftElement pointerEvents="none">
-                                    <Icon as={FaEnvelope} color="blue.500" />
+                                    <Icon as={FaEnvelope} color="blue.400" />
                                 </InputLeftElement>
                                 <Input 
                                     borderRadius="md" 
@@ -1337,7 +2262,6 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                     _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
                                     h="36px"
                                     type="email" 
-                                    placeholder="email@company.com" 
                                     value={formData.email} 
                                     onChange={(e) => handleChange(e, 'email')} 
                                     autoComplete="new-password" 
@@ -1345,7 +2269,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                             </InputGroup>
                         </FormControl>
                         <FormControl>
-                            <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>🍽️ Food Allowance</FormLabel>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>🍽️ Food Allowance</FormLabel>
                             <Select
                                 size="sm"
                                 h="36px"
@@ -1356,87 +2280,145 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                 value={formData.foodAllowance || 'Food'}
                                 onChange={(e) => handleChange(e, 'foodAllowance')}
                             >
-                                <option value="Food">🍱 Food Included</option>
-                                <option value="Without Food">🚫 Without Food</option>
+                                <option value="Food">Food Included</option>
+                                <option value="Without Food">Without Food</option>
                             </Select>
                         </FormControl>
                         <FormControl>
-                            <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>👤 Employee Status</FormLabel>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>🟢 Employee Status</FormLabel>
                             <Select
                                 size="sm"
                                 h="36px"
                                 borderRadius="md"
                                 borderColor="gray.300"
-                                bg={formData.status === 'Active' ? 'green.50' : 'red.50'}
-                                color={formData.status === 'Active' ? 'green.800' : 'red.800'}
-                                fontWeight="bold"
+                                bg="white"
+                                fontWeight="600"
                                 _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
                                 value={formData.status || 'Active'}
                                 onChange={(e) => handleChange(e, 'status')}
                             >
-                                <option value="Active">✅ Active Record</option>
-                                <option value="Deactive">❌ Deactive Record</option>
+                                <option value="Active">Active Record</option>
+                                <option value="Deactive">Deactive Record</option>
                             </Select>
                         </FormControl>
                     </SimpleGrid>
 
-                    {/* ── Primary Residential Address (Desktop Sub-GroupBox) ── */}
-                    <Box mt={3} p={3.5} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.100">
-                        <Flex align="center" justify="space-between" mb={2}>
-                            <HStack spacing={1.5}>
-                                <Icon as={FaMapMarkerAlt} color="blue.600" fontSize="xs" />
-                                <Text fontWeight="bold" fontSize="xs" color="blue.800" textTransform="uppercase" letterSpacing="0.3px">
-                                    Primary Residential Address
-                                </Text>
-                            </HStack>
-                            <Text fontSize="2xs" color="blue.600">Enter pincode for auto-city fill</Text>
-                        </Flex>
-                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={2.5}>
-                            <FormControl gridColumn={{ md: 'span 3' }}>
-                                <Input 
-                                    size="sm" 
-                                    h="34px" 
-                                    borderRadius="md" 
-                                    bg="white" 
-                                    borderColor="gray.300"
-                                    placeholder="Street / Building / Flat No. / Area" 
-                                    value={formData.addressLine1.street} 
-                                    onChange={(e) => handleChange(e, 'addressLine1', 'street')} 
-                                />
-                            </FormControl>
-                            <FormControl>
-                                <Input
-                                    size="sm"
-                                    h="34px"
-                                    borderRadius="md" 
-                                    bg="white" 
-                                    borderColor="gray.300"
-                                    placeholder="6-Digit Pincode"
-                                    maxLength={6}
-                                    value={formData.addressLine1.pincode}
-                                    onChange={(e) => handleChange(e, 'addressLine1', 'pincode')}
-                                />
-                                {pincodeLoading1 && <Text fontSize="2xs" color="blue.600" mt={0.5}>Fetching city...</Text>}
-                            </FormControl>
-                            <FormControl gridColumn={{ md: 'span 2' }}>
-                                <Input 
-                                    size="sm" 
-                                    h="34px" 
-                                    borderRadius="md" 
-                                    bg="white" 
-                                    borderColor="gray.300"
-                                    placeholder="City (Auto-filled via pincode)" 
-                                    value={formData.addressLine1.city} 
-                                    onChange={(e) => handleChange(e, 'addressLine1', 'city')} 
-                                />
-                            </FormControl>
-                        </SimpleGrid>
-                    </Box>
+                    {/* Company & Branch Selection — No "ADD NEW" in company */}
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={3}>
+                        <FormControl>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>
+                                🏢 Company
+                            </FormLabel>
+                            <Select
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                borderColor="gray.300"
+                                bg="white"
+                                _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                                value={formData.company}
+                                onChange={(e) => handleChange(e, 'company')}
+                            >
+                                <option value="">Select Company</option>
+                                {companyList.map((comp, idx) => (
+                                    <option key={idx} value={comp}>{comp}</option>
+                                ))}
+                            </Select>
+                        </FormControl>
+
+                        <FormControl>
+                            <Flex justify="space-between" align="center" mb={1}>
+                                <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={0}>
+                                    📍 Branch / Location
+                                </FormLabel>
+                                <Button
+                                    size="2xs"
+                                    colorScheme="purple"
+                                    variant="ghost"
+                                    leftIcon={<Icon as={FaPlus} fontSize="9px" />}
+                                    onClick={() => setIsAddBranchOpen(true)}
+                                >
+                                    + Add Branch
+                                </Button>
+                            </Flex>
+                            <Select
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                borderColor="gray.300"
+                                bg="white"
+                                _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                                value={formData.branch}
+                                onChange={(e) => {
+                                    if (e.target.value === '__ADD_NEW__') {
+                                        setIsAddBranchOpen(true);
+                                    } else {
+                                        handleChange(e, 'branch');
+                                    }
+                                }}
+                            >
+                                <option value="">Select Branch</option>
+                                {branchList.map((br, idx) => (
+                                    <option key={idx} value={br}>{br}</option>
+                                ))}
+                                <option value="__ADD_NEW__">+ Add New Branch...</option>
+                            </Select>
+                        </FormControl>
+                    </SimpleGrid>
+
+                    {/* Requirement 7: Report by [id-name] & Date of Joining */}
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={1}>
+                        <FormControl>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>
+                                👔 Reporting To / Manager
+                            </FormLabel>
+                            <Select
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                borderColor="gray.300"
+                                bg="white"
+                                _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                                value={formData.reportedTo}
+                                onChange={(e) => handleChange(e, 'reportedTo')}
+                            >
+                                <option value="">None (Top Level Management / Self-Reporting)</option>
+                                {employees
+                                    .filter(e => !editId || e._id !== editId)
+                                    .map(e => {
+                                        const formattedVal = `[${e.empId || '----'} - ${e.name}]`;
+                                        return (
+                                            <option key={e._id} value={formattedVal}>
+                                                {formattedVal} {e.designation ? `— ${e.designation}` : ''} {e.company ? `(${e.company})` : ''}
+                                            </option>
+                                        );
+                                    })
+                                }
+                            </Select>
+                        </FormControl>
+
+                        <FormControl>
+                            <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>
+                                📅 Date of Joining
+                            </FormLabel>
+                            <Input
+                                size="sm"
+                                type="date"
+                                h="36px"
+                                borderRadius="md"
+                                borderColor="gray.300"
+                                bg="white"
+                                _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                                value={formData.joiningDate}
+                                onChange={(e) => handleChange(e, 'joiningDate')}
+                            />
+                        </FormControl>
+                    </SimpleGrid>
                 </Box>
             </SimpleGrid>
         </Box>
 
-        {/* ── Desktop GroupBox 2: Identification & Statutory Documents ── */}
+        {/* ── GroupBox 2: Personal Demographics & Family Particulars ── */}
         <Box 
             bg="white" 
             borderWidth="1px" 
@@ -1447,26 +2429,153 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         >
             <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100">
                 <HStack spacing={2.5}>
-                    <Flex w="28px" h="28px" bg="indigo.50" color="indigo.600" borderRadius="md" align="center" justifyContent="center">
-                        <Icon as={FaIdCard} fontSize="sm" />
+                    <Flex w="30px" h="30px" bg="purple.50" color="purple.600" borderRadius="lg" align="center" justifyContent="center">
+                        <Icon as={FaUsers} fontSize="sm" />
                     </Flex>
                     <Box>
-                        <Heading size="xs" color="gray.800" textTransform="uppercase" letterSpacing="0.5px">
-                            2. Identification &amp; Statutory Document Proofs
+                        <Heading size="xs" color="gray.800" fontWeight="700" letterSpacing="0.3px">
+                            2. Personal Demographics &amp; Family Particulars
                         </Heading>
-                        <Text fontSize="2xs" color="gray.500">Government identity cards &amp; scanned proof copies (PDF / Image)</Text>
                     </Box>
                 </HStack>
             </Flex>
-            <SimpleGrid columns={{ base: 2, sm: 2, md: 4 }} spacing={3}>
-                <FileUploadInput label="Aadhar Card" field="aadharCard" />
-                <FileUploadInput label="PAN Card" field="panCard" />
-                <FileUploadInput label="Voter ID" field="voterId" />
-                <FileUploadInput label="Driving License" field="drivingLicense" />
+
+            <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3} mb={formData.maritalStatus === 'Married' ? 3 : 0}>
+                {/* Gender */}
+                <FormControl>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>
+                        ⚧ Gender
+                    </FormLabel>
+                    <Select
+                        size="sm"
+                        h="36px"
+                        borderRadius="md"
+                        borderColor="gray.300"
+                        bg="white"
+                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                        value={formData.gender}
+                        onChange={(e) => handleChange(e, 'gender')}
+                    >
+                        <option value="">Select Gender</option>
+                        <option value="Male">👨 Male</option>
+                        <option value="Female">👩 Female</option>
+                        <option value="Other">🧑 Other</option>
+                    </Select>
+                </FormControl>
+
+                {/* Date of Birth */}
+                <FormControl>
+                    <Flex justify="space-between" align="center" mb={1}>
+                        <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={0}>
+                            🎂 Date of Birth (DOB)
+                        </FormLabel>
+                        {formData.dob && calculateAge(formData.dob) !== null && (
+                            <Badge colorScheme="green" variant="subtle" fontSize="2xs" px={2} py={0.5} borderRadius="full">
+                                {calculateAge(formData.dob)} yrs old
+                            </Badge>
+                        )}
+                    </Flex>
+                    <Input 
+                        size="sm"
+                        h="36px"
+                        borderRadius="md" 
+                        borderColor="gray.300"
+                        bg="white"
+                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                        type="date"
+                        value={formData.dob}
+                        onChange={(e) => handleChange(e, 'dob')}
+                        max={new Date().toISOString().split('T')[0]}
+                    />
+                </FormControl>
+
+                {/* Blood Group */}
+                <FormControl>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>
+                        🩸 Blood Group
+                    </FormLabel>
+                    <Select
+                        size="sm"
+                        h="36px"
+                        borderRadius="md"
+                        borderColor="gray.300"
+                        bg="white"
+                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                        value={formData.bloodGroup}
+                        onChange={(e) => handleChange(e, 'bloodGroup')}
+                    >
+                        <option value="">Select Blood Group</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                    </Select>
+                </FormControl>
+
+                {/* Marital Status */}
+                <FormControl>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>
+                        💍 Marital Status
+                    </FormLabel>
+                    <Select
+                        size="sm"
+                        h="36px"
+                        borderRadius="md"
+                        borderColor="gray.300"
+                        bg="white"
+                        _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
+                        value={formData.maritalStatus || 'Single'}
+                        onChange={(e) => handleChange(e, 'maritalStatus')}
+                    >
+                        <option value="Single">Single</option>
+                        <option value="Married">Married</option>
+                        <option value="Divorced">Divorced</option>
+                        <option value="Widowed">Widowed</option>
+                    </Select>
+                </FormControl>
             </SimpleGrid>
+
+            {/* If Married -> Marriage Date (optional) */}
+            {formData.maritalStatus === 'Married' && (
+                <Box p={3} bg="pink.50" borderRadius="md" border="1px dashed" borderColor="pink.200">
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} alignItems="center">
+                        <FormControl>
+                            <Flex justify="space-between" align="center" mb={1}>
+                                <FormLabel fontWeight="600" fontSize="xs" color="pink.800" mb={0}>
+                                    📅 Marriage / Anniversary Date
+                                </FormLabel>
+                                <Badge colorScheme="pink" variant="subtle" fontSize="2xs" px={1.5} py={0.5} borderRadius="md">
+                                    Optional
+                                </Badge>
+                            </Flex>
+                            <Input 
+                                size="sm"
+                                h="36px"
+                                borderRadius="md" 
+                                borderColor="pink.300"
+                                bg="white"
+                                _focus={{ borderColor: "pink.500", boxShadow: "0 0 0 1px #ed64a6" }}
+                                type="date"
+                                value={formData.marriageDate}
+                                onChange={(e) => handleChange(e, 'marriageDate')}
+                                max={new Date().toISOString().split('T')[0]}
+                            />
+                        </FormControl>
+                        <Box pt={{ base: 0, md: 5 }}>
+                            <Text fontSize="2xs" color="pink.700">
+                                ℹ️ Used for anniversary greetings and family records.
+                            </Text>
+                        </Box>
+                    </SimpleGrid>
+                </Box>
+            )}
         </Box>
 
-        {/* ── Desktop GroupBox 3: Secondary / Permanent Address ── */}
+        {/* ── GroupBox 3: Company Items, Insurance & Mediclaim ── */}
         <Box 
             bg="white" 
             borderWidth="1px" 
@@ -1475,30 +2584,385 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
             p={{ base: 4, md: 5 }} 
             boxShadow="xs"
         >
-            <Flex align="center" justify="space-between" mb={sameAsAddress ? 0 : 3} pb={sameAsAddress ? 0 : 2} borderBottom={sameAsAddress ? 'none' : '1px solid'} borderColor="gray.100">
+            <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100">
                 <HStack spacing={2.5}>
-                    <Flex w="28px" h="28px" bg="purple.50" color="purple.600" borderRadius="md" align="center" justifyContent="center">
+                    <Flex w="30px" h="30px" bg="teal.50" color="teal.600" borderRadius="lg" align="center" justifyContent="center">
+                        <Icon as={FaShieldAlt} fontSize="sm" />
+                    </Flex>
+                    <Box>
+                        <Heading size="xs" color="gray.800" fontWeight="700" letterSpacing="0.3px">
+                            3. Company Assets, Insurance &amp; Mediclaim
+                        </Heading>
+                    </Box>
+                </HStack>
+            </Flex>
+
+            <VStack spacing={3.5} align="stretch">
+                {/* ── Subsection A: Insurance Policy & Documents ── */}
+                <Box p={3.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                    <Flex align="center" justify="space-between" mb={2.5}>
+                        <HStack spacing={2}>
+                            <Icon as={FaShieldAlt} color="blue.600" fontSize="xs" />
+                            <Text fontWeight="600" fontSize="xs" color="blue.800">
+                                🛡️ Corporate Accidental / Term Insurance
+                            </Text>
+                        </HStack>
+                    </Flex>
+                    <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3} alignItems="flex-start">
+                        <FormControl>
+                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1} noOfLines={1}>Policy Number</FormLabel>
+                            <Input
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                bg="white"
+                                borderColor="gray.300"
+                                value={formData.insuranceNumber}
+                                onChange={(e) => handleChange(e, 'insuranceNumber')}
+                            />
+                        </FormControl>
+                        <FormControl>
+                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1} noOfLines={1}>Insurance Provider</FormLabel>
+                            <Input
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                bg="white"
+                                borderColor="gray.300"
+                                value={formData.insuranceProvider}
+                                onChange={(e) => handleChange(e, 'insuranceProvider')}
+                            />
+                        </FormControl>
+                        <FormControl>
+                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1} noOfLines={1}>Policy Expiry Date</FormLabel>
+                            <Input
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                bg="white"
+                                borderColor="gray.300"
+                                type="date"
+                                value={formData.insuranceExpiry}
+                                onChange={(e) => handleChange(e, 'insuranceExpiry')}
+                            />
+                        </FormControl>
+                        <MultiDocUploader
+                            label="Insurance Documents"
+                            field="insuranceDocs"
+                            icon={FaShieldAlt}
+                            colorScheme="blue"
+                        />
+                    </SimpleGrid>
+                </Box>
+
+                {/* ── Subsection B: Mediclaim Policy & Documents ── */}
+                <Box p={3.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                    <Flex align="center" justify="space-between" mb={2.5}>
+                        <HStack spacing={2}>
+                            <Icon as={FaMedkit} color="green.600" fontSize="xs" />
+                            <Text fontWeight="600" fontSize="xs" color="green.800">
+                                🏥 Health Mediclaim &amp; Cards
+                            </Text>
+                        </HStack>
+                    </Flex>
+                    <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3} alignItems="flex-start">
+                        <FormControl>
+                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1} noOfLines={1}>Mediclaim / Card No.</FormLabel>
+                            <Input
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                bg="white"
+                                borderColor="gray.300"
+                                value={formData.mediclaimNumber}
+                                onChange={(e) => handleChange(e, 'mediclaimNumber')}
+                            />
+                        </FormControl>
+                        <FormControl>
+                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1} noOfLines={1}>Mediclaim Provider / TPA</FormLabel>
+                            <Input
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                bg="white"
+                                borderColor="gray.300"
+                                value={formData.mediclaimProvider}
+                                onChange={(e) => handleChange(e, 'mediclaimProvider')}
+                            />
+                        </FormControl>
+                        <FormControl>
+                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1} noOfLines={1}>Mediclaim Expiry Date</FormLabel>
+                            <Input
+                                size="sm"
+                                h="36px"
+                                borderRadius="md"
+                                bg="white"
+                                borderColor="gray.300"
+                                type="date"
+                                value={formData.mediclaimExpiry}
+                                onChange={(e) => handleChange(e, 'mediclaimExpiry')}
+                            />
+                        </FormControl>
+                        <MultiDocUploader
+                            label="Mediclaim Cards &amp; Docs"
+                            field="mediclaimDocs"
+                            icon={FaMedkit}
+                            colorScheme="green"
+                        />
+                    </SimpleGrid>
+                </Box>
+
+                {/* ── Subsection C: Company Issued Items / Assets ── */}
+                <Box p={3.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                    <Flex align="center" justify="space-between" mb={2.5}>
+                        <HStack spacing={2}>
+                            <Icon as={FaLaptop} color="teal.600" fontSize="xs" />
+                            <Text fontWeight="600" fontSize="xs" color="teal.800">
+                                💻 Company Issued Items &amp; Assets
+                            </Text>
+                        </HStack>
+                    </Flex>
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} alignItems="flex-start">
+                        <FormControl>
+                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1} noOfLines={1}>
+                                List of Company Items Handed Over
+                            </FormLabel>
+                            <Textarea
+                                size="sm"
+                                borderRadius="md"
+                                bg="white"
+                                borderColor="gray.300"
+                                placeholder="Laptop, SIM, safety gear, tools..."
+                                rows={2}
+                                value={formData.issuedItems}
+                                onChange={(e) => handleChange(e, 'issuedItems')}
+                            />
+                        </FormControl>
+                        <Box>
+                            <MultiDocUploader
+                                label="Item Handover Slips &amp; Documents"
+                                field="companyItemDocs"
+                                icon={FaLaptop}
+                                colorScheme="teal"
+                            />
+                        </Box>
+                    </SimpleGrid>
+                </Box>
+            </VStack>
+        </Box>
+
+        {/* ── GroupBox 4: Career & Statutory Documents (Resume, Salary Slips, KYC) ── */}
+        <Box 
+            bg="white" 
+            borderWidth="1px" 
+            borderColor="gray.200" 
+            borderRadius="xl" 
+            p={{ base: 4, md: 5 }} 
+            boxShadow="xs"
+        >
+            <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100">
+                <HStack spacing={2.5}>
+                    <Flex w="30px" h="30px" bg="orange.50" color="orange.600" borderRadius="lg" align="center" justifyContent="center">
+                        <Icon as={FaBriefcase} fontSize="sm" />
+                    </Flex>
+                    <Box>
+                        <Heading size="xs" color="gray.800" fontWeight="700" letterSpacing="0.3px">
+                            4. Career Credentials, Salary Slips &amp; Statutory KYC Documents
+                        </Heading>
+                    </Box>
+                </HStack>
+            </Flex>
+
+            {/* Resume, Joining Letter and Salary Slip / Bank Statement Uploader */}
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} mb={4} p={3.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200" alignItems="flex-start">
+                <ResumeUploadBlock />
+                <FileUploadInput
+                    label="Joining Letter (PDF)"
+                    field="joiningLetter"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    isRequired={false}
+                />
+                <MultiDocUploader
+                    label="Salary Slips &amp; Bank Statements"
+                    field="salarySlips"
+                    icon={FaMoneyBillWave}
+                    colorScheme="orange"
+                />
+            </SimpleGrid>
+
+            {/* Statutory KYC Cards */}
+            <Text fontSize="xs" fontWeight="600" color="gray.700" mb={2}>💳 Government Identity Cards (KYC Proofs &amp; Numbers):</Text>
+            <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3}>
+                <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                    <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1}>
+                        💳 Aadhaar Card No.
+                    </FormLabel>
+                    <Input
+                        size="sm"
+                        h="34px"
+                        borderRadius="md"
+                        bg="white"
+                        borderColor="gray.300"
+                        placeholder="12-digit Aadhaar No."
+                        value={formData.aadharNumber}
+                        onChange={(e) => handleChange(e, 'aadharNumber')}
+                        maxLength={14}
+                        mb={2}
+                    />
+                    <FileUploadInput label="Aadhaar File" field="aadharCard" />
+                </Box>
+                <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                    <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1}>
+                        💳 PAN Card No.
+                    </FormLabel>
+                    <Input
+                        size="sm"
+                        h="34px"
+                        borderRadius="md"
+                        bg="white"
+                        borderColor="gray.300"
+                        placeholder="10-digit PAN No."
+                        value={formData.panNumber}
+                        onChange={(e) => handleChange(e, 'panNumber')}
+                        textTransform="uppercase"
+                        maxLength={10}
+                        mb={2}
+                    />
+                    <FileUploadInput label="PAN File" field="panCard" />
+                </Box>
+                <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                    <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1}>
+                        💳 Voter ID No.
+                    </FormLabel>
+                    <Input
+                        size="sm"
+                        h="34px"
+                        borderRadius="md"
+                        bg="white"
+                        borderColor="gray.300"
+                        placeholder="Voter ID No."
+                        value={formData.voterIdNumber}
+                        onChange={(e) => handleChange(e, 'voterIdNumber')}
+                        textTransform="uppercase"
+                        mb={2}
+                    />
+                    <FileUploadInput label="Voter File" field="voterId" />
+                </Box>
+                <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                    <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={1}>
+                        🚗 Driving License No.
+                    </FormLabel>
+                    <Input
+                        size="sm"
+                        h="34px"
+                        borderRadius="md"
+                        bg="white"
+                        borderColor="gray.300"
+                        placeholder="DL Number"
+                        value={formData.drivingLicenseNumber}
+                        onChange={(e) => handleChange(e, 'drivingLicenseNumber')}
+                        textTransform="uppercase"
+                        mb={2}
+                    />
+                    <FileUploadInput label="License File" field="drivingLicense" />
+                </Box>
+            </SimpleGrid>
+        </Box>
+
+        {/* ── GroupBox 5: Residential Addresses ── */}
+        <Box 
+            bg="white" 
+            borderWidth="1px" 
+            borderColor="gray.200" 
+            borderRadius="xl" 
+            p={{ base: 4, md: 5 }} 
+            boxShadow="xs"
+        >
+            <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100">
+                <HStack spacing={2.5}>
+                    <Flex w="30px" h="30px" bg="blue.50" color="blue.600" borderRadius="lg" align="center" justifyContent="center">
                         <Icon as={FaMapMarkerAlt} fontSize="sm" />
                     </Flex>
                     <Box>
-                        <Heading size="xs" color="gray.800" textTransform="uppercase" letterSpacing="0.5px">
-                            3. Secondary / Permanent Address
+                        <Heading size="xs" color="gray.800" fontWeight="700" letterSpacing="0.3px">
+                            5. Residential &amp; Native Addresses
                         </Heading>
-                        <Text fontSize="2xs" color="gray.500">Native place / permanent home address if different from current residence</Text>
                     </Box>
                 </HStack>
                 <Checkbox 
                     colorScheme="blue" 
-                    fontWeight="bold" 
+                    fontWeight="600" 
                     fontSize="xs"
                     isChecked={sameAsAddress} 
                     onChange={handleCheckboxChange}
                 >
-                    Same as Primary Address
+                    Permanent is Same as Primary Address
                 </Checkbox>
             </Flex>
+
+            {/* Primary Address */}
+            <Box p={3.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200" mb={sameAsAddress ? 0 : 3}>
+                <Flex align="center" justify="space-between" mb={2}>
+                    <HStack spacing={1.5}>
+                        <Icon as={FaMapMarkerAlt} color="blue.600" fontSize="xs" />
+                        <Text fontWeight="600" fontSize="xs" color="blue.800">
+                            🏠 Primary / Current Residence Address
+                        </Text>
+                    </HStack>
+                </Flex>
+                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={2.5}>
+                    <FormControl gridColumn={{ md: 'span 3' }}>
+                        <Input 
+                            size="sm" 
+                            h="34px" 
+                            borderRadius="md" 
+                            bg="white" 
+                            borderColor="gray.300"
+                            placeholder="Street address, building, area" 
+                            value={formData.addressLine1.street} 
+                            onChange={(e) => handleChange(e, 'addressLine1', 'street')} 
+                        />
+                    </FormControl>
+                    <FormControl>
+                        <Input
+                            size="sm"
+                            h="34px"
+                            borderRadius="md" 
+                            bg="white" 
+                            borderColor="gray.300"
+                            placeholder="Pincode"
+                            maxLength={6}
+                            value={formData.addressLine1.pincode}
+                            onChange={(e) => handleChange(e, 'addressLine1', 'pincode')}
+                        />
+                        {pincodeLoading1 && <Text fontSize="2xs" color="blue.600" mt={0.5}>Fetching district...</Text>}
+                    </FormControl>
+                    <FormControl gridColumn={{ md: 'span 2' }}>
+                        <Input 
+                            size="sm" 
+                            h="34px" 
+                            borderRadius="md" 
+                            bg="white" 
+                            borderColor="gray.300"
+                            placeholder="City / District" 
+                            value={formData.addressLine1.city} 
+                            onChange={(e) => handleChange(e, 'addressLine1', 'city')} 
+                        />
+                    </FormControl>
+                </SimpleGrid>
+            </Box>
+
+            {/* Secondary Address (if not same) */}
             {!sameAsAddress && (
-                <Box pt={2}>
+                <Box p={3.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                    <Flex align="center" justify="space-between" mb={2}>
+                        <HStack spacing={1.5}>
+                            <Icon as={FaMapMarkerAlt} color="purple.600" fontSize="xs" />
+                            <Text fontWeight="600" fontSize="xs" color="purple.800">
+                                🏡 Secondary / Permanent Native Address
+                            </Text>
+                        </HStack>
+                    </Flex>
                     <SimpleGrid columns={{ base: 1, md: 3 }} spacing={2.5}>
                         <FormControl gridColumn={{ md: 'span 3' }}>
                             <Input 
@@ -1507,7 +2971,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                 borderRadius="md" 
                                 bg="white" 
                                 borderColor="gray.300"
-                                placeholder="Secondary Street / Village / Area" 
+                                placeholder="Secondary street, village, area" 
                                 value={formData.addressLine2.street} 
                                 onChange={(e) => handleChange(e, 'addressLine2', 'street')} 
                             />
@@ -1524,7 +2988,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                 value={formData.addressLine2.pincode}
                                 onChange={(e) => handleChange(e, 'addressLine2', 'pincode')}
                             />
-                            {pincodeLoading2 && <Text fontSize="2xs" color="blue.500" mt={0.5}>Fetching city...</Text>}
+                            {pincodeLoading2 && <Text fontSize="2xs" color="blue.600" mt={0.5}>Fetching district...</Text>}
                         </FormControl>
                         <FormControl gridColumn={{ md: 'span 2' }}>
                             <Input 
@@ -1533,7 +2997,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                 borderRadius="md" 
                                 bg="white" 
                                 borderColor="gray.300"
-                                placeholder="City (Auto-filled via pincode)" 
+                                placeholder="City / District" 
                                 value={formData.addressLine2.city} 
                                 onChange={(e) => handleChange(e, 'addressLine2', 'city')} 
                             />
@@ -1543,37 +3007,36 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
             )}
         </Box>
 
-        {/* ── Desktop GroupBox 4: Bank Details & Disbursement ── */}
+        {/* ── GroupBox 6: Bank Account & Disbursement Credentials ── */}
         <Box 
             bg="white" 
             borderWidth="1px" 
-            borderColor="green.200" 
+            borderColor="gray.200" 
             borderRadius="xl" 
             p={{ base: 4, md: 5 }} 
             boxShadow="xs"
         >
-            <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="green.100">
+            <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100">
                 <HStack spacing={2.5}>
-                    <Flex w="28px" h="28px" bg="green.50" color="green.600" borderRadius="md" align="center" justifyContent="center">
+                    <Flex w="30px" h="30px" bg="green.50" color="green.600" borderRadius="lg" align="center" justifyContent="center">
                         <Icon as={FaIdBadge} fontSize="sm" />
                     </Flex>
                     <Box>
-                        <Heading size="xs" color="gray.800" textTransform="uppercase" letterSpacing="0.5px">
-                            4. Bank Account &amp; Disbursement Credentials
+                        <Heading size="xs" color="gray.800" fontWeight="700" letterSpacing="0.3px">
+                            6. Bank Account &amp; Disbursement Credentials
                         </Heading>
-                        <Text fontSize="2xs" color="gray.500">Bank IFSC validation, verified account credentials &amp; document proof</Text>
                     </Box>
                 </HStack>
                 {bankVerified && (
                     <Badge colorScheme="green" px={2} py={0.5} borderRadius="md" fontSize="xs">
-                        ✓ Bank Verified
+                        ✓ Verified
                     </Badge>
                 )}
             </Flex>
 
             <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} mb={3}>
                 <FormControl>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>IFSC Code</FormLabel>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>🏦 IFSC Code</FormLabel>
                     <HStack spacing={1.5}>
                         <Input
                             size="sm"
@@ -1581,7 +3044,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                             borderRadius="md" 
                             bg="white" 
                             borderColor="gray.300"
-                            placeholder="e.g. SBIN0001234"
+                            placeholder="IFSC Code"
                             value={formData.ifscCode}
                             onChange={(e) => handleChange(e, 'ifscCode')}
                             textTransform="uppercase"
@@ -1593,6 +3056,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                             size="sm"
                             h="36px"
                             colorScheme={bankVerified ? 'green' : 'blue'}
+                            variant={bankVerified ? 'solid' : 'outline'}
                             onClick={handleVerifyBank}
                             isLoading={bankVerifying}
                             minW="75px"
@@ -1604,44 +3068,44 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                     </HStack>
                 </FormControl>
                 <FormControl>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Bank Name</FormLabel>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>🏛️ Bank Name</FormLabel>
                     <Input 
                         size="sm"
                         h="36px"
                         borderRadius="md" 
                         bg="white" 
                         borderColor="gray.300"
-                        placeholder="Auto-filled on IFSC verify" 
+                        placeholder="Bank Name" 
                         value={formData.bankName} 
                         onChange={(e) => handleChange(e, 'bankName')} 
                         readOnly={bankVerified} 
                     />
                 </FormControl>
                 <FormControl>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Account Holder Name</FormLabel>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>👤 Account Holder Name</FormLabel>
                     <Input 
                         size="sm"
                         h="36px"
                         borderRadius="md" 
                         bg="white" 
                         borderColor="gray.300"
-                        placeholder="Name as printed in passbook" 
+                        placeholder="Account Holder Name" 
                         value={formData.accountName} 
                         onChange={(e) => handleChange(e, 'accountName')} 
                     />
                 </FormControl>
             </SimpleGrid>
 
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={3}>
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} alignItems="flex-start">
                 <FormControl isRequired>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Account Number</FormLabel>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1} noOfLines={1}>🔢 Account Number</FormLabel>
                     <Input
                         size="sm"
                         h="36px"
                         borderRadius="md" 
                         bg="white" 
                         borderColor="gray.300"
-                        placeholder="Enter bank account number"
+                        placeholder="Account Number"
                         value={formData.accountNumber} 
                         onChange={(e) => handleChange(e, 'accountNumber')}
                         type="password"
@@ -1649,109 +3113,73 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                     />
                 </FormControl>
                 <FormControl isRequired>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Confirm Account Number</FormLabel>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1} noOfLines={1}>🔒 Confirm Account Number</FormLabel>
                     <Input 
                         size="sm"
                         h="36px"
                         borderRadius="md" 
                         bg="white" 
                         borderColor="gray.300"
-                        placeholder="Re-enter bank account number" 
+                        placeholder="Confirm Account Number" 
                         value={formData.confirmAccountNumber} 
                         onChange={(e) => handleChange(e, 'confirmAccountNumber')} 
                         type="text" 
                         fontWeight="mono"
                     />
                 </FormControl>
+                <MultiDocUploader
+                    label="Bank Proof (Passbook / Cheque)"
+                    field="bankDocuments"
+                    icon={FaCloudUploadAlt}
+                    colorScheme="green"
+                />
             </SimpleGrid>
-
-            <FormControl mt={3}>
-                <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>
-                    Bank Document Proof (Passbook / Cancelled Cheque / Statement)
-                </FormLabel>
-                <Box 
-                    p={3} 
-                    border="2px dashed" 
-                    borderColor="green.300" 
-                    borderRadius="lg" 
-                    bg="green.50" 
-                    textAlign="center" 
-                    cursor="pointer" 
-                    onClick={() => document.getElementById('bankDocuments-upload').click()} 
-                    _hover={{ bg: "green.100", borderColor: "green.500" }}
-                    transition="all 0.2s"
-                >
-                    <input type="file" id="bankDocuments-upload" multiple hidden onChange={(e) => handleFileChange(e, 'bankDocuments')} accept="image/*,.pdf" />
-                    <HStack justify="center" spacing={2}>
-                        <Icon as={FaCloudUploadAlt} w={5} h={5} color="green.600" />
-                        <Text fontSize="xs" fontWeight="bold" color="green.700">Click to upload bank documents (Passbook / Cheque / PDF)</Text>
-                    </HStack>
-                </Box>
-                
-                {(existingDocs?.bankDocuments?.length > 0 || files?.bankDocuments?.length > 0) && (
-                    <Wrap mt={2} spacing={2}>
-                        {existingDocs?.bankDocuments?.map((doc, idx) => (
-                            <HStack key={'ex-' + idx} px={2.5} py={1} bg="white" borderRadius="md" borderWidth="1px" borderColor="gray.200" boxShadow="2xs">
-                                <Text fontSize="2xs" fontWeight="bold" color="gray.700" noOfLines={1} maxW="180px">📎 {doc.name || 'Existing Document'}</Text>
-                                <Button size="xs" colorScheme="red" variant="ghost" h="18px" w="18px" minW="18px" p={0} onClick={() => removeExistingBankDoc(idx)}><FaTrash size="10px" /></Button>
-                            </HStack>
-                        ))}
-                        {files?.bankDocuments?.map((file, idx) => (
-                            <HStack key={'new-' + idx} px={2.5} py={1} bg="green.100" borderRadius="md" borderWidth="1px" borderColor="green.300" boxShadow="2xs">
-                                <Text fontSize="2xs" fontWeight="bold" color="green.800" noOfLines={1} maxW="180px">📄 {file.name}</Text>
-                                <Button size="xs" colorScheme="red" variant="ghost" h="18px" w="18px" minW="18px" p={0} onClick={() => removeBankDocument(idx)}><FaTrash size="10px" /></Button>
-                            </HStack>
-                        ))}
-                    </Wrap>
-                )}
-            </FormControl>
         </Box>
 
-        {/* ── Desktop GroupBox 5: Emergency Contact Particulars ── */}
+        {/* ── GroupBox 7: Emergency Contact Particulars ── */}
         <Box 
             bg="white" 
             borderWidth="1px" 
-            borderColor="red.200" 
+            borderColor="gray.200" 
             borderRadius="xl" 
             p={{ base: 4, md: 5 }} 
             boxShadow="xs"
         >
-            <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="red.100">
+            <Flex align="center" justify="space-between" mb={3} pb={2} borderBottom="1px solid" borderColor="gray.100">
                 <HStack spacing={2.5}>
-                    <Flex w="28px" h="28px" bg="red.50" color="red.600" borderRadius="md" align="center" justifyContent="center">
+                    <Flex w="30px" h="30px" bg="red.50" color="red.600" borderRadius="lg" align="center" justifyContent="center">
                         <Icon as={FaPhoneAlt} fontSize="sm" />
                     </Flex>
                     <Box>
-                        <Heading size="xs" color="gray.800" textTransform="uppercase" letterSpacing="0.5px">
-                            5. Emergency Contact Particulars
+                        <Heading size="xs" color="gray.800" fontWeight="700" letterSpacing="0.3px">
+                            7. Emergency Contact Particulars
                         </Heading>
-                        <Text fontSize="2xs" color="gray.500">Contact person name and phone number in case of emergency on site</Text>
                     </Box>
                 </HStack>
             </Flex>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
                 <FormControl>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Contact Person Full Name</FormLabel>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>👤 Contact Person Name</FormLabel>
                     <Input 
                         size="sm"
                         h="36px"
                         borderRadius="md" 
                         bg="white" 
                         borderColor="gray.300"
-                        placeholder="Relative / Guardian Name" 
+                        placeholder="Contact Person Name" 
                         value={formData.emergencyContact.name} 
                         onChange={(e) => handleChange(e, 'emergencyContact', 'name')} 
                     />
                 </FormControl>
                 <FormControl>
-                    <FormLabel fontWeight="bold" fontSize="xs" color="gray.700" mb={1}>Emergency Mobile Number</FormLabel>
+                    <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>📞 Emergency Mobile Number</FormLabel>
                     <Input 
                         size="sm"
                         h="36px"
                         borderRadius="md" 
                         bg="white" 
                         borderColor="gray.300"
-                        placeholder="Emergency contact mobile number" 
+                        placeholder="Emergency Mobile Number" 
                         value={formData.emergencyContact.phone} 
                         onChange={(e) => handleChange(e, 'emergencyContact', 'phone')} 
                     />
@@ -1759,30 +3187,29 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
             </SimpleGrid>
         </Box>
 
-        {/* ── Desktop Command Bar / Action Toolbar ── */}
+        {/* ── Command Bar / Action Toolbar ── */}
         <Box 
             bg="white" 
             p={4} 
             borderRadius="xl" 
             borderWidth="1px" 
             borderColor="gray.200" 
-            boxShadow="sm"
+            boxShadow="xs"
         >
             <Flex direction={{ base: "column", sm: "row" }} justify="space-between" align="center" gap={3}>
                 <HStack spacing={2}>
                     <Badge colorScheme="blue" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs">
                         * Required Fields
                     </Badge>
-                    <Text fontSize="2xs" color="gray.500">Ensure bank IFSC &amp; account number match passbook proof</Text>
                 </HStack>
                 <HStack spacing={3} w={{ base: "full", sm: "auto" }}>
                     <Button
                         type="button"
                         variant="outline"
                         colorScheme="gray"
-                        h="42px"
+                        h="38px"
                         px={5}
-                        borderRadius="lg"
+                        borderRadius="md"
                         fontSize="sm"
                         onClick={() => {
                             handleSelectEmployee({ target: { value: '' } });
@@ -1793,15 +3220,13 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                     <Button
                         type="submit"
                         colorScheme="blue"
-                        h="42px"
+                        h="38px"
                         px={7}
-                        borderRadius="lg"
+                        borderRadius="md"
                         fontSize="sm"
-                        fontWeight="bold"
-                        leftIcon={<Icon as={FaIdBadge} />}
+                        fontWeight="600"
                         isLoading={isLoading}
-                        boxShadow="md"
-                        _hover={{ transform: "translateY(-1px)", boxShadow: "lg" }}
+                        boxShadow="sm"
                     >
                         {editId ? 'Update Employee Record' : 'Save Employee Record'}
                     </Button>
@@ -1987,6 +3412,18 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                                     <Text fontSize="11px" fontWeight="medium" isTruncated>{emp.email}</Text>
                                                                                 </HStack>
                                                                             )}
+                                                                            {emp.company && (
+                                                                                <HStack fontSize="xs" color="gray.700">
+                                                                                    <Icon as={FaBuilding} color="blue.500" w={3} h={3} />
+                                                                                    <Text fontSize="11px" fontWeight="bold" isTruncated>{emp.company}{emp.branch ? ` • ${emp.branch}` : ''}</Text>
+                                                                                </HStack>
+                                                                            )}
+                                                                            {emp.reportedTo && (
+                                                                                <HStack fontSize="xs" color="gray.600">
+                                                                                    <Icon as={FaSitemap} color="purple.500" w={3} h={3} />
+                                                                                    <Text fontSize="10px" isTruncated>Rep: <Text as="span" fontWeight="bold" color="purple.700">{emp.reportedTo}</Text></Text>
+                                                                                </HStack>
+                                                                            )}
                                                                             {emp.bankDetails?.accountNumber && (
                                                                                 <HStack fontSize="10px" color="gray.500">
                                                                                     <Text fontWeight="bold">🏦 A/C:</Text>
@@ -2004,7 +3441,10 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                             variant="solid"
                                                                             borderRadius="lg"
                                                                             leftIcon={<Icon as={FaEye} />}
-                                                                            onClick={() => setViewEmployee(emp)}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleOpenEmployeeDetail(emp);
+                                                                            }}
                                                                             flex={1}
                                                                             h="30px"
                                                                             fontSize="11px"
@@ -2018,7 +3458,10 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                             variant="solid"
                                                                             borderRadius="lg"
                                                                             leftIcon={<Icon as={FaEdit} />}
-                                                                            onClick={() => handleSelectEmployee({ target: { value: emp._id } })}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleSelectEmployee({ target: { value: emp._id } });
+                                                                            }}
                                                                             flex={1}
                                                                             h="30px"
                                                                             fontSize="11px"
@@ -2032,7 +3475,10 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                             variant="ghost"
                                                                             borderRadius="lg"
                                                                             icon={<Icon as={FaTrash} />}
-                                                                            onClick={() => handleDelete(emp._id)}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDelete(emp._id);
+                                                                            }}
                                                                             aria-label="Delete employee"
                                                                             h="30px"
                                                                             w="30px"
@@ -2052,7 +3498,9 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                 <Tr>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">ID</Th>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">EMPLOYEE</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">COMPANY / BRANCH</Th>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">DESIGNATION</Th>
+                                                                    <Th fontSize="10px" fontWeight="black" color="gray.600">REPORTED TO</Th>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">PHONE</Th>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600">FOOD</Th>
                                                                     <Th fontSize="10px" fontWeight="black" color="gray.600" textAlign="center">ACTIONS</Th>
@@ -2061,7 +3509,13 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                             <Tbody>
                                                                 {filteredEmployees.map((emp, idx) => {
                                                                     return (
-                                                                        <Tr key={emp._id} bg={idx % 2 === 0 ? "white" : "gray.50"} _hover={{ bg: "blue.50" }} transition="background 0.2s">
+                                                                        <Tr 
+                                                                            key={emp._id} 
+                                                                            bg={idx % 2 === 0 ? "white" : "gray.50"} 
+                                                                            _hover={{ bg: "blue.50", cursor: "pointer" }} 
+                                                                            transition="background 0.15s"
+                                                                            onClick={() => handleOpenEmployeeDetail(emp)}
+                                                                        >
                                                                             <Td fontWeight="bold" color="blue.600" fontSize="xs">{emp.empId || 'EMP'}</Td>
                                                                             <Td>
                                                                                 <HStack spacing={2.5}>
@@ -2073,9 +3527,30 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                                 </HStack>
                                                                             </Td>
                                                                             <Td>
+                                                                                <VStack align="start" spacing={0.5}>
+                                                                                    <Text fontSize="xs" fontWeight="bold" color="gray.800" noOfLines={1}>
+                                                                                        {emp.company || '—'}
+                                                                                    </Text>
+                                                                                    {emp.branch && (
+                                                                                        <Badge colorScheme="purple" variant="subtle" fontSize="9px" borderRadius="md" px={1.5}>
+                                                                                            📍 {emp.branch}
+                                                                                        </Badge>
+                                                                                    )}
+                                                                                </VStack>
+                                                                            </Td>
+                                                                            <Td>
                                                                                 {emp.designation ? (
                                                                                     <Badge colorScheme="purple" variant="subtle" borderRadius="full" px={2} fontSize="10px">
                                                                                         {emp.designation}
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Text fontSize="10px" color="gray.400">—</Text>
+                                                                                )}
+                                                                            </Td>
+                                                                            <Td>
+                                                                                {emp.reportedTo ? (
+                                                                                    <Badge colorScheme="blue" variant="outline" fontSize="10px" borderRadius="md" px={1.5} maxW="150px" isTruncated>
+                                                                                        {emp.reportedTo}
                                                                                     </Badge>
                                                                                 ) : (
                                                                                     <Text fontSize="10px" color="gray.400">—</Text>
@@ -2087,11 +3562,44 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                                     {emp.foodAllowance === 'Without Food' ? 'No Food' : 'Food'}
                                                                                 </Badge>
                                                                             </Td>
-                                                                            <Td textAlign="center">
+                                                                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                                                                                 <HStack justify="center" spacing={1.5}>
-                                                                                    <IconButton aria-label="View" size="xs" colorScheme="teal" variant="solid" borderRadius="lg" icon={<Icon as={FaEye} />} onClick={() => setViewEmployee(emp)} />
-                                                                                    <IconButton aria-label="Edit" size="xs" colorScheme="blue" variant="solid" borderRadius="lg" icon={<Icon as={FaEdit} />} onClick={() => handleSelectEmployee({ target: { value: emp._id } })} />
-                                                                                    <IconButton aria-label="Delete" size="xs" colorScheme="red" variant="ghost" borderRadius="lg" icon={<Icon as={FaTrash} />} onClick={() => handleDelete(emp._id)} />
+                                                                                    <IconButton 
+                                                                                        aria-label="View" 
+                                                                                        size="xs" 
+                                                                                        colorScheme="teal" 
+                                                                                        variant="solid" 
+                                                                                        borderRadius="lg" 
+                                                                                        icon={<Icon as={FaEye} />} 
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleOpenEmployeeDetail(emp);
+                                                                                        }} 
+                                                                                    />
+                                                                                    <IconButton 
+                                                                                        aria-label="Edit" 
+                                                                                        size="xs" 
+                                                                                        colorScheme="blue" 
+                                                                                        variant="solid" 
+                                                                                        borderRadius="lg" 
+                                                                                        icon={<Icon as={FaEdit} />} 
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleSelectEmployee({ target: { value: emp._id } });
+                                                                                        }} 
+                                                                                    />
+                                                                                    <IconButton 
+                                                                                        aria-label="Delete" 
+                                                                                        size="xs" 
+                                                                                        colorScheme="red" 
+                                                                                        variant="ghost" 
+                                                                                        borderRadius="lg" 
+                                                                                        icon={<Icon as={FaTrash} />} 
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleDelete(emp._id);
+                                                                                        }} 
+                                                                                    />
                                                                                 </HStack>
                                                                             </Td>
                                                                         </Tr>
@@ -2462,184 +3970,2019 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                         </Tabs>
                     )}
 
-                        {/* Standardized Employee View Modal */}
-                        <Modal isOpen={!!viewEmployee} onClose={() => setViewEmployee(null)} size="4xl" isCentered motionPreset="slideInBottom">
+                        {/* Standardized Employee Detail View Modal */}
+                        <Modal isOpen={!!viewEmployee} onClose={() => setViewEmployee(null)} size="5xl" isCentered motionPreset="slideInBottom" scrollBehavior="inside">
                             <ModalOverlay backdropFilter="blur(8px) grayscale(40%)" bg="blackAlpha.600" />
                             <ModalContent borderRadius="3xl" overflow="hidden" boxShadow="2xl" border="1px solid" borderColor="whiteAlpha.300" m={{ base: 3, md: 6 }}>
                                 <ModalHeader p={0}>
-                                    <Box bgGradient="linear(to-r, blue.800, blue.600)" p={{ base: 4, md: 6 }} color="white">
-                                        <HStack justify="space-between" spacing={4}>
-                                            <HStack spacing={3}>
+                                    {/* ── Top Profile Header: Photo, ID, Company Name, Branch, Employee Name, Phone No ── */}
+                                    <Box bgGradient="linear(to-r, blue.800, blue.600)" p={{ base: 4, md: 5 }} color="white">
+                                        <Flex justify="space-between" align={{ base: "start", md: "center" }} wrap="wrap" gap={3}>
+                                            <HStack spacing={4} align="center">
                                                 <Avatar
-                                                    size="lg"
+                                                    size="xl"
                                                     src={viewEmployee?.photo ? getFileUrl(viewEmployee.photo) : undefined}
                                                     name={viewEmployee?.name}
-                                                    borderRadius="xl"
-                                                    border="2px solid white"
+                                                    borderRadius="2xl"
+                                                    border="3px solid white"
+                                                    boxShadow="md"
                                                 />
-                                                <VStack align="start" spacing={0.5}>
-                                                    <Heading size="md">{viewEmployee?.name}</Heading>
-                                                    <Text fontSize="xs" opacity={0.8}>{viewEmployee?.empId} • {viewEmployee?.designation || 'Employee'}</Text>
+                                                <VStack align="start" spacing={1}>
+                                                    <HStack spacing={2} wrap="wrap" align="center">
+                                                        <Heading size="md" fontWeight="800" letterSpacing="0.3px">
+                                                            {viewEmployee?.name}
+                                                        </Heading>
+                                                        <Badge colorScheme="whiteAlpha" bg="whiteAlpha.300" color="white" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                            ID: {viewEmployee?.empId || 'EMP'}
+                                                        </Badge>
+                                                        <Badge colorScheme="blue" bg="blue.400" color="white" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                            {viewEmployee?.designation || 'Staff'}
+                                                        </Badge>
+                                                    </HStack>
+
+                                                    <HStack spacing={2} wrap="wrap" pt={0.5}>
+                                                        <Badge colorScheme="teal" bg="teal.400" color="gray.900" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                            🏢 Company: {viewEmployee?.company || 'N/A'}
+                                                        </Badge>
+                                                        <Badge colorScheme="purple" bg="purple.400" color="white" fontSize="2xs" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                                            📍 Branch: {viewEmployee?.branch || 'N/A'}
+                                                        </Badge>
+                                                    </HStack>
+
+                                                    <HStack spacing={1.5} pt={0.5} fontSize="xs">
+                                                        <Icon as={FaPhoneAlt} fontSize="11px" opacity={0.85} />
+                                                        <Text fontWeight="600" opacity={0.95}>
+                                                            Phone: {viewEmployee?.phone || '—'}
+                                                        </Text>
+                                                        {viewEmployee?.email && (
+                                                            <>
+                                                                <Text opacity={0.6}>•</Text>
+                                                                <Icon as={FaEnvelope} fontSize="11px" opacity={0.85} />
+                                                                <Text fontWeight="500" opacity={0.9}>
+                                                                    {viewEmployee.email}
+                                                                </Text>
+                                                            </>
+                                                        )}
+                                                    </HStack>
                                                 </VStack>
                                             </HStack>
-                                            <ModalCloseButton position="static" borderRadius="full" />
-                                        </HStack>
+
+                                            <ModalCloseButton position="static" borderRadius="full" color="white" _hover={{ bg: "whiteAlpha.300" }} />
+                                        </Flex>
+
+                                        {/* ── Below: Food status of employee and food ── */}
+                                        <Box mt={3.5} p={2.5} bg="whiteAlpha.200" borderRadius="xl" backdropFilter="blur(6px)" border="1px solid" borderColor="whiteAlpha.300">
+                                            <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={2.5} alignItems="center">
+                                                <HStack spacing={2}>
+                                                    <Text fontSize="xs" fontWeight="bold" opacity={0.9}>🍽️ Food Allowance:</Text>
+                                                    <Badge
+                                                        colorScheme={viewEmployee?.foodAllowance === 'Without Food' ? 'gray' : 'green'}
+                                                        bg={viewEmployee?.foodAllowance === 'Without Food' ? 'gray.200' : 'green.400'}
+                                                        color={viewEmployee?.foodAllowance === 'Without Food' ? 'gray.800' : 'gray.900'}
+                                                        fontSize="2xs"
+                                                        px={2}
+                                                        py={0.5}
+                                                        borderRadius="full"
+                                                        fontWeight="bold"
+                                                    >
+                                                        {viewEmployee?.foodAllowance === 'Without Food' ? 'Without Food (No Food)' : 'Food Included (Food)'}
+                                                    </Badge>
+                                                </HStack>
+                                                <HStack spacing={2}>
+                                                    <Text fontSize="xs" fontWeight="bold" opacity={0.9}>🟢 Employee Status:</Text>
+                                                    <Badge
+                                                        colorScheme={viewEmployee?.status === 'Active' ? 'green' : 'red'}
+                                                        bg={viewEmployee?.status === 'Active' ? 'green.400' : 'red.400'}
+                                                        color={viewEmployee?.status === 'Active' ? 'gray.900' : 'white'}
+                                                        fontSize="2xs"
+                                                        px={2}
+                                                        py={0.5}
+                                                        borderRadius="full"
+                                                        fontWeight="bold"
+                                                    >
+                                                        {viewEmployee?.status || 'Active'}
+                                                    </Badge>
+                                                </HStack>
+                                                <HStack spacing={2}>
+                                                    <Text fontSize="xs" fontWeight="bold" opacity={0.9}>👔 Reported To:</Text>
+                                                    <Text fontSize="xs" fontWeight="600" opacity={0.95} isTruncated maxW="180px">
+                                                        {viewEmployee?.reportedTo || 'Top Management'}
+                                                    </Text>
+                                                </HStack>
+                                            </SimpleGrid>
+                                        </Box>
+                                    </Box>
+
+                                    {/* ── Below Header: 6 Buttons ── */}
+                                    <Box px={{ base: 3, md: 5 }} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                        <SimpleGrid columns={{ base: 2, sm: 3, md: 6 }} spacing={2}>
+                                            {[
+                                                { id: 'personal', num: '1', label: 'personal', icon: FaUserTie },
+                                                { id: 'work', num: '2', label: 'work', icon: FaBriefcase },
+                                                { id: 'payouts', num: '3', label: 'payouts', icon: FaIdCard },
+                                                { id: 'documents', num: '4', label: 'documents', icon: FaFileAlt },
+                                                { id: 'bank', num: '5', label: 'bank', icon: FaBuilding },
+                                                { id: 'salary', num: '6', label: 'salary', icon: FaMoneyBillWave },
+                                            ].map((btn) => {
+                                                const isActive = activeProfileTab === btn.id;
+                                                return (
+                                                    <Button
+                                                        key={btn.id}
+                                                        size="sm"
+                                                        h="34px"
+                                                        leftIcon={<Icon as={btn.icon} fontSize="xs" color={isActive ? "white" : "gray.500"} />}
+                                                        variant={isActive ? 'solid' : 'outline'}
+                                                        bg={isActive ? 'blue.600' : 'white'}
+                                                        color={isActive ? 'white' : 'gray.700'}
+                                                        borderColor={isActive ? 'blue.600' : 'gray.300'}
+                                                        borderRadius="md"
+                                                        fontWeight="700"
+                                                        fontSize="xs"
+                                                        textTransform="capitalize"
+                                                        boxShadow={isActive ? 'sm' : 'none'}
+                                                        _hover={{
+                                                            bg: isActive ? 'blue.700' : 'gray.50',
+                                                            borderColor: isActive ? 'blue.700' : 'gray.400',
+                                                        }}
+                                                        onClick={() => setActiveProfileTab(btn.id)}
+                                                    >
+                                                        {btn.num}. {btn.label}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </SimpleGrid>
                                     </Box>
                                 </ModalHeader>
 
-                                <ModalBody p={{ base: 4, md: 8 }}>
+                                <ModalBody p={{ base: 4, md: 6 }}>
                                     {viewEmployee && (
-                                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={10}>
-                                            <VStack align="start" spacing={6}>
-                                                <Box w="full">
-                                                    <Text fontSize="11px" fontWeight="black" color="blue.500" textTransform="uppercase" mb={3}>Personal & Contact</Text>
-                                                    <VStack align="start" spacing={3}>
-                                                        <Box>
-                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">PHONE</Text>
-                                                            <Text fontSize="sm" fontWeight="bold" color="gray.700">{viewEmployee.phone}</Text>
-                                                        </Box>
-                                                        <Box>
-                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">EMAIL</Text>
-                                                            <Text fontSize="sm" color="gray.700">{viewEmployee.email || 'N/A'}</Text>
-                                                        </Box>
-                                                    </VStack>
-                                                </Box>
-                                                <Box bg="red.50" p={4} borderRadius="2xl" border="1px dashed" borderColor="red.200" w="full">
-                                                    <Text fontSize="10px" color="red.600" fontWeight="black">EMERGENCY CONTACT</Text>
-                                                    <Text fontSize="sm" fontWeight="bold" color="red.800">{viewEmployee.emergencyContact?.name}</Text>
-                                                    <Text fontSize="xs" color="red.700">{viewEmployee.emergencyContact?.phone}</Text>
-                                                </Box>
-                                            </VStack>
+                                        <Box>
+                                            {/* 1. PERSONAL TAB */}
+                                            {activeProfileTab === 'personal' && (
+                                                <VStack spacing={3.5} align="stretch">
+                                                    {/* ── Items 1 to 6: Personal Particulars ── */}
+                                                    <Box bg="gray.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="xs" fontWeight="700" color="gray.700" textTransform="uppercase" mb={3} letterSpacing="0.3px">
+                                                            Personal Particulars (1 - 6)
+                                                        </Text>
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
+                                                            {/* 1. Name */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaUserTie} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">1. NAME</Text>
+                                                                </HStack>
+                                                                <Text fontWeight="700" color="gray.800" fontSize="sm">
+                                                                    {viewEmployee.name || '—'}
+                                                                </Text>
+                                                            </Box>
 
-                                            <VStack align="start" spacing={6}>
-                                                <Box bg="green.50" p={4} borderRadius="2xl" w="full" border="1px solid" borderColor="green.100">
-                                                    <Text fontSize="10px" color="green.600" fontWeight="black">GROSS SALARY (CTC)</Text>
-                                                    <Text fontSize="2xl" fontWeight="black" color="green.800">₹{parseFloat(viewEmployee.salary || 0).toLocaleString()}</Text>
-                                                </Box>
-                                                <Box w="full">
-                                                    <Text fontSize="11px" fontWeight="black" color="orange.500" textTransform="uppercase" mb={3}>Bank Details</Text>
-                                                    <VStack align="start" spacing={3} bg="orange.50" p={4} borderRadius="xl">
-                                                        <Box>
-                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">BANK</Text>
-                                                            <Text fontSize="xs" fontWeight="bold">{viewEmployee.bankDetails?.bankName || 'N/A'}</Text>
-                                                        </Box>
-                                                        <Box>
-                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">A/C NUMBER</Text>
-                                                            <Text fontSize="xs" fontWeight="bold">{viewEmployee.bankDetails?.accountNumber || 'N/A'}</Text>
-                                                        </Box>
-                                                        <Box>
-                                                            <Text fontSize="9px" color="orange.600" fontWeight="bold">IFSC CODE</Text>
-                                                            <Text fontSize="xs" color="blue.600" fontWeight="bold">{viewEmployee.bankDetails?.ifscCode || 'N/A'}</Text>
-                                                        </Box>
-                                                    </VStack>
-                                                </Box>
-                                            </VStack>
+                                                            {/* 2. Married status if yes then date */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaRing} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">2. MARRIED STATUS &amp; DATE</Text>
+                                                                </HStack>
+                                                                <HStack spacing={2} wrap="wrap">
+                                                                    <Badge
+                                                                        colorScheme="gray"
+                                                                        variant="subtle"
+                                                                        fontSize="xs"
+                                                                        px={2}
+                                                                        py={0.5}
+                                                                        borderRadius="md"
+                                                                        fontWeight="600"
+                                                                    >
+                                                                        {viewEmployee.maritalStatus || 'Single'}
+                                                                    </Badge>
+                                                                    {viewEmployee.maritalStatus === 'Married' && (
+                                                                        <Text fontSize="xs" fontWeight="600" color="gray.700">
+                                                                            📅 Date: {viewEmployee.marriageDate || 'Not specified'}
+                                                                        </Text>
+                                                                    )}
+                                                                </HStack>
+                                                            </Box>
 
-                                            <VStack align="start" spacing={6}>
-                                                <Box w="full">
-                                                    <Text fontSize="11px" fontWeight="black" color="cyan.500" textTransform="uppercase" mb={3}>Address Details</Text>
-                                                    <VStack align="start" spacing={4}>
-                                                        <Box>
-                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">CURRENT ADDRESS</Text>
-                                                            <Text fontSize="xs" lineHeight="1.6" color="gray.700">
-                                                                {viewEmployee.addressLine1?.street}, {viewEmployee.addressLine1?.city} - {viewEmployee.addressLine1?.pincode}
+                                                            {/* 3. Date of birth */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaBirthdayCake} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">3. DATE OF BIRTH</Text>
+                                                                </HStack>
+                                                                <Text fontWeight="700" color="gray.800" fontSize="xs">
+                                                                    {viewEmployee.dob ? (
+                                                                        <>
+                                                                            {viewEmployee.dob}{' '}
+                                                                            <Badge colorScheme="gray" variant="subtle" fontSize="2xs" px={1.5} py={0.5} borderRadius="md" ml={1}>
+                                                                                {calculateAge(viewEmployee.dob)} yrs old
+                                                                            </Badge>
+                                                                        </>
+                                                                    ) : '—'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* 4. Birth group (Blood Group) */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaTint} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">4. BIRTH GROUP (BLOOD)</Text>
+                                                                </HStack>
+                                                                {viewEmployee.bloodGroup ? (
+                                                                    <Badge colorScheme="gray" variant="subtle" fontSize="xs" px={2} py={0.5} borderRadius="md" fontWeight="600">
+                                                                        🩸 {viewEmployee.bloodGroup}
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <Text fontWeight="600" color="gray.400">—</Text>
+                                                                )}
+                                                            </Box>
+
+                                                            {/* 5. Gender */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaVenusMars} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">5. GENDER</Text>
+                                                                </HStack>
+                                                                <Text fontWeight="600" color="gray.800" fontSize="xs">
+                                                                    {viewEmployee.gender ? (viewEmployee.gender === 'Male' ? 'Male' : viewEmployee.gender === 'Female' ? 'Female' : 'Other') : '—'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* 6. Mail ID */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaEnvelope} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">6. MAIL ID</Text>
+                                                                </HStack>
+                                                                <Text fontWeight="600" color="gray.800" isTruncated fontSize="xs">
+                                                                    {viewEmployee.email || '—'}
+                                                                </Text>
+                                                            </Box>
+                                                        </SimpleGrid>
+                                                    </Box>
+
+                                                    {/* ── Items 7 to 10: KYC Cards - Number & Image/PDF ── */}
+                                                    <Box bg="gray.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="xs" fontWeight="700" color="gray.700" textTransform="uppercase" mb={3} letterSpacing="0.3px">
+                                                            Identity Cards — Number &amp; File (7 - 10)
+                                                        </Text>
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3}>
+                                                            {/* 7. Aadhaar Card */}
+                                                            {renderKycViewCard({
+                                                                itemNumber: '7',
+                                                                title: 'Aadhaar Card',
+                                                                cardNo: viewEmployee.aadharNumber,
+                                                                doc: viewEmployee.aadharCard,
+                                                                icon: FaIdCard,
+                                                            })}
+
+                                                            {/* 8. PAN Card */}
+                                                            {renderKycViewCard({
+                                                                itemNumber: '8',
+                                                                title: 'PAN Card',
+                                                                cardNo: viewEmployee.panNumber,
+                                                                doc: viewEmployee.panCard,
+                                                                icon: FaIdCard,
+                                                            })}
+
+                                                            {/* 9. Voter ID */}
+                                                            {renderKycViewCard({
+                                                                itemNumber: '9',
+                                                                title: 'Voter ID',
+                                                                cardNo: viewEmployee.voterIdNumber,
+                                                                doc: viewEmployee.voterId,
+                                                                icon: FaIdBadge,
+                                                            })}
+
+                                                            {/* 10. Driving License */}
+                                                            {renderKycViewCard({
+                                                                itemNumber: '10',
+                                                                title: 'Driving License',
+                                                                cardNo: viewEmployee.drivingLicenseNumber,
+                                                                doc: viewEmployee.drivingLicense,
+                                                                icon: FaCar,
+                                                            })}
+                                                        </SimpleGrid>
+                                                    </Box>
+
+                                                    {/* ── Residential Addresses & Emergency Contact ── */}
+                                                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+                                                        <Box p={3} bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase">Primary Residence</Text>
+                                                            <Text fontSize="xs" color="gray.700" fontWeight="500" mt={1}>
+                                                                {viewEmployee.addressLine1?.street || '—'}, {viewEmployee.addressLine1?.city || '—'} - {viewEmployee.addressLine1?.pincode || '—'}
                                                             </Text>
                                                         </Box>
-                                                        <Box>
-                                                            <Text fontSize="9px" color="gray.400" fontWeight="bold">PERMANENT ADDRESS</Text>
-                                                            <Text fontSize="xs" lineHeight="1.6" color="gray.700">
-                                                                {viewEmployee.addressLine2?.street || 'Same'}, {viewEmployee.addressLine2?.city} - {viewEmployee.addressLine2?.pincode}
+                                                        <Box p={3} bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase">Permanent Native</Text>
+                                                            <Text fontSize="xs" color="gray.700" fontWeight="500" mt={1}>
+                                                                {viewEmployee.addressLine2?.street || 'Same as primary'}, {viewEmployee.addressLine2?.city || '—'} - {viewEmployee.addressLine2?.pincode || '—'}
                                                             </Text>
                                                         </Box>
-                                                    </VStack>
-                                                </Box>
-                                                <Box w="full">
-                                                    <Text fontSize="11px" fontWeight="black" color="purple.500" textTransform="uppercase" mb={3}>KYC & Bank Documents</Text>
-                                                    <Wrap spacing={2.5}>
-                                                        {[
-                                                            { field: 'aadharCard', label: 'AADHAAR', icon: FaIdCard, color: 'purple' },
-                                                            { field: 'panCard', label: 'PAN CARD', icon: FaIdCard, color: 'blue' },
-                                                            { field: 'voterId', label: 'VOTER ID', icon: FaIdBadge, color: 'teal' },
-                                                            { field: 'drivingLicense', label: 'LICENSE', icon: FaCar, color: 'green' }
-                                                        ].map(({ field, label, icon: DocIcon, color }) => {
-                                                            const docData = viewEmployee[field];
-                                                            const docUrl = getFileUrl(docData);
-                                                            if (!docUrl) return null;
-                                                            return (
-                                                                <Button
-                                                                    key={field}
-                                                                    as="a"
-                                                                    href={docUrl}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    size="xs"
-                                                                    colorScheme={color}
-                                                                    variant="solid"
-                                                                    leftIcon={<Icon as={DocIcon} />}
-                                                                    rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
-                                                                    borderRadius="lg"
-                                                                    fontWeight="bold"
-                                                                    px={3}
-                                                                    py={2}
-                                                                    shadow="xs"
-                                                                    _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
-                                                                    onClick={(e) => {
-                                                                        if (window.innerWidth < 768) {
-                                                                            e.preventDefault();
-                                                                            window.open(docUrl, '_blank', 'noopener,noreferrer');
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    {label}
-                                                                </Button>
-                                                            );
-                                                        })}
-                                                        {/* Bank Documents if any */}
-                                                        {Array.isArray(viewEmployee.bankDocuments) && viewEmployee.bankDocuments.map((doc, idx) => {
-                                                            const docUrl = getFileUrl(doc);
-                                                            if (!docUrl) return null;
-                                                            return (
-                                                                <Button
-                                                                    key={`bank-doc-${idx}`}
-                                                                    as="a"
-                                                                    href={docUrl}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    size="xs"
-                                                                    colorScheme="orange"
-                                                                    variant="solid"
-                                                                    leftIcon={<Icon as={FaFilePdf} />}
-                                                                    rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
-                                                                    borderRadius="lg"
-                                                                    fontWeight="bold"
-                                                                    px={3}
-                                                                    py={2}
-                                                                    shadow="xs"
-                                                                    _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
-                                                                    onClick={(e) => {
-                                                                        if (window.innerWidth < 768) {
-                                                                            e.preventDefault();
-                                                                            window.open(docUrl, '_blank', 'noopener,noreferrer');
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    BANK DOC {idx + 1}
-                                                                </Button>
-                                                            );
-                                                        })}
-                                                        {!viewEmployee.aadharCard && !viewEmployee.panCard && !viewEmployee.voterId && !viewEmployee.drivingLicense && (!viewEmployee.bankDocuments || viewEmployee.bankDocuments.length === 0) && (
-                                                            <Text fontSize="xs" color="gray.400" fontStyle="italic">
-                                                                No KYC documents uploaded for this employee.
+                                                        <Box p={3} bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase">Emergency Contact</Text>
+                                                            <Text fontSize="xs" color="gray.800" fontWeight="600" mt={1}>
+                                                                {viewEmployee.emergencyContact?.name || '—'} {viewEmployee.emergencyContact?.phone ? `• ${viewEmployee.emergencyContact.phone}` : ''}
                                                             </Text>
+                                                        </Box>
+                                                    </SimpleGrid>
+                                                </VStack>
+                                            )}
+
+                                            {/* 2. WORK TAB */}
+                                            {activeProfileTab === 'work' && (
+                                                <VStack spacing={3.5} align="stretch">
+                                                    {/* ── Items 1 to 4: Core Work Details ── */}
+                                                    <Box bg="gray.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="xs" fontWeight="700" color="gray.700" textTransform="uppercase" mb={3} letterSpacing="0.3px">
+                                                            Work &amp; Employment Details (1 - 4)
+                                                        </Text>
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3}>
+                                                            {/* 1. Designation */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaBriefcase} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">1. DESIGNATION</Text>
+                                                                </HStack>
+                                                                <Text fontWeight="700" color="gray.800" fontSize="sm">
+                                                                    {viewEmployee.designation || 'Staff'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* 2. Report To */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaSitemap} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">2. REPORT TO</Text>
+                                                                </HStack>
+                                                                <Text fontWeight="700" color="gray.800" fontSize="xs" isTruncated title={viewEmployee.reportedTo || 'Top Management'}>
+                                                                    {viewEmployee.reportedTo || 'Top Management'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* 3. Joining Date */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaCalendarAlt} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">3. JOINING DATE</Text>
+                                                                </HStack>
+                                                                <Text fontWeight="700" color="gray.800" fontSize="xs">
+                                                                    {viewEmployee.joiningDate || (viewEmployee.createdAt ? new Date(viewEmployee.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* 4. ID */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={1.5} mb={1}>
+                                                                    <Icon as={FaIdBadge} color="gray.500" fontSize="11px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">4. ID</Text>
+                                                                </HStack>
+                                                                <Badge colorScheme="blue" variant="subtle" fontSize="xs" px={2} py={0.5} borderRadius="md" fontFamily="mono" fontWeight="700">
+                                                                    {viewEmployee.empId || viewEmployee._id?.substring(0, 8)?.toUpperCase() || '—'}
+                                                                </Badge>
+                                                            </Box>
+                                                        </SimpleGrid>
+                                                    </Box>
+
+                                                    {/* ── Organization & Branch Details ── */}
+                                                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+                                                        {/* Company & Branch Card */}
+                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
+                                                                Company &amp; Branch
+                                                            </Text>
+                                                            <VStack align="start" spacing={2} fontSize="xs">
+                                                                <Box>
+                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">COMPANY</Text>
+                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.company || '—'}</Text>
+                                                                </Box>
+                                                                <Box>
+                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">BRANCH / LOCATION</Text>
+                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.branch || '—'}</Text>
+                                                                </Box>
+                                                            </VStack>
+                                                        </Box>
+
+                                                        {/* Insurance Card */}
+                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
+                                                                Corporate Insurance
+                                                            </Text>
+                                                            <VStack align="start" spacing={2} fontSize="xs">
+                                                                <Box>
+                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">POLICY NUMBER</Text>
+                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.companyItems?.insuranceNumber || '—'}</Text>
+                                                                </Box>
+                                                                <Box>
+                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">PROVIDER / EXPIRY</Text>
+                                                                    <Text fontWeight="600" color="gray.700">
+                                                                        {viewEmployee.companyItems?.insuranceProvider || '—'} {viewEmployee.companyItems?.insuranceExpiry ? `• Exp: ${viewEmployee.companyItems.insuranceExpiry}` : ''}
+                                                                    </Text>
+                                                                </Box>
+                                                            </VStack>
+                                                        </Box>
+
+                                                        {/* Mediclaim Card */}
+                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
+                                                                Mediclaim &amp; TPA
+                                                            </Text>
+                                                            <VStack align="start" spacing={2} fontSize="xs">
+                                                                <Box>
+                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">CARD / POLICY NUMBER</Text>
+                                                                    <Text fontWeight="700" color="gray.800">{viewEmployee.companyItems?.mediclaimNumber || '—'}</Text>
+                                                                </Box>
+                                                                <Box>
+                                                                    <Text fontSize="9px" color="gray.500" fontWeight="bold">PROVIDER / EXPIRY</Text>
+                                                                    <Text fontWeight="600" color="gray.700">
+                                                                        {viewEmployee.companyItems?.mediclaimProvider || '—'} {viewEmployee.companyItems?.mediclaimExpiry ? `• Exp: ${viewEmployee.companyItems.mediclaimExpiry}` : ''}
+                                                                    </Text>
+                                                                </Box>
+                                                            </VStack>
+                                                        </Box>
+                                                    </SimpleGrid>
+
+                                                    {/* Issued Assets / Hardware */}
+                                                    <Box p={3.5} bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={1}>
+                                                            Company Issued Hardware &amp; Assets
+                                                        </Text>
+                                                        <Text fontSize="xs" color="gray.800" fontWeight="500">
+                                                            {viewEmployee.companyItems?.issuedItems || 'No assets recorded as handed over.'}
+                                                        </Text>
+                                                    </Box>
+                                                </VStack>
+                                            )}
+
+                                            {/* 3. PAYOUTS TAB */}
+                                            {activeProfileTab === 'payouts' && (
+                                                <VStack spacing={4} align="stretch">
+                                                    {/* Hidden File Input for Quick Salary Slip Upload */}
+                                                    <input
+                                                        type="file"
+                                                        ref={salarySlipInputRef}
+                                                        onChange={handleQuickUploadSalarySlip}
+                                                        multiple
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        style={{ display: 'none' }}
+                                                    />
+
+                                                    {/* ── Items 2, 3 & 5: Salary Overview Cards ── */}
+                                                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3.5}>
+                                                        {/* 2. Monthly Salary */}
+                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <HStack spacing={1.5} mb={1}>
+                                                                <Icon as={FaMoneyBillWave} color="gray.500" fontSize="12px" />
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="700">2. MONTHLY SALARY</Text>
+                                                            </HStack>
+                                                            <Heading size="md" color="gray.800" mt={0.5}>
+                                                                ₹{parseFloat(viewEmployee.salary || 0).toLocaleString()}
+                                                            </Heading>
+                                                            <Text fontSize="2xs" color="gray.500" mt={1}>
+                                                                Fixed regular monthly compensation
+                                                            </Text>
+                                                        </Box>
+
+                                                        {/* 3. Year Salary */}
+                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <HStack spacing={1.5} mb={1}>
+                                                                <Icon as={FaMoneyCheckAlt} color="gray.500" fontSize="12px" />
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="700">3. YEAR SALARY (ANNUAL CTC)</Text>
+                                                            </HStack>
+                                                            <Heading size="md" color="gray.800" mt={0.5}>
+                                                                ₹{(parseFloat(viewEmployee.salary || 0) * 12).toLocaleString()}
+                                                            </Heading>
+                                                            <Text fontSize="2xs" color="gray.500" mt={1}>
+                                                                Gross annualized package (12 months)
+                                                            </Text>
+                                                        </Box>
+
+                                                        {/* 5. Salary Date (Easy Interaction) */}
+                                                        <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                            <HStack justify="space-between" align="center" mb={1}>
+                                                                <HStack spacing={1.5}>
+                                                                    <Icon as={FaCalendarCheck} color="gray.500" fontSize="12px" />
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">5. SALARY DISBURSEMENT DATE</Text>
+                                                                </HStack>
+                                                                {isUpdatingSalaryDate && <Spinner size="xs" color="blue.500" />}
+                                                            </HStack>
+                                                            <Box mt={1}>
+                                                                <Input
+                                                                    type="date"
+                                                                    size="xs"
+                                                                    h="28px"
+                                                                    fontWeight="700"
+                                                                    color="blue.700"
+                                                                    bg="gray.50"
+                                                                    borderRadius="md"
+                                                                    borderColor="gray.300"
+                                                                    _hover={{ borderColor: "blue.400" }}
+                                                                    _focus={{ borderColor: "blue.600", bg: "white" }}
+                                                                    value={viewEmployee.salaryDate || ''}
+                                                                    onChange={(e) => handleQuickUpdateSalaryDate(e.target.value)}
+                                                                    isDisabled={isUpdatingSalaryDate}
+                                                                />
+                                                            </Box>
+                                                            <Text fontSize="2xs" color="gray.500" mt={1}>
+                                                                Select exact disbursement date (e.g. 2026-11-05)
+                                                            </Text>
+                                                        </Box>
+                                                    </SimpleGrid>
+
+                                                    {/* ── Item 4: Salary Increment Date & Added to Previous Salary ── */}
+                                                    <Box bg="gray.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={3}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaChartLine} color="gray.600" fontSize="xs" />
+                                                                <Text fontSize="xs" fontWeight="700" color="gray.700" textTransform="uppercase">
+                                                                    4. Salary Increment Date &amp; Added to Previous Salary
+                                                                </Text>
+                                                            </HStack>
+                                                            <Button
+                                                                size="xs"
+                                                                h="28px"
+                                                                colorScheme="blue"
+                                                                variant="solid"
+                                                                borderRadius="md"
+                                                                fontWeight="700"
+                                                                leftIcon={<Icon as={FaPlus} fontSize="9px" />}
+                                                                onClick={() => {
+                                                                    setIncrementForm({
+                                                                        newSalary: '',
+                                                                        incrementAmount: '',
+                                                                        incrementDate: new Date().toISOString().split('T')[0],
+                                                                        remarks: ''
+                                                                    });
+                                                                    setIsIncrementModalOpen(true);
+                                                                }}
+                                                            >
+                                                                + Add / Revise Salary
+                                                            </Button>
+                                                        </Flex>
+
+                                                        {/* Increment Metrics Row */}
+                                                        <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
+                                                            {/* Increment Date */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="700" textTransform="uppercase">
+                                                                    Last Increment Date
+                                                                </Text>
+                                                                <Text fontSize="xs" fontWeight="700" color="gray.800" mt={1}>
+                                                                    {viewEmployee.salaryIncrementDate ? `📅 ${viewEmployee.salaryIncrementDate}` : (viewEmployee.joiningDate ? `Initial Joined (${viewEmployee.joiningDate})` : 'Initial Joining')}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* Previous Salary */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="700" textTransform="uppercase">
+                                                                    Previous Salary
+                                                                </Text>
+                                                                <Text fontSize="xs" fontWeight="700" color="gray.800" mt={1}>
+                                                                    {viewEmployee.previousSalary ? `₹${parseFloat(viewEmployee.previousSalary).toLocaleString()} / mo` : '— (Base Salary)'}
+                                                                </Text>
+                                                            </Box>
+
+                                                            {/* Salary Added / Increment */}
+                                                            <Box bg="white" p={3} borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="700" textTransform="uppercase">
+                                                                    Salary Added to Previous
+                                                                </Text>
+                                                                {viewEmployee.previousSalary && viewEmployee.salary > viewEmployee.previousSalary ? (
+                                                                    <HStack spacing={1.5} mt={1}>
+                                                                        <Badge colorScheme="green" variant="subtle" fontSize="xs" fontWeight="bold" px={2} py={0.5} borderRadius="md">
+                                                                            +₹{(parseFloat(viewEmployee.salary) - parseFloat(viewEmployee.previousSalary)).toLocaleString()}
+                                                                        </Badge>
+                                                                        <Text fontSize="2xs" color="green.700" fontWeight="bold">
+                                                                            (+{(((viewEmployee.salary - viewEmployee.previousSalary) / viewEmployee.previousSalary) * 100).toFixed(1)}%)
+                                                                        </Text>
+                                                                    </HStack>
+                                                                ) : (
+                                                                    <Text fontSize="xs" fontWeight="600" color="gray.500" mt={1}>
+                                                                        No previous increment logged
+                                                                    </Text>
+                                                                )}
+                                                            </Box>
+                                                        </SimpleGrid>
+
+                                                        {/* Historical Salary Revisions Table (if present) */}
+                                                        {Array.isArray(viewEmployee.salaryHistory) && viewEmployee.salaryHistory.length > 0 && (
+                                                            <Box mt={3} bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200" overflow="hidden">
+                                                                <TableContainer maxH="160px" overflowY="auto">
+                                                                    <Table size="xs" variant="simple">
+                                                                        <Thead bg="gray.100">
+                                                                            <Tr>
+                                                                                <Th fontSize="9px">INCREMENT DATE</Th>
+                                                                                <Th fontSize="9px">PREVIOUS SALARY</Th>
+                                                                                <Th fontSize="9px">REVISED SALARY</Th>
+                                                                                <Th fontSize="9px">SALARY ADDED</Th>
+                                                                                <Th fontSize="9px">REMARKS</Th>
+                                                                            </Tr>
+                                                                        </Thead>
+                                                                        <Tbody>
+                                                                            {viewEmployee.salaryHistory.map((hist, hIdx) => (
+                                                                                <Tr key={hIdx}>
+                                                                                    <Td fontSize="xs" fontWeight="600">{hist.date}</Td>
+                                                                                    <Td fontSize="xs">₹{parseFloat(hist.previousSalary || 0).toLocaleString()}</Td>
+                                                                                    <Td fontSize="xs" fontWeight="bold" color="blue.700">₹{parseFloat(hist.newSalary || 0).toLocaleString()}</Td>
+                                                                                    <Td fontSize="xs">
+                                                                                        <Badge colorScheme="green" variant="subtle" fontSize="2xs" px={1.5} py={0.5} borderRadius="sm">
+                                                                                            +₹{parseFloat(hist.incrementAmount || 0).toLocaleString()} {hist.percentage ? `(+${hist.percentage}%)` : ''}
+                                                                                        </Badge>
+                                                                                    </Td>
+                                                                                    <Td fontSize="2xs" color="gray.600">{hist.remarks || 'Salary Revision'}</Td>
+                                                                                </Tr>
+                                                                            ))}
+                                                                        </Tbody>
+                                                                    </Table>
+                                                                </TableContainer>
+                                                            </Box>
                                                         )}
-                                                    </Wrap>
-                                                </Box>
-                                            </VStack>
-                                        </SimpleGrid>
+                                                    </Box>
+
+                                                    {/* ── Item 1: Old Salary Slips ── */}
+                                                    <Box bg="gray.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={3}>
+                                                            <HStack spacing={1.5}>
+                                                                <Icon as={FaFileAlt} color="gray.600" fontSize="xs" />
+                                                                <Text fontSize="xs" fontWeight="700" color="gray.700" textTransform="uppercase">
+                                                                    1. Old Salary Slips &amp; Documents ({Array.isArray(viewEmployee.salarySlips) ? viewEmployee.salarySlips.length : 0})
+                                                                </Text>
+                                                            </HStack>
+                                                            <Button
+                                                                size="xs"
+                                                                h="28px"
+                                                                colorScheme="blue"
+                                                                variant="outline"
+                                                                borderRadius="md"
+                                                                fontWeight="600"
+                                                                leftIcon={<Icon as={FaCloudUploadAlt} fontSize="11px" />}
+                                                                isLoading={isUploadingSlip}
+                                                                onClick={() => salarySlipInputRef.current?.click()}
+                                                            >
+                                                                + Upload Salary Slip
+                                                            </Button>
+                                                        </Flex>
+
+                                                        {Array.isArray(viewEmployee.salarySlips) && viewEmployee.salarySlips.length > 0 ? (
+                                                            <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
+                                                                {viewEmployee.salarySlips.map((doc, idx) => {
+                                                                    const docUrl = getFileUrl(doc);
+                                                                    if (!docUrl) return null;
+                                                                    const fileName = doc?.name || doc?.title || `Salary Slip #${idx + 1}`;
+                                                                    const isPdf = fileName.toLowerCase().endsWith('.pdf') || docUrl.toLowerCase().includes('.pdf');
+                                                                    return (
+                                                                        <Box
+                                                                            key={`slip-${idx}`}
+                                                                            p={3}
+                                                                            bg="white"
+                                                                            borderRadius="lg"
+                                                                            border="1px solid"
+                                                                            borderColor="gray.200"
+                                                                            display="flex"
+                                                                            flexDirection="column"
+                                                                            justify="space-between"
+                                                                        >
+                                                                            <HStack spacing={2} mb={2}>
+                                                                                <Icon as={isPdf ? FaFilePdf : FaFileImage} color={isPdf ? "red.500" : "blue.500"} fontSize="sm" />
+                                                                                <Text fontSize="xs" fontWeight="700" color="gray.800" isTruncated title={fileName}>
+                                                                                    {doc.title || `Salary Slip #${idx + 1}`}
+                                                                                </Text>
+                                                                            </HStack>
+                                                                            <HStack spacing={2} pt={1}>
+                                                                                <Button
+                                                                                    as="a"
+                                                                                    href={docUrl}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    size="xs"
+                                                                                    h="26px"
+                                                                                    colorScheme="blue"
+                                                                                    variant="outline"
+                                                                                    borderRadius="md"
+                                                                                    leftIcon={<Icon as={FaEye} fontSize="10px" />}
+                                                                                    flex={1}
+                                                                                >
+                                                                                    View
+                                                                                </Button>
+                                                                                <Button
+                                                                                    as="a"
+                                                                                    href={docUrl}
+                                                                                    download={fileName}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    size="xs"
+                                                                                    h="26px"
+                                                                                    colorScheme="gray"
+                                                                                    variant="ghost"
+                                                                                    borderRadius="md"
+                                                                                    leftIcon={<Icon as={FaDownload} fontSize="10px" />}
+                                                                                >
+                                                                                    Save
+                                                                                </Button>
+                                                                            </HStack>
+                                                                        </Box>
+                                                                    );
+                                                                })}
+                                                            </SimpleGrid>
+                                                        ) : (
+                                                            <Box py={4} textAlign="center" bg="white" borderRadius="lg" border="1px dashed" borderColor="gray.300">
+                                                                <Text fontSize="xs" color="gray.500" fontWeight="500">
+                                                                    No previous salary slips on record.
+                                                                </Text>
+                                                                <Button
+                                                                    size="xs"
+                                                                    mt={2}
+                                                                    colorScheme="blue"
+                                                                    variant="ghost"
+                                                                    leftIcon={<Icon as={FaPlus} fontSize="9px" />}
+                                                                    onClick={() => salarySlipInputRef.current?.click()}
+                                                                >
+                                                                    Click here to upload past payslips
+                                                                </Button>
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+
+                                                    {/* ── Recorded Payout Ledger ── */}
+                                                    <Box bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200" overflow="hidden">
+                                                        <Box px={3.5} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                            <Text fontSize="10px" fontWeight="700" color="gray.600" textTransform="uppercase">
+                                                                Monthly Payout History Ledger ({Array.isArray(viewEmployee.monthlyPayments) ? viewEmployee.monthlyPayments.length : 0} Records)
+                                                            </Text>
+                                                        </Box>
+                                                        <TableContainer>
+                                                            <Table size="sm" variant="simple">
+                                                                <Thead bg="gray.50">
+                                                                    <Tr>
+                                                                        <Th fontSize="10px">MONTH</Th>
+                                                                        <Th fontSize="10px">MODE</Th>
+                                                                        <Th fontSize="10px">STATUS</Th>
+                                                                        <Th fontSize="10px">DAYS (P/A)</Th>
+                                                                        <Th fontSize="10px">UPAD (ADV)</Th>
+                                                                        <Th fontSize="10px">INCENTIVE</Th>
+                                                                    </Tr>
+                                                                </Thead>
+                                                                <Tbody>
+                                                                    {Array.isArray(viewEmployee.monthlyPayments) && viewEmployee.monthlyPayments.length > 0 ? (
+                                                                        viewEmployee.monthlyPayments.map((p, pIdx) => (
+                                                                            <Tr key={pIdx}>
+                                                                                <Td fontWeight="bold" fontSize="xs">{p.month}</Td>
+                                                                                <Td fontSize="xs">
+                                                                                    <Badge colorScheme="gray" variant="subtle" fontSize="2xs">
+                                                                                        {p.paymentMode || 'Cash'}
+                                                                                    </Badge>
+                                                                                </Td>
+                                                                                <Td fontSize="xs">
+                                                                                    <Badge colorScheme={p.paymentStatus === 'Done' ? 'green' : 'orange'} fontSize="2xs">
+                                                                                        {p.paymentStatus === 'Done' ? '✅ Paid' : '⏳ Pending'}
+                                                                                    </Badge>
+                                                                                </Td>
+                                                                                <Td fontSize="xs">{p.presentDays ?? '—'} / {p.absentDays ?? '—'}</Td>
+                                                                                <Td fontSize="xs" color="gray.700" fontWeight="bold">{p.upad ? `₹${p.upad}` : '—'}</Td>
+                                                                                <Td fontSize="xs" color="green.700" fontWeight="bold">{p.incentive ? `₹${p.incentive}` : '—'}</Td>
+                                                                            </Tr>
+                                                                        ))
+                                                                    ) : (
+                                                                        <Tr>
+                                                                            <Td colSpan={6} textAlign="center" py={5} color="gray.500" fontSize="xs">
+                                                                                No monthly payout records yet. Records are generated in the Monthly Payout Report tab.
+                                                                            </Td>
+                                                                        </Tr>
+                                                                    )}
+                                                                </Tbody>
+                                                            </Table>
+                                                        </TableContainer>
+                                                    </Box>
+                                                </VStack>
+                                            )}
+
+                                            {/* 4. DOCUMENTS TAB */}
+                                            {activeProfileTab === 'documents' && (
+                                                <VStack spacing={4} align="stretch">
+                                                    {/* Hidden File Input for Quick Joining Letter Upload */}
+                                                    <input
+                                                        type="file"
+                                                        ref={joiningLetterInputRef}
+                                                        onChange={handleQuickUploadJoiningLetter}
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        style={{ display: 'none' }}
+                                                    />
+
+                                                    {/* ── Primary Documents Grid (1 to 4) ── */}
+                                                    <Box bg="gray.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="xs" fontWeight="700" color="gray.700" textTransform="uppercase" mb={3} letterSpacing="0.3px">
+                                                            Core Employment &amp; Policy Documents (1 - 4)
+                                                        </Text>
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3.5}>
+                                                            {/* 1. Resume */}
+                                                            <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justify="space-between">
+                                                                <Box>
+                                                                    <Flex justify="space-between" align="center" mb={2}>
+                                                                        <HStack spacing={1.5}>
+                                                                            <Icon as={FaFileAlt} color="gray.600" fontSize="xs" />
+                                                                            <Text fontSize="xs" fontWeight="700" color="gray.800">
+                                                                                1. RESUME / CV
+                                                                            </Text>
+                                                                        </HStack>
+                                                                        <Badge
+                                                                            colorScheme={viewEmployee.resume && getFileUrl(viewEmployee.resume) ? "blue" : "gray"}
+                                                                            variant="subtle"
+                                                                            fontSize="2xs"
+                                                                            px={1.5}
+                                                                            py={0.5}
+                                                                            borderRadius="md"
+                                                                        >
+                                                                            {viewEmployee.resume && getFileUrl(viewEmployee.resume) ? "Attached" : "Not Attached"}
+                                                                        </Badge>
+                                                                    </Flex>
+                                                                    <Text fontSize="2xs" color="gray.500" mb={3}>
+                                                                        Candidate CV &amp; Career Portfolio
+                                                                    </Text>
+                                                                </Box>
+
+                                                                <Box pt={1}>
+                                                                    {viewEmployee.resume && getFileUrl(viewEmployee.resume) ? (
+                                                                        <VStack align="stretch" spacing={2}>
+                                                                            <Button
+                                                                                as="a"
+                                                                                href={getFileUrl(viewEmployee.resume)}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                size="xs"
+                                                                                h="28px"
+                                                                                colorScheme="blue"
+                                                                                variant="solid"
+                                                                                borderRadius="md"
+                                                                                leftIcon={<Icon as={FaEye} fontSize="10px" />}
+                                                                                rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
+                                                                                w="full"
+                                                                            >
+                                                                                View Resume
+                                                                            </Button>
+                                                                            <Button
+                                                                                as="a"
+                                                                                href={getFileUrl(viewEmployee.resume)}
+                                                                                download="resume"
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                size="xs"
+                                                                                h="26px"
+                                                                                colorScheme="gray"
+                                                                                variant="outline"
+                                                                                borderRadius="md"
+                                                                                leftIcon={<Icon as={FaDownload} fontSize="10px" />}
+                                                                                w="full"
+                                                                            >
+                                                                                Download File
+                                                                            </Button>
+                                                                        </VStack>
+                                                                    ) : (
+                                                                        <Box py={3} textAlign="center" bg="gray.50" borderRadius="md" border="1px dashed" borderColor="gray.300">
+                                                                            <Text fontSize="2xs" color="gray.400" fontWeight="500">
+                                                                                No resume on record
+                                                                            </Text>
+                                                                        </Box>
+                                                                    )}
+                                                                </Box>
+                                                            </Box>
+
+                                                            {/* 2. Mediclaim */}
+                                                            <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justify="space-between">
+                                                                <Box>
+                                                                    <Flex justify="space-between" align="center" mb={2}>
+                                                                        <HStack spacing={1.5}>
+                                                                            <Icon as={FaMedkit} color="gray.600" fontSize="xs" />
+                                                                            <Text fontSize="xs" fontWeight="700" color="gray.800">
+                                                                                2. MEDICLAIM
+                                                                            </Text>
+                                                                        </HStack>
+                                                                        <Badge
+                                                                            colorScheme={(Array.isArray(viewEmployee.mediclaimDocs) && viewEmployee.mediclaimDocs.length > 0) || viewEmployee.companyItems?.mediclaimNumber ? "blue" : "gray"}
+                                                                            variant="subtle"
+                                                                            fontSize="2xs"
+                                                                            px={1.5}
+                                                                            py={0.5}
+                                                                            borderRadius="md"
+                                                                        >
+                                                                            {(Array.isArray(viewEmployee.mediclaimDocs) && viewEmployee.mediclaimDocs.length > 0) || viewEmployee.companyItems?.mediclaimNumber ? "Active / Attached" : "Not Attached"}
+                                                                        </Badge>
+                                                                    </Flex>
+                                                                    <Box mb={2} p={2} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" fontSize="2xs">
+                                                                        <Text color="gray.500" fontWeight="bold">CARD NO: <Text as="span" color="gray.800" fontFamily="mono">{viewEmployee.companyItems?.mediclaimNumber || '—'}</Text></Text>
+                                                                        <Text color="gray.500">PROVIDER: <Text as="span" color="gray.800" fontWeight="600">{viewEmployee.companyItems?.mediclaimProvider || '—'}</Text></Text>
+                                                                    </Box>
+                                                                </Box>
+
+                                                                <Box pt={1}>
+                                                                    {Array.isArray(viewEmployee.mediclaimDocs) && viewEmployee.mediclaimDocs.length > 0 ? (
+                                                                        <VStack align="stretch" spacing={1.5}>
+                                                                            {viewEmployee.mediclaimDocs.map((doc, idx) => {
+                                                                                const docUrl = getFileUrl(doc);
+                                                                                if (!docUrl) return null;
+                                                                                return (
+                                                                                    <Button
+                                                                                        key={`med-${idx}`}
+                                                                                        as="a"
+                                                                                        href={docUrl}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        size="xs"
+                                                                                        h="26px"
+                                                                                        colorScheme="blue"
+                                                                                        variant="outline"
+                                                                                        borderRadius="md"
+                                                                                        leftIcon={<Icon as={FaFilePdf} fontSize="10px" />}
+                                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
+                                                                                    >
+                                                                                        View Card #{idx + 1}
+                                                                                    </Button>
+                                                                                );
+                                                                            })}
+                                                                        </VStack>
+                                                                    ) : (
+                                                                        <Box py={3} textAlign="center" bg="gray.50" borderRadius="md" border="1px dashed" borderColor="gray.300">
+                                                                            <Text fontSize="2xs" color="gray.400" fontWeight="500">
+                                                                                No mediclaim doc attached
+                                                                            </Text>
+                                                                        </Box>
+                                                                    )}
+                                                                </Box>
+                                                            </Box>
+
+                                                            {/* 3. Insurance */}
+                                                            <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justify="space-between">
+                                                                <Box>
+                                                                    <Flex justify="space-between" align="center" mb={2}>
+                                                                        <HStack spacing={1.5}>
+                                                                            <Icon as={FaShieldAlt} color="gray.600" fontSize="xs" />
+                                                                            <Text fontSize="xs" fontWeight="700" color="gray.800">
+                                                                                3. INSURANCE
+                                                                            </Text>
+                                                                        </HStack>
+                                                                        <Badge
+                                                                            colorScheme={(Array.isArray(viewEmployee.insuranceDocs) && viewEmployee.insuranceDocs.length > 0) || viewEmployee.companyItems?.insuranceNumber ? "blue" : "gray"}
+                                                                            variant="subtle"
+                                                                            fontSize="2xs"
+                                                                            px={1.5}
+                                                                            py={0.5}
+                                                                            borderRadius="md"
+                                                                        >
+                                                                            {(Array.isArray(viewEmployee.insuranceDocs) && viewEmployee.insuranceDocs.length > 0) || viewEmployee.companyItems?.insuranceNumber ? "Active / Attached" : "Not Attached"}
+                                                                        </Badge>
+                                                                    </Flex>
+                                                                    <Box mb={2} p={2} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" fontSize="2xs">
+                                                                        <Text color="gray.500" fontWeight="bold">POLICY NO: <Text as="span" color="gray.800" fontFamily="mono">{viewEmployee.companyItems?.insuranceNumber || '—'}</Text></Text>
+                                                                        <Text color="gray.500">PROVIDER: <Text as="span" color="gray.800" fontWeight="600">{viewEmployee.companyItems?.insuranceProvider || '—'}</Text></Text>
+                                                                    </Box>
+                                                                </Box>
+
+                                                                <Box pt={1}>
+                                                                    {Array.isArray(viewEmployee.insuranceDocs) && viewEmployee.insuranceDocs.length > 0 ? (
+                                                                        <VStack align="stretch" spacing={1.5}>
+                                                                            {viewEmployee.insuranceDocs.map((doc, idx) => {
+                                                                                const docUrl = getFileUrl(doc);
+                                                                                if (!docUrl) return null;
+                                                                                return (
+                                                                                    <Button
+                                                                                        key={`ins-${idx}`}
+                                                                                        as="a"
+                                                                                        href={docUrl}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        size="xs"
+                                                                                        h="26px"
+                                                                                        colorScheme="blue"
+                                                                                        variant="outline"
+                                                                                        borderRadius="md"
+                                                                                        leftIcon={<Icon as={FaFilePdf} fontSize="10px" />}
+                                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
+                                                                                    >
+                                                                                        View Policy #{idx + 1}
+                                                                                    </Button>
+                                                                                );
+                                                                            })}
+                                                                        </VStack>
+                                                                    ) : (
+                                                                        <Box py={3} textAlign="center" bg="gray.50" borderRadius="md" border="1px dashed" borderColor="gray.300">
+                                                                            <Text fontSize="2xs" color="gray.400" fontWeight="500">
+                                                                                No insurance doc attached
+                                                                            </Text>
+                                                                        </Box>
+                                                                    )}
+                                                                </Box>
+                                                            </Box>
+
+                                                            {/* 4. Joining Letter */}
+                                                            <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justify="space-between">
+                                                                <Box>
+                                                                    <Flex justify="space-between" align="center" mb={2}>
+                                                                        <HStack spacing={1.5}>
+                                                                            <Icon as={FaCalendarAlt} color="gray.600" fontSize="xs" />
+                                                                            <Text fontSize="xs" fontWeight="700" color="gray.800">
+                                                                                4. JOINING LETTER
+                                                                            </Text>
+                                                                        </HStack>
+                                                                        <Badge
+                                                                            colorScheme={viewEmployee.joiningLetter && getFileUrl(viewEmployee.joiningLetter) ? "green" : "orange"}
+                                                                            variant="subtle"
+                                                                            fontSize="2xs"
+                                                                            px={1.5}
+                                                                            py={0.5}
+                                                                            borderRadius="md"
+                                                                        >
+                                                                            {viewEmployee.joiningLetter && getFileUrl(viewEmployee.joiningLetter) ? "Attached & Ready" : "Pending Upload"}
+                                                                        </Badge>
+                                                                    </Flex>
+                                                                    <Text fontSize="2xs" color="gray.500" mb={3}>
+                                                                        Official Appointment / Joining Letter
+                                                                    </Text>
+                                                                </Box>
+
+                                                                <Box pt={1}>
+                                                                    {viewEmployee.joiningLetter && getFileUrl(viewEmployee.joiningLetter) ? (
+                                                                        <VStack align="stretch" spacing={2}>
+                                                                            <Button
+                                                                                as="a"
+                                                                                href={getFileUrl(viewEmployee.joiningLetter)}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                size="xs"
+                                                                                h="28px"
+                                                                                colorScheme="blue"
+                                                                                variant="solid"
+                                                                                borderRadius="md"
+                                                                                leftIcon={<Icon as={FaFilePdf} fontSize="10px" />}
+                                                                                rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
+                                                                                w="full"
+                                                                            >
+                                                                                View Joining Letter
+                                                                            </Button>
+                                                                            <HStack spacing={1.5}>
+                                                                                <Button
+                                                                                    as="a"
+                                                                                    href={getFileUrl(viewEmployee.joiningLetter)}
+                                                                                    download="joining_letter"
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    size="xs"
+                                                                                    h="26px"
+                                                                                    colorScheme="gray"
+                                                                                    variant="outline"
+                                                                                    borderRadius="md"
+                                                                                    leftIcon={<Icon as={FaDownload} fontSize="10px" />}
+                                                                                    flex={1}
+                                                                                >
+                                                                                    Save PDF
+                                                                                </Button>
+                                                                                <Button
+                                                                                    size="xs"
+                                                                                    h="26px"
+                                                                                    colorScheme="gray"
+                                                                                    variant="ghost"
+                                                                                    borderRadius="md"
+                                                                                    isLoading={isUploadingJoiningLetter}
+                                                                                    onClick={() => joiningLetterInputRef.current?.click()}
+                                                                                >
+                                                                                    Replace
+                                                                                </Button>
+                                                                            </HStack>
+                                                                        </VStack>
+                                                                    ) : (
+                                                                        <VStack align="stretch" spacing={2}>
+                                                                            <Box py={2} px={1} textAlign="center" bg="gray.50" borderRadius="md" border="1px dashed" borderColor="gray.300">
+                                                                                <Text fontSize="2xs" color="gray.500" fontWeight="500">
+                                                                                    Joining letter PDF pending
+                                                                                </Text>
+                                                                            </Box>
+                                                                            <Button
+                                                                                size="xs"
+                                                                                h="28px"
+                                                                                colorScheme="blue"
+                                                                                variant="solid"
+                                                                                borderRadius="md"
+                                                                                fontWeight="700"
+                                                                                leftIcon={<Icon as={FaCloudUploadAlt} fontSize="12px" />}
+                                                                                isLoading={isUploadingJoiningLetter}
+                                                                                onClick={() => joiningLetterInputRef.current?.click()}
+                                                                                w="full"
+                                                                            >
+                                                                                + Upload Joining Letter (PDF)
+                                                                            </Button>
+                                                                        </VStack>
+                                                                    )}
+                                                                </Box>
+                                                            </Box>
+                                                        </SimpleGrid>
+                                                    </Box>
+
+                                                    {/* ── Other Associated Documents (Statutory KYC & Banking) ── */}
+                                                    <Box bg="white" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" mb={2.5}>
+                                                            Other Statutory KYC &amp; Bank Attachments
+                                                        </Text>
+                                                        <Wrap spacing={2}>
+                                                            {/* KYC Docs */}
+                                                            {[
+                                                                { field: 'aadharCard', label: 'Aadhaar Card', icon: FaIdCard },
+                                                                { field: 'panCard', label: 'PAN Card', icon: FaIdCard },
+                                                                { field: 'voterId', label: 'Voter ID', icon: FaIdBadge },
+                                                                { field: 'drivingLicense', label: 'Driving License', icon: FaCar }
+                                                            ].map(({ field, label, icon: DocIcon }) => {
+                                                                const docData = viewEmployee[field];
+                                                                const docUrl = getFileUrl(docData);
+                                                                if (!docUrl) return null;
+                                                                return (
+                                                                    <Button
+                                                                        key={field}
+                                                                        as="a"
+                                                                        href={docUrl}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        size="xs"
+                                                                        variant="outline"
+                                                                        colorScheme="gray"
+                                                                        borderColor="gray.300"
+                                                                        leftIcon={<Icon as={DocIcon} fontSize="10px" color="gray.600" />}
+                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" color="gray.400" />}
+                                                                        borderRadius="md"
+                                                                        fontWeight="600"
+                                                                    >
+                                                                        {label}
+                                                                    </Button>
+                                                                );
+                                                            })}
+
+                                                            {/* Bank Documents */}
+                                                            {Array.isArray(viewEmployee.bankDetails?.documents) && viewEmployee.bankDetails.documents.map((doc, idx) => {
+                                                                const docUrl = getFileUrl(doc);
+                                                                if (!docUrl) return null;
+                                                                return (
+                                                                    <Button
+                                                                        key={`bank-doc-${idx}`}
+                                                                        as="a"
+                                                                        href={docUrl}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        size="xs"
+                                                                        variant="outline"
+                                                                        colorScheme="gray"
+                                                                        borderColor="gray.300"
+                                                                        leftIcon={<Icon as={FaFilePdf} fontSize="10px" color="gray.600" />}
+                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" color="gray.400" />}
+                                                                        borderRadius="md"
+                                                                        fontWeight="600"
+                                                                    >
+                                                                        Bank Proof #{idx + 1}
+                                                                    </Button>
+                                                                );
+                                                            })}
+
+                                                            {/* Company Item Docs */}
+                                                            {Array.isArray(viewEmployee.companyItemDocs) && viewEmployee.companyItemDocs.map((doc, idx) => {
+                                                                const docUrl = getFileUrl(doc);
+                                                                if (!docUrl) return null;
+                                                                return (
+                                                                    <Button
+                                                                        key={`item-doc-${idx}`}
+                                                                        as="a"
+                                                                        href={docUrl}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        size="xs"
+                                                                        variant="outline"
+                                                                        colorScheme="gray"
+                                                                        borderColor="gray.300"
+                                                                        leftIcon={<Icon as={FaLaptop} fontSize="10px" color="gray.600" />}
+                                                                        rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" color="gray.400" />}
+                                                                        borderRadius="md"
+                                                                        fontWeight="600"
+                                                                    >
+                                                                        Asset Slip #{idx + 1}
+                                                                    </Button>
+                                                                );
+                                                            })}
+                                                        </Wrap>
+                                                    </Box>
+                                                </VStack>
+                                            )}
+
+                                            {/* 5. BANK TAB */}
+                                            {activeProfileTab === 'bank' && (
+                                                <VStack spacing={4} align="stretch">
+                                                    <Box bg="green.50" p={4} borderRadius="2xl" border="1px solid" borderColor="green.100">
+                                                        <Flex justify="space-between" align="center" mb={3}>
+                                                            <Text fontSize="xs" fontWeight="black" color="green.800" textTransform="uppercase">
+                                                                🏦 Banking &amp; Disbursement Particulars
+                                                            </Text>
+                                                            {viewEmployee.bankDetails?.verified && (
+                                                                <Badge colorScheme="green" fontSize="2xs" px={2} py={0.5} borderRadius="full">
+                                                                    ✓ Verified Bank Account
+                                                                </Badge>
+                                                            )}
+                                                        </Flex>
+                                                        <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={4} fontSize="xs">
+                                                            <Box>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold">BANK NAME</Text>
+                                                                <Text fontWeight="bold" color="gray.800">{viewEmployee.bankDetails?.bankName || 'N/A'}</Text>
+                                                            </Box>
+                                                            <Box>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold">ACCOUNT HOLDER NAME</Text>
+                                                                <Text fontWeight="bold" color="gray.800">{viewEmployee.bankDetails?.accountName || 'N/A'}</Text>
+                                                            </Box>
+                                                            <Box>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold">ACCOUNT NUMBER</Text>
+                                                                <Text fontWeight="black" color="green.800" fontSize="sm">{viewEmployee.bankDetails?.accountNumber || 'N/A'}</Text>
+                                                            </Box>
+                                                            <Box>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold">IFSC CODE</Text>
+                                                                <Text fontWeight="bold" color="blue.600">{viewEmployee.bankDetails?.ifscCode || 'N/A'}</Text>
+                                                            </Box>
+                                                            <Box>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="bold">VERIFICATION STATUS</Text>
+                                                                <Badge colorScheme={viewEmployee.bankDetails?.verified ? 'green' : 'gray'} fontSize="2xs" mt={0.5}>
+                                                                    {viewEmployee.bankDetails?.verified ? 'Verified Online' : 'Standard / Self Attested'}
+                                                                </Badge>
+                                                            </Box>
+                                                        </SimpleGrid>
+                                                    </Box>
+
+                                                    {/* Bank Proof Documents */}
+                                                    <Box p={4} bg="gray.50" borderRadius="2xl" border="1px solid" borderColor="gray.200">
+                                                        <Text fontSize="xs" fontWeight="black" color="gray.700" textTransform="uppercase" mb={2}>
+                                                            📄 Bank Proof (Passbook / Cheque Copy)
+                                                        </Text>
+                                                        {Array.isArray(viewEmployee.bankDetails?.documents) && viewEmployee.bankDetails.documents.length > 0 ? (
+                                                            <Wrap spacing={2}>
+                                                                {viewEmployee.bankDetails.documents.map((doc, idx) => {
+                                                                    const docUrl = getFileUrl(doc);
+                                                                    if (!docUrl) return null;
+                                                                    return (
+                                                                        <Button
+                                                                            key={idx}
+                                                                            as="a"
+                                                                            href={docUrl}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            size="sm"
+                                                                            colorScheme="green"
+                                                                            leftIcon={<Icon as={FaFilePdf} />}
+                                                                            rightIcon={<Icon as={FaExternalLinkAlt} fontSize="8px" />}
+                                                                            borderRadius="xl"
+                                                                        >
+                                                                            View Bank Proof #{idx + 1}
+                                                                        </Button>
+                                                                    );
+                                                                })}
+                                                            </Wrap>
+                                                        ) : (
+                                                            <Text fontSize="xs" color="gray.500">No bank passbook or cancelled cheque copy uploaded.</Text>
+                                                        )}
+                                                    </Box>
+                                                </VStack>
+                                            )}
+
+                                            {/* 6. SALARY TAB */}
+                                            {activeProfileTab === 'salary' && (() => {
+                                                const periodCalc = calculateActiveSalaryPeriod(
+                                                    viewEmployee,
+                                                    salaryPeriodState.startDate,
+                                                    salaryPeriodState.endDate
+                                                );
+                                                const totalPay = calculateTotalPayAmount(viewEmployee);
+                                                const today = new Date();
+                                                const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                                                const currentMonthRecord = Array.isArray(viewEmployee.monthlyPayments)
+                                                    ? viewEmployee.monthlyPayments.find(p => p.month === currentMonthKey)
+                                                    : null;
+                                                const currentStatus = currentMonthRecord ? currentMonthRecord.paymentStatus : (viewEmployee.paymentStatus || 'Pending');
+                                                const currentMode = currentMonthRecord ? currentMonthRecord.paymentMode : (viewEmployee.paymentMode || 'Cash');
+
+                                                // Net payable for current month taking deactive days into account:
+                                                const currentUpad = Number(currentMonthRecord?.upad || 0);
+                                                const currentIncentive = Number(currentMonthRecord?.incentive || 0);
+                                                const currentNetPayable = Math.max(0, periodCalc.payableSalary - currentUpad + currentIncentive);
+
+                                                const prevSal = Number(viewEmployee.previousSalary || 0);
+                                                const curSal = Number(viewEmployee.salary || 0);
+                                                const incrementDiff = curSal - prevSal;
+                                                const incrementPercent = prevSal > 0 ? ((incrementDiff / prevSal) * 100).toFixed(1) : 0;
+
+                                                return (
+                                                    <VStack spacing={3.5} align="stretch">
+                                                        {/* ── TOP METRIC CARDS: 2. Monthly Salary, 4. Total Pay Amount, 6. Current Payout Quick Status ── */}
+                                                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+                                                            {/* 2. Monthly Salary */}
+                                                            <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200" shadow="xs">
+                                                                <HStack justify="space-between" mb={1}>
+                                                                    <HStack spacing={1.5}>
+                                                                        <Icon as={FaMoneyBillWave} color="gray.500" fontSize="12px" />
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">2. MONTHLY SALARY</Text>
+                                                                    </HStack>
+                                                                    <Badge colorScheme="blue" variant="subtle" fontSize="2xs">Active Base</Badge>
+                                                                </HStack>
+                                                                <Heading size="md" color="gray.800" fontWeight="800" mt={1}>
+                                                                    ₹{curSal.toLocaleString()}
+                                                                    <Text as="span" fontSize="xs" fontWeight="normal" color="gray.500"> / month</Text>
+                                                                </Heading>
+                                                                <HStack spacing={2} mt={2} fontSize="2xs" color="gray.600">
+                                                                    <Text>Daily: <strong>₹{(curSal / 30).toFixed(0)}</strong></Text>
+                                                                    <Text>•</Text>
+                                                                    <Text>Hourly (8h): <strong>₹{(curSal / 240).toFixed(0)}</strong></Text>
+                                                                    <Text>•</Text>
+                                                                    <Badge colorScheme={viewEmployee.foodAllowance === 'Without Food' ? 'gray' : 'green'} fontSize="2xs">
+                                                                        {viewEmployee.foodAllowance || 'Food'}
+                                                                    </Badge>
+                                                                </HStack>
+                                                            </Box>
+
+                                                            {/* 4. Total Pay Amount */}
+                                                            <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200" shadow="xs">
+                                                                <HStack justify="space-between" mb={1}>
+                                                                    <HStack spacing={1.5}>
+                                                                        <Icon as={FaMoneyCheckAlt} color="gray.500" fontSize="12px" />
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">4. TOTAL PAY AMOUNT</Text>
+                                                                    </HStack>
+                                                                    <Badge colorScheme="green" variant="subtle" fontSize="2xs">{totalPay.paidMonthsCount} Cycles Paid</Badge>
+                                                                </HStack>
+                                                                <Heading size="md" color="green.700" fontWeight="800" mt={1}>
+                                                                    ₹{totalPay.totalPaid.toLocaleString()}
+                                                                </Heading>
+                                                                <HStack spacing={2} mt={2} fontSize="2xs" color="gray.600">
+                                                                    <Text>Cumulative disbursed total</Text>
+                                                                    {totalPay.pendingAmount > 0 && (
+                                                                        <>
+                                                                            <Text>•</Text>
+                                                                            <Text color="orange.600">Pending: <strong>₹{totalPay.pendingAmount.toLocaleString()}</strong></Text>
+                                                                        </>
+                                                                    )}
+                                                                </HStack>
+                                                            </Box>
+
+                                                            {/* 6. Monthly Salary Payout Status Header Card */}
+                                                            <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200" shadow="xs">
+                                                                <HStack justify="space-between" mb={1}>
+                                                                    <HStack spacing={1.5}>
+                                                                        <Icon as={FaCalendarCheck} color="gray.500" fontSize="12px" />
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">6. MONTHLY PAYOUT STATUS</Text>
+                                                                    </HStack>
+                                                                    <Badge colorScheme={currentStatus === 'Done' ? 'green' : 'orange'} fontSize="2xs" px={2} py={0.5} borderRadius="full">
+                                                                        {currentStatus === 'Done' ? '✅ DONE (PAID)' : '⏳ PENDING'}
+                                                                    </Badge>
+                                                                </HStack>
+                                                                <HStack justify="space-between" align="baseline" mt={1}>
+                                                                    <Heading size="md" color="gray.800" fontWeight="800">
+                                                                        ₹{currentNetPayable.toLocaleString()}
+                                                                    </Heading>
+                                                                    <Text fontSize="2xs" color="gray.500">{currentMonthKey}</Text>
+                                                                </HStack>
+                                                                <HStack spacing={2} mt={2} justify="space-between" align="center">
+                                                                    <HStack spacing={1} fontSize="2xs" color="gray.600">
+                                                                        <Text>Mode: <strong>{currentMode}</strong></Text>
+                                                                        <Text>•</Text>
+                                                                        <Text>Disburse: <strong>{viewEmployee.salaryDate || 'Not set'}</strong></Text>
+                                                                    </HStack>
+                                                                    <Button
+                                                                        size="2xs"
+                                                                        colorScheme={currentStatus === 'Done' ? 'orange' : 'green'}
+                                                                        variant={currentStatus === 'Done' ? 'outline' : 'solid'}
+                                                                        isLoading={isUpdatingCurrentPayout}
+                                                                        onClick={() => handleToggleCurrentMonthPayout(currentStatus, currentMode)}
+                                                                        h="22px"
+                                                                        fontSize="10px"
+                                                                        px={2}
+                                                                    >
+                                                                        {currentStatus === 'Done' ? 'Mark Pending' : 'Mark as Paid'}
+                                                                    </Button>
+                                                                </HStack>
+                                                            </Box>
+                                                        </SimpleGrid>
+
+                                                        {/* ── 1. SALARY DATE (START TO END DATE & DEACTIVE DATE NOT CONSIDERED) ── */}
+                                                        <Box bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200" overflow="hidden" shadow="xs">
+                                                            <Box px={3.5} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
+                                                                    <HStack spacing={2}>
+                                                                        <Icon as={FaCalendarAlt} color="blue.600" fontSize="13px" />
+                                                                        <Text fontSize="11px" fontWeight="700" color="gray.800" textTransform="uppercase">
+                                                                            1. Salary Date Period & Active Calculation (Deactive Dates Excluded)
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    <Badge colorScheme="blue" variant="subtle" fontSize="2xs">
+                                                                        Exact Dates • Pro-Rata Active Service
+                                                                    </Badge>
+                                                                </Flex>
+                                                            </Box>
+
+                                                            <Box p={3.5}>
+                                                                {/* Period Controls & Exact Date Pickers */}
+                                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={3} mb={3}>
+                                                                    <FormControl>
+                                                                        <FormLabel fontSize="10px" fontWeight="700" color="gray.500" mb={1} textTransform="uppercase">
+                                                                            Salary Period Start Date
+                                                                        </FormLabel>
+                                                                        <Input
+                                                                            type="date"
+                                                                            size="xs"
+                                                                            h="30px"
+                                                                            borderRadius="md"
+                                                                            borderColor="gray.300"
+                                                                            bg="white"
+                                                                            fontWeight="600"
+                                                                            value={salaryPeriodState.startDate}
+                                                                            onChange={(e) => setSalaryPeriodState(prev => ({ ...prev, startDate: e.target.value }))}
+                                                                        />
+                                                                    </FormControl>
+
+                                                                    <FormControl>
+                                                                        <FormLabel fontSize="10px" fontWeight="700" color="gray.500" mb={1} textTransform="uppercase">
+                                                                            Salary Period End Date
+                                                                        </FormLabel>
+                                                                        <Input
+                                                                            type="date"
+                                                                            size="xs"
+                                                                            h="30px"
+                                                                            borderRadius="md"
+                                                                            borderColor="gray.300"
+                                                                            bg="white"
+                                                                            fontWeight="600"
+                                                                            value={salaryPeriodState.endDate}
+                                                                            onChange={(e) => setSalaryPeriodState(prev => ({ ...prev, endDate: e.target.value }))}
+                                                                        />
+                                                                    </FormControl>
+
+                                                                    <FormControl>
+                                                                        <FormLabel fontSize="10px" fontWeight="700" color="gray.500" mb={1} textTransform="uppercase">
+                                                                            Salary Disbursement Date
+                                                                        </FormLabel>
+                                                                        <Input
+                                                                            type="date"
+                                                                            size="xs"
+                                                                            h="30px"
+                                                                            borderRadius="md"
+                                                                            borderColor="gray.300"
+                                                                            bg="white"
+                                                                            fontWeight="600"
+                                                                            value={salaryPeriodState.disbursementDate}
+                                                                            onChange={(e) => setSalaryPeriodState(prev => ({ ...prev, disbursementDate: e.target.value }))}
+                                                                        />
+                                                                    </FormControl>
+
+                                                                    <FormControl display="flex" flexDirection="column" justifyContent="flex-end">
+                                                                        <Button
+                                                                            size="xs"
+                                                                            h="30px"
+                                                                            colorScheme="blue"
+                                                                            isLoading={isSavingSalaryPeriod}
+                                                                            leftIcon={<Icon as={FaCalendarCheck} />}
+                                                                            onClick={handleSaveSalaryPeriod}
+                                                                        >
+                                                                            Save Period & Date
+                                                                        </Button>
+                                                                    </FormControl>
+                                                                </SimpleGrid>
+
+                                                                {/* Breakdown Summary Grid */}
+                                                                <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                    <Box>
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">TOTAL CYCLE DAYS</Text>
+                                                                        <Text fontSize="md" fontWeight="800" color="gray.800" mt={0.5}>
+                                                                            {periodCalc.totalDays} Days
+                                                                        </Text>
+                                                                        <Text fontSize="2xs" color="gray.500">{periodCalc.startDate} to {periodCalc.endDate}</Text>
+                                                                    </Box>
+
+                                                                    <Box>
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">DEACTIVE DAYS EXCLUDED</Text>
+                                                                        <HStack spacing={1.5} mt={0.5}>
+                                                                            <Text fontSize="md" fontWeight="800" color={periodCalc.deactiveDays > 0 ? "red.600" : "green.600"}>
+                                                                                {periodCalc.deactiveDays} Days
+                                                                            </Text>
+                                                                            {periodCalc.deactiveDays > 0 && (
+                                                                                <Badge colorScheme="red" fontSize="2xs">Excluded</Badge>
+                                                                            )}
+                                                                        </HStack>
+                                                                        <Text fontSize="2xs" color={periodCalc.deactiveDays > 0 ? "red.500" : "gray.500"}>
+                                                                            {periodCalc.deactiveDays > 0 ? "Not considered in payable salary" : "0 deactive days during period"}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box>
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">NET ACTIVE SERVICE DAYS</Text>
+                                                                        <Text fontSize="md" fontWeight="800" color="blue.700" mt={0.5}>
+                                                                            {periodCalc.activeDays} Days
+                                                                        </Text>
+                                                                        <Text fontSize="2xs" color="gray.500">
+                                                                            {periodCalc.totalDays > 0 ? `${((periodCalc.activeDays / periodCalc.totalDays) * 100).toFixed(0)}% active service ratio` : ''}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box>
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">CALCULATED PAYABLE BASE</Text>
+                                                                        <Text fontSize="md" fontWeight="800" color="green.700" mt={0.5}>
+                                                                            ₹{periodCalc.payableSalary.toLocaleString()}
+                                                                        </Text>
+                                                                        <Text fontSize="2xs" color="gray.500">
+                                                                            {periodCalc.deactiveDays > 0 ? `(₹${curSal}/mo / ${periodCalc.totalDays}d) × ${periodCalc.activeDays}d` : `Full base salary`}
+                                                                        </Text>
+                                                                    </Box>
+                                                                </SimpleGrid>
+
+                                                                {periodCalc.deactiveDays > 0 && (
+                                                                    <Box mt={2.5} p={2} bg="orange.50" borderRadius="md" border="1px dashed" borderColor="orange.300">
+                                                                        <Text fontSize="2xs" color="orange.800">
+                                                                            <strong>⚠️ Deactivation Notice:</strong> Employee has {periodCalc.deactiveDays} deactive day(s) inside this evaluation cycle. All deactive dates are excluded from the payable calculation.
+                                                                        </Text>
+                                                                    </Box>
+                                                                )}
+                                                            </Box>
+                                                        </Box>
+
+                                                        {/* ── 3. SALARY LIST (ITEMIZED DISBURSEMENT BREAKDOWN & LEDGER) ── */}
+                                                        <Box bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200" overflow="hidden" shadow="xs">
+                                                            <Box px={3.5} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
+                                                                    <HStack spacing={2}>
+                                                                        <Icon as={FaList} color="gray.600" fontSize="13px" />
+                                                                        <Text fontSize="11px" fontWeight="700" color="gray.800" textTransform="uppercase">
+                                                                            3. Salary List & Disbursement Ledger ({Array.isArray(viewEmployee.monthlyPayments) ? viewEmployee.monthlyPayments.length : 0} Records)
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    <Text fontSize="2xs" color="gray.500">Month-by-month payout breakdown</Text>
+                                                                </Flex>
+                                                            </Box>
+
+                                                            <TableContainer maxH="240px" overflowY="auto">
+                                                                <Table size="xs" variant="simple">
+                                                                    <Thead bg="gray.50" position="sticky" top={0} zIndex={1}>
+                                                                        <Tr>
+                                                                            <Th fontSize="9px" color="gray.500">MONTH / CYCLE</Th>
+                                                                            <Th fontSize="9px" color="gray.500">BASE SALARY</Th>
+                                                                            <Th fontSize="9px" color="gray.500">DAYS (P / A)</Th>
+                                                                            <Th fontSize="9px" color="gray.500">UPAD (ADVANCE)</Th>
+                                                                            <Th fontSize="9px" color="gray.500">INCENTIVE</Th>
+                                                                            <Th fontSize="9px" color="gray.500">NET PAYABLE</Th>
+                                                                            <Th fontSize="9px" color="gray.500">MODE</Th>
+                                                                            <Th fontSize="9px" color="gray.500">PAYOUT STATUS</Th>
+                                                                            <Th fontSize="9px" color="gray.500" textAlign="center">ACTION</Th>
+                                                                        </Tr>
+                                                                    </Thead>
+                                                                    <Tbody>
+                                                                        {/* Current Active Cycle Preview Row if not already saved in monthlyPayments */}
+                                                                        {!Array.isArray(viewEmployee.monthlyPayments) || !viewEmployee.monthlyPayments.some(p => p.month === currentMonthKey) ? (
+                                                                            <Tr bg="blue.50">
+                                                                                <Td fontSize="xs" fontWeight="700" color="blue.800">
+                                                                                    <HStack spacing={1}>
+                                                                                        <Badge colorScheme="blue" fontSize="2xs">Active</Badge>
+                                                                                        <Text>{currentMonthKey}</Text>
+                                                                                    </HStack>
+                                                                                </Td>
+                                                                                <Td fontSize="xs" fontWeight="600">₹{curSal.toLocaleString()}</Td>
+                                                                                <Td fontSize="xs">
+                                                                                    <Text fontSize="2xs" color="gray.600">
+                                                                                        {periodCalc.activeDays}d active {periodCalc.deactiveDays > 0 ? `(${periodCalc.deactiveDays}d deactive excl.)` : ''}
+                                                                                    </Text>
+                                                                                </Td>
+                                                                                <Td fontSize="xs" color="red.600">₹0</Td>
+                                                                                <Td fontSize="xs" color="green.600">₹0</Td>
+                                                                                <Td fontSize="xs" fontWeight="700" color="blue.900">
+                                                                                    ₹{periodCalc.payableSalary.toLocaleString()}
+                                                                                </Td>
+                                                                                <Td fontSize="xs">
+                                                                                    <Badge colorScheme="gray" variant="subtle" fontSize="2xs">
+                                                                                        {viewEmployee.paymentMode || 'Cash'}
+                                                                                    </Badge>
+                                                                                </Td>
+                                                                                <Td fontSize="xs">
+                                                                                    <Badge colorScheme={currentStatus === 'Done' ? 'green' : 'orange'} fontSize="2xs">
+                                                                                        {currentStatus === 'Done' ? '✅ Paid' : '⏳ Pending'}
+                                                                                    </Badge>
+                                                                                </Td>
+                                                                                <Td textAlign="center">
+                                                                                    <Button
+                                                                                        size="2xs"
+                                                                                        colorScheme={currentStatus === 'Done' ? 'orange' : 'green'}
+                                                                                        variant="solid"
+                                                                                        h="20px"
+                                                                                        fontSize="9px"
+                                                                                        px={2}
+                                                                                        isLoading={isUpdatingCurrentPayout}
+                                                                                        onClick={() => handleToggleCurrentMonthPayout(currentStatus, currentMode)}
+                                                                                    >
+                                                                                        {currentStatus === 'Done' ? 'Set Pending' : 'Mark Paid'}
+                                                                                    </Button>
+                                                                                </Td>
+                                                                            </Tr>
+                                                                        ) : null}
+
+                                                                        {/* Existing Historical Rows */}
+                                                                        {Array.isArray(viewEmployee.monthlyPayments) && viewEmployee.monthlyPayments.length > 0 ? (
+                                                                            viewEmployee.monthlyPayments.map((p, pIdx) => {
+                                                                                const base = Number(viewEmployee.salary || 0);
+                                                                                const present = p.presentDays !== null && p.presentDays !== undefined ? Number(p.presentDays) : null;
+                                                                                const upad = Number(p.upad || 0);
+                                                                                const incentive = Number(p.incentive || 0);
+                                                                                let calcNet = 0;
+                                                                                if (p.payableAmount !== undefined && p.payableAmount !== null) {
+                                                                                    calcNet = Number(p.payableAmount);
+                                                                                } else if (present !== null) {
+                                                                                    calcNet = Math.round((base / 30) * present) - upad + incentive;
+                                                                                } else {
+                                                                                    calcNet = base - upad + incentive;
+                                                                                }
+                                                                                const isPaid = p.paymentStatus === 'Done';
+
+                                                                                return (
+                                                                                    <Tr key={pIdx} _hover={{ bg: "gray.50" }}>
+                                                                                        <Td fontSize="xs" fontWeight="700" color="gray.800">
+                                                                                            {p.month}
+                                                                                        </Td>
+                                                                                        <Td fontSize="xs" fontWeight="600">₹{base.toLocaleString()}</Td>
+                                                                                        <Td fontSize="xs">
+                                                                                            {present !== null ? (
+                                                                                                <HStack spacing={1} fontSize="2xs">
+                                                                                                    <Text color="green.700" fontWeight="600">{present} P</Text>
+                                                                                                    <Text color="gray.400">/</Text>
+                                                                                                    <Text color="red.600" fontWeight="600">{p.absentDays || 0} A</Text>
+                                                                                                </HStack>
+                                                                                            ) : (
+                                                                                                <Text fontSize="2xs" color="gray.500">Standard (30d)</Text>
+                                                                                            )}
+                                                                                        </Td>
+                                                                                        <Td fontSize="xs" color="red.600">
+                                                                                            {upad > 0 ? `-₹${upad.toLocaleString()}` : '₹0'}
+                                                                                        </Td>
+                                                                                        <Td fontSize="xs" color="green.600">
+                                                                                            {incentive > 0 ? `+₹${incentive.toLocaleString()}` : '₹0'}
+                                                                                        </Td>
+                                                                                        <Td fontSize="xs" fontWeight="700" color="gray.900">
+                                                                                            ₹{Math.max(0, calcNet).toLocaleString()}
+                                                                                        </Td>
+                                                                                        <Td fontSize="xs">
+                                                                                            <Badge colorScheme="gray" variant="subtle" fontSize="2xs">
+                                                                                                {p.paymentMode || 'Cash'}
+                                                                                            </Badge>
+                                                                                        </Td>
+                                                                                        <Td fontSize="xs">
+                                                                                            <Badge colorScheme={isPaid ? 'green' : 'orange'} fontSize="2xs">
+                                                                                                {isPaid ? '✅ Paid' : '⏳ Pending'}
+                                                                                            </Badge>
+                                                                                        </Td>
+                                                                                        <Td textAlign="center">
+                                                                                            <Button
+                                                                                                size="2xs"
+                                                                                                colorScheme={isPaid ? 'orange' : 'green'}
+                                                                                                variant="ghost"
+                                                                                                h="20px"
+                                                                                                fontSize="9px"
+                                                                                                px={1.5}
+                                                                                                onClick={async () => {
+                                                                                                    const nextStat = isPaid ? 'Pending' : 'Done';
+                                                                                                    try {
+                                                                                                        const res = await api.put(`/employee-master/${viewEmployee._id}/monthly-payment`, {
+                                                                                                            month: p.month,
+                                                                                                            paymentStatus: nextStat
+                                                                                                        });
+                                                                                                        if (res.data.success) {
+                                                                                                            setViewEmployee(prev => {
+                                                                                                                const updated = prev.monthlyPayments.map((item, idx) => idx === pIdx ? { ...item, paymentStatus: nextStat } : item);
+                                                                                                                return { ...prev, monthlyPayments: updated };
+                                                                                                            });
+                                                                                                            fetchEmployees();
+                                                                                                        }
+                                                                                                    } catch (err) {}
+                                                                                                }}
+                                                                                            >
+                                                                                                {isPaid ? 'Set Pending' : 'Set Paid'}
+                                                                                            </Button>
+                                                                                        </Td>
+                                                                                    </Tr>
+                                                                                );
+                                                                            })
+                                                                        ) : null}
+                                                                    </Tbody>
+                                                                </Table>
+                                                            </TableContainer>
+                                                        </Box>
+
+                                                        {/* ── 5. INCREMENT (SALARY INCREMENT DATE, REVISION & ADDED TO PREVIOUS) ── */}
+                                                        <Box bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200" overflow="hidden" shadow="xs">
+                                                            <Box px={3.5} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
+                                                                    <HStack spacing={2}>
+                                                                        <Icon as={FaChartLine} color="purple.600" fontSize="13px" />
+                                                                        <Text fontSize="11px" fontWeight="700" color="gray.800" textTransform="uppercase">
+                                                                            5. Salary Increment & Revision Breakdown
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    <Button
+                                                                        size="2xs"
+                                                                        colorScheme="purple"
+                                                                        leftIcon={<Icon as={FaPlus} />}
+                                                                        h="22px"
+                                                                        fontSize="10px"
+                                                                        px={2.5}
+                                                                        onClick={() => {
+                                                                            setIncrementForm({
+                                                                                newSalary: '',
+                                                                                incrementAmount: '',
+                                                                                incrementDate: new Date().toISOString().split('T')[0],
+                                                                                remarks: ''
+                                                                            });
+                                                                            setIsIncrementModalOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        Log Increment
+                                                                    </Button>
+                                                                </Flex>
+                                                            </Box>
+
+                                                            <Box p={3.5}>
+                                                                <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mb={3}>
+                                                                    <Box p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">PREVIOUS SALARY</Text>
+                                                                        <Text fontSize="sm" fontWeight="700" color="gray.700" mt={0.5}>
+                                                                            ₹{prevSal > 0 ? prevSal.toLocaleString() : '0'}
+                                                                        </Text>
+                                                                        <Text fontSize="2xs" color="gray.400">Before last revision</Text>
+                                                                    </Box>
+
+                                                                    <Box p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">CURRENT REVISED SALARY</Text>
+                                                                        <Text fontSize="sm" fontWeight="800" color="gray.900" mt={0.5}>
+                                                                            ₹{curSal.toLocaleString()}
+                                                                        </Text>
+                                                                        <Text fontSize="2xs" color="gray.400">Active package</Text>
+                                                                    </Box>
+
+                                                                    <Box p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">SALARY ADDED</Text>
+                                                                        <Text fontSize="sm" fontWeight="800" color={incrementDiff > 0 ? "green.600" : "gray.600"} mt={0.5}>
+                                                                            {incrementDiff > 0 ? `+₹${incrementDiff.toLocaleString()}` : '₹0'}
+                                                                        </Text>
+                                                                        <Text fontSize="2xs" color="gray.500">
+                                                                            {incrementDiff > 0 ? `+${incrementPercent}% increase` : 'No increase logged yet'}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">INCREMENT DATE</Text>
+                                                                        <Text fontSize="sm" fontWeight="700" color="purple.700" mt={0.5}>
+                                                                            {viewEmployee.salaryIncrementDate || 'Not recorded'}
+                                                                        </Text>
+                                                                        <Text fontSize="2xs" color="gray.400">Exact revision date</Text>
+                                                                    </Box>
+                                                                </SimpleGrid>
+
+                                                                {/* Salary Revision History Table */}
+                                                                {Array.isArray(viewEmployee.salaryHistory) && viewEmployee.salaryHistory.length > 0 ? (
+                                                                    <Box border="1px solid" borderColor="gray.200" borderRadius="md" overflow="hidden">
+                                                                        <TableContainer maxH="160px" overflowY="auto">
+                                                                            <Table size="xs" variant="simple">
+                                                                                <Thead bg="gray.50">
+                                                                                    <Tr>
+                                                                                        <Th fontSize="9px">REVISION DATE</Th>
+                                                                                        <Th fontSize="9px">PREVIOUS</Th>
+                                                                                        <Th fontSize="9px">REVISED NEW</Th>
+                                                                                        <Th fontSize="9px">ADDED SALARY</Th>
+                                                                                        <Th fontSize="9px">GROWTH %</Th>
+                                                                                        <Th fontSize="9px">REMARKS</Th>
+                                                                                    </Tr>
+                                                                                </Thead>
+                                                                                <Tbody>
+                                                                                    {viewEmployee.salaryHistory.map((h, hIdx) => (
+                                                                                        <Tr key={hIdx}>
+                                                                                            <Td fontSize="xs" fontWeight="700">{h.date}</Td>
+                                                                                            <Td fontSize="xs">₹{Number(h.previousSalary || 0).toLocaleString()}</Td>
+                                                                                            <Td fontSize="xs" fontWeight="700" color="purple.800">₹{Number(h.newSalary || 0).toLocaleString()}</Td>
+                                                                                            <Td fontSize="xs" fontWeight="700" color="green.700">+₹{Number(h.incrementAmount || 0).toLocaleString()}</Td>
+                                                                                            <Td fontSize="xs">
+                                                                                                <Badge colorScheme="green" fontSize="2xs">+{h.percentage}%</Badge>
+                                                                                            </Td>
+                                                                                            <Td fontSize="2xs" color="gray.600">{h.remarks || '-'}</Td>
+                                                                                        </Tr>
+                                                                                    ))}
+                                                                                </Tbody>
+                                                                            </Table>
+                                                                        </TableContainer>
+                                                                    </Box>
+                                                                ) : (
+                                                                    <Text fontSize="2xs" color="gray.500">No previous salary increment revisions recorded. Use "Log Increment" to record revisions.</Text>
+                                                                )}
+                                                            </Box>
+                                                        </Box>
+
+                                                        {/* ── 6. MONTHLY SALARY PAYOUT STATUS & DETAILS ── */}
+                                                        <Box bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200" overflow="hidden" shadow="xs">
+                                                            <Box px={3.5} py={2.5} bg="gray.50" borderBottom="1px solid" borderColor="gray.200">
+                                                                <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
+                                                                    <HStack spacing={2}>
+                                                                        <Icon as={FaCalendarCheck} color="green.600" fontSize="13px" />
+                                                                        <Text fontSize="11px" fontWeight="700" color="gray.800" textTransform="uppercase">
+                                                                            6. Current Month Payout Status & Disbursal Controls ({currentMonthKey})
+                                                                        </Text>
+                                                                    </HStack>
+                                                                    <Badge colorScheme={currentStatus === 'Done' ? 'green' : 'orange'} fontSize="2xs" px={2.5} py={0.5} borderRadius="full">
+                                                                        {currentStatus === 'Done' ? '✅ Status: Paid (Done)' : '⏳ Status: Pending'}
+                                                                    </Badge>
+                                                                </Flex>
+                                                            </Box>
+
+                                                            <Box p={3.5}>
+                                                                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} mb={3}>
+                                                                    <Box p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">NET CURRENT PAYABLE</Text>
+                                                                        <Heading size="md" color="gray.900" mt={1}>
+                                                                            ₹{currentNetPayable.toLocaleString()}
+                                                                        </Heading>
+                                                                        <Text fontSize="2xs" color="gray.500" mt={0.5}>
+                                                                            Base (deactive excluded) {currentUpad > 0 ? `- ₹${currentUpad} upad` : ''} {currentIncentive > 0 ? `+ ₹${currentIncentive} bonus` : ''}
+                                                                        </Text>
+                                                                    </Box>
+
+                                                                    <Box p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">PAYMENT DISBURSEMENT MODE</Text>
+                                                                        <Select
+                                                                            size="xs"
+                                                                            h="28px"
+                                                                            mt={1}
+                                                                            fontWeight="700"
+                                                                            borderRadius="md"
+                                                                            borderColor="gray.300"
+                                                                            bg="white"
+                                                                            value={currentMode}
+                                                                            onChange={async (e) => {
+                                                                                const newMode = e.target.value;
+                                                                                try {
+                                                                                    const res = await api.put(`/employee-master/${viewEmployee._id}/monthly-payment`, {
+                                                                                        month: currentMonthKey,
+                                                                                        paymentMode: newMode
+                                                                                    });
+                                                                                    if (res.data.success) {
+                                                                                        setViewEmployee(prev => {
+                                                                                            const payments = Array.isArray(prev.monthlyPayments) ? [...prev.monthlyPayments] : [];
+                                                                                            const idx = payments.findIndex(p => p.month === currentMonthKey);
+                                                                                            if (idx > -1) payments[idx] = { ...payments[idx], paymentMode: newMode };
+                                                                                            else payments.push({ month: currentMonthKey, paymentMode: newMode, paymentStatus: currentStatus });
+                                                                                            return { ...prev, monthlyPayments: payments, paymentMode: newMode };
+                                                                                        });
+                                                                                        fetchEmployees();
+                                                                                    }
+                                                                                } catch (err) {}
+                                                                            }}
+                                                                        >
+                                                                            <option value="Bank">Bank Transfer (NEFT/IMPS)</option>
+                                                                            <option value="Cash">Cash Handover</option>
+                                                                            <option value="UPI">UPI / GPay / PhonePe</option>
+                                                                            <option value="Cheque">Bank Cheque</option>
+                                                                        </Select>
+                                                                        <Text fontSize="2xs" color="gray.400" mt={0.5}>Change mode instantly</Text>
+                                                                    </Box>
+
+                                                                    <Box p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                        <Text fontSize="10px" color="gray.500" fontWeight="700">1-CLICK STATUS ACTION</Text>
+                                                                        <Button
+                                                                            size="xs"
+                                                                            h="28px"
+                                                                            mt={1}
+                                                                            w="100%"
+                                                                            colorScheme={currentStatus === 'Done' ? 'orange' : 'green'}
+                                                                            variant={currentStatus === 'Done' ? 'outline' : 'solid'}
+                                                                            isLoading={isUpdatingCurrentPayout}
+                                                                            leftIcon={<Icon as={currentStatus === 'Done' ? FaTimes : FaCheckCircle} />}
+                                                                            onClick={() => handleToggleCurrentMonthPayout(currentStatus, currentMode)}
+                                                                        >
+                                                                            {currentStatus === 'Done' ? 'Change to Pending' : 'Mark Month as Paid'}
+                                                                        </Button>
+                                                                        <Text fontSize="2xs" color="gray.400" mt={0.5}>
+                                                                            {currentStatus === 'Done' ? 'Marked complete for this cycle' : 'Click when salary is disbursed'}
+                                                                        </Text>
+                                                                    </Box>
+                                                                </SimpleGrid>
+
+                                                                {/* Bank Reference Bar */}
+                                                                <Flex p={2.5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" justify="space-between" align="center" wrap="wrap" gap={2}>
+                                                                    <HStack spacing={3} fontSize="xs">
+                                                                        <HStack spacing={1}>
+                                                                            <Text fontSize="10px" color="gray.500" fontWeight="700">BANK:</Text>
+                                                                            <Text fontWeight="700" color="gray.800">{viewEmployee.bankDetails?.bankName || 'Not Set'}</Text>
+                                                                        </HStack>
+                                                                        <Text color="gray.300">•</Text>
+                                                                        <HStack spacing={1}>
+                                                                            <Text fontSize="10px" color="gray.500" fontWeight="700">A/C NO:</Text>
+                                                                            <Text fontWeight="700" color="gray.800">{viewEmployee.bankDetails?.accountNumber || 'Not Set'}</Text>
+                                                                        </HStack>
+                                                                        <Text color="gray.300">•</Text>
+                                                                        <HStack spacing={1}>
+                                                                            <Text fontSize="10px" color="gray.500" fontWeight="700">IFSC:</Text>
+                                                                            <Text fontWeight="700" color="blue.700">{viewEmployee.bankDetails?.ifscCode || 'Not Set'}</Text>
+                                                                        </HStack>
+                                                                    </HStack>
+                                                                    <Button
+                                                                        size="2xs"
+                                                                        variant="link"
+                                                                        colorScheme="blue"
+                                                                        onClick={() => setActiveProfileTab('bank')}
+                                                                    >
+                                                                        Open Bank Tab →
+                                                                    </Button>
+                                                                </Flex>
+                                                            </Box>
+                                                        </Box>
+                                                    </VStack>
+                                                );
+                                            })()}
+                                        </Box>
                                     )}
                                 </ModalBody>
-                                <ModalFooter bg="gray.50">
-                                    <Button colorScheme="blue" px={10} borderRadius="full" shadow="lg" onClick={() => setViewEmployee(null)}>Close Profile</Button>
+                                <ModalFooter bg="gray.50" borderTop="1px solid" borderColor="gray.200">
+                                    <HStack spacing={3}>
+                                        <Button
+                                            size="sm"
+                                            colorScheme="blue"
+                                            variant="outline"
+                                            leftIcon={<Icon as={FaEdit} />}
+                                            borderRadius="xl"
+                                            onClick={() => {
+                                                const idToEdit = viewEmployee?._id;
+                                                setViewEmployee(null);
+                                                if (idToEdit) handleSelectEmployee({ target: { value: idToEdit } });
+                                            }}
+                                        >
+                                            Edit Employee
+                                        </Button>
+                                        <Button colorScheme="blue" size="sm" px={6} borderRadius="xl" shadow="md" onClick={() => setViewEmployee(null)}>
+                                            Close
+                                        </Button>
+                                    </HStack>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
+
+                        {/* Quick Add Company Modal */}
+                        <Modal isOpen={isAddCompanyOpen} onClose={() => setIsAddCompanyOpen(false)} isCentered size="md">
+                            <ModalOverlay backdropFilter="blur(4px)" />
+                            <ModalContent borderRadius="2xl">
+                                <ModalHeader borderBottom="1px solid" borderColor="gray.100" py={3}>
+                                    <HStack spacing={2}>
+                                        <Icon as={FaBuilding} color="blue.600" />
+                                        <Text fontSize="md" fontWeight="bold">Add New Company / Entity</Text>
+                                    </HStack>
+                                </ModalHeader>
+                                <ModalCloseButton />
+                                <ModalBody py={4}>
+                                    <FormControl isRequired>
+                                        <FormLabel fontSize="xs" fontWeight="bold">Company Name</FormLabel>
+                                        <Input
+                                            placeholder="e.g. Unique Precision Instruments Pvt Ltd"
+                                            value={newCompanyName}
+                                            onChange={(e) => setNewCompanyName(e.target.value)}
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleAddCompany();
+                                                }
+                                            }}
+                                        />
+                                    </FormControl>
+                                </ModalBody>
+                                <ModalFooter borderTop="1px solid" borderColor="gray.100" py={3}>
+                                    <Button variant="ghost" size="sm" mr={2} onClick={() => setIsAddCompanyOpen(false)}>Cancel</Button>
+                                    <Button colorScheme="blue" size="sm" onClick={handleAddCompany}>Add &amp; Select Company</Button>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
+
+                        {/* Quick Add Branch Modal */}
+                        <Modal isOpen={isAddBranchOpen} onClose={() => setIsAddBranchOpen(false)} isCentered size="md">
+                            <ModalOverlay backdropFilter="blur(4px)" />
+                            <ModalContent borderRadius="2xl">
+                                <ModalHeader borderBottom="1px solid" borderColor="gray.100" py={3}>
+                                    <HStack spacing={2}>
+                                        <Icon as={FaCodeBranch} color="purple.600" />
+                                        <Text fontSize="md" fontWeight="bold">Add New Branch / Location</Text>
+                                    </HStack>
+                                </ModalHeader>
+                                <ModalCloseButton />
+                                <ModalBody py={4}>
+                                    <FormControl isRequired>
+                                        <FormLabel fontSize="xs" fontWeight="bold">Branch Name</FormLabel>
+                                        <Input
+                                            placeholder="e.g. Surat Branch / Site Office"
+                                            value={newBranchName}
+                                            onChange={(e) => setNewBranchName(e.target.value)}
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleAddBranch();
+                                                }
+                                            }}
+                                        />
+                                    </FormControl>
+                                </ModalBody>
+                                <ModalFooter borderTop="1px solid" borderColor="gray.100" py={3}>
+                                    <Button variant="ghost" size="sm" mr={2} onClick={() => setIsAddBranchOpen(false)}>Cancel</Button>
+                                    <Button colorScheme="purple" size="sm" onClick={handleAddBranch}>Add &amp; Select Branch</Button>
                                 </ModalFooter>
                             </ModalContent>
                         </Modal>
@@ -2723,6 +6066,125 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                 </ModalBody>
                                 <ModalFooter bg="gray.50" justify="flex-end">
                                     <Button colorScheme="purple" px={10} borderRadius="full" shadow="lg" onClick={() => setSelectedReportEmployee(null)}>Close</Button>
+                                </ModalFooter>
+                            </ModalContent>
+                        </Modal>
+
+                        {/* Salary Revision / Increment Modal */}
+                        <Modal isOpen={isIncrementModalOpen} onClose={() => setIsIncrementModalOpen(false)} isCentered size="md">
+                            <ModalOverlay backdropFilter="blur(4px)" />
+                            <ModalContent borderRadius="xl">
+                                <ModalHeader borderBottom="1px solid" borderColor="gray.100" py={3}>
+                                    <HStack spacing={2}>
+                                        <Icon as={FaChartLine} color="blue.600" />
+                                        <Text fontSize="md" fontWeight="bold">Revise Salary / Add Increment</Text>
+                                    </HStack>
+                                </ModalHeader>
+                                <ModalCloseButton />
+                                <ModalBody py={4}>
+                                    {viewEmployee && (
+                                        <VStack spacing={3.5} align="stretch">
+                                            <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                <HStack justify="space-between">
+                                                    <Text fontSize="xs" color="gray.600">Current Monthly Salary:</Text>
+                                                    <Text fontSize="sm" fontWeight="800" color="gray.800">
+                                                        ₹{parseFloat(viewEmployee.salary || 0).toLocaleString()}
+                                                    </Text>
+                                                </HStack>
+                                            </Box>
+
+                                            <FormControl isRequired>
+                                                <FormLabel fontSize="xs" fontWeight="bold">New Monthly Salary (₹)</FormLabel>
+                                                <Input
+                                                    type="number"
+                                                    size="sm"
+                                                    borderRadius="md"
+                                                    placeholder="e.g. 25000"
+                                                    value={incrementForm.newSalary}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const currSal = parseFloat(viewEmployee.salary || 0);
+                                                        const newSal = parseFloat(val);
+                                                        const diff = !isNaN(newSal) ? newSal - currSal : '';
+                                                        setIncrementForm(prev => ({
+                                                            ...prev,
+                                                            newSalary: val,
+                                                            incrementAmount: diff > 0 ? diff : ''
+                                                        }));
+                                                    }}
+                                                />
+                                            </FormControl>
+
+                                            <FormControl>
+                                                <FormLabel fontSize="xs" fontWeight="bold">Or Salary Added to Previous (+₹)</FormLabel>
+                                                <Input
+                                                    type="number"
+                                                    size="sm"
+                                                    borderRadius="md"
+                                                    placeholder="e.g. 5000"
+                                                    value={incrementForm.incrementAmount}
+                                                    onChange={(e) => {
+                                                        const diff = e.target.value;
+                                                        const currSal = parseFloat(viewEmployee.salary || 0);
+                                                        const addAmount = parseFloat(diff);
+                                                        const newSal = !isNaN(addAmount) ? currSal + addAmount : '';
+                                                        setIncrementForm(prev => ({
+                                                            ...prev,
+                                                            incrementAmount: diff,
+                                                            newSalary: newSal !== '' ? newSal : ''
+                                                        }));
+                                                    }}
+                                                />
+                                            </FormControl>
+
+                                            {/* Live Preview Banner */}
+                                            {incrementForm.newSalary && parseFloat(incrementForm.newSalary) > parseFloat(viewEmployee.salary || 0) && (
+                                                <Box p={2.5} bg="green.50" borderRadius="md" border="1px solid" borderColor="green.200">
+                                                    <Text fontSize="xs" color="green.900" fontWeight="bold">
+                                                        📈 ₹{parseFloat(viewEmployee.salary || 0).toLocaleString()} ➔ ₹{parseFloat(incrementForm.newSalary).toLocaleString()} (+₹{(parseFloat(incrementForm.newSalary) - parseFloat(viewEmployee.salary || 0)).toLocaleString()})
+                                                    </Text>
+                                                    <Text fontSize="2xs" color="green.700">
+                                                        That is a {(((parseFloat(incrementForm.newSalary) - parseFloat(viewEmployee.salary || 0)) / parseFloat(viewEmployee.salary || 1)) * 100).toFixed(1)}% salary increment
+                                                    </Text>
+                                                </Box>
+                                            )}
+
+                                            <FormControl isRequired>
+                                                <FormLabel fontSize="xs" fontWeight="bold">Effective Increment Date</FormLabel>
+                                                <Input
+                                                    type="date"
+                                                    size="sm"
+                                                    borderRadius="md"
+                                                    value={incrementForm.incrementDate}
+                                                    onChange={(e) => setIncrementForm(prev => ({ ...prev, incrementDate: e.target.value }))}
+                                                />
+                                            </FormControl>
+
+                                            <FormControl>
+                                                <FormLabel fontSize="xs" fontWeight="bold">Reason / Remarks</FormLabel>
+                                                <Input
+                                                    size="sm"
+                                                    borderRadius="md"
+                                                    placeholder="e.g. Annual Appraisal, Promotion, Performance Bonus"
+                                                    value={incrementForm.remarks}
+                                                    onChange={(e) => setIncrementForm(prev => ({ ...prev, remarks: e.target.value }))}
+                                                />
+                                            </FormControl>
+                                        </VStack>
+                                    )}
+                                </ModalBody>
+                                <ModalFooter borderTop="1px solid" borderColor="gray.100" py={3}>
+                                    <Button variant="ghost" size="sm" mr={2} onClick={() => setIsIncrementModalOpen(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        colorScheme="blue"
+                                        size="sm"
+                                        isLoading={isSubmittingIncrement}
+                                        onClick={handleAddSalaryIncrement}
+                                    >
+                                        Save Increment
+                                    </Button>
                                 </ModalFooter>
                             </ModalContent>
                         </Modal>

@@ -853,7 +853,7 @@ const AdminProducts = () => {
             boxShadow="0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
         >
             <ModulePermissionBar moduleGroupKey="productsGroup" />
-            <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={10} direction={{ base: 'column', md: 'row' }} gap={6}>
+            <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={{ base: 4, md: 5 }} direction={{ base: 'column', md: 'row' }} gap={4}>
                 <Stack spacing={1}>
                     <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="800" bgGradient="linear(to-r, brand.500, brand.700)" bgClip="text">
                         Product Inventory

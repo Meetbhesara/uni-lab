@@ -13,6 +13,8 @@ const PARENT_PERMISSIONS = {
     'incomingEnquiries': 'enquiries',
     'outboundQuotations': 'enquiries',
     'processedHistory': 'enquiries',
+    'whatsappLogs': 'enquiries',
+    'docWhatsapp': 'enquiries',
 
     // Vehicle Master
     'vehicleMaster_form': 'vehicleMaster',

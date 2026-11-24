@@ -11,7 +11,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
-import { FaPhone, FaEnvelope, FaShoppingCart, FaTrash, FaBars, FaSearch, FaYoutube, FaInstagram } from 'react-icons/fa';
+import { FaPhone, FaEnvelope, FaShoppingCart, FaTrash, FaBars, FaSearch, FaYoutube, FaInstagram, FaWhatsapp } from 'react-icons/fa';
 import {
     FiMoreVertical, FiLogIn, FiLogOut, FiShield, FiUser, FiLock,
     FiPhone, FiMail, FiCheckCircle, FiEye, FiEyeOff, FiArrowLeft, FiKey, FiGrid,

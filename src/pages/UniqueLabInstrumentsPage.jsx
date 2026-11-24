@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../utils/permissions';
 import AdminProducts from './admin/AdminProducts';
 import AdminEnquiries from './admin/AdminEnquiries';
+import CompanyDocShareWidget from '../components/admin/CompanyDocShareWidget';
 
 const UniqueLabInstrumentsPage = () => {
     const { user, loading } = useAuth();
@@ -554,6 +555,9 @@ const UniqueLabInstrumentsPage = () => {
                     </Box>
                 </Box>
             </Box>
+
+            {/* Quick Action: Share Company Documents (WhatsApp) */}
+            {user?.isAdmin && <CompanyDocShareWidget />}
         </Box>
     );
 };

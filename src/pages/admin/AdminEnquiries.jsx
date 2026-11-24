@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner, Heading, Tooltip, Tag, TagLabel, TagLeftIcon, Avatar, AvatarBadge } from '@chakra-ui/react';
-import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, FiEdit, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Text, Tabs, TabList, TabPanels, Tab, TabPanel, Input, FormControl, FormLabel, Flex, VStack, HStack, Divider, NumberInput, NumberInputField, Image, Textarea, Checkbox, Stack, IconButton, SimpleGrid, useDisclosure, Select, InputGroup, InputLeftElement, Spinner, Heading, Tooltip, Tag, TagLabel, TagLeftIcon, Avatar, AvatarBadge, Icon } from '@chakra-ui/react';
+import { FiPlus, FiPrinter, FiTrash, FiDownload, FiSearch, FiCheck, FiX, FiEye, FiEdit, FiChevronLeft, FiChevronRight, FiLock } from 'react-icons/fi';
 import { FaWhatsapp, FaChevronLeft, FaClock, FaBell, FaHistory, FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
 import { DEMO_ENQUIRIES, DEMO_QUOTATIONS } from '../../data/mockData';
 import ModulePermissionBar from '../../components/admin/ModulePermissionBar';
 import { hasPermission } from '../../utils/permissions';
@@ -14,6 +15,7 @@ const AdminEnquiries = () => {
     const [quotations, setQuotations] = useState([]); // Active (Sent)
     const [processedQuotations, setProcessedQuotations] = useState([]); // Done/Rejected
     const [whatsappLogs, setWhatsappLogs] = useState([]); // WhatsApp type enquiries
+    const [docWhatsappLogs, setDocWhatsappLogs] = useState([]); // Company Doc WhatsApp type enquiries
     const [selectedEnquiry, setSelectedEnquiry] = useState(null);
     const [selectedQuotation, setSelectedQuotation] = useState(null);
     const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
@@ -24,6 +26,7 @@ const AdminEnquiries = () => {
     const [loadingQuotations, setLoadingQuotations] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [loadingWhatsapp, setLoadingWhatsapp] = useState(false);
+    const [loadingDocWhatsapp, setLoadingDocWhatsapp] = useState(false);
     const [loadingProducts, setLoadingProducts] = useState(true);
 
     // ── Request tracking & debounce refs to avoid race conditions ─────────────
@@ -31,11 +34,13 @@ const AdminEnquiries = () => {
     const quotationReqIdRef = useRef(0);
     const historyReqIdRef = useRef(0);
     const whatsappReqIdRef = useRef(0);
+    const docWhatsappReqIdRef = useRef(0);
     const searchDebounceRef = useRef({
         enquiry: null,
         active: null,
         history: null,
-        whatsapp: null
+        whatsapp: null,
+        docWhatsapp: null
     });
 
     // ── Server-side totals (for pagination controls) ──────────────────────────
@@ -43,17 +48,20 @@ const AdminEnquiries = () => {
     const [quotationsTotal, setQuotationsTotal] = useState(0);
     const [historyTotal, setHistoryTotal] = useState(0);
     const [whatsappTotal, setWhatsappTotal] = useState(0);
+    const [docWhatsappTotal, setDocWhatsappTotal] = useState(0);
 
     // ── Search & Pagination States ────────────────────────────────────────────
     const [enquirySearch, setEnquirySearch] = useState('');
     const [activeSearch, setActiveSearch] = useState('');
     const [historySearch, setHistorySearch] = useState('');
     const [whatsappSearch, setWhatsappSearch] = useState('');
+    const [docWhatsappSearch, setDocWhatsappSearch] = useState('');
 
     const [enquiryPage, setEnquiryPage] = useState(1);
     const [activePage, setActivePage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
     const [whatsappPage, setWhatsappPage] = useState(1);
+    const [docWhatsappPage, setDocWhatsappPage] = useState(1);
     const ITEMS_PER_PAGE = 20;
 
     // Status Confirmation State
@@ -162,9 +170,46 @@ const AdminEnquiries = () => {
         { id: "SAFETY PRODUCTS", title: "Safety Products" }
     ];
 
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const { user: authUser } = useAuth();
+    const localUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const user = authUser || localUser;
     const isSuperAdmin = user.isSuperAdmin || user.email === 'iatulkanak@gmail.com';
     const canShowDealerPrice = hasPermission(user, 'showDealerPrice', 'read');
+
+    // Permissions for Enquiries Module
+    const canReadParentEnquiries = hasPermission(user, 'enquiries', 'read');
+    const canWriteParentEnquiries = hasPermission(user, 'enquiries', 'write');
+
+    const canReadIncoming = hasPermission(user, 'incomingEnquiries', 'read') ||
+        (user?.permissions?.incomingEnquiries === undefined && canReadParentEnquiries);
+    const canWriteIncoming = hasPermission(user, 'incomingEnquiries', 'write') ||
+        (user?.permissions?.incomingEnquiries === undefined && canWriteParentEnquiries);
+
+    const canReadQuotations = hasPermission(user, 'outboundQuotations', 'read') ||
+        (user?.permissions?.outboundQuotations === undefined && canReadParentEnquiries);
+    const canWriteQuotations = hasPermission(user, 'outboundQuotations', 'write') ||
+        (user?.permissions?.outboundQuotations === undefined && canWriteParentEnquiries);
+
+    const canReadHistory = hasPermission(user, 'processedHistory', 'read') ||
+        (user?.permissions?.processedHistory === undefined && canReadParentEnquiries);
+    const canWriteHistory = hasPermission(user, 'processedHistory', 'write') ||
+        (user?.permissions?.processedHistory === undefined && canWriteParentEnquiries);
+
+    const canReadWhatsapp = hasPermission(user, 'whatsappLogs', 'read') ||
+        (user?.permissions?.whatsappLogs === undefined && canReadParentEnquiries);
+    const canWriteWhatsapp = hasPermission(user, 'whatsappLogs', 'write') ||
+        (user?.permissions?.whatsappLogs === undefined && canWriteParentEnquiries);
+
+    const canReadDocWhatsapp = hasPermission(user, 'docWhatsapp', 'read') ||
+        (user?.permissions?.docWhatsapp === undefined && canReadParentEnquiries);
+
+    const visibleTabs = [
+        canReadIncoming && { id: 'incoming', label: 'Incoming Enquiries' },
+        canReadQuotations && { id: 'quotations', label: 'Outbound Quotations' },
+        canReadHistory && { id: 'history', label: 'Processed (History)' },
+        canReadWhatsapp && { id: 'whatsapp', label: 'WhatsApp Logs' },
+        canReadDocWhatsapp && { id: 'docWhatsapp', label: 'Doc WhatsApp' },
+    ].filter(Boolean);
 
 
     const toast = useToast();
@@ -235,6 +280,31 @@ const AdminEnquiries = () => {
         }
     };
 
+    // ── 5. Doc WhatsApp Logs — type=doc_whatsapp ─────────────────────────────
+    const fetchDocWhatsapp = async (page = 1, search = '') => {
+        const reqId = ++docWhatsappReqIdRef.current;
+        try {
+            setLoadingDocWhatsapp(true);
+            const res = await api.get('/enquiries', {
+                params: { type: 'doc_whatsapp', page, limit: ITEMS_PER_PAGE, search: search || undefined }
+            });
+            if (reqId !== docWhatsappReqIdRef.current) return;
+            const { data, total, page: serverPage } = normalisePaged(res.data);
+            setDocWhatsappLogs(data);
+            setDocWhatsappTotal(total);
+            if (serverPage) setDocWhatsappPage(serverPage);
+        } catch (error) {
+            if (reqId !== docWhatsappReqIdRef.current) return;
+            console.error('fetchDocWhatsapp failed', error);
+            setDocWhatsappLogs([]);
+            setDocWhatsappTotal(0);
+        } finally {
+            if (reqId === docWhatsappReqIdRef.current) {
+                setLoadingDocWhatsapp(false);
+            }
+        }
+    };
+
     // ── 3. Outgoing Quotations — status=Sent ─────────────────────────────────
     const fetchQuotations = async (page = 1, search = '') => {
         const reqId = ++quotationReqIdRef.current;
@@ -300,31 +370,58 @@ const AdminEnquiries = () => {
         }
     };
 
-    // ── Active tab index (0=Enquiries,1=Quotations,2=History,3=WhatsApp) ──────
+    // ── Active tab index based on visibleTabs ────────────────────────────────
     const [activeTabIndex, setActiveTabIndex] = useState(0);
 
-    // ── Mount: only fetch Tab 1 (default visible) + products ─────────────────
-    // Other tabs load lazily when first selected (see handleTabChange).
+    // ── Mount: fetch first visible tab + products + docWhatsapp count ────────
     useEffect(() => {
-        fetchEnquiries(1, '');
+        if (visibleTabs.length > 0) {
+            const first = visibleTabs[0];
+            if (first.id === 'incoming') fetchEnquiries(1, '');
+            else if (first.id === 'quotations') fetchQuotations(1, '');
+            else if (first.id === 'history') fetchHistory(1, '');
+            else if (first.id === 'whatsapp') fetchWhatsapp(1, '');
+            else if (first.id === 'docWhatsapp') fetchDocWhatsapp(1, '');
+        }
         fetchProducts();
+        if (canReadDocWhatsapp) {
+            api.get('/enquiries', { params: { type: 'doc_whatsapp', limit: 1 } })
+                .then(res => {
+                    const total = res.data?.total || (Array.isArray(res.data) ? res.data.length : 0);
+                    setDocWhatsappTotal(total);
+                })
+                .catch(() => {});
+        }
     }, []);
 
-    // ── Tab switch: fetch that tab's data on first visit ──────────────────────
+    // Keep activeTabIndex in valid bounds if visibleTabs length changes
+    useEffect(() => {
+        if (activeTabIndex >= visibleTabs.length && visibleTabs.length > 0) {
+            setActiveTabIndex(0);
+        }
+    }, [visibleTabs.length]);
+
+    // ── Tab switch: fetch that tab's data on visit ──────────────────────────
     const handleTabChange = (index) => {
         setActiveTabIndex(index);
-        if (index === 0) fetchEnquiries(enquiryPage, enquirySearch);
-        if (index === 1) fetchQuotations(activePage, activeSearch);
-        if (index === 2) fetchHistory(historyPage, historySearch);
-        if (index === 3) fetchWhatsapp(whatsappPage, whatsappSearch);
+        const target = visibleTabs[index];
+        if (!target) return;
+        if (target.id === 'incoming') fetchEnquiries(enquiryPage, enquirySearch);
+        if (target.id === 'quotations') fetchQuotations(activePage, activeSearch);
+        if (target.id === 'history') fetchHistory(historyPage, historySearch);
+        if (target.id === 'whatsapp') fetchWhatsapp(whatsappPage, whatsappSearch);
+        if (target.id === 'docWhatsapp') fetchDocWhatsapp(docWhatsappPage, docWhatsappSearch);
     };
 
     // ── Convenience: refresh only the currently active tab ───────────────────
     const fetchData = () => {
-        if (activeTabIndex === 0) fetchEnquiries(enquiryPage, enquirySearch);
-        if (activeTabIndex === 1) fetchQuotations(activePage, activeSearch);
-        if (activeTabIndex === 2) fetchHistory(historyPage, historySearch);
-        if (activeTabIndex === 3) fetchWhatsapp(whatsappPage, whatsappSearch);
+        const target = visibleTabs[activeTabIndex];
+        if (!target) return;
+        if (target.id === 'incoming') fetchEnquiries(enquiryPage, enquirySearch);
+        if (target.id === 'quotations') fetchQuotations(activePage, activeSearch);
+        if (target.id === 'history') fetchHistory(historyPage, historySearch);
+        if (target.id === 'whatsapp') fetchWhatsapp(whatsappPage, whatsappSearch);
+        if (target.id === 'docWhatsapp') fetchDocWhatsapp(docWhatsappPage, docWhatsappSearch);
     };
 
     // ── Pagination Change Handlers ───────────────────────────────────────────
@@ -346,6 +443,11 @@ const AdminEnquiries = () => {
     const handleWhatsappPageChange = (newPage) => {
         setWhatsappPage(newPage);
         fetchWhatsapp(newPage, whatsappSearch);
+    };
+
+    const handleDocWhatsappPageChange = (newPage) => {
+        setDocWhatsappPage(newPage);
+        fetchDocWhatsapp(newPage, docWhatsappSearch);
     };
 
 
@@ -1301,12 +1403,14 @@ const AdminEnquiries = () => {
     const paginatedQuotations = quotations;
     const paginatedHistory = processedQuotations;
     const paginatedWhatsappLogs = whatsappLogs;
+    const paginatedDocWhatsappLogs = docWhatsappLogs;
 
     // Keep legacy filter names pointing at the same arrays (used in empty-row checks)
     const filteredEnquiries = enquiries;
     const filteredQuotations = quotations;
     const filteredHistory = processedQuotations;
     const filteredWhatsappLogs = whatsappLogs;
+    const filteredDocWhatsappLogs = docWhatsappLogs;
 
     const PaginationControls = ({ currentPage, totalItems, onPageChange }) => {
         const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
@@ -1396,133 +1500,183 @@ const AdminEnquiries = () => {
             </Flex>
 
             {/* Stat Cards */}
-            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={5} mb={8}>
-                <Box p={5} bg="blue.50" borderRadius="2xl" border="1px" borderColor="blue.100">
-                    <VStack align="start" spacing={1}>
-                        <Text fontSize="sm" color="blue.600" fontWeight="bold" textTransform="uppercase">New Enquiries</Text>
-                        <Heading size="xl" color="blue.800">{enquiries.filter(e => !e.isSeen).length}</Heading>
-                        <Text fontSize="xs" color="blue.500">Unseen on this page · {enquiriesTotal} total</Text>
-                    </VStack>
-                </Box>
-                <Box p={5} bg="orange.50" borderRadius="2xl" border="1px" borderColor="orange.100">
-                    <VStack align="start" spacing={1}>
-                        <Text fontSize="sm" color="orange.600" fontWeight="bold" textTransform="uppercase">Active Quotations</Text>
-                        <Heading size="xl" color="orange.800">{quotationsTotal}</Heading>
-                        <Text fontSize="xs" color="orange.500">Sent quotes awaiting client decision</Text>
-                    </VStack>
-                </Box>
-                <Box p={5} bg="green.50" borderRadius="2xl" border="1px" borderColor="green.100">
-                    <VStack align="start" spacing={1}>
-                        <Text fontSize="sm" color="green.600" fontWeight="bold" textTransform="uppercase">Processed History</Text>
-                        <Heading size="xl" color="green.800">{historyTotal}</Heading>
-                        <Text fontSize="xs" color="green.500">Total Done / Rejected quotations</Text>
-                    </VStack>
-                </Box>
+            <SimpleGrid columns={{ base: 1, sm: 2, lg: Math.min(4, Math.max(1, [canReadIncoming, canReadQuotations, canReadHistory, canReadDocWhatsapp].filter(Boolean).length)) }} spacing={4} mb={8}>
+                {canReadIncoming && (
+                    <Box p={4} bg="blue.50" borderRadius="2xl" border="1px" borderColor="blue.100">
+                        <VStack align="start" spacing={1}>
+                            <Text fontSize="xs" color="blue.600" fontWeight="bold" textTransform="uppercase">New Enquiries</Text>
+                            <Heading size="lg" color="blue.800">{enquiries.filter(e => !e.isSeen).length}</Heading>
+                            <Text fontSize="2xs" color="blue.500">Unseen on this page · {enquiriesTotal} total</Text>
+                        </VStack>
+                    </Box>
+                )}
+                {canReadQuotations && (
+                    <Box p={4} bg="orange.50" borderRadius="2xl" border="1px" borderColor="orange.100">
+                        <VStack align="start" spacing={1}>
+                            <Text fontSize="xs" color="orange.600" fontWeight="bold" textTransform="uppercase">Active Quotations</Text>
+                            <Heading size="lg" color="orange.800">{quotationsTotal}</Heading>
+                            <Text fontSize="2xs" color="orange.500">Sent quotes awaiting decision</Text>
+                        </VStack>
+                    </Box>
+                )}
+                {canReadHistory && (
+                    <Box p={4} bg="green.50" borderRadius="2xl" border="1px" borderColor="green.100">
+                        <VStack align="start" spacing={1}>
+                            <Text fontSize="xs" color="green.600" fontWeight="bold" textTransform="uppercase">Processed History</Text>
+                            <Heading size="lg" color="green.800">{historyTotal}</Heading>
+                            <Text fontSize="2xs" color="green.500">Total Done / Rejected quotes</Text>
+                        </VStack>
+                    </Box>
+                )}
+                {canReadDocWhatsapp && (
+                    <Box p={4} bg="teal.50" borderRadius="2xl" border="1px" borderColor="teal.100">
+                        <VStack align="start" spacing={1}>
+                            <Text fontSize="xs" color="teal.600" fontWeight="bold" textTransform="uppercase">Doc WhatsApp</Text>
+                            <Heading size="lg" color="teal.800">{docWhatsappTotal}</Heading>
+                            <Text fontSize="2xs" color="teal.500">Company document dispatches</Text>
+                        </VStack>
+                    </Box>
+                )}
             </SimpleGrid>
 
-            <Tabs colorScheme="brand" isLazy index={activeTabIndex} onChange={handleTabChange}>
-                <TabList>
-                    <Tab fontWeight="bold">
-                        Incoming Enquiries
-                        {enquiries.some(e => !e.isSeen) && (
-                            <Badge ml={2} colorScheme="red" borderRadius="full">NEW</Badge>
+            {visibleTabs.length === 0 ? (
+                <Box p={8} textAlign="center" bg="gray.50" borderRadius="2xl" border="1px dashed" borderColor="gray.300">
+                    <Icon as={FiLock} boxSize={8} color="gray.400" mb={2} />
+                    <Heading size="sm" color="gray.700">No Enquiries Access Permitted</Heading>
+                    <Text fontSize="xs" color="gray.500" mt={1}>
+                        You do not currently have read access to any tabs in the Enquiries module. Please contact a Super Administrator.
+                    </Text>
+                </Box>
+            ) : (
+                <Tabs colorScheme="brand" isLazy index={activeTabIndex} onChange={handleTabChange}>
+                    <TabList>
+                        {canReadIncoming && (
+                            <Tab fontWeight="bold">
+                                Incoming Enquiries
+                                {enquiries.some(e => !e.isSeen) && (
+                                    <Badge ml={2} colorScheme="red" borderRadius="full">NEW</Badge>
+                                )}
+                            </Tab>
                         )}
-                    </Tab>
-                    <Tab fontWeight="bold">Outbound Quotations</Tab>
-                    <Tab fontWeight="bold">Processed (History)</Tab>
-                    <Tab fontWeight="bold" color="green.600">
-                        <HStack spacing={1}>
-                            <FaWhatsapp />
-                            <Text>WhatsApp Logs</Text>
-                        </HStack>
-                    </Tab>
-                </TabList>
+                        {canReadQuotations && (
+                            <Tab fontWeight="bold">Outbound Quotations</Tab>
+                        )}
+                        {canReadHistory && (
+                            <Tab fontWeight="bold">Processed (History)</Tab>
+                        )}
+                        {canReadWhatsapp && (
+                            <Tab fontWeight="bold" color="green.600">
+                                <HStack spacing={1}>
+                                    <FaWhatsapp />
+                                    <Text>WhatsApp Logs</Text>
+                                </HStack>
+                            </Tab>
+                        )}
+                        {canReadDocWhatsapp && (
+                            <Tab fontWeight="bold" color="teal.600">
+                                <HStack spacing={1.5}>
+                                    <FaWhatsapp style={{ color: "#0D9488" }} />
+                                    <Text>Doc WhatsApp</Text>
+                                    {docWhatsappTotal > 0 && (
+                                        <Badge colorScheme="teal" borderRadius="full" fontSize="10px" px={1.5}>
+                                            {docWhatsappTotal}
+                                        </Badge>
+                                    )}
+                                </HStack>
+                            </Tab>
+                        )}
+                    </TabList>
 
                 <TabPanels>
                     {/* ── Tab 1: Incoming Enquiries ───────────────────────── */}
-                    <TabPanel p={0} pt={4}>
-                        <Flex justify="space-between" mb={4} align="center">
-                            <InputGroup maxW="350px" size="sm">
-                                <InputLeftElement pointerEvents="none">
-                                    <FiSearch color="gray.400" />
-                                </InputLeftElement>
-                                <Input
-                                    placeholder="Search by sender name or contact..."
-                                    borderRadius="xl"
-                                    value={enquirySearch}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        setEnquirySearch(val);
-                                        setEnquiryPage(1);
-                                        if (searchDebounceRef.current.enquiry) clearTimeout(searchDebounceRef.current.enquiry);
-                                        searchDebounceRef.current.enquiry = setTimeout(() => {
-                                            fetchEnquiries(1, val);
-                                        }, 300);
-                                    }}
-                                />
-                            </InputGroup>
-                        </Flex>
-                        {loadingEnquiries ? (
-                            <Flex justify="center" align="center" py={16}>
-                                <Spinner size="xl" color="brand.500" thickness="4px" speed="0.65s" />
+                    {canReadIncoming && (
+                        <TabPanel p={0} pt={4}>
+                            <Flex justify="space-between" mb={4} align="center">
+                                <InputGroup maxW="350px" size="sm">
+                                    <InputLeftElement pointerEvents="none">
+                                        <FiSearch color="gray.400" />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="Search by sender name or contact..."
+                                        borderRadius="xl"
+                                        value={enquirySearch}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setEnquirySearch(val);
+                                            setEnquiryPage(1);
+                                            if (searchDebounceRef.current.enquiry) clearTimeout(searchDebounceRef.current.enquiry);
+                                            searchDebounceRef.current.enquiry = setTimeout(() => {
+                                                fetchEnquiries(1, val);
+                                            }, 300);
+                                        }}
+                                    />
+                                </InputGroup>
                             </Flex>
-                        ) : (
-                            <>
-                                <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
-                                    <Table variant="simple" minW="500px">
-                                        <Thead bg="gray.50">
-                                            <Tr>
-                                                <Th>Date</Th>
-                                                <Th>Sender</Th>
-                                                <Th>Requested Items</Th>
-                                                <Th textAlign="right">Action</Th>
-                                            </Tr>
-                                        </Thead>
-                                        <Tbody>
-                                            {paginatedEnquiries.map(e => (
-                                                <Tr key={e._id} _hover={{ bg: "gray.50" }}>
-                                                    <Td fontSize="sm">
-                                                        <HStack>
-                                                            {!e.isSeen && <Box w="8px" h="8px" bg="red.500" borderRadius="full" />}
-                                                            <Text>{new Date(e.createdAt).toLocaleDateString('en-GB')}</Text>
-                                                        </HStack>
-                                                    </Td>
-                                                    <Td>
-                                                        <VStack align="start" spacing={0}>
-                                                            <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
-                                                            <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
-                                                            <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
-                                                        </VStack>
-                                                    </Td>
-                                                    <Td>
-                                                        <Badge colorScheme="purple">{(e.products || []).length} items requested</Badge>
-                                                    </Td>
-                                                    <Td textAlign="right">
-                                                        <HStack spacing={2} justify="flex-end">
-                                                            <Button size="sm" colorScheme="brand" leftIcon={<FiEye />} onClick={() => handleViewEnquiry(e)}>View Details</Button>
-                                                            <IconButton
-                                                                aria-label="Delete"
-                                                                icon={<FiTrash />}
-                                                                size="sm"
-                                                                colorScheme="red"
-                                                                variant="ghost"
-                                                                onClick={() => handleDeleteRequest('enquiry', e._id)}
-                                                            />
-                                                        </HStack>
-                                                    </Td>
+                            {loadingEnquiries ? (
+                                <Flex justify="center" align="center" py={16}>
+                                    <Spinner size="xl" color="brand.500" thickness="4px" speed="0.65s" />
+                                </Flex>
+                            ) : (
+                                <>
+                                    <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
+                                        <Table variant="simple" minW="500px">
+                                            <Thead bg="gray.50">
+                                                <Tr>
+                                                    <Th>Date</Th>
+                                                    <Th>Sender</Th>
+                                                    <Th>Requested Items</Th>
+                                                    <Th textAlign="right">Action</Th>
                                                 </Tr>
-                                            ))}
-                                            {filteredEnquiries.length === 0 && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No enquiries found.</Td></Tr>}
-                                        </Tbody>
-                                    </Table>
-                                </Box>
-                                <PaginationControls currentPage={enquiryPage} totalItems={enquiriesTotal} onPageChange={handleEnquiryPageChange} />
-                            </>
-                        )}
-                    </TabPanel>
+                                            </Thead>
+                                            <Tbody>
+                                                {paginatedEnquiries.map(e => (
+                                                    <Tr key={e._id} _hover={{ bg: "gray.50" }}>
+                                                        <Td fontSize="sm">
+                                                            <HStack>
+                                                                {!e.isSeen && <Box w="8px" h="8px" bg="red.500" borderRadius="full" />}
+                                                                <Text>{new Date(e.createdAt).toLocaleDateString('en-GB')}</Text>
+                                                            </HStack>
+                                                        </Td>
+                                                        <Td>
+                                                            <VStack align="start" spacing={0}>
+                                                                <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
+                                                                <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
+                                                                <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
+                                                            </VStack>
+                                                        </Td>
+                                                        <Td>
+                                                            <Badge colorScheme="purple">{(e.products || []).length} items requested</Badge>
+                                                        </Td>
+                                                        <Td textAlign="right">
+                                                            <HStack spacing={2} justify="flex-end">
+                                                                <Button size="sm" colorScheme="brand" leftIcon={<FiEye />} onClick={() => handleViewEnquiry(e)}>View Details</Button>
+                                                                {canWriteIncoming && (
+                                                                    <IconButton
+                                                                        aria-label="Delete"
+                                                                        icon={<FiTrash />}
+                                                                        size="sm"
+                                                                        colorScheme="red"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleDeleteRequest('enquiry', e._id)}
+                                                                    />
+                                                                )}
+                                                            </HStack>
+                                                        </Td>
+                                                    </Tr>
+                                                ))}
+                                                {filteredEnquiries.length === 0 && <Tr><Td colSpan={4} textAlign="center" py={4} color="gray.500">No enquiries found.</Td></Tr>}
+                                            </Tbody>
+                                        </Table>
+                                    </Box>
+                                    <PaginationControls currentPage={enquiryPage} totalItems={enquiriesTotal} onPageChange={handleEnquiryPageChange} />
+                                </>
+                            )}
+                        </TabPanel>
+                    )}
 
                     {/* ── Tab 2: Outgoing Quotations (status=Sent) ─────────── */}
-                    <TabPanel p={0} pt={4}>
+                    {canReadQuotations && (
+                        <TabPanel p={0} pt={4}>
                         <Flex justify="space-between" mb={4} align="center">
                             <InputGroup maxW="350px" size="sm">
                                 <InputLeftElement pointerEvents="none">
@@ -1760,9 +1914,11 @@ const AdminEnquiries = () => {
                             </>
                         )}
                     </TabPanel>
+                    )}
 
                     {/* ── Tab 3: SS History (status=Done or Reject) ────────── */}
-                    <TabPanel p={0} pt={4}>
+                    {canReadHistory && (
+                        <TabPanel p={0} pt={4}>
                         <Flex justify="space-between" mb={4} align="center">
                             <InputGroup maxW="350px" size="sm">
                                 <InputLeftElement pointerEvents="none">
@@ -1865,70 +2021,283 @@ const AdminEnquiries = () => {
                             </>
                         )}
                     </TabPanel>
+                    )}
 
                     {/* ── Tab 4: WhatsApp Logs (type=whatsapp) ─────────────── */}
-                    <TabPanel p={0} pt={4}>
-                        <Flex justify="space-between" mb={4} align="center">
-                            <InputGroup maxW="350px" size="sm">
+                    {canReadWhatsapp && (
+                        <TabPanel p={0} pt={4}>
+                            <Flex justify="space-between" mb={4} align="center">
+                                <InputGroup maxW="350px" size="sm">
+                                    <InputLeftElement pointerEvents="none">
+                                        <FiSearch color="gray.400" />
+                                    </InputLeftElement>
+                                    <Input
+                                        placeholder="Search by client name or phone..."
+                                        borderRadius="xl"
+                                        value={whatsappSearch}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setWhatsappSearch(val);
+                                            setWhatsappPage(1);
+                                            if (searchDebounceRef.current.whatsapp) clearTimeout(searchDebounceRef.current.whatsapp);
+                                            searchDebounceRef.current.whatsapp = setTimeout(() => {
+                                                fetchWhatsapp(1, val);
+                                            }, 300);
+                                        }}
+                                    />
+                                </InputGroup>
+                            </Flex>
+                            {loadingWhatsapp ? (
+                                <Flex justify="center" align="center" py={16}>
+                                    <Spinner size="xl" color="green.400" thickness="4px" speed="0.65s" />
+                                </Flex>
+                            ) : (
+                                <>
+                                    <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
+                                        <Table variant="simple" minW="500px">
+                                            <Thead bg="green.50">
+                                                <Tr>
+                                                    <Th>Date</Th>
+                                                    <Th>Client Name & Contact</Th>
+                                                    <Th>Products Sent</Th>
+                                                    <Th>WA Status</Th>
+                                                    <Th>Next Follow-Up</Th>
+                                                    <Th textAlign="right">Action</Th>
+                                                </Tr>
+                                            </Thead>
+                                            <Tbody>
+                                                {paginatedWhatsappLogs.map(e => (
+                                                    <Tr key={e._id} _hover={{ bg: "gray.50" }}>
+                                                        <Td fontSize="sm">
+                                                            {new Date(e.createdAt).toLocaleDateString('en-GB')}
+                                                        </Td>
+                                                        <Td>
+                                                            <VStack align="start" spacing={0}>
+                                                                <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
+                                                                <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
+                                                                <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
+                                                            </VStack>
+                                                        </Td>
+                                                        <Td>
+                                                            <Badge colorScheme="green">{(e.products || []).length} products sent</Badge>
+                                                        </Td>
+                                                        <Td>
+                                                            {e.whatsappStatus === 'failed'
+                                                                ? <Badge colorScheme="red" variant="solid">❌ Failed</Badge>
+                                                                : e.whatsappStatus === 'partial'
+                                                                    ? <Badge colorScheme="orange" variant="solid">⚠️ Partial</Badge>
+                                                                    : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
+                                                                }
+                                                            {e.whatsappSentAt && (
+                                                                <Text fontSize="10px" color="gray.400" mt={0.5}>
+                                                                    {new Date(e.whatsappSentAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                                </Text>
+                                                            )}
+                                                        </Td>
+                                                        <Td>
+                                                            {(() => {
+                                                                if (e.status === 'Done' || e.status === 'Reject') {
+                                                                    return <Badge colorScheme={e.status === 'Done' ? 'green' : 'red'}>{e.status}</Badge>;
+                                                                }
+
+                                                                const followUpDate = e.nextFollowUp
+                                                                    ? new Date(e.nextFollowUp)
+                                                                    : e.firstFollowUpDate
+                                                                        ? new Date(e.firstFollowUpDate)
+                                                                        : new Date(new Date(e.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
+
+                                                                const dateZero = new Date(followUpDate).setHours(0, 0, 0, 0);
+                                                                const todayZero = new Date().setHours(0, 0, 0, 0);
+                                                                const isOverdue = dateZero < todayZero;
+                                                                const isToday = dateZero === todayZero;
+
+                                                                return (
+                                                                    <VStack align="start" spacing={1}>
+                                                                        <Text fontSize="sm" fontWeight="bold">
+                                                                            {followUpDate.toLocaleDateString('en-GB')}
+                                                                        </Text>
+                                                                        {isOverdue && <Badge colorScheme="red" variant="solid" fontSize="10px">OVERDUE</Badge>}
+                                                                        {isToday && <Badge colorScheme="orange" variant="solid" fontSize="10px">TODAY</Badge>}
+                                                                    </VStack>
+                                                                );
+                                                            })()}
+                                                        </Td>
+                                                        <Td textAlign="right">
+                                                            <HStack spacing={2} justify="flex-end">
+                                                                <IconButton
+                                                                    aria-label="View Details"
+                                                                    icon={<FiEye />}
+                                                                    size="xs"
+                                                                    variant="outline"
+                                                                    onClick={() => handleViewEnquiry(e)}
+                                                                />
+                                                                {canWriteWhatsapp && (
+                                                                    <>
+                                                                        <Button
+                                                                            size="xs"
+                                                                            colorScheme="brand"
+                                                                            variant="outline"
+                                                                            onClick={() => handleOpenFollowUp(e, 'enquiry')}
+                                                                        >
+                                                                            Follow-up {e.followUps?.length > 0 ? `(${e.followUps.length})` : ''}
+                                                                        </Button>
+                                                                        <IconButton
+                                                                            aria-label="Done"
+                                                                            icon={<FiCheck />}
+                                                                            size="xs"
+                                                                            colorScheme="green"
+                                                                            onClick={() => handleStatusUpdate('enquiry', e._id, 'Done')}
+                                                                        />
+                                                                        <IconButton
+                                                                            aria-label="Reject"
+                                                                            icon={<FiX />}
+                                                                            size="xs"
+                                                                            colorScheme="red"
+                                                                            onClick={() => handleStatusUpdate('enquiry', e._id, 'Reject')}
+                                                                        />
+                                                                        <IconButton
+                                                                            aria-label="Delete"
+                                                                            icon={<FiTrash />}
+                                                                            size="xs"
+                                                                            colorScheme="red"
+                                                                            variant="ghost"
+                                                                            onClick={() => handleDeleteRequest('enquiry', e._id)}
+                                                                        />
+                                                                    </>
+                                                                )}
+                                                            </HStack>
+                                                        </Td>
+                                                    </Tr>
+                                                ))}
+                                                {filteredWhatsappLogs.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
+                                            </Tbody>
+                                        </Table>
+                                    </Box>
+                                    <PaginationControls currentPage={whatsappPage} totalItems={whatsappTotal} onPageChange={handleWhatsappPageChange} />
+                                </>
+                            )}
+                        </TabPanel>
+                    )}
+
+                    {/* ── Tab 5: Doc WhatsApp Logs (Company Documents Shared via WhatsApp) ── */}
+                    {canReadDocWhatsapp && (
+                        <TabPanel p={0} pt={4}>
+                        <Flex justify="space-between" mb={4} align="center" wrap="wrap" gap={3}>
+                            <InputGroup maxW="380px" size="sm">
                                 <InputLeftElement pointerEvents="none">
                                     <FiSearch color="gray.400" />
                                 </InputLeftElement>
                                 <Input
-                                    placeholder="Search by client name or phone..."
+                                    placeholder="Search by client, phone, or company..."
                                     borderRadius="xl"
-                                    value={whatsappSearch}
+                                    value={docWhatsappSearch}
                                     onChange={(e) => {
                                         const val = e.target.value;
-                                        setWhatsappSearch(val);
-                                        setWhatsappPage(1);
-                                        if (searchDebounceRef.current.whatsapp) clearTimeout(searchDebounceRef.current.whatsapp);
-                                        searchDebounceRef.current.whatsapp = setTimeout(() => {
-                                            fetchWhatsapp(1, val);
+                                        setDocWhatsappSearch(val);
+                                        setDocWhatsappPage(1);
+                                        if (searchDebounceRef.current.docWhatsapp) clearTimeout(searchDebounceRef.current.docWhatsapp);
+                                        searchDebounceRef.current.docWhatsapp = setTimeout(() => {
+                                            fetchDocWhatsapp(1, val);
                                         }, 300);
                                     }}
                                 />
                             </InputGroup>
+                            <Badge colorScheme="teal" variant="subtle" px={3} py={1} borderRadius="lg" fontSize="xs">
+                                📑 Total Company Doc Dispatches: {docWhatsappTotal}
+                            </Badge>
                         </Flex>
-                        {loadingWhatsapp ? (
+                        {loadingDocWhatsapp ? (
                             <Flex justify="center" align="center" py={16}>
-                                <Spinner size="xl" color="green.400" thickness="4px" speed="0.65s" />
+                                <Spinner size="xl" color="teal.500" thickness="4px" speed="0.65s" />
                             </Flex>
                         ) : (
                             <>
                                 <Box overflowX="auto" border="1px" borderColor="gray.100" borderRadius="xl">
-                                    <Table variant="simple" minW="500px">
-                                        <Thead bg="green.50">
+                                    <Table variant="simple" minW="850px">
+                                        <Thead bg="teal.50">
                                             <Tr>
-                                                <Th>Date</Th>
-                                                <Th>Client Name & Contact</Th>
-                                                <Th>Products Sent</Th>
+                                                <Th>Date & Time</Th>
+                                                <Th>Client & Contact</Th>
+                                                <Th>Shared Company</Th>
+                                                <Th>Documents Sent</Th>
                                                 <Th>WA Status</Th>
-                                                <Th>Next Follow-Up</Th>
+                                                <Th>Sent By</Th>
                                                 <Th textAlign="right">Action</Th>
                                             </Tr>
                                         </Thead>
                                         <Tbody>
-                                            {paginatedWhatsappLogs.map(e => (
+                                            {paginatedDocWhatsappLogs.map(e => (
                                                 <Tr key={e._id} _hover={{ bg: "gray.50" }}>
-                                                    <Td fontSize="sm">
-                                                        {new Date(e.createdAt).toLocaleDateString('en-GB')}
+                                                    <Td fontSize="xs" whiteSpace="nowrap">
+                                                        <Text fontWeight="bold" color="gray.800">
+                                                            {new Date(e.createdAt).toLocaleDateString('en-GB')}
+                                                        </Text>
+                                                        <Text fontSize="10px" color="gray.500">
+                                                            {new Date(e.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                        </Text>
                                                     </Td>
                                                     <Td>
                                                         <VStack align="start" spacing={0}>
-                                                            <Text fontWeight="bold" color="gray.800">{e.Name}</Text>
-                                                            <Text fontSize="xs" color="gray.500">{e.email && e.email !== 'N/A' ? e.email : ''}</Text>
-                                                            <Text fontSize="xs" color="gray.500">{e.phone && e.phone !== 'N/A' ? e.phone : ''}</Text>
+                                                            <Text fontWeight="bold" color="gray.800" fontSize="sm">{e.Name}</Text>
+                                                            {e.companyName && (
+                                                                <Text fontSize="xs" fontWeight="semibold" color="teal.700">
+                                                                    🏢 {e.companyName}
+                                                                </Text>
+                                                            )}
+                                                            <HStack spacing={1}>
+                                                                <Text fontSize="xs" color="gray.600" fontFamily="monospace">
+                                                                    +91 {e.phone}
+                                                                </Text>
+                                                                <IconButton
+                                                                    size="2xs"
+                                                                    variant="ghost"
+                                                                    colorScheme="whatsapp"
+                                                                    icon={<FaWhatsapp />}
+                                                                    aria-label="WhatsApp Chat"
+                                                                    onClick={() => window.open(`https://wa.me/91${e.phone.replace(/\D/g, '')}`, '_blank')}
+                                                                />
+                                                            </HStack>
+                                                            {e.email && e.email !== 'N/A' && !e.email.includes('noemail') && (
+                                                                <Text fontSize="10px" color="gray.500">{e.email}</Text>
+                                                            )}
                                                         </VStack>
                                                     </Td>
                                                     <Td>
-                                                        <Badge colorScheme="green">{(e.products || []).length} products sent</Badge>
+                                                        <Badge colorScheme="purple" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs" fontWeight="bold">
+                                                            {e.senderCompanyName || 'Company Docs'}
+                                                        </Badge>
+                                                    </Td>
+                                                    <Td maxW="280px">
+                                                        {e.sentDocs && e.sentDocs.length > 0 ? (
+                                                            <VStack align="start" spacing={1}>
+                                                                {e.sentDocs.map((doc, idx) => (
+                                                                    <Tag
+                                                                        key={idx}
+                                                                        size="sm"
+                                                                        colorScheme="teal"
+                                                                        variant="outline"
+                                                                        cursor={doc.fileUrl ? "pointer" : "default"}
+                                                                        borderRadius="full"
+                                                                        onClick={() => {
+                                                                            if (doc.fileUrl) window.open(getImageUrl(doc.fileUrl), '_blank');
+                                                                        }}
+                                                                        _hover={doc.fileUrl ? { bg: "teal.50" } : {}}
+                                                                    >
+                                                                        <TagLeftIcon as={FiDownload} />
+                                                                        <TagLabel fontSize="10px">{doc.name || 'Document'}</TagLabel>
+                                                                    </Tag>
+                                                                ))}
+                                                            </VStack>
+                                                        ) : (
+                                                            <Text fontSize="xs" color="gray.600">
+                                                                {e.notes || 'Company Credentials'}
+                                                            </Text>
+                                                        )}
                                                     </Td>
                                                     <Td>
                                                         {e.whatsappStatus === 'failed'
                                                             ? <Badge colorScheme="red" variant="solid">❌ Failed</Badge>
-                                                            : e.whatsappStatus === 'partial'
-                                                                ? <Badge colorScheme="orange" variant="solid">⚠️ Partial</Badge>
-                                                                : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
+                                                            : <Badge colorScheme="green" variant="solid">✅ Sent</Badge>
                                                         }
                                                         {e.whatsappSentAt && (
                                                             <Text fontSize="10px" color="gray.400" mt={0.5}>
@@ -1937,97 +2306,112 @@ const AdminEnquiries = () => {
                                                         )}
                                                     </Td>
                                                     <Td>
-                                                        {(() => {
-                                                            if (e.status === 'Done' || e.status === 'Reject') {
-                                                                return <Badge colorScheme={e.status === 'Done' ? 'green' : 'red'}>{e.status}</Badge>;
-                                                            }
-
-                                                            const followUpDate = e.nextFollowUp
-                                                                ? new Date(e.nextFollowUp)
-                                                                : e.firstFollowUpDate
-                                                                    ? new Date(e.firstFollowUpDate)
-                                                                    : new Date(new Date(e.createdAt).getTime() + (2 * 24 * 60 * 60 * 1000));
-
-                                                            const dateZero = new Date(followUpDate).setHours(0, 0, 0, 0);
-                                                            const todayZero = new Date().setHours(0, 0, 0, 0);
-                                                            const isOverdue = dateZero < todayZero;
-                                                            const isToday = dateZero === todayZero;
-
-                                                            return (
-                                                                <VStack align="start" spacing={1}>
-                                                                    <Text fontSize="sm" fontWeight="bold">
-                                                                        {followUpDate.toLocaleDateString('en-GB')}
-                                                                    </Text>
-                                                                    {isOverdue && <Badge colorScheme="red" variant="solid" fontSize="10px">OVERDUE</Badge>}
-                                                                    {isToday && <Badge colorScheme="orange" variant="solid" fontSize="10px">TODAY</Badge>}
-                                                                </VStack>
-                                                            );
-                                                        })()}
+                                                        <Badge colorScheme="blue" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs" fontWeight="bold">
+                                                            👤 {e.sentBy || 'Admin'}
+                                                        </Badge>
                                                     </Td>
                                                     <Td textAlign="right">
-                                                        <HStack spacing={2} justify="flex-end">
+                                                        <HStack spacing={1.5} justify="flex-end">
                                                             <IconButton
                                                                 aria-label="View Details"
                                                                 icon={<FiEye />}
                                                                 size="xs"
                                                                 variant="outline"
+                                                                colorScheme="teal"
                                                                 onClick={() => handleViewEnquiry(e)}
-                                                            />
-                                                            <Button
-                                                                size="xs"
-                                                                colorScheme="brand"
-                                                                variant="outline"
-                                                                onClick={() => handleOpenFollowUp(e, 'enquiry')}
-                                                            >
-                                                                Follow-up {e.followUps?.length > 0 ? `(${e.followUps.length})` : ''}
-                                                            </Button>
-                                                            <IconButton
-                                                                aria-label="Done"
-                                                                icon={<FiCheck />}
-                                                                size="xs"
-                                                                colorScheme="green"
-                                                                onClick={() => handleStatusUpdate('enquiry', e._id, 'Done')}
-                                                            />
-                                                            <IconButton
-                                                                aria-label="Reject"
-                                                                icon={<FiX />}
-                                                                size="xs"
-                                                                colorScheme="red"
-                                                                onClick={() => handleStatusUpdate('enquiry', e._id, 'Reject')}
-                                                            />
-                                                            <IconButton
-                                                                aria-label="Delete"
-                                                                icon={<FiTrash />}
-                                                                size="xs"
-                                                                colorScheme="red"
-                                                                variant="ghost"
-                                                                onClick={() => handleDeleteRequest('enquiry', e._id)}
                                                             />
                                                         </HStack>
                                                     </Td>
                                                 </Tr>
                                             ))}
-                                            {filteredWhatsappLogs.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
+                                            {filteredDocWhatsappLogs.length === 0 && (
+                                                <Tr>
+                                                    <Td colSpan={7} textAlign="center" py={8} color="gray.500">
+                                                        <Icon as={FaWhatsapp} boxSize={8} color="teal.300" mb={2} />
+                                                        <Text fontWeight="bold">No Company Document WhatsApp dispatches found.</Text>
+                                                        <Text fontSize="xs" color="gray.400" mt={1}>
+                                                            Entries appear here automatically after company documents are successfully sent via WhatsApp.
+                                                        </Text>
+                                                    </Td>
+                                                </Tr>
+                                            )}
                                         </Tbody>
                                     </Table>
                                 </Box>
-                                <PaginationControls currentPage={whatsappPage} totalItems={whatsappTotal} onPageChange={handleWhatsappPageChange} />
+                                <PaginationControls currentPage={docWhatsappPage} totalItems={docWhatsappTotal} onPageChange={handleDocWhatsappPageChange} />
                             </>
                         )}
                     </TabPanel>
+                    )}
                 </TabPanels>
             </Tabs>
+            )}
 
             {/* ENQUIRY DETAILS / CREATE QUOTE MODAL */}
             <Modal isOpen={!!selectedEnquiry} onClose={() => setSelectedEnquiry(null)} size={{ base: 'full', md: 'xl' }}>
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>
-                        {isCreatingQuote ? 'Generate New Quotation' : 'Enquiry Details'}
+                        {isCreatingQuote ? 'Generate New Quotation' : (selectedEnquiry?.type === 'doc_whatsapp' ? 'Company Document WhatsApp Dispatch Details' : 'Enquiry Details')}
                     </ModalHeader>
                     <ModalCloseButton />
                     <ModalBody pb={6}>
-                        {selectedEnquiry && !isCreatingQuote && (
+                        {selectedEnquiry && !isCreatingQuote && selectedEnquiry.type === 'doc_whatsapp' && (
+                            <VStack align="stretch" spacing={4}>
+                                <Box bg="teal.50" p={4} borderRadius="md" border="1px solid" borderColor="teal.200">
+                                    <HStack justify="space-between" mb={2}>
+                                        <Badge colorScheme="teal" px={2} py={0.5} borderRadius="md" fontSize="xs">
+                                            📑 COMPANY DOCS WHATSAPP DISPATCH
+                                        </Badge>
+                                        <Badge colorScheme="purple" px={2} py={0.5} borderRadius="md" fontSize="xs">
+                                            {selectedEnquiry.senderCompanyName || 'Company Docs'}
+                                        </Badge>
+                                    </HStack>
+                                    <Text fontSize="sm"><strong>Recipient:</strong> {selectedEnquiry.Name} {selectedEnquiry.companyName ? `(${selectedEnquiry.companyName})` : ''}</Text>
+                                    <Text fontSize="sm"><strong>Mobile Phone:</strong> +91 {selectedEnquiry.phone}</Text>
+                                    <Text fontSize="sm"><strong>Sent By:</strong> {selectedEnquiry.sentBy || 'Admin'}</Text>
+                                    {selectedEnquiry.email && <Text fontSize="sm"><strong>Email:</strong> {selectedEnquiry.email}</Text>}
+                                    {selectedEnquiry.gstNumber && <Text fontSize="sm"><strong>GSTIN:</strong> {selectedEnquiry.gstNumber}</Text>}
+                                    {selectedEnquiry.whatsappSentAt && (
+                                        <Text fontSize="xs" color="gray.500" mt={1}>
+                                            Dispatched: {new Date(selectedEnquiry.whatsappSentAt).toLocaleString('en-GB')}
+                                        </Text>
+                                    )}
+                                </Box>
+
+                                {selectedEnquiry.sentDocs && selectedEnquiry.sentDocs.length > 0 && (
+                                    <Box>
+                                        <Text fontWeight="bold" fontSize="sm" mb={2}>Delivered Documents ({selectedEnquiry.sentDocs.length}):</Text>
+                                        <VStack align="stretch" spacing={2}>
+                                            {selectedEnquiry.sentDocs.map((doc, idx) => (
+                                                <Flex key={idx} p={2.5} bg="gray.50" borderRadius="md" justify="space-between" align="center" border="1px solid" borderColor="gray.200">
+                                                    <HStack spacing={2}>
+                                                        <Icon as={FiDownload} color="teal.500" />
+                                                        <Text fontSize="xs" fontWeight="bold">{doc.name || 'Document'}</Text>
+                                                    </HStack>
+                                                    {doc.fileUrl && (
+                                                        <Button size="xs" colorScheme="teal" variant="outline" onClick={() => window.open(getImageUrl(doc.fileUrl), '_blank')}>
+                                                            View / Download
+                                                        </Button>
+                                                    )}
+                                                </Flex>
+                                            ))}
+                                        </VStack>
+                                    </Box>
+                                )}
+
+                                {selectedEnquiry.message && (
+                                    <Box>
+                                        <Text fontWeight="bold" fontSize="sm" mb={1}>Delivered WhatsApp Message:</Text>
+                                        <Box p={3} bg="gray.50" borderRadius="md" fontSize="xs" whiteSpace="pre-wrap" border="1px solid" borderColor="gray.200" fontFamily="sans-serif">
+                                            {selectedEnquiry.message}
+                                        </Box>
+                                    </Box>
+                                )}
+                            </VStack>
+                        )}
+
+                        {selectedEnquiry && !isCreatingQuote && selectedEnquiry.type !== 'doc_whatsapp' && (
                             <VStack align="stretch" spacing={4}>
                                 <Box bg="gray.50" p={4} borderRadius="md">
                                     <Text><strong>From:</strong> {selectedEnquiry.Name} ({selectedEnquiry.email})</Text>

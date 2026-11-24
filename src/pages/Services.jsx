@@ -29,6 +29,7 @@ import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-d
 import api from '../api/axios';
 import { hasPermission } from '../utils/permissions';
 import ModulePermissionBar from '../components/admin/ModulePermissionBar';
+import CompanyDocShareWidget from '../components/admin/CompanyDocShareWidget';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -14939,6 +14940,9 @@ const Services = () => {
             ) : (
                 <CivilEngineeringServices />
             )}
+
+            {/* Quick Action: Share Company Documents (WhatsApp) */}
+            {user?.isAdmin && <CompanyDocShareWidget />}
         </Box>
     );
 };

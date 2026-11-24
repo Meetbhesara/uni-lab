@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Box, Flex, Text, Button, Modal, ModalOverlay, ModalContent, ModalHeader,
     ModalCloseButton, ModalBody, ModalFooter, useDisclosure, Select, VStack,
     HStack, Checkbox, Spinner, useToast, Icon, Badge, Avatar
 } from '@chakra-ui/react';
 import { FiLock, FiSliders, FiSave } from 'react-icons/fi';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { PERMISSION_MODULES } from '../../utils/permissionModules';
 
 const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
+    const location = useLocation();
     const { user, refreshUser } = useAuth();
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [admins, setAdmins] = useState([]);
@@ -17,6 +19,8 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
     const [permissions, setPermissions] = useState({});
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [isScrolled, setIsScrolled] = useState(false);
+    const barRef = useRef(null);
     const toast = useToast();
 
     const moduleConfig = PERMISSION_MODULES.find(m => m.key === moduleGroupKey) || {
@@ -47,11 +51,62 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
         })
         : moduleConfig.subTabs;
 
+    const isStandaloneInstruments = location.pathname.startsWith('/unique-lab-instruments') || location.pathname.startsWith('/lab-instruments');
+    const isAdminLayoutRoute = location.pathname.startsWith('/admin');
+    const isAdminRoute = isAdminLayoutRoute || isStandaloneInstruments;
+
+    // On standalone Unique Lab Instruments, there is no global header, so it floats right at top (6px-8px)
+    // On admin layout routes with header, it floats right below the header
+    const scrolledTop = isStandaloneInstruments
+        ? { base: "6px", md: "8px" }
+        : (isAdminLayoutRoute ? { base: "50px", md: "58px" } : { base: "52px", md: "64px" });
+
+    // Robust scroll detection across both main admin scroll container and window
     useEffect(() => {
-        if (isOpen && user?.isSuperAdmin) {
+        const getScrollY = () => {
+            const adminContainer = document.getElementById('admin-main-scroll-container');
+            if (adminContainer && adminContainer.scrollTop > 0) {
+                return adminContainer.scrollTop;
+            }
+            if (window.scrollY > 0) return window.scrollY;
+            if (document.documentElement && document.documentElement.scrollTop > 0) {
+                return document.documentElement.scrollTop;
+            }
+            return 0;
+        };
+
+        const handleScroll = () => {
+            const y = getScrollY();
+            setIsScrolled(y > 20);
+        };
+
+        const adminContainer = document.getElementById('admin-main-scroll-container');
+        if (adminContainer) {
+            adminContainer.addEventListener('scroll', handleScroll, { passive: true });
+        }
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+
+        // Lightweight interval to guarantee instant detection without fail
+        const interval = setInterval(handleScroll, 120);
+        handleScroll();
+
+        return () => {
+            if (adminContainer) {
+                adminContainer.removeEventListener('scroll', handleScroll);
+            }
+            window.removeEventListener('scroll', handleScroll);
+            document.removeEventListener('scroll', handleScroll, { capture: true });
+            clearInterval(interval);
+        };
+    }, []);
+
+    // Prefetch admins for instant ("fast") response when opening configuration
+    useEffect(() => {
+        if (user?.isSuperAdmin) {
             fetchAdmins();
         }
-    }, [isOpen]);
+    }, [user?.isSuperAdmin]);
 
     const fetchAdmins = async () => {
         setLoading(true);
@@ -98,157 +153,59 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
     const handlePermissionChange = (key, type, value) => {
         setPermissions(prev => {
             const next = { ...prev };
+
+            // Helper: get all direct children of a key
+            const getChildren = (parentK) => {
+                const children = [];
+                PERMISSION_MODULES.forEach(mod => {
+                    if (mod.subTabs) {
+                        mod.subTabs.forEach(s => { if (s.parentKey === parentK) children.push(s.key); });
+                    }
+                });
+                return children;
+            };
+
+            // 1. Update the target key itself
             next[key] = {
                 ...next[key],
                 [type]: value,
-                // If read is turned OFF, write must also turn OFF
-                ...(type === 'read' && !value ? { write: false } : {})
+                ...(type === 'read' && !value ? { write: false } : {}),
+                ...(type === 'write' && value ? { read: true } : {})
             };
 
-            // ── GATE MODULES: Dashboard & Products ──
-            // Parent Read/Write gates (unlocks) children, but does NOT auto-enable them.
-            // When parent goes OFF → children are cleared. When parent goes ON → children stay as-is.
-            // Children never affect parent.
-            const INDEPENDENT_GROUPS = ['dashboardGroup', 'productsGroup'];
-            const isIndependent = PERMISSION_MODULES.some(mod =>
-                INDEPENDENT_GROUPS.includes(mod.key) &&
-                (mod.mainTabKey === key || mod.subTabs.some(s => s.key === key))
-            );
-            if (isIndependent) {
-                // Only propagate DISABLE downward (not enable)
-                if (!value) {
-                    const clearChildren = (parentKey) => {
-                        PERMISSION_MODULES.forEach(mod => {
-                            if (mod.subTabs && mod.subTabs.length > 0) {
-                                mod.subTabs.filter(s => s.parentKey === parentKey).forEach(child => {
-                                    if (type === 'read') {
-                                        next[child.key] = { read: false, write: false };
-                                    } else if (type === 'write') {
-                                        next[child.key] = { ...next[child.key], write: false };
-                                    }
-                                    clearChildren(child.key);
-                                });
-                            }
-                        });
-                    };
-                    clearChildren(key);
+            // 2. Cascade down to children if toggling parent
+            const children = getChildren(key);
+            children.forEach(childKey => {
+                if (!next[childKey]) next[childKey] = { read: false, write: false };
+
+                if (isIndependentModule) {
+                    if (type === 'read' && !value) {
+                        next[childKey] = { read: false, write: false };
+                    }
+                    if (type === 'write' && !value) {
+                        next[childKey] = { ...next[childKey], write: false };
+                    }
+                } else {
+                    if (type === 'read' && !value) {
+                        next[childKey] = { read: false, write: false };
+                    }
                 }
-                return next;
-            }
+            });
 
-            // ── ALL OTHER MODULES: full bidirectional parent↔child linking ──
-
-            // 1. Parent → Children (both directions: ON enables all, OFF disables all)
-            const propagateParentToChild = (parentKey, isEnabled) => {
-                PERMISSION_MODULES.forEach(mod => {
-                    if (mod.subTabs && mod.subTabs.length > 0) {
-                        const children = mod.subTabs.filter(s => s.parentKey === parentKey);
-                        children.forEach(child => {
-                            if (type === 'read') {
-                                if (isEnabled) {
-                                    // Parent read ON → turn ON all children read
-                                    next[child.key] = { ...next[child.key], read: true };
-                                } else {
-                                    // Parent read OFF → force all children read+write OFF
-                                    next[child.key] = { read: false, write: false };
-                                }
-                            } else if (type === 'write') {
-                                if (isEnabled) {
-                                    // Parent write ON → turn ON children write (only if they have read)
-                                    if (next[child.key]?.read) {
-                                        next[child.key] = { ...next[child.key], write: true };
-                                    }
-                                } else {
-                                    // Parent write OFF → force all children write OFF
-                                    next[child.key] = { ...next[child.key], write: false };
-                                }
-                            }
-                            propagateParentToChild(child.key, isEnabled);
-                        });
-                    }
-                });
-            };
-            propagateParentToChild(key, value);
-
-            // 2. Children → Parent (if all siblings off, parent turns off; if any on, parent turns on)
-            const propagateChildToParent = (childKey) => {
-                PERMISSION_MODULES.forEach(mod => {
-                    if (mod.subTabs && mod.subTabs.length > 0) {
-                        const targetSub = mod.subTabs.find(s => s.key === childKey);
-                        if (targetSub && targetSub.parentKey) {
-                            const parentKey = targetSub.parentKey;
-                            if (type === 'read' && value) {
-                                // Child read ON → parent read must be ON
-                                next[parentKey] = { ...next[parentKey], read: true };
-                                propagateChildToParent(parentKey);
-                            } else if (type === 'read' && !value) {
-                                // Child read OFF → if no sibling has read, parent read+write OFF
-                                const siblings = mod.subTabs.filter(s => s.parentKey === parentKey && s.key !== childKey);
-                                const anyRead = siblings.some(sk => next[sk.key]?.read === true);
-                                if (!anyRead) {
-                                    next[parentKey] = { ...next[parentKey], read: false, write: false };
-                                    propagateChildToParent(parentKey);
-                                }
-                            } else if (type === 'write' && value) {
-                                // Child write ON → parent write must be ON
-                                next[parentKey] = { ...next[parentKey], write: true };
-                                propagateChildToParent(parentKey);
-                            } else if (type === 'write' && !value) {
-                                // Child write OFF → if no sibling has write, parent write OFF
-                                const siblings = mod.subTabs.filter(s => s.parentKey === parentKey && s.key !== childKey);
-                                const anyWrite = siblings.some(sk => next[sk.key]?.write === true);
-                                if (!anyWrite) {
-                                    next[parentKey] = { ...next[parentKey], write: false };
-                                    propagateChildToParent(parentKey);
-                                }
-                            }
-                        }
-                    }
-                });
-            };
-            propagateChildToParent(key);
-
-            // 3. Main tab sync
+            // 3. Independent module cascading upwards
             PERMISSION_MODULES.forEach(mod => {
-                if (mod.mainTabKey && mod.subTabs && mod.subTabs.length > 0) {
-                    const mainTabKey = mod.mainTabKey;
-                    // Sub-tab changed → sync main tab state
-                    if (key !== mainTabKey && mod.subTabs.some(s => s.key === key)) {
-                        const anySubRead = mod.subTabs.filter(s => s.key !== mainTabKey).some(sub => {
-                            if (sub.key === key) return type === 'read' ? value : next[key]?.read;
-                            return next[sub.key]?.read === true;
-                        });
-                        const anySubWrite = mod.subTabs.filter(s => s.key !== mainTabKey).some(sub => {
-                            if (sub.key === key) return type === 'write' ? value : next[key]?.write;
-                            return next[sub.key]?.write === true;
-                        });
-                        next[mainTabKey] = anySubRead
-                            ? { ...next[mainTabKey], read: true }
-                            : { ...next[mainTabKey], read: false, write: false };
-                        if (!anySubWrite) {
-                            next[mainTabKey] = { ...next[mainTabKey], write: false };
+                if (mod.subTabs) {
+                    const currentSub = mod.subTabs.find(s => s.key === key);
+                    if (currentSub && currentSub.parentKey) {
+                        const parentK = currentSub.parentKey;
+                        if (!next[parentK]) next[parentK] = { read: false, write: false };
+
+                        if (type === 'read' && value) {
+                            next[parentK] = { ...next[parentK], read: true };
                         }
-                    }
-                    // Main tab changed → cascade down to all sub-tabs
-                    if (key === mainTabKey && type === 'read') {
-                        mod.subTabs.forEach(sub => {
-                            next[sub.key] = value
-                                ? { ...next[sub.key], read: true }   // ON  → all children read ON
-                                : { read: false, write: false };       // OFF → all children OFF
-                        });
-                    }
-                    if (key === mainTabKey && type === 'write') {
-                        mod.subTabs.forEach(sub => {
-                            if (value) {
-                                // ON → enable write for sub-tabs that already have read
-                                if (next[sub.key]?.read) {
-                                    next[sub.key] = { ...next[sub.key], write: true };
-                                }
-                            } else {
-                                // OFF → force all sub-tabs write OFF
-                                next[sub.key] = { ...next[sub.key], write: false };
-                            }
-                        });
+                        if (type === 'write' && value) {
+                            next[parentK] = { ...next[parentK], read: true, write: true };
+                        }
                     }
                 }
             });
@@ -257,11 +214,9 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
         });
     };
 
-
     const renderPermissionTree = (items, parentKey = null, depth = 0) => {
         const levelItems = items.filter(s => {
             if (parentKey === null) {
-                // If s has no parentKey OR its parentKey is not in this rendered items list, treat as root item
                 return !s.parentKey || !items.some(other => other.key === s.parentKey);
             }
             return s.parentKey === parentKey;
@@ -287,7 +242,6 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                     const parentIsInList = item.parentKey && items.some(other => other.key === item.parentKey);
                     const parentPerms = parentIsInList ? (permissions[item.parentKey] || {}) : null;
 
-                    // Gate model: if parent is in list, gate by parent. If parent is not in list (filtered single sub-module), allow independent control.
                     const effectiveParentRead = parentIsInList
                         ? (isIndependentModule
                             ? (parentPerms ? (parentPerms.read || false) : true)
@@ -302,9 +256,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
 
                     const isWriteChecked = (permissions[item.key]?.write && isItemRead) || false;
 
-                    const isReadDisabled  = isIndependentModule
-                        ? !effectiveParentRead
-                        : !effectiveParentRead;
+                    const isReadDisabled  = !effectiveParentRead;
 
                     const isWriteDisabled = isIndependentModule
                         ? (!isItemRead || !effectiveParentWrite)
@@ -321,7 +273,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                                 border="1px solid"
                                 borderColor="gray.200"
                                 position="relative"
-                                opacity={(isIndependentModule ? effectiveParentRead : effectiveParentRead) ? 1 : 0.6}
+                                opacity={effectiveParentRead ? 1 : 0.6}
                                 _hover={depth === 0 ? { borderColor: 'purple.300', shadow: 'sm' } : {}}
                                 transition="all 0.2s"
                             >
@@ -337,16 +289,16 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                                     />
                                 )}
                                 <HStack spacing={2}>
-                                    {depth > 0 && <Text color="gray.400" fontFamily="monospace">└─</Text>}
+                                    {depth > 0 && <Text color="gray.400" fontFamily="monospace">└──</Text>}
                                     <Text 
-                                        fontWeight="bold" 
+                                        fontWeight={depth === 0 ? "bold" : "medium"} 
                                         fontSize={depth === 0 ? "sm" : "xs"} 
-                                        color={depth === 0 ? "gray.700" : "gray.600"}
+                                        color="gray.800"
                                     >
                                         {item.label}
                                     </Text>
                                 </HStack>
-                                <HStack spacing={5}>
+                                <HStack spacing={4}>
                                     <Checkbox 
                                         colorScheme="purple" 
                                         size={depth === 0 ? "md" : "sm"}
@@ -354,7 +306,7 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
                                         isDisabled={isReadDisabled}
                                         onChange={(e) => handlePermissionChange(item.key, 'read', e.target.checked)}
                                     >
-                                        <Text fontSize={depth === 0 ? "xs" : "10px"} fontWeight="semibold">Read</Text>
+                                        <Text fontSize={depth === 0 ? "xs" : "10px"} fontWeight="semibold">Read Access</Text>
                                     </Checkbox>
                                     <Checkbox 
                                         colorScheme="red" 
@@ -401,135 +353,171 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
     if (!user?.isSuperAdmin) return null;
 
     return (
-        <Box mb={5}>
+        <>
+            {/* Height placeholder when bar is dynamically fixed/floating with scroll */}
+            {isScrolled && (
+                <Box h={{ base: "42px", md: "46px" }} mb={2} aria-hidden="true" />
+            )}
+
             <Box
-                p={{ base: 3, md: 4 }}
-                bgGradient="linear(to-r, purple.800, indigo.800)"
-                color="white"
-                borderRadius="xl"
-                boxShadow="md"
-                border="1px solid"
-                borderColor="purple.600"
+                ref={barRef}
+                position={isScrolled ? "fixed" : "relative"}
+                top={isScrolled ? scrolledTop : "0"}
+                left={isScrolled ? (isAdminRoute ? { base: "12px", md: "256px" } : { base: "12px", md: "24px" }) : "auto"}
+                right={isScrolled ? { base: "12px", md: "24px" } : "auto"}
+                zIndex={isScrolled ? 999 : 1}
+                mb={isScrolled ? 0 : 2.5}
+                transition="all 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
             >
-                <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
-                    <HStack spacing={3}>
-                        <Flex
-                            w={10} h={10} bg="whiteAlpha.200" borderRadius="lg"
-                            align="center" justify="center"
-                        >
-                            <Icon as={FiLock} fontSize="xl" color="yellow.300" />
-                        </Flex>
-                        <VStack align="start" spacing={0}>
-                            <HStack>
-                                <Badge colorScheme="yellow" fontSize="10px" px={2} py={0.5} borderRadius="md">Super Admin Control</Badge>
-                                <Text fontWeight="bold" fontSize="sm" letterSpacing="wide">
-                                    {titleLabel} Access Gating
-                                </Text>
-                            </HStack>
-                            <Text fontSize="xs" color="purple.200" mt={0.5}>
-                                Directly configure read/write access for administrative staff without leaving this module.
-                            </Text>
-                        </VStack>
-                    </HStack>
-                    <Button
-                        size="sm"
-                        leftIcon={<FiSliders />}
-                        colorScheme="yellow"
-                        color="gray.900"
-                        fontWeight="bold"
-                        onClick={onOpen}
-                        _hover={{ bg: 'yellow.300', transform: 'translateY(-1px)' }}
-                        transition="all 0.2s"
-                        shadow="sm"
-                    >
-                        Configure Module Permissions
-                    </Button>
-                </Flex>
-            </Box>
-
-            <Modal isOpen={isOpen} onClose={onClose} size="lg" isCentered>
-                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.600" />
-                <ModalContent borderRadius="2xl" overflow="hidden">
-                    <ModalHeader bgGradient="linear(to-r, purple.700, indigo.800)" color="white" py={4}>
-                        <HStack>
-                            <Icon as={FiSliders} />
-                            <Text fontSize="md">Module Permission Settings: {titleLabel}</Text>
-                        </HStack>
-                    </ModalHeader>
-                    <ModalCloseButton color="white" mt={1} />
-
-                    <ModalBody p={6}>
-                        {loading ? (
-                            <Flex justify="center" align="center" py={10}>
-                                <Spinner size="xl" color="purple.500" />
+                <Box
+                    py={isScrolled ? { base: 1.5, md: 2 } : { base: 3, md: 3.5 }}
+                    px={{ base: 3, md: 4 }}
+                    bg="linear-gradient(135deg, rgba(88, 28, 135, 0.98), rgba(67, 56, 202, 0.98))"
+                    backdropFilter="blur(16px)"
+                    color="white"
+                    borderRadius={isScrolled ? "xl" : "2xl"}
+                    boxShadow={isScrolled 
+                        ? "0 14px 34px -4px rgba(88, 28, 135, 0.6), 0 6px 16px rgba(0,0,0,0.22)" 
+                        : "0 4px 16px -2px rgba(88, 28, 135, 0.3)"}
+                    border="1.5px solid"
+                    borderColor={isScrolled ? "yellow.400" : "purple.500"}
+                    transition="all 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                >
+                    <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
+                        <HStack spacing={3}>
+                            <Flex
+                                w={isScrolled ? 7 : 9}
+                                h={isScrolled ? 7 : 9}
+                                bg="whiteAlpha.200"
+                                borderRadius="lg"
+                                align="center"
+                                justify="center"
+                                flexShrink={0}
+                                transition="all 0.2s"
+                            >
+                                <Icon as={FiLock} fontSize={isScrolled ? "sm" : "lg"} color="yellow.300" />
                             </Flex>
-                        ) : (
-                            <VStack spacing={5} align="stretch">
-                                <Box bg="gray.50" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                    <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" mb={2}>
-                                        Select Administrative Staff Member
+                            <VStack align="start" spacing={0}>
+                                <HStack spacing={2}>
+                                    <Badge colorScheme="yellow" fontSize="10px" px={2} py={0.5} borderRadius="md" fontWeight="bold">
+                                        Super Admin Control
+                                    </Badge>
+                                    <Text fontWeight="bold" fontSize={isScrolled ? "xs" : "sm"} letterSpacing="wide">
+                                        {titleLabel} Access Gating
                                     </Text>
-                                    <Select
-                                        value={selectedAdmin?._id || ''}
-                                        onChange={(e) => selectAdminHandler(e.target.value)}
-                                        bg="white"
-                                        size="md"
-                                        borderRadius="lg"
-                                        fontWeight="semibold"
-                                    >
-                                        {admins.map(admin => (
-                                            <option key={admin._id} value={admin._id}>
-                                                {admin.name} ({admin.email}) {admin.isSuperAdmin ? ' [SUPER ADMIN]' : ''}
-                                            </option>
-                                        ))}
-                                    </Select>
-                                </Box>
-
-                                {selectedAdmin && (
-                                    <Box>
-                                        <HStack justify="space-between" mb={3} p={2} bg="purple.50" borderRadius="lg">
-                                            <HStack>
-                                                <Avatar size="sm" name={selectedAdmin.name} bg="purple.600" />
-                                                <Text fontWeight="bold" fontSize="sm" color="purple.900">{selectedAdmin.name}</Text>
-                                            </HStack>
-                                            {selectedAdmin.isSuperAdmin && (
-                                                <Badge colorScheme="purple">SUPER ADMIN</Badge>
-                                            )}
-                                        </HStack>
-
-                                        {selectedAdmin.isSuperAdmin && (
-                                            <Text fontSize="xs" color="purple.600" mb={3}>
-                                                Note: Super Admins automatically bypass permission checks. Modifying checkboxes below applies to their profile if Super Admin privileges are revoked later.
-                                            </Text>
-                                        )}
-
-                                        <VStack align="stretch" spacing={3}>
-                                            {renderPermissionTree(subTabsToRender.length === 0 ? [{ key: moduleConfig.key, label: 'Full Access' }] : subTabsToRender)}
-                                        </VStack>
-                                    </Box>
+                                </HStack>
+                                {!isScrolled && (
+                                    <Text fontSize="xs" color="purple.200" mt={0.5} noOfLines={{ base: 1, md: 2 }}>
+                                        Directly configure read/write access for administrative staff without leaving this module.
+                                    </Text>
                                 )}
                             </VStack>
-                        )}
-                    </ModalBody>
+                        </HStack>
 
-                    <ModalFooter bg="gray.50" py={3.5} borderTop="1px solid" borderColor="gray.100">
-                        <Button variant="ghost" size="sm" mr={3} onClick={onClose} borderRadius="lg">Cancel</Button>
                         <Button
-                            colorScheme="purple"
                             size="sm"
-                            leftIcon={<FiSave />}
-                            onClick={handleSavePermissions}
-                            isLoading={saving}
-                            loadingText="Applying..."
-                            borderRadius="lg"
-                            px={6}
+                            h={isScrolled ? "30px" : "36px"}
+                            leftIcon={<FiSliders />}
+                            colorScheme="yellow"
+                            color="gray.900"
+                            fontWeight="bold"
+                            onClick={onOpen}
+                            _hover={{ bg: 'yellow.300', transform: 'translateY(-1px)' }}
+                            _active={{ bg: 'yellow.400' }}
+                            transition="all 0.2s"
+                            shadow="md"
+                            fontSize="xs"
+                            px={3.5}
                         >
-                            Apply Permissions
+                            Configure Module Permissions
                         </Button>
-                    </ModalFooter>
-                </ModalContent>
-            </Modal>
-        </Box>
+                    </Flex>
+                </Box>
+
+                <Modal isOpen={isOpen} onClose={onClose} size="lg" isCentered>
+                    <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.600" />
+                    <ModalContent borderRadius="2xl" overflow="hidden">
+                        <ModalHeader bgGradient="linear(to-r, purple.700, indigo.800)" color="white" py={4}>
+                            <HStack>
+                                <Icon as={FiSliders} />
+                                <Text fontSize="md">Module Permission Settings: {titleLabel}</Text>
+                            </HStack>
+                        </ModalHeader>
+                        <ModalCloseButton color="white" mt={1} />
+
+                        <ModalBody p={6}>
+                            {loading && admins.length === 0 ? (
+                                <Flex justify="center" align="center" py={10}>
+                                    <Spinner size="xl" color="purple.500" />
+                                </Flex>
+                            ) : (
+                                <VStack spacing={5} align="stretch">
+                                    <Box bg="gray.50" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200">
+                                        <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" mb={2}>
+                                            Select Administrative Staff Member
+                                        </Text>
+                                        <Select
+                                            value={selectedAdmin?._id || ''}
+                                            onChange={(e) => selectAdminHandler(e.target.value)}
+                                            bg="white"
+                                            size="md"
+                                            borderRadius="lg"
+                                            fontWeight="semibold"
+                                        >
+                                            {admins.map(admin => (
+                                                <option key={admin._id} value={admin._id}>
+                                                    {admin.name} ({admin.email}) {admin.isSuperAdmin ? ' [SUPER ADMIN]' : ''}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    </Box>
+
+                                    {selectedAdmin && (
+                                        <Box>
+                                            <HStack justify="space-between" mb={3} p={2} bg="purple.50" borderRadius="lg">
+                                                <HStack>
+                                                    <Avatar size="sm" name={selectedAdmin.name} bg="purple.600" />
+                                                    <Text fontWeight="bold" fontSize="sm" color="purple.900">{selectedAdmin.name}</Text>
+                                                </HStack>
+                                                {selectedAdmin.isSuperAdmin && (
+                                                    <Badge colorScheme="purple">SUPER ADMIN</Badge>
+                                                )}
+                                            </HStack>
+
+                                            {selectedAdmin.isSuperAdmin && (
+                                                <Text fontSize="xs" color="purple.600" mb={3}>
+                                                    Note: Super Admins automatically bypass permission checks. Modifying checkboxes below applies to their profile if Super Admin privileges are revoked later.
+                                                </Text>
+                                            )}
+
+                                            <VStack align="stretch" spacing={3}>
+                                                {renderPermissionTree(subTabsToRender.length === 0 ? [{ key: moduleConfig.key, label: 'Full Access' }] : subTabsToRender)}
+                                            </VStack>
+                                        </Box>
+                                    )}
+                                </VStack>
+                            )}
+                        </ModalBody>
+
+                        <ModalFooter bg="gray.50" py={3.5} borderTop="1px solid" borderColor="gray.100">
+                            <Button variant="ghost" size="sm" mr={3} onClick={onClose} borderRadius="lg">Cancel</Button>
+                            <Button
+                                colorScheme="purple"
+                                size="sm"
+                                leftIcon={<FiSave />}
+                                onClick={handleSavePermissions}
+                                isLoading={saving}
+                                loadingText="Applying..."
+                                borderRadius="lg"
+                                px={6}
+                            >
+                                Apply Permissions
+                            </Button>
+                        </ModalFooter>
+                    </ModalContent>
+                </Modal>
+            </Box>
+        </>
     );
 };
 

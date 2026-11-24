@@ -5,11 +5,11 @@ import {
     Tabs, TabList, TabPanels, Tab, TabPanel, Table, Thead, Tbody, Tr, Th, Td, Wrap,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner, Center
+    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner, Center, Select
 } from '@chakra-ui/react';
 import {
     FaBuilding, FaCloudUploadAlt, FaTrash, FaEdit, FaEye,
-    FaWhatsapp, FaFilePdf, FaCheckCircle
+    FaWhatsapp, FaFilePdf, FaCheckCircle, FaQrcode
 } from 'react-icons/fa';
 import {
     FiPhone, FiMail, FiMapPin, FiUser, FiFileText, FiPlus,
@@ -35,7 +35,9 @@ const CompanyMaster = () => {
     const [panFile, setPanFile] = useState(null);
     const [gstFile, setGstFile] = useState(null);
     const [cancelledChequeFile, setCancelledChequeFile] = useState(null);
+    const [paymentQrFile, setPaymentQrFile] = useState(null);
     const [stampFile, setStampFile] = useState(null);
+    const [visitingCardFile, setVisitingCardFile] = useState(null);
     const [otherDocFile, setOtherDocFile] = useState(null);
 
     // Multiple Other Statutory Documents (Company-wise)
@@ -64,9 +66,7 @@ const CompanyMaster = () => {
         email: '',
         gstNumber: '',
         address: '',
-        customMessage: '',
-        includeStatutoryDetails: true,
-        includeBankDetails: true
+        customMessage: ''
     });
 
     const [companies, setCompanies] = useState([]);
@@ -76,17 +76,35 @@ const CompanyMaster = () => {
     const [activeTab, setActiveTab] = useState(0);
 
     const [existingDocs, setExistingDocs] = useState({
-        logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', companyStamp: '', otherDoc: ''
+        logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', paymentQrDoc: '', companyStamp: '', visitingCard: '', otherDoc: ''
     });
     const [removeFlags, setRemoveFlags] = useState({
-        logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false, otherDoc: false
+        logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, paymentQrDoc: false, companyStamp: false, visitingCard: false, otherDoc: false
     });
 
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
 
+    // ─── Dynamic Company Division / Type Options ─────────────────────────────
+    const DEFAULT_COMPANY_TYPES = ['Unique Lab Instruments', 'Unique Survey'];
+    const COMPANY_TYPES_STORAGE_KEY = 'company_master_division_types';
+
+    const [companyTypeOptions, setCompanyTypeOptions] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(COMPANY_TYPES_STORAGE_KEY) || '[]');
+            const merged = Array.from(new Set([...DEFAULT_COMPANY_TYPES, ...(Array.isArray(saved) ? saved : [])]));
+            return merged;
+        } catch {
+            return DEFAULT_COMPANY_TYPES;
+        }
+    });
+    const [isAddTypeModalOpen, setIsAddTypeModalOpen] = useState(false);
+    const [newTypeName, setNewTypeName] = useState('');
+
     const [formData, setFormData] = useState({
         companyName: '',
+        companyType: 'Unique Lab Instruments',
+        division: 'Unique Lab Instruments',
         address: '',
         state: '',
         pincode: '',
@@ -162,17 +180,19 @@ const CompanyMaster = () => {
         setPanFile(null);
         setGstFile(null);
         setCancelledChequeFile(null);
+        setPaymentQrFile(null);
         setStampFile(null);
+        setVisitingCardFile(null);
         setOtherDocFile(null);
         setExistingOtherDocs([]);
         setExistingCatalogs([]);
         setQueuedCatalogs([]);
         setCatalogInput({ title: '', file: null });
         setExistingDocs({
-            logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', companyStamp: '', otherDoc: ''
+            logo: '', udyamDoc: '', panCardDoc: '', gstDoc: '', cancelledChequeDoc: '', paymentQrDoc: '', companyStamp: '', visitingCard: '', otherDoc: ''
         });
         setRemoveFlags({
-            logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, companyStamp: false, otherDoc: false
+            logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false, cancelledChequeDoc: false, paymentQrDoc: false, companyStamp: false, visitingCard: false, otherDoc: false
         });
     };
 
@@ -181,6 +201,8 @@ const CompanyMaster = () => {
         setEditId(null);
         setFormData({
             companyName: '',
+            companyType: companyTypeOptions[0] || 'Unique Lab Instruments',
+            division: companyTypeOptions[0] || 'Unique Lab Instruments',
             address: '',
             state: '',
             pincode: '',
@@ -213,11 +235,41 @@ const CompanyMaster = () => {
     const fetchCompanies = async () => {
         try {
             const res = await api.get('/company-master');
-            if (res.data.success) {
-                setCompanies(res.data.data || []);
+            if (res.data?.success) {
+                const list = res.data.data || [];
+                setCompanies(list);
+
+                // Dynamically sync and merge all company types present in DB
+                const dbTypes = list
+                    .map(c => c.companyType || c.division)
+                    .filter(Boolean);
+                setCompanyTypeOptions(prev => {
+                    const combined = Array.from(new Set([...DEFAULT_COMPANY_TYPES, ...prev, ...dbTypes]));
+                    try {
+                        localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(combined));
+                    } catch (e) {}
+                    return combined;
+                });
             }
         } catch (err) {
             console.error("Failed to fetch companies", err);
+        }
+    };
+
+    const fetchCompanyTypes = async () => {
+        try {
+            const res = await api.get('/company-master/types');
+            if (res.data?.success && Array.isArray(res.data.data)) {
+                setCompanyTypeOptions(prev => {
+                    const combined = Array.from(new Set([...DEFAULT_COMPANY_TYPES, ...prev, ...res.data.data]));
+                    try {
+                        localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(combined));
+                    } catch (e) {}
+                    return combined;
+                });
+            }
+        } catch (err) {
+            // Silently fallback to company list sync
         }
     };
 
@@ -234,8 +286,61 @@ const CompanyMaster = () => {
 
     useEffect(() => {
         fetchCompanies();
+        fetchCompanyTypes();
         fetchCatalogs();
     }, []);
+
+    // Dynamically handle adding a custom Company Division / Type into the selection box
+    const handleAddNewType = () => {
+        const trimmed = newTypeName.trim();
+        if (!trimmed) {
+            toast({
+                title: "Enter Division / Type Name",
+                description: "Please enter a valid name before adding.",
+                status: "warning",
+                duration: 2500
+            });
+            return;
+        }
+
+        setCompanyTypeOptions(prev => {
+            const exists = prev.some(t => t.toLowerCase() === trimmed.toLowerCase());
+            const next = exists ? prev : [...prev, trimmed];
+            try {
+                localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(next));
+            } catch (e) {}
+            return next;
+        });
+
+        setFormData(prev => ({
+            ...prev,
+            companyType: trimmed,
+            division: trimmed
+        }));
+
+        toast({
+            title: "Option Added & Selected",
+            description: `"${trimmed}" is now selected in the dropdown.`,
+            status: "success",
+            duration: 2500
+        });
+
+        setNewTypeName('');
+        setIsAddTypeModalOpen(false);
+    };
+
+    const handleCompanyTypeChange = (e) => {
+        const val = e.target.value;
+        if (val === '__ADD_NEW__') {
+            setIsAddTypeModalOpen(true);
+            return;
+        }
+        setFormData(prev => ({
+            ...prev,
+            companyType: val,
+            division: val
+        }));
+    };
 
     const filteredCompanies = companies.filter(c =>
         c.companyName?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -358,6 +463,8 @@ const CompanyMaster = () => {
         if (comp.panCardDoc) addDoc('panCardDoc', 'PAN Card Document', comp.panCardDoc, comp.panCardNumber || 'PAN');
         if (comp.udyamDoc) addDoc('udyamDoc', 'Udyam Registration Certificate', comp.udyamDoc, comp.udyamNumber || 'Udyam');
         if (comp.cancelledChequeDoc) addDoc('cancelledChequeDoc', 'Cancelled Cheque / Bank Proof', comp.cancelledChequeDoc, 'Cheque');
+        if (comp.paymentQrDoc) addDoc('paymentQrDoc', 'Payment QR Code', comp.paymentQrDoc, 'Payment QR');
+        if (comp.visitingCard) addDoc('visitingCard', 'Company Visiting Card', comp.visitingCard, 'Visiting Card');
 
         // 2. Multiple Other Statutory Documents (strictly deduplicated)
         const otherDocs = getUniqueOtherDocs(comp.otherDocs, comp.otherDoc, comp.otherDocTitle);
@@ -397,9 +504,7 @@ const CompanyMaster = () => {
             email: '',
             gstNumber: '',
             address: '',
-            customMessage: '',
-            includeStatutoryDetails: true,
-            includeBankDetails: true
+            customMessage: ''
         });
         setShareClientAutoFilled(false);
         setIsShareModalOpen(true);
@@ -491,49 +596,10 @@ const CompanyMaster = () => {
     };
 
     const buildShareMessageText = (comp) => {
-        let caption = `*${comp.companyName.toUpperCase()}*\nOfficial Company Statutory Credentials & Documents\n\n`;
-
-        if (shareForm.includeStatutoryDetails) {
-            caption += `🏢 *Company Profile:*\n`;
-            if (comp.gstin) caption += `• *GSTIN:* ${comp.gstin}\n`;
-            if (comp.panCardNumber) caption += `• *PAN Card:* ${comp.panCardNumber}\n`;
-            if (comp.udyamNumber) caption += `• *Udyam Reg:* ${comp.udyamNumber}\n`;
-            if (comp.contactNo) caption += `• *Contact:* ${comp.contactNo}\n`;
-            if (comp.email) caption += `• *Email:* ${comp.email}\n`;
-            if (comp.address) caption += `• *Address:* ${comp.address}${comp.state ? ', ' + comp.state : ''}${comp.pincode ? ' - ' + comp.pincode : ''}\n`;
-            caption += `\n`;
-        }
-
-        if (shareForm.includeBankDetails && comp.bankDetails?.accountNumber) {
-            caption += `🏦 *Official Bank Account Details:*\n`;
-            caption += `• *Account Name:* ${comp.bankDetails.accountHolderName || comp.companyName}\n`;
-            caption += `• *Bank Name:* ${comp.bankDetails.bankName}\n`;
-            caption += `• *Account No:* ${comp.bankDetails.accountNumber}\n`;
-            caption += `• *IFSC Code:* ${comp.bankDetails.ifscCode}\n\n`;
-        }
-
-        const selectedDocsList = getAvailableShareDocs(comp).filter(d => selectedShareDocs.has(d.key));
-        const availCats = getAvailableShareCatalogs(comp);
-        const selectedCatsList = availCats.filter(c => selectedShareCatalogs.has(c._id));
-
-        if (selectedDocsList.length > 0 || selectedCatsList.length > 0) {
-            caption += `📎 *Attached Statutory Documents & Catalogs:*\n`;
-            let itemNum = 1;
-            selectedDocsList.forEach(d => {
-                caption += `${itemNum++}. ${d.title}\n`;
-            });
-            selectedCatsList.forEach(c => {
-                caption += `${itemNum++}. [Catalog] ${c.title}\n`;
-            });
-            caption += `\n`;
-        }
-
         if (shareForm.customMessage?.trim()) {
-            caption += `💬 *Note:* ${shareForm.customMessage.trim()}\n\n`;
+            return shareForm.customMessage.trim();
         }
-
-        caption += `🌐 *Website:* https://uecivil.com`;
-        return caption;
+        return '';
     };
 
     const handleSendShareWhatsapp = async () => {
@@ -570,13 +636,17 @@ const CompanyMaster = () => {
                 address: shareForm.address.trim(),
                 pdfUrls: filesToSend,
                 catalogTitles: titlesToSend,
-                message: caption
+                message: caption,
+                senderCompanyName: comp.companyName,
+                senderCompanyId: comp._id,
+                sentByName: user?.name || user?.contactPersonName || user?.email || 'Admin',
+                sentById: user?.id || user?._id || null
             };
 
-            const res = await api.post('/whatsapp/send-catalog', payload);
+            const res = await api.post('/whatsapp/send-company-docs', payload);
             if (res.data?.success) {
                 toast({
-                    title: '🚀 Company Details & Documents Shared!',
+                    title: '🚀 Company Documents Shared!',
                     description: `Sent successfully to ${cleanPhone} on WhatsApp & synced with Google Contacts.`,
                     status: 'success',
                     duration: 4000,
@@ -622,7 +692,9 @@ const CompanyMaster = () => {
             if (panFile) uploadData.append('panCardDoc', panFile);
             if (gstFile) uploadData.append('gstDoc', gstFile);
             if (cancelledChequeFile) uploadData.append('cancelledChequeDoc', cancelledChequeFile);
+            if (paymentQrFile) uploadData.append('paymentQrDoc', paymentQrFile);
             if (stampFile) uploadData.append('companyStamp', stampFile);
+            if (visitingCardFile) uploadData.append('visitingCard', visitingCardFile);
             if (otherDocFile) uploadData.append('otherDoc', otherDocFile);
 
             // Existing other statutory documents
@@ -716,17 +788,35 @@ const CompanyMaster = () => {
             panCardDoc: c.panCardDoc || '',
             gstDoc: c.gstDoc || '',
             cancelledChequeDoc: c.cancelledChequeDoc || '',
+            paymentQrDoc: c.paymentQrDoc || '',
             companyStamp: c.companyStamp || '',
+            visitingCard: c.visitingCard || '',
             otherDoc: c.otherDoc || ''
         });
 
         setRemoveFlags({
             logo: false, udyamDoc: false, panCardDoc: false, gstDoc: false,
-            cancelledChequeDoc: false, companyStamp: false, otherDoc: false
+            cancelledChequeDoc: false, paymentQrDoc: false, companyStamp: false, visitingCard: false, otherDoc: false
         });
+
+        const compType = c.companyType || c.division || 'Unique Lab Instruments';
+        if (compType) {
+            setCompanyTypeOptions(prev => {
+                if (!prev.includes(compType)) {
+                    const next = [...prev, compType];
+                    try {
+                        localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(next));
+                    } catch (e) {}
+                    return next;
+                }
+                return prev;
+            });
+        }
 
         setFormData({
             companyName: c.companyName || '',
+            companyType: compType,
+            division: compType,
             address: c.address || '',
             state: c.state || '',
             pincode: c.pincode || '',
@@ -887,515 +977,559 @@ const CompanyMaster = () => {
                                     if (tab.id === 'form') {
                                         return (
                                             <TabPanel key="form" p={0}>
-                                    {/* Mode Indicator Banner */}
-                                    <Box
-                                        mb={6} p={4} borderRadius="2xl" border="1px solid"
-                                        bg={editId ? "blue.50" : "green.50"}
-                                        borderColor={editId ? "blue.200" : "green.200"}
-                                    >
-                                        <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
-                                            <HStack spacing={3}>
-                                                <Icon as={editId ? FaEdit : FiCheckCircle} color={editId ? "blue.600" : "green.600"} w={5} h={5} />
-                                                <Box>
-                                                    <Text fontSize="sm" fontWeight="800" color={editId ? "blue.900" : "green.900"}>
-                                                        {editId
-                                                            ? `Editing Company: ${formData.companyName || 'Company'}`
-                                                            : 'Creating New Company Record (Clean Blank Form)'}
-                                                    </Text>
-                                                    <Text fontSize="xs" color={editId ? "blue.700" : "green.700"}>
-                                                        {editId
-                                                            ? 'Updating details and attaching company-specific statutory documents & catalogs.'
-                                                            : 'All fields and file queues are clean for this new company. No documents from other companies are attached.'}
-                                                    </Text>
-                                                </Box>
+                                    {/* Active Mode Notice (Compact) */}
+                                    {editId && (
+                                        <Flex mb={3} p={2.5} px={4} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.200" justify="space-between" align="center">
+                                            <HStack spacing={2}>
+                                                <Icon as={FaEdit} color="blue.600" />
+                                                <Text fontSize="xs" fontWeight="bold" color="blue.800">
+                                                    Editing: {formData.companyName || 'Company'}
+                                                </Text>
                                             </HStack>
-                                            {editId ? (
-                                                <Button size="xs" colorScheme="blue" variant="outline" onClick={handleAddNew}>
-                                                    Switch to Add New (Clean Form)
-                                                </Button>
-                                            ) : (
-                                                <Badge colorScheme="green" fontSize="xs" px={3} py={1} borderRadius="full">
-                                                    ✨ Clean New Form
-                                                </Badge>
-                                            )}
+                                            <Button size="xs" colorScheme="blue" variant="outline" onClick={handleAddNew}>
+                                                + Switch to New Company
+                                            </Button>
                                         </Flex>
-                                    </Box>
+                                    )}
 
                                     <form onSubmit={handleSubmit}>
-                                        <VStack spacing={8}>
+                                        <VStack spacing={4} align="stretch">
                                             {/* 1. Basic Company Details */}
-                                            <Box w="full" p={5} bg="gray.50/50" borderRadius="2xl" border="1px solid" borderColor="gray.200">
-                                                <Flex align="center" gap={2} mb={4}>
+                                            <Box p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                                                <Flex align="center" gap={2} mb={3}>
                                                     <Icon as={FaBuilding} color="teal.600" />
-                                                    <Text fontSize="md" fontWeight="bold" color="teal.800">1. Basic Company Details</Text>
+                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" textTransform="uppercase" letterSpacing="wider">
+                                                        1. Company Information
+                                                    </Text>
                                                 </Flex>
-                                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={5}>
-                                                    <FormControl isRequired>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Company Name</FormLabel>
-                                                        <Input name="companyName" value={formData.companyName} onChange={handleChange} placeholder="e.g. Unique Engineering" borderRadius="xl" bg="white" />
+
+                                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3}>
+                                                    <FormControl isRequired gridColumn={{ base: "span 1", sm: "span 2" }}>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Company Name</FormLabel>
+                                                        <Input name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company Name" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Official Email Address</FormLabel>
-                                                        <Input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="company@uecivil.com" borderRadius="xl" bg="white" />
+
+                                                    <FormControl isRequired gridColumn={{ base: "span 1", sm: "span 2" }}>
+                                                        <Flex justify="space-between" align="center" mb={1}>
+                                                            <FormLabel fontSize="xs" fontWeight="semibold" mb={0} color="gray.600">Division / Type</FormLabel>
+                                                            <Button size="xs" variant="link" colorScheme="teal" onClick={() => setIsAddTypeModalOpen(true)}>+ Add New</Button>
+                                                        </Flex>
+                                                        <Select name="companyType" value={formData.companyType || 'Unique Lab Instruments'} onChange={handleCompanyTypeChange} size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }}>
+                                                            {companyTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                            <option value="__ADD_NEW__">➕ + Add New Type...</option>
+                                                        </Select>
                                                     </FormControl>
+
                                                     <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Contact / Mobile Number</FormLabel>
-                                                        <Input name="contactNo" value={formData.contactNo} onChange={handleChange} placeholder="9099160391" borderRadius="xl" bg="white" />
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Official Email</FormLabel>
+                                                        <Input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Email Address" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
+
                                                     <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">State</FormLabel>
-                                                        <Input name="state" value={formData.state} onChange={handleChange} placeholder="Gujarat" borderRadius="xl" bg="white" />
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Contact Number</FormLabel>
+                                                        <Input name="contactNo" value={formData.contactNo} onChange={handleChange} placeholder="Mobile / Phone" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
+
                                                     <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Pincode</FormLabel>
-                                                        <Input name="pincode" value={formData.pincode} onChange={handleChange} placeholder="380051" borderRadius="xl" bg="white" />
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">State</FormLabel>
+                                                        <Input name="state" value={formData.state} onChange={handleChange} placeholder="State" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
+
                                                     <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Full Office / Billing Address</FormLabel>
-                                                        <Input name="address" value={formData.address} onChange={handleChange} placeholder="Plot No, Industrial Estate, City..." borderRadius="xl" bg="white" />
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Pincode</FormLabel>
+                                                        <Input name="pincode" value={formData.pincode} onChange={handleChange} placeholder="Pincode" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
+                                                    </FormControl>
+
+                                                    <FormControl gridColumn={{ base: "span 1", sm: "span 2", lg: "span 4" }}>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Billing Address</FormLabel>
+                                                        <Input name="address" value={formData.address} onChange={handleChange} placeholder="Registered Office / Billing Address" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
                                                 </SimpleGrid>
                                             </Box>
 
-                                            {/* 2. Registration & Tax Details */}
-                                            <Box w="full" p={5} bg="gray.50/50" borderRadius="2xl" border="1px solid" borderColor="gray.200">
-                                                <Flex align="center" gap={2} mb={4}>
+                                            {/* 2. Registration & Tax Details (With Integrated GST, PAN & Udyam Document Uploads) */}
+                                            <Box p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                                                <Flex align="center" gap={2} mb={3}>
                                                     <Icon as={FiFileText} color="purple.600" />
-                                                    <Text fontSize="md" fontWeight="bold" color="purple.800">2. Registration & Tax Details</Text>
+                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" textTransform="uppercase" letterSpacing="wider">
+                                                        2. Registration & Tax Credentials
+                                                    </Text>
                                                 </Flex>
-                                                <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4}>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Udyam Number</FormLabel>
-                                                        <Input name="udyamNumber" value={formData.udyamNumber} onChange={handleChange} placeholder="UDYAM-GJ-01-..." borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">GSTIN</FormLabel>
-                                                        <Input name="gstin" value={formData.gstin} onChange={handleChange} placeholder="24CHHPK0829H2ZG" borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">PAN Card Number</FormLabel>
-                                                        <Input name="panCardNumber" value={formData.panCardNumber} onChange={handleChange} placeholder="CHHPK0829H" borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Invoice Prefix (e.g. UE, ULI)</FormLabel>
-                                                        <Input name="invoicePrefix" value={formData.invoicePrefix} onChange={handleChange} placeholder="Prefix (e.g. UE)" borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                </SimpleGrid>
-                                            </Box>
 
-                                            {/* 3. Bank Account Details */}
-                                            <Box w="full" p={5} bg="gray.50/50" borderRadius="2xl" border="1px solid" borderColor="gray.200">
-                                                <Flex align="center" gap={2} mb={4}>
-                                                    <Icon as={FiBriefcase} color="blue.600" />
-                                                    <Text fontSize="md" fontWeight="bold" color="blue.800">3. Bank Account Details</Text>
-                                                </Flex>
-                                                <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4}>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Account Holder Name</FormLabel>
-                                                        <Input name="accountHolderName" value={formData.bankDetails?.accountHolderName} onChange={handleChange} placeholder="Account Holder" borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Bank Name</FormLabel>
-                                                        <Input name="bankName" value={formData.bankDetails?.bankName} onChange={handleChange} placeholder="e.g. Indusind Bank" borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">Account Number</FormLabel>
-                                                        <Input name="accountNumber" value={formData.bankDetails?.accountNumber} onChange={handleChange} placeholder="Account Number" borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">IFSC Code</FormLabel>
-                                                        <Input name="ifscCode" value={formData.bankDetails?.ifscCode} onChange={handleChange} placeholder="INDB0000330" borderRadius="xl" bg="white" />
-                                                    </FormControl>
-                                                </SimpleGrid>
-                                            </Box>
-
-                                            {/* 4. Company Statutory Documents (Photo / PDF) */}
-                                            <Box w="full" p={5} bg="gray.50/50" borderRadius="2xl" border="1px solid" borderColor="gray.200">
-                                                <Flex align="center" gap={2} mb={4}>
-                                                    <Icon as={FiLayers} color="teal.600" />
-                                                    <Text fontSize="md" fontWeight="bold" color="teal.800">4. Company Statutory Documents & Stamp</Text>
-                                                </Flex>
-                                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                                                    {/* 1. Logo */}
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">1. Company Logo (Photo/Image)</FormLabel>
-                                                        {existingDocs.logo && !removeFlags.logo ? (
-                                                            <HStack p={3} border="1px solid" borderColor="teal.200" borderRadius="xl" bg="teal.50" justify="space-between">
-                                                                <HStack spacing={2}>
-                                                                    <Image src={`${API_BASE_URL}${existingDocs.logo}`} w="32px" h="32px" objectFit="contain" />
-                                                                    <Button size="xs" colorScheme="teal" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${existingDocs.logo}`, '_blank')}>View Logo</Button>
-                                                                </HStack>
-                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove Logo" onClick={() => setRemoveFlags(prev => ({ ...prev, logo: true }))} />
-                                                            </HStack>
-                                                        ) : (
-                                                            <Box p={4} border="2px dashed" borderColor="teal.200" borderRadius="xl" bg="teal.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('logo-upload').click()} _hover={{ bg: "teal.100" }}>
-                                                                <input type="file" id="logo-upload" hidden onChange={(e) => setLogoFile(e.target.files[0])} accept="image/*" />
-                                                                <Icon as={FaCloudUploadAlt} w={6} h={6} color="teal.500" mb={1} />
-                                                                <Text fontSize="xs" fontWeight="bold" color="teal.700">{logoFile ? `Selected: ${logoFile.name}` : "Upload Logo Image"}</Text>
-                                                            </Box>
-                                                        )}
-                                                    </FormControl>
-
-                                                    {/* 2. Company Stamp */}
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">2. Company Stamp / Seal (Photo/Image)</FormLabel>
-                                                        {existingDocs.companyStamp && !removeFlags.companyStamp ? (
-                                                            <HStack p={3} border="1px solid" borderColor="purple.200" borderRadius="xl" bg="purple.50" justify="space-between">
-                                                                <HStack spacing={2}>
-                                                                    <Image src={`${API_BASE_URL}${existingDocs.companyStamp}`} w="32px" h="32px" objectFit="contain" />
-                                                                    <Button size="xs" colorScheme="purple" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${existingDocs.companyStamp}`, '_blank')}>View Stamp</Button>
-                                                                </HStack>
-                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove Stamp" onClick={() => setRemoveFlags(prev => ({ ...prev, companyStamp: true }))} />
-                                                            </HStack>
-                                                        ) : (
-                                                            <Box p={4} border="2px dashed" borderColor="purple.200" borderRadius="xl" bg="purple.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('stamp-upload').click()} _hover={{ bg: "purple.100" }}>
-                                                                <input type="file" id="stamp-upload" hidden onChange={(e) => setStampFile(e.target.files[0])} accept="image/*" />
-                                                                <Icon as={FaCloudUploadAlt} w={6} h={6} color="purple.500" mb={1} />
-                                                                <Text fontSize="xs" fontWeight="bold" color="purple.700">{stampFile ? `Selected: ${stampFile.name}` : "Upload Stamp Photo"}</Text>
-                                                            </Box>
-                                                        )}
-                                                    </FormControl>
-
-                                                    {/* 3. Udyam Doc */}
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">3. Udyam Registration (PDF / Photo)</FormLabel>
-                                                        {existingDocs.udyamDoc && !removeFlags.udyamDoc ? (
-                                                            <HStack p={3} border="1px solid" borderColor="blue.200" borderRadius="xl" bg="blue.50" justify="space-between">
-                                                                <HStack spacing={2}>
-                                                                    <Badge colorScheme="blue">Saved Udyam</Badge>
-                                                                    <Button size="xs" colorScheme="blue" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${existingDocs.udyamDoc}`, '_blank')}>View File</Button>
-                                                                </HStack>
-                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove Udyam Doc" onClick={() => setRemoveFlags(prev => ({ ...prev, udyamDoc: true }))} />
-                                                            </HStack>
-                                                        ) : (
-                                                            <Box p={4} border="2px dashed" borderColor="blue.200" borderRadius="xl" bg="blue.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('udyam-upload').click()} _hover={{ bg: "blue.100" }}>
-                                                                <input type="file" id="udyam-upload" hidden onChange={(e) => setUdyamFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                <Icon as={FaCloudUploadAlt} w={6} h={6} color="blue.500" mb={1} />
-                                                                <Text fontSize="xs" fontWeight="bold" color="blue.700">{udyamFile ? `Selected: ${udyamFile.name}` : "Upload Udyam Document"}</Text>
-                                                            </Box>
-                                                        )}
-                                                    </FormControl>
-
-                                                    {/* 4. PAN Card Doc */}
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">4. PAN Card (Photo / PDF)</FormLabel>
-                                                        {existingDocs.panCardDoc && !removeFlags.panCardDoc ? (
-                                                            <HStack p={3} border="1px solid" borderColor="orange.200" borderRadius="xl" bg="orange.50" justify="space-between">
-                                                                <HStack spacing={2}>
-                                                                    <Badge colorScheme="orange">Saved PAN</Badge>
-                                                                    <Button size="xs" colorScheme="orange" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${existingDocs.panCardDoc}`, '_blank')}>View File</Button>
-                                                                </HStack>
-                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove PAN Card" onClick={() => setRemoveFlags(prev => ({ ...prev, panCardDoc: true }))} />
-                                                            </HStack>
-                                                        ) : (
-                                                            <Box p={4} border="2px dashed" borderColor="orange.200" borderRadius="xl" bg="orange.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('pan-upload').click()} _hover={{ bg: "orange.100" }}>
-                                                                <input type="file" id="pan-upload" hidden onChange={(e) => setPanFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                <Icon as={FaCloudUploadAlt} w={6} h={6} color="orange.500" mb={1} />
-                                                                <Text fontSize="xs" fontWeight="bold" color="orange.700">{panFile ? `Selected: ${panFile.name}` : "Upload PAN Card"}</Text>
-                                                            </Box>
-                                                        )}
-                                                    </FormControl>
-
-                                                    {/* 5. GST Doc */}
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">5. GST Certificate (Photo / PDF)</FormLabel>
-                                                        {existingDocs.gstDoc && !removeFlags.gstDoc ? (
-                                                            <HStack p={3} border="1px solid" borderColor="green.200" borderRadius="xl" bg="green.50" justify="space-between">
-                                                                <HStack spacing={2}>
-                                                                    <Badge colorScheme="green">Saved GST</Badge>
-                                                                    <Button size="xs" colorScheme="green" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${existingDocs.gstDoc}`, '_blank')}>View File</Button>
-                                                                </HStack>
-                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove GST Cert" onClick={() => setRemoveFlags(prev => ({ ...prev, gstDoc: true }))} />
-                                                            </HStack>
-                                                        ) : (
-                                                            <Box p={4} border="2px dashed" borderColor="green.200" borderRadius="xl" bg="green.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('gst-upload').click()} _hover={{ bg: "green.100" }}>
-                                                                <input type="file" id="gst-upload" hidden onChange={(e) => setGstFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                <Icon as={FaCloudUploadAlt} w={6} h={6} color="green.500" mb={1} />
-                                                                <Text fontSize="xs" fontWeight="bold" color="green.700">{gstFile ? `Selected: ${gstFile.name}` : "Upload GST Certificate"}</Text>
-                                                            </Box>
-                                                        )}
-                                                    </FormControl>
-
-                                                    {/* 6. Cancelled Cheque Doc */}
-                                                    <FormControl>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">6. Cancelled Cheque (Photo / PDF)</FormLabel>
-                                                        {existingDocs.cancelledChequeDoc && !removeFlags.cancelledChequeDoc ? (
-                                                            <HStack p={3} border="1px solid" borderColor="red.200" borderRadius="xl" bg="red.50" justify="space-between">
-                                                                <HStack spacing={2}>
-                                                                    <Badge colorScheme="red">Saved Cheque</Badge>
-                                                                    <Button size="xs" colorScheme="red" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${existingDocs.cancelledChequeDoc}`, '_blank')}>View File</Button>
-                                                                </HStack>
-                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove Cheque" onClick={() => setRemoveFlags(prev => ({ ...prev, cancelledChequeDoc: true }))} />
-                                                            </HStack>
-                                                        ) : (
-                                                            <Box p={4} border="2px dashed" borderColor="red.200" borderRadius="xl" bg="red.50" textAlign="center" cursor="pointer" onClick={() => document.getElementById('cheque-upload').click()} _hover={{ bg: "red.100" }}>
-                                                                <input type="file" id="cheque-upload" hidden onChange={(e) => setCancelledChequeFile(e.target.files[0])} accept="image/*,.pdf" />
-                                                                <Icon as={FaCloudUploadAlt} w={6} h={6} color="red.500" mb={1} />
-                                                                <Text fontSize="xs" fontWeight="bold" color="red.700">{cancelledChequeFile ? `Selected: ${cancelledChequeFile.name}` : "Upload Cancelled Cheque"}</Text>
-                                                            </Box>
-                                                        )}
-                                                    </FormControl>
-
-                                                    {/* 7. Other Documents (Multiple Allowed, Deduplicated) */}
-                                                    <FormControl gridColumn={{ base: "span 1", md: "span 2" }}>
-                                                        <FormLabel fontWeight="bold" fontSize="xs">
-                                                            7. Other Statutory Documents (Multiple Allowed: ISO, Trade License, Incorporation, MSME)
-                                                        </FormLabel>
-                                                        
-                                                        {/* List of existing other documents */}
-                                                        {existingOtherDocs.length > 0 && (
-                                                            <VStack align="stretch" spacing={2} mb={3}>
-                                                                {existingOtherDocs.map((od, idx) => (
-                                                                    <HStack key={od._id || idx} p={2.5} border="1px solid" borderColor="purple.200" borderRadius="lg" bg="purple.50" justify="space-between">
-                                                                        <HStack spacing={2}>
-                                                                            <Badge colorScheme="purple">{od.title || `Doc #${idx + 1}`}</Badge>
-                                                                            <Button size="xs" colorScheme="purple" variant="ghost" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${od.url}`, '_blank')}>View</Button>
-                                                                        </HStack>
-                                                                        <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove this document" onClick={() => setExistingOtherDocs(prev => prev.filter((_, i) => i !== idx))} />
+                                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3}>
+                                                    {/* GSTIN Card */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justifyContent="space-between">
+                                                        <Box mb={2}>
+                                                            <Flex justify="space-between" align="center" mb={1}>
+                                                                <FormLabel fontSize="xs" fontWeight="bold" mb={0} color="gray.700">GSTIN</FormLabel>
+                                                                <Badge colorScheme="green" fontSize="10px">GST</Badge>
+                                                            </Flex>
+                                                            <Input
+                                                                name="gstin"
+                                                                value={formData.gstin}
+                                                                onChange={handleChange}
+                                                                placeholder="GSTIN Number"
+                                                                size="sm"
+                                                                borderRadius="md"
+                                                                bg="white"
+                                                                fontFamily="monospace"
+                                                                textTransform="uppercase"
+                                                            />
+                                                        </Box>
+                                                        <Box>
+                                                            {existingDocs.gstDoc && !removeFlags.gstDoc ? (
+                                                                <HStack justify="space-between" bg="green.50" p={1.5} borderRadius="md" border="1px solid" borderColor="green.200">
+                                                                    <HStack spacing={1}>
+                                                                        <Badge colorScheme="green" fontSize="10px">✓ Attached</Badge>
+                                                                        <Button size="xs" variant="link" colorScheme="green" onClick={() => window.open(`${API_BASE_URL}${existingDocs.gstDoc}`, '_blank')}>View</Button>
                                                                     </HStack>
+                                                                    <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setRemoveFlags(p => ({ ...p, gstDoc: true }))} />
+                                                                </HStack>
+                                                            ) : (
+                                                                <Button
+                                                                    size="xs"
+                                                                    w="full"
+                                                                    variant="outline"
+                                                                    colorScheme={gstFile ? "green" : "gray"}
+                                                                    leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                    onClick={() => document.getElementById('gst-upload').click()}
+                                                                >
+                                                                    <input type="file" id="gst-upload" hidden onChange={(e) => setGstFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                    {gstFile ? gstFile.name.slice(0, 16) + '...' : "Upload GST Doc"}
+                                                                </Button>
+                                                            )}
+                                                        </Box>
+                                                    </Box>
+
+                                                    {/* PAN Card */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justifyContent="space-between">
+                                                        <Box mb={2}>
+                                                            <Flex justify="space-between" align="center" mb={1}>
+                                                                <FormLabel fontSize="xs" fontWeight="bold" mb={0} color="gray.700">PAN Card</FormLabel>
+                                                                <Badge colorScheme="orange" fontSize="10px">PAN</Badge>
+                                                            </Flex>
+                                                            <Input
+                                                                name="panCardNumber"
+                                                                value={formData.panCardNumber}
+                                                                onChange={handleChange}
+                                                                placeholder="PAN Number"
+                                                                size="sm"
+                                                                borderRadius="md"
+                                                                bg="white"
+                                                                fontFamily="monospace"
+                                                                textTransform="uppercase"
+                                                            />
+                                                        </Box>
+                                                        <Box>
+                                                            {existingDocs.panCardDoc && !removeFlags.panCardDoc ? (
+                                                                <HStack justify="space-between" bg="orange.50" p={1.5} borderRadius="md" border="1px solid" borderColor="orange.200">
+                                                                    <HStack spacing={1}>
+                                                                        <Badge colorScheme="orange" fontSize="10px">✓ Attached</Badge>
+                                                                        <Button size="xs" variant="link" colorScheme="orange" onClick={() => window.open(`${API_BASE_URL}${existingDocs.panCardDoc}`, '_blank')}>View</Button>
+                                                                    </HStack>
+                                                                    <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setRemoveFlags(p => ({ ...p, panCardDoc: true }))} />
+                                                                </HStack>
+                                                            ) : (
+                                                                <Button
+                                                                    size="xs"
+                                                                    w="full"
+                                                                    variant="outline"
+                                                                    colorScheme={panFile ? "orange" : "gray"}
+                                                                    leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                    onClick={() => document.getElementById('pan-upload').click()}
+                                                                >
+                                                                    <input type="file" id="pan-upload" hidden onChange={(e) => setPanFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                    {panFile ? panFile.name.slice(0, 16) + '...' : "Upload PAN Doc"}
+                                                                </Button>
+                                                            )}
+                                                        </Box>
+                                                    </Box>
+
+                                                    {/* Udyam Card */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justifyContent="space-between">
+                                                        <Box mb={2}>
+                                                            <Flex justify="space-between" align="center" mb={1}>
+                                                                <FormLabel fontSize="xs" fontWeight="bold" mb={0} color="gray.700">Udyam No</FormLabel>
+                                                                <Badge colorScheme="blue" fontSize="10px">Udyam</Badge>
+                                                            </Flex>
+                                                            <Input
+                                                                name="udyamNumber"
+                                                                value={formData.udyamNumber}
+                                                                onChange={handleChange}
+                                                                placeholder="Udyam Number"
+                                                                size="sm"
+                                                                borderRadius="md"
+                                                                bg="white"
+                                                                fontFamily="monospace"
+                                                            />
+                                                        </Box>
+                                                        <Box>
+                                                            {existingDocs.udyamDoc && !removeFlags.udyamDoc ? (
+                                                                <HStack justify="space-between" bg="blue.50" p={1.5} borderRadius="md" border="1px solid" borderColor="blue.200">
+                                                                    <HStack spacing={1}>
+                                                                        <Badge colorScheme="blue" fontSize="10px">✓ Attached</Badge>
+                                                                        <Button size="xs" variant="link" colorScheme="blue" onClick={() => window.open(`${API_BASE_URL}${existingDocs.udyamDoc}`, '_blank')}>View</Button>
+                                                                    </HStack>
+                                                                    <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setRemoveFlags(p => ({ ...p, udyamDoc: true }))} />
+                                                                </HStack>
+                                                            ) : (
+                                                                <Button
+                                                                    size="xs"
+                                                                    w="full"
+                                                                    variant="outline"
+                                                                    colorScheme={udyamFile ? "blue" : "gray"}
+                                                                    leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                    onClick={() => document.getElementById('udyam-upload').click()}
+                                                                >
+                                                                    <input type="file" id="udyam-upload" hidden onChange={(e) => setUdyamFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                    {udyamFile ? udyamFile.name.slice(0, 16) + '...' : "Upload Udyam Doc"}
+                                                                </Button>
+                                                            )}
+                                                        </Box>
+                                                    </Box>
+
+                                                    {/* Invoice Prefix Card */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200" display="flex" flexDirection="column" justifyContent="space-between">
+                                                        <Box mb={2}>
+                                                            <Flex justify="space-between" align="center" mb={1}>
+                                                                <FormLabel fontSize="xs" fontWeight="bold" mb={0} color="gray.700">Invoice Prefix</FormLabel>
+                                                                <Badge colorScheme="purple" fontSize="10px">Prefix</Badge>
+                                                            </Flex>
+                                                            <Input
+                                                                name="invoicePrefix"
+                                                                value={formData.invoicePrefix}
+                                                                onChange={handleChange}
+                                                                placeholder="e.g. UE, ULI"
+                                                                size="sm"
+                                                                borderRadius="md"
+                                                                bg="white"
+                                                                fontWeight="bold"
+                                                                textTransform="uppercase"
+                                                            />
+                                                        </Box>
+                                                        <Text fontSize="10px" color="gray.400">
+                                                            Prefix for bills & quotes
+                                                        </Text>
+                                                    </Box>
+                                                </SimpleGrid>
+                                            </Box>
+
+                                            {/* 3. Bank Account Details (With Integrated Cancelled Cheque / Bank Proof) */}
+                                            <Box p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                                                <Flex align="center" gap={2} mb={3}>
+                                                    <Icon as={FiBriefcase} color="blue.600" />
+                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" textTransform="uppercase" letterSpacing="wider">
+                                                        3. Bank Account & Settlement Details
+                                                    </Text>
+                                                </Flex>
+
+                                                <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 6 }} spacing={3} alignItems="flex-end">
+                                                    <FormControl>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Account Holder</FormLabel>
+                                                        <Input name="accountHolderName" value={formData.bankDetails?.accountHolderName} onChange={handleChange} placeholder="Account Name" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
+                                                    </FormControl>
+
+                                                    <FormControl>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Bank Name</FormLabel>
+                                                        <Input name="bankName" value={formData.bankDetails?.bankName} onChange={handleChange} placeholder="Bank Name" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
+                                                    </FormControl>
+
+                                                    <FormControl>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Account Number</FormLabel>
+                                                        <Input name="accountNumber" value={formData.bankDetails?.accountNumber} onChange={handleChange} placeholder="Account No" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} fontFamily="monospace" />
+                                                    </FormControl>
+
+                                                    <FormControl>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">IFSC Code</FormLabel>
+                                                        <Input name="ifscCode" value={formData.bankDetails?.ifscCode} onChange={handleChange} placeholder="IFSC Code" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} fontFamily="monospace" textTransform="uppercase" />
+                                                    </FormControl>
+
+                                                    {/* Cancelled Cheque Upload */}
+                                                    <Box>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Cancelled Cheque</FormLabel>
+                                                        {existingDocs.cancelledChequeDoc && !removeFlags.cancelledChequeDoc ? (
+                                                            <HStack justify="space-between" bg="red.50" p={1.5} borderRadius="md" border="1px solid" borderColor="red.200" h="32px">
+                                                                <HStack spacing={1}>
+                                                                    <Badge colorScheme="red" fontSize="10px">✓ Cheque</Badge>
+                                                                    <Button size="xs" variant="link" colorScheme="red" onClick={() => window.open(`${API_BASE_URL}${existingDocs.cancelledChequeDoc}`, '_blank')}>View</Button>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Delete Cheque" aria-label="Delete Cheque" onClick={() => setRemoveFlags(p => ({ ...p, cancelledChequeDoc: true }))} />
+                                                            </HStack>
+                                                        ) : cancelledChequeFile ? (
+                                                            <HStack justify="space-between" bg="green.50" p={1.5} borderRadius="md" border="1px solid" borderColor="green.200" h="32px">
+                                                                <HStack spacing={1} overflow="hidden">
+                                                                    <Badge colorScheme="green" fontSize="10px">✓ Cheque</Badge>
+                                                                    <Text fontSize="xs" fontWeight="semibold" color="green.800" isTruncated maxW="80px">
+                                                                        {cancelledChequeFile.name}
+                                                                    </Text>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove Selected Cheque" aria-label="Remove Selected Cheque" onClick={() => { setCancelledChequeFile(null); const el = document.getElementById('cheque-upload'); if (el) el.value = ''; }} />
+                                                            </HStack>
+                                                        ) : (
+                                                            <Button
+                                                                size="sm"
+                                                                w="full"
+                                                                variant="outline"
+                                                                colorScheme="gray"
+                                                                leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                onClick={() => document.getElementById('cheque-upload').click()}
+                                                                h="32px"
+                                                                fontSize="xs"
+                                                            >
+                                                                <input type="file" id="cheque-upload" hidden onChange={(e) => { if (e.target.files && e.target.files[0]) { setCancelledChequeFile(e.target.files[0]); setRemoveFlags(p => ({ ...p, cancelledChequeDoc: false })); } }} accept="image/*,.pdf" />
+                                                                Upload Cheque
+                                                            </Button>
+                                                        )}
+                                                    </Box>
+
+                                                    {/* Payment QR Code Upload */}
+                                                    <Box>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Payment QR Code</FormLabel>
+                                                        {existingDocs.paymentQrDoc && !removeFlags.paymentQrDoc ? (
+                                                            <HStack justify="space-between" bg="teal.50" p={1.5} borderRadius="md" border="1px solid" borderColor="teal.200" h="32px">
+                                                                <HStack spacing={1}>
+                                                                    <Badge colorScheme="teal" fontSize="10px">✓ QR Code</Badge>
+                                                                    <Button size="xs" variant="link" colorScheme="teal" onClick={() => window.open(`${API_BASE_URL}${existingDocs.paymentQrDoc}`, '_blank')}>View</Button>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Delete QR Code" aria-label="Delete QR Code" onClick={() => setRemoveFlags(p => ({ ...p, paymentQrDoc: true }))} />
+                                                            </HStack>
+                                                        ) : paymentQrFile ? (
+                                                            <HStack justify="space-between" bg="green.50" p={1.5} borderRadius="md" border="1px solid" borderColor="green.200" h="32px">
+                                                                <HStack spacing={1} overflow="hidden">
+                                                                    <Badge colorScheme="green" fontSize="10px">✓ QR</Badge>
+                                                                    <Text fontSize="xs" fontWeight="semibold" color="green.800" isTruncated maxW="80px">
+                                                                        {paymentQrFile.name}
+                                                                    </Text>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} title="Remove Selected QR" aria-label="Remove Selected QR" onClick={() => { setPaymentQrFile(null); const el = document.getElementById('payment-qr-upload'); if (el) el.value = ''; }} />
+                                                            </HStack>
+                                                        ) : (
+                                                            <Button
+                                                                size="sm"
+                                                                w="full"
+                                                                variant="outline"
+                                                                colorScheme="gray"
+                                                                leftIcon={<Icon as={FaCloudUploadAlt} />}
+                                                                onClick={() => document.getElementById('payment-qr-upload').click()}
+                                                                h="32px"
+                                                                fontSize="xs"
+                                                            >
+                                                                <input type="file" id="payment-qr-upload" hidden onChange={(e) => { if (e.target.files && e.target.files[0]) { setPaymentQrFile(e.target.files[0]); setRemoveFlags(p => ({ ...p, paymentQrDoc: false })); } }} accept="image/*,.pdf" />
+                                                                Upload QR Code
+                                                            </Button>
+                                                        )}
+                                                    </Box>
+                                                </SimpleGrid>
+                                            </Box>
+
+                                            {/* 4. Company Branding & Documents */}
+                                            <Box p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                                                <Flex align="center" gap={2} mb={3}>
+                                                    <Icon as={FiLayers} color="teal.600" />
+                                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" textTransform="uppercase" letterSpacing="wider">
+                                                        4. Logo, Stamp, Visiting Card & Documents
+                                                    </Text>
+                                                </Flex>
+
+                                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3} alignItems="start">
+                                                    {/* Logo */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                        <FormLabel fontSize="xs" fontWeight="bold" mb={2} color="gray.700">Company Logo</FormLabel>
+                                                        {existingDocs.logo && !removeFlags.logo ? (
+                                                            <HStack justify="space-between" bg="white" p={1.5} borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={2}>
+                                                                    <Image src={`${API_BASE_URL}${existingDocs.logo}`} w="26px" h="26px" objectFit="contain" />
+                                                                    <Button size="xs" variant="link" colorScheme="teal" onClick={() => window.open(`${API_BASE_URL}${existingDocs.logo}`, '_blank')}>View Logo</Button>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setRemoveFlags(p => ({ ...p, logo: true }))} />
+                                                            </HStack>
+                                                        ) : (
+                                                            <Button size="xs" w="full" variant="outline" colorScheme={logoFile ? "teal" : "gray"} leftIcon={<Icon as={FaCloudUploadAlt} />} onClick={() => document.getElementById('logo-upload').click()}>
+                                                                <input type="file" id="logo-upload" hidden onChange={(e) => setLogoFile(e.target.files[0])} accept="image/*" />
+                                                                {logoFile ? logoFile.name.slice(0, 16) + '...' : "Upload Logo"}
+                                                            </Button>
+                                                        )}
+                                                    </Box>
+
+                                                    {/* Stamp */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                        <FormLabel fontSize="xs" fontWeight="bold" mb={2} color="gray.700">Company Stamp / Seal</FormLabel>
+                                                        {existingDocs.companyStamp && !removeFlags.companyStamp ? (
+                                                            <HStack justify="space-between" bg="white" p={1.5} borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={2}>
+                                                                    <Image src={`${API_BASE_URL}${existingDocs.companyStamp}`} w="26px" h="26px" objectFit="contain" />
+                                                                    <Button size="xs" variant="link" colorScheme="purple" onClick={() => window.open(`${API_BASE_URL}${existingDocs.companyStamp}`, '_blank')}>View Stamp</Button>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setRemoveFlags(p => ({ ...p, companyStamp: true }))} />
+                                                            </HStack>
+                                                        ) : (
+                                                            <Button size="xs" w="full" variant="outline" colorScheme={stampFile ? "purple" : "gray"} leftIcon={<Icon as={FaCloudUploadAlt} />} onClick={() => document.getElementById('stamp-upload').click()}>
+                                                                <input type="file" id="stamp-upload" hidden onChange={(e) => setStampFile(e.target.files[0])} accept="image/*" />
+                                                                {stampFile ? stampFile.name.slice(0, 16) + '...' : "Upload Stamp"}
+                                                            </Button>
+                                                        )}
+                                                    </Box>
+
+                                                    {/* Visiting Card */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                        <FormLabel fontSize="xs" fontWeight="bold" mb={2} color="gray.700">Visiting Card</FormLabel>
+                                                        {existingDocs.visitingCard && !removeFlags.visitingCard ? (
+                                                            <HStack justify="space-between" bg="white" p={1.5} borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                                <HStack spacing={2}>
+                                                                    {existingDocs.visitingCard.match(/\.(jpg|jpeg|png|webp|svg)$/i) ? (
+                                                                        <Image src={`${API_BASE_URL}${existingDocs.visitingCard}`} w="26px" h="26px" objectFit="contain" />
+                                                                    ) : (
+                                                                        <Badge colorScheme="cyan" fontSize="10px">Card</Badge>
+                                                                    )}
+                                                                    <Button size="xs" variant="link" colorScheme="cyan" onClick={() => window.open(`${API_BASE_URL}${existingDocs.visitingCard}`, '_blank')}>View Card</Button>
+                                                                </HStack>
+                                                                <IconButton size="xs" colorScheme="red" variant="ghost" icon={<Icon as={FaTrash} />} onClick={() => setRemoveFlags(p => ({ ...p, visitingCard: true }))} />
+                                                            </HStack>
+                                                        ) : (
+                                                            <Button size="xs" w="full" variant="outline" colorScheme={visitingCardFile ? "cyan" : "gray"} leftIcon={<Icon as={FaCloudUploadAlt} />} onClick={() => document.getElementById('visiting-card-upload').click()}>
+                                                                <input type="file" id="visiting-card-upload" hidden onChange={(e) => setVisitingCardFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                {visitingCardFile ? visitingCardFile.name.slice(0, 16) + '...' : "Upload Card"}
+                                                            </Button>
+                                                        )}
+                                                    </Box>
+
+                                                    {/* Other Docs */}
+                                                    <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                                        <FormLabel fontSize="xs" fontWeight="bold" mb={2} color="gray.700">Other Statutory Documents</FormLabel>
+                                                        <HStack spacing={1.5} mb={2}>
+                                                            <Input
+                                                                size="xs"
+                                                                placeholder="Doc Title"
+                                                                name="otherDocTitle"
+                                                                value={formData.otherDocTitle || ''}
+                                                                onChange={handleChange}
+                                                                bg="white"
+                                                                borderRadius="md"
+                                                            />
+                                                            <Button size="xs" colorScheme={otherDocFile ? "purple" : "gray"} variant="outline" px={2} onClick={() => document.getElementById('other-doc-upload').click()} flexShrink={0}>
+                                                                <input type="file" id="other-doc-upload" hidden onChange={(e) => setOtherDocFile(e.target.files[0])} accept="image/*,.pdf" />
+                                                                {otherDocFile ? "Selected" : "Choose"}
+                                                            </Button>
+                                                        </HStack>
+                                                        {existingOtherDocs.length > 0 && (
+                                                            <Wrap spacing={1}>
+                                                                {existingOtherDocs.map((od, idx) => (
+                                                                    <Badge key={od._id || idx} colorScheme="purple" fontSize="9px" px={1.5} py={0.5} borderRadius="md" display="flex" alignItems="center" gap={1}>
+                                                                        <Text isTruncated maxW="80px">{od.title}</Text>
+                                                                        <Icon as={FaEye} cursor="pointer" onClick={() => window.open(`${API_BASE_URL}${od.url}`, '_blank')} />
+                                                                        <Icon as={FaTrash} cursor="pointer" color="red.500" onClick={() => setExistingOtherDocs(p => p.filter((_, i) => i !== idx))} />
+                                                                    </Badge>
                                                                 ))}
-                            </VStack>
-                        )}
+                                                            </Wrap>
+                                                        )}
+                                                    </Box>
+                                                </SimpleGrid>
+                                            </Box>
 
-                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} alignItems="center">
-                            <Box gridColumn={{ base: "span 1", md: "span 2" }}>
-                                <Input
-                                    size="sm"
-                                    borderRadius="lg"
-                                    placeholder="New Document Title (e.g. ISO 9001 Certificate, MSME, Trade License)"
-                                    name="otherDocTitle"
-                                    value={formData.otherDocTitle || ''}
-                                    onChange={handleChange}
-                                    bg="white"
-                                />
-                            </Box>
-                            <Box
-                                p={2.5}
-                                border="2px dashed"
-                                borderColor={otherDocFile ? "purple.400" : "purple.200"}
-                                borderRadius="xl"
-                                bg={otherDocFile ? "purple.100" : "purple.50"}
-                                textAlign="center"
-                                cursor="pointer"
-                                onClick={() => document.getElementById('other-doc-upload').click()}
-                                _hover={{ bg: "purple.100" }}
-                            >
-                                <input type="file" id="other-doc-upload" hidden onChange={(e) => setOtherDocFile(e.target.files[0])} accept="image/*,.pdf" />
-                                <Text fontSize="xs" fontWeight="bold" color="purple.800" isTruncated>
-                                    {otherDocFile ? `Selected: ${otherDocFile.name}` : "+ Choose File to Upload"}
-                                </Text>
-                            </Box>
-                        </SimpleGrid>
-                    </FormControl>
-                </SimpleGrid>
-            </Box>
+                                            {/* 5. Company Catalogs (Compact GUI) */}
+                                            <Box p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                                                <Flex justify="space-between" align="center" mb={2.5}>
+                                                    <HStack spacing={2}>
+                                                        <Icon as={FaFilePdf} color="teal.600" />
+                                                        <Text fontSize="xs" fontWeight="bold" color="gray.700" textTransform="uppercase" letterSpacing="wider">
+                                                            5. Catalogs & Product Brochures
+                                                        </Text>
+                                                    </HStack>
+                                                    <Badge colorScheme="teal" fontSize="10px">
+                                                        {existingCatalogs.length} Active {queuedCatalogs.length > 0 ? `• +${queuedCatalogs.length} Queued` : ''}
+                                                    </Badge>
+                                                </Flex>
 
-            {/* ════ 8. Company Catalogs & Product Brochures (Company-Wise) ════ */}
-            <Box w="full" p={5} border="2px solid" borderColor="teal.300" borderRadius="2xl" bg="teal.50/40">
-                <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={3}>
-                    <HStack spacing={2}>
-                        <Icon as={FaFilePdf} color="teal.600" w={5} h={5} />
-                        <Text fontSize="md" fontWeight="bold" color="teal.900">
-                            8. Company Catalogs & Product Brochures (Company-Wise)
-                        </Text>
-                    </HStack>
-                    <Badge colorScheme={editId ? "teal" : "green"} borderRadius="full" px={3} py={1} fontSize="xs" fontWeight="bold">
-                        {editId
-                            ? `${existingCatalogs.length} Active for ${formData.companyName || 'This Company'}${queuedCatalogs.length > 0 ? ` • +${queuedCatalogs.length} Queued` : ''}`
-                            : `✨ Clean New Form • 0 Active Catalogs${queuedCatalogs.length > 0 ? ` • +${queuedCatalogs.length} Queued` : ''}`}
-                    </Badge>
-                </Flex>
+                                                {/* Compact Adder */}
+                                                <HStack spacing={2} mb={2.5}>
+                                                    <Input
+                                                        size="sm"
+                                                        placeholder="Catalog Title (e.g. LAB TESTING INSTRUMENTS)"
+                                                        value={catalogInput.title}
+                                                        onChange={e => setCatalogInput(p => ({ ...p, title: e.target.value.toUpperCase() }))}
+                                                        borderRadius="md"
+                                                        bg="gray.50"
+                                                    />
+                                                    <Button size="sm" variant="outline" colorScheme={catalogInput.file ? "teal" : "gray"} onClick={() => document.getElementById('company-new-catalog-input').click()} flexShrink={0} fontSize="xs">
+                                                        <input
+                                                            type="file"
+                                                            id="company-new-catalog-input"
+                                                            hidden
+                                                            accept=".pdf,image/*"
+                                                            onChange={e => {
+                                                                if (e.target.files?.[0]) {
+                                                                    const f = e.target.files[0];
+                                                                    setCatalogInput(p => ({
+                                                                        ...p,
+                                                                        file: f,
+                                                                        title: p.title || f.name.replace(/\.[^/.]+$/, '').toUpperCase()
+                                                                    }));
+                                                                }
+                                                            }}
+                                                        />
+                                                        {catalogInput.file ? catalogInput.file.name.slice(0, 16) + '...' : "Choose File"}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        colorScheme="teal"
+                                                        onClick={handleAddQueuedCatalog}
+                                                        isDisabled={!canWriteForm || !catalogInput.title || !catalogInput.file}
+                                                        flexShrink={0}
+                                                    >
+                                                        + Add
+                                                    </Button>
+                                                </HStack>
 
-                <Text fontSize="xs" color="gray.600" mb={4}>
-                    Add and manage product catalogs, testing brochures, and technical pamphlets specifically for this company. Each company maintains its own isolated catalogs list.
-                </Text>
+                                                {/* Badges for Catalogs */}
+                                                {(existingCatalogs.length > 0 || queuedCatalogs.length > 0) && (
+                                                    <Wrap spacing={2}>
+                                                        {existingCatalogs.map((cat, idx) => (
+                                                            <Badge key={cat._id || idx} colorScheme="teal" variant="subtle" p={1.5} borderRadius="md" display="flex" alignItems="center" gap={1.5}>
+                                                                <Text fontSize="xs" fontWeight="bold" isTruncated maxW="160px">{cat.title}</Text>
+                                                                <Icon as={FaEye} cursor="pointer" onClick={() => window.open(`${API_BASE_URL}${cat.url || cat.pdfUrl}`, '_blank')} />
+                                                                <Icon as={FaTrash} cursor="pointer" color="red.500" onClick={() => handleRemoveExistingCatalog(cat._id || cat.url, cat.title)} />
+                                                            </Badge>
+                                                        ))}
+                                                        {queuedCatalogs.map(qc => (
+                                                            <Badge key={qc.id} colorScheme="orange" variant="outline" p={1.5} borderRadius="md" display="flex" alignItems="center" gap={1.5}>
+                                                                <Text fontSize="xs" fontWeight="bold" isTruncated maxW="140px">[Queued] {qc.title}</Text>
+                                                                <Icon as={FaTrash} cursor="pointer" color="red.500" onClick={() => handleRemoveQueuedCatalog(qc.id)} />
+                                                            </Badge>
+                                                        ))}
+                                                    </Wrap>
+                                                )}
+                                            </Box>
 
-                {/* Existing Catalogs for this Company (when editing) */}
-                {editId ? (
-                    existingCatalogs.length > 0 ? (
-                        <Box mb={4}>
-                            <Text fontSize="xs" fontWeight="bold" color="gray.700" mb={2}>
-                                Active Catalogs for {formData.companyName || 'This Company'} ({existingCatalogs.length}):
-                            </Text>
-                            <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={3}>
-                                {existingCatalogs.map((cat, idx) => (
-                                    <HStack key={cat._id || idx} p={3} bg="white" borderRadius="xl" border="1px solid" borderColor="teal.200" justify="space-between" shadow="xs">
-                                        <VStack align="start" spacing={0} overflow="hidden" flex={1}>
-                                            <Text fontSize="xs" fontWeight="bold" color="teal.900" isTruncated maxW="180px">{cat.title}</Text>
-                                            <Text fontSize="10px" color="gray.500">
-                                                {cat.uploadedAt ? new Date(cat.uploadedAt).toLocaleDateString() : 'Active Catalog'}
-                                            </Text>
+                                            {/* Action Buttons */}
+                                            <Flex justify="flex-end" align="center" gap={3} w="full" pt={1}>
+                                                {editId && (
+                                                    <Button variant="ghost" size="sm" onClick={handleAddNew}>
+                                                        Cancel
+                                                    </Button>
+                                                )}
+                                                {canWriteForm ? (
+                                                    <Button
+                                                        size="md"
+                                                        colorScheme="teal"
+                                                        type="submit"
+                                                        leftIcon={<Icon as={FaBuilding} />}
+                                                        isLoading={isLoading}
+                                                        fontWeight="bold"
+                                                        px={6}
+                                                        borderRadius="lg"
+                                                        boxShadow="sm"
+                                                    >
+                                                        {editId ? 'Update Company' : 'Save Company'}
+                                                    </Button>
+                                                ) : (
+                                                    <Button size="md" colorScheme="gray" isDisabled borderRadius="lg">
+                                                        Read-Only
+                                                    </Button>
+                                                )}
+                                            </Flex>
                                         </VStack>
-                                        <HStack spacing={1}>
-                                            <IconButton
-                                                size="xs"
-                                                colorScheme="teal"
-                                                variant="ghost"
-                                                icon={<Icon as={FaEye} />}
-                                                title="View Catalog PDF"
-                                                onClick={() => window.open(`${API_BASE_URL}${cat.url || cat.pdfUrl}`, '_blank')}
-                                            />
-                                            <IconButton
-                                                size="xs"
-                                                colorScheme="red"
-                                                variant="ghost"
-                                                icon={<Icon as={FaTrash} />}
-                                                title="Remove Catalog"
-                                                onClick={() => handleRemoveExistingCatalog(cat._id || cat.url, cat.title)}
-                                            />
-                                        </HStack>
-                                    </HStack>
-                                ))}
-                            </SimpleGrid>
-                        </Box>
-                    ) : (
-                        <Box mb={4} p={3} bg="white" borderRadius="xl" border="1px dashed" borderColor="teal.200" textAlign="center">
-                            <Text fontSize="xs" color="gray.500">
-                                No active catalogs attached to {formData.companyName || 'this company'} yet. Add documents below to attach.
-                            </Text>
-                        </Box>
-                    )
-                ) : (
-                    <Box mb={4} p={3} bg="green.50" borderRadius="xl" border="1px dashed" borderColor="green.300" textAlign="center">
-                        <Text fontSize="xs" color="green.800" fontWeight="600">
-                            ✨ Brand New Company Form — Clean slate with 0 catalogs. You can queue catalogs below to save with this company.
-                        </Text>
-                    </Box>
-                )}
-
-                {/* Queued Catalogs to be saved */}
-                {queuedCatalogs.length > 0 && (
-                    <Box mb={4} p={3.5} bg="white" borderRadius="xl" border="2px dashed" borderColor="teal.400">
-                        <Text fontSize="xs" fontWeight="bold" color="teal.800" mb={2}>
-                            Queued Catalogs to Upload on Save ({queuedCatalogs.length}):
-                        </Text>
-                        <VStack align="stretch" spacing={2}>
-                            {queuedCatalogs.map(qc => (
-                                <HStack key={qc.id} p={2.5} bg="teal.50" borderRadius="lg" justify="space-between">
-                                    <HStack spacing={2.5}>
-                                        <Icon as={FaFilePdf} color="teal.600" />
-                                        <VStack align="start" spacing={0}>
-                                            <Text fontSize="xs" fontWeight="bold" color="teal.900">{qc.title}</Text>
-                                            <Text fontSize="10px" color="gray.500">{qc.fileName} ({qc.fileSize})</Text>
-                                        </VStack>
-                                    </HStack>
-                                    <IconButton
-                                        size="xs"
-                                        colorScheme="red"
-                                        variant="ghost"
-                                        icon={<Icon as={FaTrash} />}
-                                        title="Remove from queue"
-                                        onClick={() => handleRemoveQueuedCatalog(qc.id)}
-                                    />
-                                </HStack>
-                            ))}
-                        </VStack>
-                    </Box>
-                )}
-
-                {/* Input Bar to Add Multiple Catalogs */}
-                <Box p={3.5} bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200">
-                    <Text fontSize="xs" fontWeight="bold" color="gray.700" mb={2}>+ Add a Catalog / Brochure Document (Can add multiple):</Text>
-                    <SimpleGrid columns={{ base: 1, md: 5 }} spacing={3} alignItems="center">
-                        <Box gridColumn={{ base: "span 1", md: "span 2" }}>
-                            <Input
-                                size="sm"
-                                borderRadius="lg"
-                                placeholder="Catalog Title (e.g. TESTING INSTRUMENTS 2026)"
-                                value={catalogInput.title}
-                                onChange={e => setCatalogInput(p => ({ ...p, title: e.target.value.toUpperCase() }))}
-                            />
-                        </Box>
-                        <Box gridColumn={{ base: "span 1", md: "span 2" }}>
-                            <Box
-                                p={2}
-                                border="1px dashed"
-                                borderColor={catalogInput.file ? "teal.400" : "gray.300"}
-                                borderRadius="lg"
-                                bg={catalogInput.file ? "teal.50" : "gray.50"}
-                                textAlign="center"
-                                cursor="pointer"
-                                onClick={() => document.getElementById('company-new-catalog-input').click()}
-                            >
-                                <input
-                                    type="file"
-                                    id="company-new-catalog-input"
-                                    hidden
-                                    accept=".pdf,image/*"
-                                    onChange={e => {
-                                        if (e.target.files?.[0]) {
-                                            const f = e.target.files[0];
-                                            setCatalogInput(p => ({
-                                                ...p,
-                                                file: f,
-                                                title: p.title || f.name.replace(/\.[^/.]+$/, '').toUpperCase()
-                                            }));
-                                        }
-                                    }}
-                                />
-                                <Text fontSize="xs" fontWeight="bold" color={catalogInput.file ? "teal.700" : "gray.600"} isTruncated>
-                                    {catalogInput.file ? `Selected: ${catalogInput.file.name}` : "Choose PDF or Image File..."}
-                                </Text>
-                            </Box>
-                        </Box>
-                        <Button
-                            size="sm"
-                            colorScheme="teal"
-                            borderRadius="lg"
-                            leftIcon={<Icon as={FiPlus} />}
-                            onClick={handleAddQueuedCatalog}
-                            isDisabled={!canWriteForm || !catalogInput.title || !catalogInput.file}
-                        >
-                            Add to List
-                        </Button>
-                    </SimpleGrid>
-                </Box>
-            </Box>
-
-            {/* Submit & Cancel Buttons */}
-            <SimpleGrid columns={{ base: 1, md: editId ? 2 : 1 }} spacing={4} w="full">
-                {canWriteForm ? (
-                    <Button
-                        size="lg"
-                        colorScheme="teal"
-                        borderRadius="xl"
-                        h="56px"
-                        type="submit"
-                        leftIcon={<FaBuilding />}
-                        isLoading={isLoading}
-                        boxShadow="lg"
-                        fontWeight="bold"
-                    >
-                        {editId ? 'Update Company Record & Catalogs' : 'Save New Company Record & Catalogs'}
-                    </Button>
-                ) : (
-                    <Button
-                        size="lg"
-                        colorScheme="gray"
-                        borderRadius="xl"
-                        h="56px"
-                        isDisabled
-                        leftIcon={<Icon as={FiLock} />}
-                    >
-                        Read-Only Access (Modifications Disabled)
-                    </Button>
-                )}
-                {editId && (
-                    <Button
-                        variant="outline"
-                        colorScheme="gray"
-                        borderRadius="xl"
-                        h="56px"
-                        onClick={handleAddNew}
-                        leftIcon={<Icon as={FiRefreshCw} />}
-                    >
-                        Cancel Edit (Clean Form)
-                    </Button>
-                )}
-            </SimpleGrid>
-        </VStack>
-    </form>
-</TabPanel>
+                                    </form>
+                                </TabPanel>
                                         );
                                     }
                                     if (tab.id === 'view') {
@@ -1427,6 +1561,9 @@ const CompanyMaster = () => {
                                                                     <VStack align="start" spacing={1}>
                                                                         <Text fontSize="sm" fontWeight="800" color="teal.800">{c.companyName}</Text>
                                                                         <HStack spacing={1.5} wrap="wrap">
+                                                                            <Badge colorScheme="teal" variant="solid" fontSize="10px" borderRadius="md" px={2} py={0.5}>
+                                                                                {c.companyType || c.division || 'Unique Lab Instruments'}
+                                                                            </Badge>
                                                                             {c.invoicePrefix && (
                                                                                 <Badge colorScheme="purple" fontSize="10px">Prefix: {c.invoicePrefix}</Badge>
                                                                             )}
@@ -1471,12 +1608,17 @@ const CompanyMaster = () => {
                                                                             Cheque
                                                                         </Button>
                                                                     )}
+                                                                    {c.paymentQrDoc && (
+                                                                        <Button size="xs" colorScheme="teal" variant="subtle" leftIcon={<Icon as={FaQrcode} />} onClick={() => window.open(`${API_BASE_URL}${c.paymentQrDoc}`, '_blank')}>
+                                                                            Payment QR
+                                                                        </Button>
+                                                                    )}
                                                                     {uniqueOther.map((od, idx) => (
                                                                         <Button key={od._id || idx} size="xs" colorScheme="teal" variant="subtle" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${od.url}`, '_blank')}>
                                                                             {od.title || `Other Doc #${idx + 1}`}
                                                                         </Button>
                                                                     ))}
-                                                                    {!c.udyamDoc && !c.panCardDoc && !c.gstDoc && !c.cancelledChequeDoc && uniqueOther.length === 0 && (
+                                                                    {!c.udyamDoc && !c.panCardDoc && !c.gstDoc && !c.cancelledChequeDoc && !c.paymentQrDoc && uniqueOther.length === 0 && (
                                                                         <Text fontSize="xs" color="gray.400">0 Documents</Text>
                                                                     )}
                                                                 </Wrap>
@@ -1575,6 +1717,93 @@ const CompanyMaster = () => {
 </Card>
             </Container>
 
+            {/* ── Modal to Add New Company Division / Type ── */}
+            <Modal
+                isOpen={isAddTypeModalOpen}
+                onClose={() => { setIsAddTypeModalOpen(false); setNewTypeName(''); }}
+                isCentered
+                size="md"
+            >
+                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.600" />
+                <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
+                    <ModalHeader bgGradient="linear(to-r, teal.700, teal.500)" color="white" py={4}>
+                        <HStack spacing={2}>
+                            <Icon as={FiLayers} />
+                            <Text fontSize="md">Add New Company Division / Type</Text>
+                        </HStack>
+                    </ModalHeader>
+                    <ModalCloseButton color="white" mt={1} />
+                    <ModalBody p={6}>
+                        <VStack spacing={4} align="stretch">
+                            <Text fontSize="xs" color="gray.600">
+                                Enter the name of the new company division or category. It will be added to the selection dropdown and selected for this company.
+                            </Text>
+                            <FormControl isRequired>
+                                <FormLabel fontWeight="bold" fontSize="xs">Division / Type Name</FormLabel>
+                                <Input
+                                    placeholder="e.g. Unique Survey, Unique Calibration, Unique Services"
+                                    value={newTypeName}
+                                    onChange={(e) => setNewTypeName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleAddNewType();
+                                        }
+                                    }}
+                                    autoFocus
+                                    borderRadius="xl"
+                                    size="md"
+                                    bg="white"
+                                />
+                            </FormControl>
+
+                            <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
+                                <Text fontSize="xs" color="teal.800" fontWeight="bold" mb={2}>
+                                    Existing Options ({companyTypeOptions.length}):
+                                </Text>
+                                <Wrap spacing={1.5}>
+                                    {companyTypeOptions.map((opt) => (
+                                        <Badge
+                                            key={opt}
+                                            colorScheme={opt === formData.companyType ? "teal" : "gray"}
+                                            variant={opt === formData.companyType ? "solid" : "subtle"}
+                                            borderRadius="full"
+                                            px={2.5}
+                                            py={0.5}
+                                            fontSize="10px"
+                                        >
+                                            {opt}
+                                        </Badge>
+                                    ))}
+                                </Wrap>
+                            </Box>
+                        </VStack>
+                    </ModalBody>
+                    <ModalFooter bg="gray.50" py={3.5} borderTop="1px solid" borderColor="gray.100">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            mr={3}
+                            onClick={() => { setIsAddTypeModalOpen(false); setNewTypeName(''); }}
+                            borderRadius="lg"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            colorScheme="teal"
+                            size="sm"
+                            onClick={handleAddNewType}
+                            leftIcon={<Icon as={FiPlus} />}
+                            borderRadius="lg"
+                            fontWeight="bold"
+                            px={5}
+                        >
+                            Add & Select
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
             {/* ── View Company Details Modal (Includes Company-Wise Catalogs & Multiple Docs) ── */}
             <Modal isOpen={Boolean(viewCompanyModal)} onClose={() => setViewCompanyModal(null)} size="2xl" isCentered scrollBehavior="inside">
                 <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
@@ -1589,9 +1818,14 @@ const CompanyMaster = () => {
                                         <Icon as={FaBuilding} w={7} h={7} color="white" />
                                     </Box>
                                 )}
-                                <VStack align="start" spacing={0}>
+                                <VStack align="start" spacing={0.5}>
                                     <Heading size="md" color="white">{viewCompanyModal?.companyName}</Heading>
-                                    <Text fontSize="xs" opacity={0.9}>Invoice Prefix: <b>{viewCompanyModal?.invoicePrefix || 'UE'}</b></Text>
+                                    <HStack spacing={2} wrap="wrap">
+                                        <Badge colorScheme="yellow" color="gray.900" fontSize="10px" fontWeight="bold" borderRadius="md" px={2} py={0.5}>
+                                            {viewCompanyModal?.companyType || viewCompanyModal?.division || 'Unique Lab Instruments'}
+                                        </Badge>
+                                        <Text fontSize="xs" opacity={0.9}>Invoice Prefix: <b>{viewCompanyModal?.invoicePrefix || 'UE'}</b></Text>
+                                    </HStack>
                                 </VStack>
                             </HStack>
                             <Button
@@ -1619,6 +1853,7 @@ const CompanyMaster = () => {
                                 <Box bg="gray.50" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.200">
                                     <Text fontSize="xs" fontWeight="black" color="teal.700" textTransform="uppercase" mb={3}>📍 Company Profile</Text>
                                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} fontSize="xs">
+                                        <Box><Text color="gray.500">Company Division / Type:</Text><Badge colorScheme="teal" variant="subtle" fontWeight="bold">{viewCompanyModal.companyType || viewCompanyModal.division || 'Unique Lab Instruments'}</Badge></Box>
                                         <Box><Text color="gray.500">Address:</Text><Text fontWeight="bold">{viewCompanyModal.address || '—'}</Text></Box>
                                         <Box><Text color="gray.500">State & Pincode:</Text><Text fontWeight="bold">{viewCompanyModal.state || '—'} - {viewCompanyModal.pincode || '—'}</Text></Box>
                                         <Box><Text color="gray.500">Email:</Text><Text fontWeight="bold">{viewCompanyModal.email || '—'}</Text></Box>
@@ -1671,6 +1906,16 @@ const CompanyMaster = () => {
                                         {viewCompanyModal.cancelledChequeDoc && (
                                             <Button size="sm" colorScheme="red" variant="solid" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${viewCompanyModal.cancelledChequeDoc}`, '_blank')}>
                                                 View Cancelled Cheque
+                                            </Button>
+                                        )}
+                                        {viewCompanyModal.paymentQrDoc && (
+                                            <Button size="sm" colorScheme="teal" variant="solid" leftIcon={<Icon as={FaQrcode} />} onClick={() => window.open(`${API_BASE_URL}${viewCompanyModal.paymentQrDoc}`, '_blank')}>
+                                                View Payment QR Code
+                                            </Button>
+                                        )}
+                                        {viewCompanyModal.visitingCard && (
+                                            <Button size="sm" colorScheme="cyan" variant="solid" leftIcon={<Icon as={FaEye} />} onClick={() => window.open(`${API_BASE_URL}${viewCompanyModal.visitingCard}`, '_blank')}>
+                                                View Visiting Card
                                             </Button>
                                         )}
                                         {getUniqueOtherDocs(viewCompanyModal.otherDocs, viewCompanyModal.otherDoc, viewCompanyModal.otherDocTitle).map((od, idx) => (
@@ -1933,28 +2178,6 @@ const CompanyMaster = () => {
                                 </InputGroup>
                             </FormControl>
 
-                            {/* Credentials Include Toggles */}
-                            <Box p={3} bg="purple.50" borderRadius="xl" border="1px solid" borderColor="purple.100">
-                                <Text fontSize="xs" fontWeight="700" color="purple.900" mb={2}>
-                                    Include Credentials in WhatsApp Text:
-                                </Text>
-                                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2}>
-                                    <Checkbox
-                                        colorScheme="purple"
-                                        isChecked={shareForm.includeBankDetails}
-                                        onChange={e => setShareForm({ ...shareForm, includeBankDetails: e.target.checked })}
-                                    >
-                                        <Text fontSize="xs" fontWeight="600" color="gray.700">Official Bank Account Details</Text>
-                                    </Checkbox>
-                                    <Checkbox
-                                        colorScheme="purple"
-                                        isChecked={shareForm.includeStatutoryDetails}
-                                        onChange={e => setShareForm({ ...shareForm, includeStatutoryDetails: e.target.checked })}
-                                    >
-                                        <Text fontSize="xs" fontWeight="600" color="gray.700">GSTIN, PAN & Udyam Reg</Text>
-                                    </Checkbox>
-                                </SimpleGrid>
-                            </Box>
 
                             {/* Statutory Documents Checkbox Selection (NO Logo, NO Stamp, ZERO Duplicates) */}
                             {shareTargetCompany && (() => {

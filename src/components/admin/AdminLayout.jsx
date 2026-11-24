@@ -14,6 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
 import { useRealtimeSync } from '../../utils/useRealtimeSync';
 import Header from '../Header';
+import CompanyDocShareWidget from './CompanyDocShareWidget';
 
 const LinkItems = [
     { name: 'Dashboard', icon: FiHome, path: '/admin/dashboard', permissionKey: 'dashboard' },
@@ -444,6 +445,7 @@ const AdminLayout = () => {
                 {/* Main Content Area — scrolls independently */}
                 <Box
                     ref={contentRef}
+                    id="admin-main-scroll-container"
                     flex="1"
                     minW="0"
                     h="100%"
@@ -469,6 +471,9 @@ const AdminLayout = () => {
 
             {/* Mobile bottom tab navigation */}
             <MobileBottomNav user={user} />
+
+            {/* Quick Action: Share Company Documents (WhatsApp) */}
+            <CompanyDocShareWidget />
         </Flex>
     );
 };

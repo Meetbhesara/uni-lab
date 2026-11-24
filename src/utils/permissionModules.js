@@ -39,7 +39,9 @@ export const PERMISSION_MODULES = [
             { key: 'enquiries', label: 'Main Tab Access' },
             { key: 'incomingEnquiries', label: 'Incoming Enquiries', parentKey: 'enquiries' },
             { key: 'outboundQuotations', label: 'Outbound Quotations', parentKey: 'enquiries' },
-            { key: 'processedHistory', label: 'Processed (History)', parentKey: 'enquiries' }
+            { key: 'processedHistory', label: 'Processed (History)', parentKey: 'enquiries' },
+            { key: 'whatsappLogs', label: 'WhatsApp Logs', parentKey: 'enquiries' },
+            { key: 'docWhatsapp', label: 'Doc WhatsApp', parentKey: 'enquiries' }
         ]
     },
     {
