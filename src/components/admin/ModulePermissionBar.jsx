@@ -1,17 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Box, Flex, Text, Button, Modal, ModalOverlay, ModalContent, ModalHeader,
     ModalCloseButton, ModalBody, ModalFooter, useDisclosure, Select, VStack,
     HStack, Checkbox, Spinner, useToast, Icon, Badge, Avatar
 } from '@chakra-ui/react';
 import { FiLock, FiSliders, FiSave } from 'react-icons/fi';
-import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { PERMISSION_MODULES } from '../../utils/permissionModules';
 
 const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
-    const location = useLocation();
     const { user, refreshUser } = useAuth();
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [admins, setAdmins] = useState([]);
@@ -19,8 +17,6 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
     const [permissions, setPermissions] = useState({});
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [isScrolled, setIsScrolled] = useState(false);
-    const barRef = useRef(null);
     const toast = useToast();
 
     const moduleConfig = PERMISSION_MODULES.find(m => m.key === moduleGroupKey) || {
@@ -50,56 +46,6 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
             return false;
         })
         : moduleConfig.subTabs;
-
-    const isStandaloneInstruments = location.pathname.startsWith('/unique-lab-instruments') || location.pathname.startsWith('/lab-instruments');
-    const isAdminLayoutRoute = location.pathname.startsWith('/admin');
-    const isAdminRoute = isAdminLayoutRoute || isStandaloneInstruments;
-
-    // On standalone Unique Lab Instruments, there is no global header, so it floats right at top (6px-8px)
-    // On admin layout routes with header, it floats right below the header
-    const scrolledTop = isStandaloneInstruments
-        ? { base: "6px", md: "8px" }
-        : (isAdminLayoutRoute ? { base: "50px", md: "58px" } : { base: "52px", md: "64px" });
-
-    // Robust scroll detection across both main admin scroll container and window
-    useEffect(() => {
-        const getScrollY = () => {
-            const adminContainer = document.getElementById('admin-main-scroll-container');
-            if (adminContainer && adminContainer.scrollTop > 0) {
-                return adminContainer.scrollTop;
-            }
-            if (window.scrollY > 0) return window.scrollY;
-            if (document.documentElement && document.documentElement.scrollTop > 0) {
-                return document.documentElement.scrollTop;
-            }
-            return 0;
-        };
-
-        const handleScroll = () => {
-            const y = getScrollY();
-            setIsScrolled(y > 20);
-        };
-
-        const adminContainer = document.getElementById('admin-main-scroll-container');
-        if (adminContainer) {
-            adminContainer.addEventListener('scroll', handleScroll, { passive: true });
-        }
-        window.addEventListener('scroll', handleScroll, { passive: true });
-        document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-
-        // Lightweight interval to guarantee instant detection without fail
-        const interval = setInterval(handleScroll, 120);
-        handleScroll();
-
-        return () => {
-            if (adminContainer) {
-                adminContainer.removeEventListener('scroll', handleScroll);
-            }
-            window.removeEventListener('scroll', handleScroll);
-            document.removeEventListener('scroll', handleScroll, { capture: true });
-            clearInterval(interval);
-        };
-    }, []);
 
     // Prefetch admins for instant ("fast") response when opening configuration
     useEffect(() => {
@@ -354,69 +300,52 @@ const ModulePermissionBar = ({ moduleGroupKey, subModuleFilterKey }) => {
 
     return (
         <>
-            {/* Height placeholder when bar is dynamically fixed/floating with scroll */}
-            {isScrolled && (
-                <Box h={{ base: "42px", md: "46px" }} mb={2} aria-hidden="true" />
-            )}
-
             <Box
-                ref={barRef}
-                position={isScrolled ? "fixed" : "relative"}
-                top={isScrolled ? scrolledTop : "0"}
-                left={isScrolled ? (isAdminRoute ? { base: "12px", md: "256px" } : { base: "12px", md: "24px" }) : "auto"}
-                right={isScrolled ? { base: "12px", md: "24px" } : "auto"}
-                zIndex={isScrolled ? 999 : 1}
-                mb={isScrolled ? 0 : 2.5}
-                transition="all 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                position="relative"
+                w="full"
+                mb={{ base: 2.5, md: 3 }}
             >
                 <Box
-                    py={isScrolled ? { base: 1.5, md: 2 } : { base: 3, md: 3.5 }}
+                    py={{ base: 2.5, md: 3 }}
                     px={{ base: 3, md: 4 }}
                     bg="linear-gradient(135deg, rgba(88, 28, 135, 0.98), rgba(67, 56, 202, 0.98))"
-                    backdropFilter="blur(16px)"
                     color="white"
-                    borderRadius={isScrolled ? "xl" : "2xl"}
-                    boxShadow={isScrolled 
-                        ? "0 14px 34px -4px rgba(88, 28, 135, 0.6), 0 6px 16px rgba(0,0,0,0.22)" 
-                        : "0 4px 16px -2px rgba(88, 28, 135, 0.3)"}
+                    borderRadius="2xl"
+                    boxShadow="0 4px 16px -2px rgba(88, 28, 135, 0.3)"
                     border="1.5px solid"
-                    borderColor={isScrolled ? "yellow.400" : "purple.500"}
-                    transition="all 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
+                    borderColor="purple.500"
                 >
                     <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
                         <HStack spacing={3}>
                             <Flex
-                                w={isScrolled ? 7 : 9}
-                                h={isScrolled ? 7 : 9}
+                                w={9}
+                                h={9}
                                 bg="whiteAlpha.200"
                                 borderRadius="lg"
                                 align="center"
                                 justify="center"
                                 flexShrink={0}
-                                transition="all 0.2s"
                             >
-                                <Icon as={FiLock} fontSize={isScrolled ? "sm" : "lg"} color="yellow.300" />
+                                <Icon as={FiLock} fontSize="lg" color="yellow.300" />
                             </Flex>
                             <VStack align="start" spacing={0}>
                                 <HStack spacing={2}>
                                     <Badge colorScheme="yellow" fontSize="10px" px={2} py={0.5} borderRadius="md" fontWeight="bold">
                                         Super Admin Control
                                     </Badge>
-                                    <Text fontWeight="bold" fontSize={isScrolled ? "xs" : "sm"} letterSpacing="wide">
+                                    <Text fontWeight="bold" fontSize="sm" letterSpacing="wide">
                                         {titleLabel} Access Gating
                                     </Text>
                                 </HStack>
-                                {!isScrolled && (
-                                    <Text fontSize="xs" color="purple.200" mt={0.5} noOfLines={{ base: 1, md: 2 }}>
-                                        Directly configure read/write access for administrative staff without leaving this module.
-                                    </Text>
-                                )}
+                                <Text fontSize="xs" color="purple.200" mt={0.5} noOfLines={{ base: 1, md: 2 }}>
+                                    Directly configure read/write access for administrative staff without leaving this module.
+                                </Text>
                             </VStack>
                         </HStack>
 
                         <Button
                             size="sm"
-                            h={isScrolled ? "30px" : "36px"}
+                            h="36px"
                             leftIcon={<FiSliders />}
                             colorScheme="yellow"
                             color="gray.900"
