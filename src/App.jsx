@@ -25,6 +25,7 @@ import UniqueLabInstrumentsPage from "./pages/UniqueLabInstrumentsPage";
 import Login from "./pages/Login";
 import MyProfile from "./pages/MyProfile";
 import MyDashboard from "./pages/MyDashboard";
+import Guides from "./pages/Guides";
 import ScrollToTop from "./components/ScrollToTop";
 
 function App() {
@@ -79,6 +80,9 @@ function App() {
         <Route path="/products/:categorySlug/:productSlug" element={<Layout><Products /></Layout>} />
         <Route path="/product/:categorySlug/:productSlug" element={<Layout><Products /></Layout>} />
         <Route path="/services" element={<Layout><Services /></Layout>} />
+        <Route path="/services/:surveySlug" element={<Layout><Services /></Layout>} />
+        <Route path="/guides" element={<Layout><Guides /></Layout>} />
+        <Route path="/guides/:slug" element={<Layout><Guides /></Layout>} />
         <Route path="/about" element={<Layout><About /></Layout>} />
         <Route path="/contact" element={<Layout><Contact /></Layout>} />
 

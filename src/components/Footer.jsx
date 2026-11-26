@@ -47,25 +47,25 @@ const Footer = () => {
                         <Text fontWeight="bold" fontSize="sm" color="white" textTransform="uppercase" letterSpacing="wider">
                             Land Survey Services
                         </Text>
-                        <Link as={RouterLink} to="/services?view=public&survey=contour-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                        <Link as={RouterLink} to="/services/contour-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Counter Survey (Contour Survey)
                         </Link>
-                        <Link as={RouterLink} to="/services?view=public&survey=topography-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                        <Link as={RouterLink} to="/services/topography-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Land Topography Survey
                         </Link>
-                        <Link as={RouterLink} to="/services?view=public&survey=point-marking" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                        <Link as={RouterLink} to="/services/point-marking" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Point Marking & Demarcation
                         </Link>
-                        <Link as={RouterLink} to="/services?view=public&survey=dgps-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                        <Link as={RouterLink} to="/services/dgps-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             DGPS & RTK Geodetic Survey
                         </Link>
-                        <Link as={RouterLink} to="/services?view=public&survey=drone-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                        <Link as={RouterLink} to="/services/drone-survey" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Drone / UAV Aerial Mapping
                         </Link>
-                        <Link as={RouterLink} to="/services?view=public&survey=layout-demarcation" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                        <Link as={RouterLink} to="/services/layout-demarcation" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Plot Layout Setting Out
                         </Link>
-                        <Link as={RouterLink} to="/services?view=public&survey=road-alignment" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                        <Link as={RouterLink} to="/services/road-alignment" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Road & Pipeline Alignment Survey
                         </Link>
                     </Stack>
@@ -105,6 +105,9 @@ const Footer = () => {
                         </Link>
                         <Link as={RouterLink} to="/contact" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Contact & Office Locations
+                        </Link>
+                        <Link as={RouterLink} to="/guides" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
+                            Engineering Guides & FAQ
                         </Link>
                         <Link as={RouterLink} to="/products" onClick={scrollToTop} fontSize="xs" color="gray.400" _hover={{ color: "orange.300" }}>
                             Online Quotation Builder
@@ -163,8 +166,9 @@ const Footer = () => {
                         </HStack>
                         <Divider orientation="vertical" h="14px" borderColor="whiteAlpha.300" />
                         <HStack spacing={5} fontSize="xs" color="gray.400">
-                            <Link as={RouterLink} to="/services?view=public" onClick={scrollToTop} _hover={{ color: "white" }}>Surveying</Link>
+                            <Link as={RouterLink} to="/services" onClick={scrollToTop} _hover={{ color: "white" }}>Surveying</Link>
                             <Link as={RouterLink} to="/products" onClick={scrollToTop} _hover={{ color: "white" }}>Equipment</Link>
+                            <Link as={RouterLink} to="/guides" onClick={scrollToTop} _hover={{ color: "white" }}>Guides & FAQ</Link>
                             <Link as={RouterLink} to="/contact" onClick={scrollToTop} _hover={{ color: "white" }}>Support</Link>
                         </HStack>
                     </HStack>

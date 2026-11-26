@@ -252,7 +252,7 @@ const Header = () => {
                         </Link>
                     </Flex>
                     <Flex align="center" gap={4}>
-                        <Text fontSize="xs" color="gray.300">GST: 22AAAAA0000A1Z5</Text>
+                        <Text fontSize="xs" color="gray.300">MSME: UDYAM-GJ-01-0569418</Text>
                         <Box h="14px" w="1px" bg="whiteAlpha.400" />
                         <HStack spacing={2} align="center">
                             <Text fontSize="xs" fontWeight="700" color="gray.300" letterSpacing="0.5px">
@@ -296,6 +296,7 @@ const Header = () => {
                     <NavLinkItem to="/about" isActive={isActiveLink('/about')}>About Us</NavLinkItem>
                     <NavLinkItem to="/products" isActive={isActiveLink('/product')}>Products</NavLinkItem>
                     <NavLinkItem to="/services" isActive={isActiveLink('/services')}>Services</NavLinkItem>
+                    <NavLinkItem to="/guides" isActive={isActiveLink('/guides')}>Guides & FAQ</NavLinkItem>
                     <NavLinkItem to="/contact" isActive={isActiveLink('/contact')}>Contact</NavLinkItem>
                 </Flex>
 
@@ -567,6 +568,7 @@ const Header = () => {
                             <MobileNavLink to="/about" isActive={isActiveLink('/about')} onClick={toggleNav}>About Us</MobileNavLink>
                             <MobileNavLink to="/products" isActive={isActiveLink('/product')} onClick={toggleNav}>Products</MobileNavLink>
                             <MobileNavLink to="/services" isActive={isActiveLink('/services')} onClick={toggleNav}>Services</MobileNavLink>
+                            <MobileNavLink to="/guides" isActive={isActiveLink('/guides')} onClick={toggleNav}>Guides & FAQ</MobileNavLink>
                             <MobileNavLink to="/contact" isActive={isActiveLink('/contact')} onClick={toggleNav}>Contact</MobileNavLink>
 
                             {/* Social Channels in Drawer */}

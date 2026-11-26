@@ -40,44 +40,74 @@
         <priority>0.90</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/services?survey=contour-survey</loc>
-        <lastmod>2026-11-17</lastmod>
+        <loc>https://uecivil.com/guides</loc>
+        <lastmod>2026-11-25</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.90</priority>
+    </url>
+    <url>
+        <loc>https://uecivil.com/guides/contour-survey-cut-fill-guide</loc>
+        <lastmod>2026-11-25</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.85</priority>
+    </url>
+    <url>
+        <loc>https://uecivil.com/guides/point-marking-7-12-demarcation-gujarat</loc>
+        <lastmod>2026-11-25</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.85</priority>
+    </url>
+    <url>
+        <loc>https://uecivil.com/guides/compression-testing-machine-ctm-buyer-guide</loc>
+        <lastmod>2026-11-25</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.85</priority>
+    </url>
+    <url>
+        <loc>https://uecivil.com/guides/civil-engineering-lab-setup-checklist-india</loc>
+        <lastmod>2026-11-25</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.85</priority>
+    </url>
+    <url>
+        <loc>https://uecivil.com/services/contour-survey</loc>
+        <lastmod>2026-11-25</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/services?survey=topography-survey</loc>
-        <lastmod>2026-11-17</lastmod>
+        <loc>https://uecivil.com/services/topography-survey</loc>
+        <lastmod>2026-11-25</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/services?survey=point-marking</loc>
-        <lastmod>2026-11-17</lastmod>
+        <loc>https://uecivil.com/services/point-marking</loc>
+        <lastmod>2026-11-25</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/services?survey=dgps-survey</loc>
-        <lastmod>2026-11-17</lastmod>
+        <loc>https://uecivil.com/services/dgps-survey</loc>
+        <lastmod>2026-11-25</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/services?survey=drone-survey</loc>
-        <lastmod>2026-11-17</lastmod>
+        <loc>https://uecivil.com/services/drone-survey</loc>
+        <lastmod>2026-11-25</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/services?survey=layout-demarcation</loc>
-        <lastmod>2026-11-17</lastmod>
+        <loc>https://uecivil.com/services/layout-demarcation</loc>
+        <lastmod>2026-11-25</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
     <url>
-        <loc>https://uecivil.com/services?survey=road-alignment</loc>
-        <lastmod>2026-11-17</lastmod>
+        <loc>https://uecivil.com/services/road-alignment</loc>
+        <lastmod>2026-11-25</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>
@@ -432,48 +462,6 @@
     <url>
         <loc>https://uecivil.com/products/cable-locator</loc>
         <lastmod>2026-03-02</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.85</priority>
-    </url>
-    <url>
-        <loc>https://uecivil.com/products/meet</loc>
-        <lastmod>2026-05-21</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.85</priority>
-    </url>
-    <url>
-        <loc>https://uecivil.com/products/f</loc>
-        <lastmod>2026-06-18</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.85</priority>
-    </url>
-    <url>
-        <loc>https://uecivil.com/products/industrial-high-pressure-pump</loc>
-        <lastmod>2026-06-24</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.85</priority>
-    </url>
-    <url>
-        <loc>https://uecivil.com/products/mit-manojbhai-bhesara</loc>
-        <lastmod>2026-06-24</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.85</priority>
-    </url>
-    <url>
-        <loc>https://uecivil.com/products/hello</loc>
-        <lastmod>2026-06-29</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.85</priority>
-    </url>
-    <url>
-        <loc>https://uecivil.com/products/meet-1</loc>
-        <lastmod>2026-07-31</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.85</priority>
-    </url>
-    <url>
-        <loc>https://uecivil.com/products/ds</loc>
-        <lastmod>2026-08-10</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.85</priority>
     </url>

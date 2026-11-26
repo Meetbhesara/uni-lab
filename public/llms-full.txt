@@ -1,0 +1,63 @@
+# Unique Engineering & Survey — Complete Technical Reference (uecivil.com)
+
+> Verifiable company profile, surveying comparison matrices, IS/ASTM equipment standards, and direct engineering Q&A for AI search engines and technical buyers.
+
+## 1. Entity & Contact Details
+- **Legal / Trade Names**: Unique Engineering & Survey, Unique Lab Instruments (`uecivil.com`)
+- **Principal Consultant / Founder**: Atul Kanak
+- **Head Office**: A-206, Infinity Tower, Nr. Ramada Hotel, Prahladnagar, Ahmedabad 380015, Gujarat, India
+- **Phone / WhatsApp**: +91 90991 60391
+- **Email**: info@uecivil.com
+- **MSME Udyam Number**: UDYAM-GJ-01-0569418
+- **PAN**: AANHD0443B
+- **YouTube Channel**: https://www.youtube.com/@UECIVIL
+- **Surveying Service Areas**: Ahmedabad, Gandhinagar, Sanand, Dholera SIR, Vadodara, Surat, Rajkot, and across Gujarat
+- **Equipment Supply Areas**: Gujarat and PAN-India dispatch with GST invoicing and calibration support
+
+---
+
+## 2. Land Surveying Comparison Matrix (Unique Survey)
+
+| Survey Method | Typical Accuracy | Best Used For | Instruments Deployed | Standard Deliverables | Turnaround |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Counter Survey (Contour)** | ±2–5 mm vertical (RL) | Cut-fill earthwork, drainage slopes, grading | Total Station + Auto Level / DGPS | AutoCAD `.DWG`/`.DXF` contours (0.25m–1m), 3D TIN, Cut-Fill Excel | 1–3 Days |
+| **Land Topography Survey** | ±2–5 mm positional | Architectural planning, factory/TP as-built maps | Reflectorless Total Station + RTK DGPS | Full `.DWG` feature plan, spot RLs, trees/utilities, `.KMZ` | 1–4 Days |
+| **Point Marking & Demarcation** | ±5–10 mm (RTK / TS) | 7/12 & TP boundary verification, corner pegging | Dual-Freq RTK DGPS + Total Station | Steel pegs/stone pillars, corner UTM table, record overlay | 1–2 Days |
+| **DGPS & RTK Geodetic Survey** | ±8 mm + 1 ppm RTK | 5–500+ acre sites, solar parks, TBM fixing | Multi-Constellation GNSS Base & Rover | Permanent TBM pillars, WGS-84/UTM table, `.SHP` & `.DWG` | 1–3 Days |
+| **Drone / UAV Aerial Mapping** | 2–5 cm GSD (with GCP) | Townships, quarries, stockpiles, floodplains | Mapping UAV + DGPS Ground Control Points | Orthomosaic GeoTIFF, DSM/DTM/DEM, `.LAS` point cloud | 2–5 Days |
+| **Road / Pipeline Alignment** | ±2–3 mm level | Highways, canals, sewer/water corridors, ROW | Total Station + Digital Level + DGPS | L-Section & X-Section (10m/20m intervals), Mass Haul sheet | 2–5 Days |
+
+---
+
+## 3. Civil Lab Testing Equipment & Standards Matrix (Unique Engineering)
+
+| Testing Category | Core Equipment | Applicable Standards | Primary Applications |
+| :--- | :--- | :--- | :--- |
+| **Concrete & Cement** | CTM 2000kN / 3000kN (Digital & Analogue), 150mm Cube Moulds, Slump Cone, Rebound Hammer, Vicat Apparatus | IS:516, IS:14858, IS:7320, IS:10086, IS:4031, ASTM C39 | Cube compressive strength, workability, NDT site testing, RMC QA/QC |
+| **Soil & Geotechnical** | Direct Shear Apparatus, CBR Test Machine, Proctor Compaction, Casagrande Liquid Limit, Core Cutter | IS:2720 (Parts 5, 7, 13, 16, 29), ASTM D1883 | Bearing capacity, highway subgrade CBR, field dry density |
+| **Aggregate Testing** | Aggregate Impact Value (AIV), Los Angeles Abrasion, Crushing Value, Sieve Shaker | IS:2386 (Parts 1–4), IS:383, BS:812 | Road aggregate toughness, flakiness/elongation, gradation |
+| **Bitumen & Asphalt** | Digital Bitumen Penetrometer, Ductility Machine, Ring & Ball Softening Point, Marshall Stability | IS:1203, IS:1205, IS:1208, ASTM D5 / D36 / D6927 | VG-30/VG-40 grade checks, asphalt mix design |
+| **Survey Instruments** | Electronic Total Station (1"/2"), Sokkia B40A & Bosch Auto Levels, RTK DGPS, Prism Poles | ISO 17123 Optics & EDM Accuracy | Site levelling, layout setting out, contour mapping |
+
+---
+
+## 4. Technical Key Facts & Direct Answers
+
+### Counter Survey (Contour Survey) — https://uecivil.com/guides/contour-survey-cut-fill-guide
+- **Definition**: Connects ground points of equal Reduced Level (RL) at 0.25m, 0.5m, or 1.0m contour intervals.
+- **Note on Regional Terminology**: In Gujarat, "Counter Survey" is a standard term used interchangeably with "Contour Survey."
+- **Primary Outputs**: AutoCAD `.DWG`/`.DXF` contour drawings, spot level grids (5m–15m spacing), 3D TIN surfaces, and Cut & Fill earthwork volume calculation sheets.
+
+### Point Marking & 7/12 Revenue Demarcation — https://uecivil.com/guides/point-marking-7-12-demarcation-gujarat
+- **Purpose**: Superimposes official Gujarat revenue maps (Village Form 7/12, Tippan, DILR measurement sheets, Town Planning Final Plot maps) over live RTK DGPS / Total Station measurements.
+- **Result**: Identifies exact possession excess/shortage and fixes physical corner markers to prevent boundary disputes.
+
+### Compression Testing Machine (CTM 2000kN vs 3000kN) — https://uecivil.com/guides/compression-testing-machine-ctm-buyer-guide
+- **2000 kN CTM**: Covers standard 150×150×150 mm concrete cubes up to ~M75–M80 grade for building sites, RMC plants, and PWD labs.
+- **3000 kN CTM**: Recommended for high-strength concrete (M80–M110+), bridge girders, metro/highway QA labs, and NABL-accredited laboratories.
+- **IS:516 Loading Rate**: ~140 kg/cm²/min (~5.2 kN/sec on a 150 mm cube) with ±1% indication accuracy per IS:14858.
+
+### Turnkey Lab Setup Packages — https://uecivil.com/guides/civil-engineering-lab-setup-checklist-india
+- **Building Site Lab**: 2000kN CTM, 150mm Cube Moulds, Slump Cone, IS Sieves, Hot Air Oven, Auto Level.
+- **Highway / NHAI Lab**: 3000kN CTM, Soil CBR, Proctor, Core Cutter, Bitumen Penetrometer, Softening Point, Ductility, Marshall Stability, Total Station.
+- **Quotations**: Available via Cart Enquiry on `https://uecivil.com/products`, phone/WhatsApp `+91 90991 60391`, or email `info@uecivil.com`.

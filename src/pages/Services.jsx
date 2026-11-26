@@ -7,7 +7,8 @@ import {
     Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Portal,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Spacer, Menu, MenuButton, MenuList, MenuItem,
-    NumberInput, NumberInputField, Spinner, Textarea, Alert, AlertIcon, AlertTitle, AlertDescription, Tooltip
+    NumberInput, NumberInputField, Spinner, Textarea, Alert, AlertIcon, AlertTitle, AlertDescription, Tooltip,
+    Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon
 } from '@chakra-ui/react';
 import {
     FaRoad, FaHardHat, FaBuilding, FaRoute, FaTruck, FaCloudUploadAlt, FaFilePdf, FaFileImage, FaTrash, FaCheckCircle,
@@ -25,7 +26,7 @@ import AdminSiteAllocation from '../components/AdminSiteAllocation';
 import AdminDraftingWork from './admin/AdminDraftingWork';
 import InvoiceReport from './admin/InvoiceReport';
 import AdminLoginReportView from '../components/admin/AdminLoginReportView';
-import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams, Link as RouterLink } from 'react-router-dom';
 import api from '../api/axios';
 import { hasPermission } from '../utils/permissions';
 import ModulePermissionBar from '../components/admin/ModulePermissionBar';
@@ -35,6 +36,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import SEO from '../components/SEO';
 import { getImageUrl, getSafeImageUrl } from '../utils/imageUrl';
+import { SURVEY_COMPARISON_ROWS } from '../data/aeoGeoData';
 
 
 
@@ -210,6 +212,7 @@ const SURVEY_SOLUTIONS = [
 
 const CivilEngineeringServices = () => {
     const navigate = useNavigate();
+    const { surveySlug } = useParams();
     const [searchParams] = useSearchParams();
     const toast = useToast();
     const { isOpen: isDocModalOpen, onOpen: onDocModalOpen, onClose: onDocModalClose } = useDisclosure();
@@ -217,15 +220,17 @@ const CivilEngineeringServices = () => {
     const [panSide, setPanSide] = useState('front'); // 'front' | 'back'
     const [copiedKey, setCopiedKey] = useState('');
 
-    const initialSurvey = searchParams.get('survey') || 'all';
+    const initialSurvey = surveySlug || searchParams.get('survey') || 'all';
     const [activeSurveyFilter, setActiveSurveyFilter] = useState(initialSurvey);
 
     useEffect(() => {
-        const param = searchParams.get('survey');
+        const param = surveySlug || searchParams.get('survey');
         if (param) {
             setActiveSurveyFilter(param);
+        } else {
+            setActiveSurveyFilter('all');
         }
-    }, [searchParams]);
+    }, [surveySlug, searchParams]);
 
     const handleCopy = (text, key) => {
         if (navigator.clipboard) {
@@ -271,7 +276,7 @@ const CivilEngineeringServices = () => {
         ? `${currentSurveyObj.summary} Professional survey solutions in Gujarat by Unique Survey (uecivil.com).`
         : "Unique Survey (uecivil.com) — Premier land surveying solutions in Ahmedabad & Gujarat. High-precision Counter Survey (Contour), Land Topography, Point Marking Demarcation, DGPS & Drone Surveys.";
     const serviceCanonical = currentSurveyObj
-        ? `https://uecivil.com/services?survey=${currentSurveyObj.slug}`
+        ? `https://uecivil.com/services/${currentSurveyObj.slug}`
         : "https://uecivil.com/services";
     const serviceKeywords = currentSurveyObj
         ? `${currentSurveyObj.title.toLowerCase()}, counter survey, contour survey, counter survey ahmedabad, ${currentSurveyObj.slug.replace(/-/g, ' ')}, land survey ahmedabad, gujarat, uecivil`
@@ -289,7 +294,7 @@ const CivilEngineeringServices = () => {
                 "@type": "ListItem",
                 "position": 3,
                 "name": currentSurveyObj.title,
-                "item": `https://uecivil.com/services?survey=${currentSurveyObj.slug}`
+                "item": `https://uecivil.com/services/${currentSurveyObj.slug}`
             });
         }
 
@@ -408,7 +413,7 @@ const CivilEngineeringServices = () => {
                                 variant={activeSurveyFilter === s.slug ? 'solid' : 'outline'}
                                 onClick={() => {
                                     setActiveSurveyFilter(s.slug);
-                                    navigate(`/services?survey=${s.slug}`, { replace: true });
+                                    navigate(`/services/${s.slug}`, { replace: true });
                                 }}
                             >
                                 {s.title.includes('Counter') ? 'Counter Survey' : s.title.includes('Topography') ? 'Topography' : s.title.includes('Demarcation') ? 'Demarcation' : s.title.split(' ')[0]}
@@ -519,7 +524,54 @@ const CivilEngineeringServices = () => {
                         ))}
                     </SimpleGrid>
 
-                    {/* ════════ SEO FAQ SECTION (GOOGLE SNIPPETS & RICH CARDS) ════════ */}
+                    {/* ════════ SURVEY COMPARISON MATRIX (GEO & AEO STRUCTURED DATA) ════════ */}
+                    <Box bg="white" p={{ base: 6, md: 10 }} borderRadius="3xl" border="1px solid" borderColor="gray.200" shadow="sm" mb={10}>
+                        <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align={{ base: 'start', md: 'center' }} mb={6} gap={3}>
+                            <Box>
+                                <Badge colorScheme="blue" px={3} py={1} borderRadius="full" mb={2}>SURVEY METHOD COMPARISON</Badge>
+                                <Heading size="lg" color="gray.800">Which Land Survey Do You Need?</Heading>
+                                <Text color="gray.500" fontSize="sm" mt={1}>Compare precision accuracy, instruments, deliverables, and typical turnaround across Gujarat.</Text>
+                            </Box>
+                            <HStack spacing={2} flexWrap="wrap">
+                                <Button as={RouterLink} to="/guides/contour-survey-cut-fill-guide" size="xs" colorScheme="orange" variant="outline" borderRadius="lg" rightIcon={<FaArrowRight />}>
+                                    Contour Guide
+                                </Button>
+                                <Button as={RouterLink} to="/guides/point-marking-7-12-demarcation-gujarat" size="xs" colorScheme="teal" variant="outline" borderRadius="lg" rightIcon={<FaArrowRight />}>
+                                    7/12 Demarcation Guide
+                                </Button>
+                            </HStack>
+                        </Flex>
+                        <TableContainer>
+                            <Table variant="simple" size="sm">
+                                <Thead bg="gray.50">
+                                    <Tr>
+                                        <Th>Survey Service</Th>
+                                        <Th>Accuracy</Th>
+                                        <Th>Ideal For</Th>
+                                        <Th>Instruments</Th>
+                                        <Th>Deliverables</Th>
+                                        <Th>Turnaround</Th>
+                                    </Tr>
+                                </Thead>
+                                <Tbody>
+                                    {SURVEY_COMPARISON_ROWS.map((row) => (
+                                        <Tr key={row.slug} _hover={{ bg: 'blue.50' }}>
+                                            <Td fontWeight="700" color="brand.700" whiteSpace="normal">
+                                                <RouterLink to={`/services/${row.slug}`}>{row.method}</RouterLink>
+                                            </Td>
+                                            <Td fontSize="xs" fontWeight="600" color="green.700" whiteSpace="nowrap">{row.accuracy}</Td>
+                                            <Td fontSize="xs" color="gray.700" whiteSpace="normal">{row.bestFor}</Td>
+                                            <Td fontSize="xs" color="gray.600" whiteSpace="normal">{row.instruments}</Td>
+                                            <Td fontSize="xs" color="gray.600" whiteSpace="normal">{row.deliverables}</Td>
+                                            <Td fontSize="xs" fontWeight="700" color="orange.600" whiteSpace="nowrap">{row.turnaround}</Td>
+                                        </Tr>
+                                    ))}
+                                </Tbody>
+                            </Table>
+                        </TableContainer>
+                    </Box>
+
+                    {/* ════════ SEO & AEO FAQ SECTION (GOOGLE SNIPPETS & RICH CARDS) ════════ */}
                     <Box bg="white" p={{ base: 6, md: 10 }} borderRadius="3xl" border="1px solid" borderColor="gray.200" shadow="sm">
                         <Box textAlign="center" mb={8}>
                             <Badge colorScheme="purple" px={3} py={1} borderRadius="full" mb={2}>Frequently Asked Questions</Badge>
@@ -527,18 +579,21 @@ const CivilEngineeringServices = () => {
                             <Text color="gray.500" fontSize="sm" mt={1}>Direct answers regarding survey methodologies, instruments, and timelines in Ahmedabad, Gujarat.</Text>
                         </Box>
 
-                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                        <Accordion allowMultiple defaultIndex={[0, 1]}>
                             {SURVEY_SOLUTIONS.map((s, idx) => (
-                                <Box key={idx} p={5} borderRadius="2xl" bg="gray.50" border="1px solid" borderColor="gray.200">
-                                    <Heading size="xs" color="brand.800" mb={2} fontWeight="bold">
-                                        Q: {s.faqQuestion}
-                                    </Heading>
-                                    <Text fontSize="xs" color="gray.600" lineHeight={1.6}>
+                                <AccordionItem key={idx} border="1px solid" borderColor="gray.200" borderRadius="xl" mb={3} overflow="hidden">
+                                    <AccordionButton bg="gray.50" _expanded={{ bg: 'brand.50', color: 'brand.800' }} py={3.5} px={4}>
+                                        <Box flex="1" textAlign="left" fontWeight="bold" fontSize="sm">
+                                            Q: {s.faqQuestion}
+                                        </Box>
+                                        <AccordionIcon />
+                                    </AccordionButton>
+                                    <AccordionPanel pb={4} pt={3} px={4} fontSize="sm" color="gray.700" lineHeight="1.7">
                                         {s.faqAnswer}
-                                    </Text>
-                                </Box>
+                                    </AccordionPanel>
+                                </AccordionItem>
                             ))}
-                        </SimpleGrid>
+                        </Accordion>
                     </Box>
                 </Box>
 

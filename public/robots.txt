@@ -1,5 +1,5 @@
 # robots.txt for uecivil.com
-# Unique Engineering & Unique Survey Solutions
+# Unique Engineering & Survey Solutions
 
 # ── AI Search Engine & Assistant Crawlers (Google AI, ChatGPT, Perplexity, Claude) ──
 User-agent: Google-Extended
@@ -8,10 +8,19 @@ Allow: /
 User-agent: GPTBot
 Allow: /
 
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
 User-agent: PerplexityBot
 Allow: /
 
 User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
 Allow: /
 
 User-agent: Applebot-Extended
@@ -29,6 +38,7 @@ User-agent: *
 Allow: /
 Allow: /products
 Allow: /services
+Allow: /guides
 Allow: /about
 Allow: /contact
 Allow: /unique-lab-instruments
@@ -43,7 +53,8 @@ Host: https://uecivil.com
 
 # LLM Discovery & Context (for AI search engines)
 # https://uecivil.com/llms.txt
+# https://uecivil.com/llms-full.txt
 
-# Sitemap Index
+# Sitemap Index (Live MongoDB auto-updated sitemap + static fallback)
+Sitemap: https://uecivil.com/api/sitemap.xml
 Sitemap: https://uecivil.com/sitemap.xml
-

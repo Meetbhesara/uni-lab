@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, Divider, VStack, Progress } from '@chakra-ui/react';
+import { useNavigate, useLocation, useParams, Link as RouterLink } from 'react-router-dom';
+import { Box, Container, Stack, Heading, Text, Button, Badge, Flex, useToast, IconButton, Image, Spinner, SimpleGrid, Input, InputGroup, InputLeftElement, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, Divider, VStack, Progress, HStack, Table, Thead, Tbody, Tr, Th, Td, TableContainer, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { FaShoppingCart, FaChevronLeft, FaChevronRight, FaTrash } from 'react-icons/fa';
-import { FiSettings, FiSearch, FiPlay, FiShare2 } from 'react-icons/fi';
+import { FiSettings, FiSearch, FiPlay, FiShare2, FiArrowRight } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 import SEO from '../components/SEO';
+import { LAB_STANDARDS_ROWS, PRODUCT_AEO_FAQS } from '../data/aeoGeoData';
 
 import { getImageUrl } from '../utils/imageUrl';
 
@@ -88,8 +89,6 @@ styleEl.innerHTML = `
 `;
 
 const ProductSlider = ({ products }) => {
-    const navigate = useNavigate();
-
     if (!products || !products.length) return null;
 
     // Ensure we have enough items so the base list spans well beyond screen width for seamless looping
@@ -128,6 +127,9 @@ const ProductSlider = ({ products }) => {
                     return (
                         <Box
                             key={`${productId}-${idx}`}
+                            as={RouterLink}
+                            to={`/products/${product.slug || productId}`}
+                            display="block"
                             mx={3}
                             flexShrink={0}
                             cursor="pointer"
@@ -147,7 +149,6 @@ const ProductSlider = ({ products }) => {
                                 boxShadow: '2xl',
                                 borderColor: 'brand.400'
                             }}
-                            onClick={() => navigate(`/products?category=${encodeURIComponent(product.category || '')}&highlight=${product.slug || productId}`)}
                         >
                             <Image
                                 src={imgSrc}
@@ -966,7 +967,15 @@ const Products = () => {
                     "@type": "Answer",
                     "text": "Add desired instruments to your inquiry cart on uecivil.com, call +91 90991 60391, or send an email to info@uecivil.com for immediate quotation and catalog delivery."
                 }
-            }
+            },
+            ...PRODUCT_AEO_FAQS.map(f => ({
+                "@type": "Question",
+                "name": f.q,
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": f.a
+                }
+            }))
         ];
 
         return {
@@ -1062,6 +1071,9 @@ const Products = () => {
                             {PRODUCT_CATEGORIES.map((cat) => (
                                 <Box
                                     key={cat.id}
+                                    as={RouterLink}
+                                    to={`/products?category=${cat.slug}`}
+                                    display="block"
                                     borderRadius="2xl"
                                     cursor="pointer"
                                     overflow="hidden"
@@ -1070,10 +1082,14 @@ const Products = () => {
                                     boxShadow="md"
                                     _hover={{
                                         transform: 'translateY(-5px)',
-                                        boxShadow: '2xl'
+                                        boxShadow: '2xl',
+                                        textDecoration: 'none'
                                     }}
                                     transition="all 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
-                                    onClick={() => handleCategoryClick(cat.id)}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        handleCategoryClick(cat.id);
+                                    }}
                                 >
                                     <Box
                                         position="absolute"
@@ -1424,6 +1440,71 @@ const Products = () => {
                             )}
                         </Box>
                     )}
+
+                    {/* Visible AEO & GEO Civil Lab Standards Table & Buyer FAQs */}
+                    <Box mt={12} bg="white" p={{ base: 5, md: 8 }} borderRadius="3xl" border="1px solid" borderColor="gray.200" shadow="sm">
+                        <Flex direction={{ base: 'column', sm: 'row' }} justify="space-between" align={{ base: 'start', sm: 'center' }} mb={6} gap={3}>
+                            <Box>
+                                <Badge colorScheme="orange" px={3} py={1} borderRadius="full" mb={2}>IS / BS / ASTM COMPLIANCE</Badge>
+                                <Heading as="h2" size="md" color="brand.800">
+                                    Civil Lab Testing Standards & Equipment Reference
+                                </Heading>
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Quick technical reference for contractors, NABL labs, RMC plants, and educational institutions.
+                                </Text>
+                            </Box>
+                            <HStack spacing={2} flexWrap="wrap">
+                                <Button as={RouterLink} to="/guides/compression-testing-machine-ctm-buyer-guide" size="xs" colorScheme="blue" variant="outline" borderRadius="lg" rightIcon={<FiArrowRight />}>
+                                    CTM 2000kN vs 3000kN Guide
+                                </Button>
+                                <Button as={RouterLink} to="/guides/civil-engineering-lab-setup-checklist-india" size="xs" colorScheme="orange" variant="outline" borderRadius="lg" rightIcon={<FiArrowRight />}>
+                                    Lab Setup Checklist
+                                </Button>
+                            </HStack>
+                        </Flex>
+
+                        <TableContainer mb={8}>
+                            <Table variant="simple" size="sm">
+                                <Thead bg="gray.50">
+                                    <Tr>
+                                        <Th>Testing Line</Th>
+                                        <Th>Key Equipment</Th>
+                                        <Th>Compliance Standards</Th>
+                                        <Th>Applications</Th>
+                                    </Tr>
+                                </Thead>
+                                <Tbody>
+                                    {LAB_STANDARDS_ROWS.map((row, rIdx) => (
+                                        <Tr key={rIdx} _hover={{ bg: 'gray.50' }}>
+                                            <Td fontWeight="700" color="brand.700" whiteSpace="normal">{row.category}</Td>
+                                            <Td fontSize="xs" color="gray.700" whiteSpace="normal">{row.keyEquipment}</Td>
+                                            <Td fontSize="xs" fontWeight="700" color="blue.700" whiteSpace="normal">{row.standards}</Td>
+                                            <Td fontSize="xs" color="gray.600" whiteSpace="normal">{row.applications}</Td>
+                                        </Tr>
+                                    ))}
+                                </Tbody>
+                            </Table>
+                        </TableContainer>
+
+                        <Heading as="h3" size="sm" color="gray.800" mb={4}>
+                            Equipment Buyer Frequently Asked Questions
+                        </Heading>
+                        <Accordion allowMultiple defaultIndex={[0]}>
+                            {PRODUCT_AEO_FAQS.map((faq, idx) => (
+                                <AccordionItem key={idx} border="1px solid" borderColor="gray.200" borderRadius="xl" mb={2.5} overflow="hidden">
+                                    <AccordionButton bg="gray.50" _expanded={{ bg: 'orange.50', color: 'orange.800' }} py={3} px={4}>
+                                        <Box flex="1" textAlign="left" fontWeight="700" fontSize="sm">
+                                            {faq.q}
+                                        </Box>
+                                        <AccordionIcon />
+                                    </AccordionButton>
+                                    <AccordionPanel pb={4} pt={3} px={4} fontSize="xs" color="gray.700" lineHeight="1.7">
+                                        {faq.a}
+                                    </AccordionPanel>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
+                    </Box>
                 </Box>
                 {/* Right Sticky Cart Sidebar (Desktop & Mobile) */}
                 <CartSidebar onOpenCart={handleOpenCart} />
