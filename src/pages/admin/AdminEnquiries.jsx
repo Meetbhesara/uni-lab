@@ -1192,7 +1192,8 @@ const AdminEnquiries = () => {
                 status: 'Sent',
                 packaging: quoteTotals.packaging || 0,
                 packagingGst: quoteTotals.packagingGst || 0,
-                discount: finalDiscount
+                discount: finalDiscount,
+                sentByName: user?.name || user?.contactPersonName || user?.email || ''
             };
 
             const response = await api.post('/quotations', payload);
@@ -1246,10 +1247,14 @@ const AdminEnquiries = () => {
             const res = await api.post('/whatsapp/send-quotation', {
                 quotationId: q._id,
                 phone: phoneNumber,
-                message: message
+                message: message,
+                sentByName: user?.name || user?.contactPersonName || user?.email || ''
             });
 
             const data = res.data || {};
+            if (data.sentBy) {
+                setQuotations(prev => prev.map(item => item._id === q._id ? { ...item, sentBy: data.sentBy } : item));
+            }
             const cleanDigits = (phoneNumber || '').replace(/\D/g, '').slice(-10);
 
             // Pop up the detailed Acknowledgement Modal with WhatsApp & Google Contacts sync status
@@ -1683,7 +1688,7 @@ const AdminEnquiries = () => {
                                     <FiSearch color="gray.400" />
                                 </InputLeftElement>
                                 <Input
-                                    placeholder="Search by client or Ref No..."
+                                    placeholder="Search by client, Ref No, or sent by..."
                                     borderRadius="xl"
                                     value={activeSearch}
                                     onChange={(e) => {
@@ -1713,6 +1718,7 @@ const AdminEnquiries = () => {
                                         <Th>Client</Th>
                                         <Th>Total Value</Th>
                                         <Th>Status</Th>
+                                        <Th>Sent By</Th>
                                         <Th>Next Follow-up</Th>
                                         <Th textAlign="right">Action</Th>
                                     </Tr>
@@ -1744,6 +1750,7 @@ const AdminEnquiries = () => {
                                             }
                                             const clientName = q.enquiryId?.Name || q.enquiry?.Name || q.partyName || 'Unknown';
                                             const totalAmt = q.grandTotal || q.totalAmount || 0;
+                                            const senderLabel = q.sentBy || q.sentById?.name || q.sentById?.contactPersonName || q.sentById?.email || 'Admin';
 
                                             const nextDate = q.nextFollowUp
                                                 ? new Date(q.nextFollowUp)
@@ -1816,6 +1823,11 @@ const AdminEnquiries = () => {
                                                     </Td>
                                                     <Td fontWeight="bold" color="gray.700">₹{totalAmt.toLocaleString('en-IN')}</Td>
                                                     <Td><Badge colorScheme="blue">{q.status}</Badge></Td>
+                                                    <Td>
+                                                        <Badge colorScheme="blue" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs" fontWeight="bold">
+                                                            👤 {senderLabel}
+                                                        </Badge>
+                                                    </Td>
                                                     <Td>
                                                         <VStack align="start" spacing={0}>
                                                             {nextDate ? (
@@ -1902,7 +1914,7 @@ const AdminEnquiries = () => {
                                     })()}
                                     {filteredQuotations.length === 0 && (
                                         <Tr>
-                                            <Td colSpan={7} textAlign="center" py={4} color="gray.500">
+                                            <Td colSpan={8} textAlign="center" py={4} color="gray.500">
                                                 No outbound quotations found.
                                             </Td>
                                         </Tr>
@@ -1984,18 +1996,6 @@ const AdminEnquiries = () => {
                                                         <Td><Badge colorScheme={q.status === 'Done' ? 'green' : 'red'}>{q.status === 'Done' ? 'Accepted' : 'Rejected'}</Badge></Td>
                                                         <Td textAlign="right">
                                                             <HStack spacing={2} justify="flex-end">
-                                                                <Button
-                                                                    size="sm"
-                                                                    bg="#25D366"
-                                                                    color="white"
-                                                                    _hover={{ bg: "#128C7E" }}
-                                                                    leftIcon={<FaWhatsapp />}
-                                                                    isLoading={sendingWhatsappId === q._id}
-                                                                    isDisabled={!!sendingWhatsappId}
-                                                                    onClick={() => handleSendWhatsApp(q)}
-                                                                >
-                                                                    WhatsApp
-                                                                </Button>
                                                                 <Button size="sm" variant="outline" leftIcon={<FiEye />} onClick={() => handleViewQuotation(q)}>View Quote</Button>
                                                                 {q.status === 'Done' && (
                                                                     <Button size="sm" colorScheme="purple" leftIcon={<FiDownload />} onClick={() => downloadTallyXML(q)}>Tally XML</Button>
@@ -2032,7 +2032,7 @@ const AdminEnquiries = () => {
                                         <FiSearch color="gray.400" />
                                     </InputLeftElement>
                                     <Input
-                                        placeholder="Search by client name or phone..."
+                                        placeholder="Search by client, phone, or sent by..."
                                         borderRadius="xl"
                                         value={whatsappSearch}
                                         onChange={(e) => {
@@ -2061,12 +2061,15 @@ const AdminEnquiries = () => {
                                                     <Th>Client Name & Contact</Th>
                                                     <Th>Products Sent</Th>
                                                     <Th>WA Status</Th>
+                                                    <Th>Sent By</Th>
                                                     <Th>Next Follow-Up</Th>
                                                     <Th textAlign="right">Action</Th>
                                                 </Tr>
                                             </Thead>
                                             <Tbody>
-                                                {paginatedWhatsappLogs.map(e => (
+                                                {paginatedWhatsappLogs.map(e => {
+                                                    const senderLabel = e.sentBy || e.sentById?.name || e.sentById?.contactPersonName || e.sentById?.email || 'Admin';
+                                                    return (
                                                     <Tr key={e._id} _hover={{ bg: "gray.50" }}>
                                                         <Td fontSize="sm">
                                                             {new Date(e.createdAt).toLocaleDateString('en-GB')}
@@ -2093,6 +2096,11 @@ const AdminEnquiries = () => {
                                                                     {new Date(e.whatsappSentAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                                                                 </Text>
                                                             )}
+                                                        </Td>
+                                                        <Td>
+                                                            <Badge colorScheme="blue" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs" fontWeight="bold">
+                                                                👤 {senderLabel}
+                                                            </Badge>
                                                         </Td>
                                                         <Td>
                                                             {(() => {
@@ -2168,8 +2176,9 @@ const AdminEnquiries = () => {
                                                             </HStack>
                                                         </Td>
                                                     </Tr>
-                                                ))}
-                                                {filteredWhatsappLogs.length === 0 && <Tr><Td colSpan={6} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
+                                                    );
+                                                })}
+                                                {filteredWhatsappLogs.length === 0 && <Tr><Td colSpan={7} textAlign="center" py={4} color="gray.500">No WhatsApp logs found.</Td></Tr>}
                                             </Tbody>
                                         </Table>
                                     </Box>
@@ -2307,7 +2316,7 @@ const AdminEnquiries = () => {
                                                     </Td>
                                                     <Td>
                                                         <Badge colorScheme="blue" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs" fontWeight="bold">
-                                                            👤 {e.sentBy || 'Admin'}
+                                                            👤 {e.sentBy || e.sentById?.name || e.sentById?.contactPersonName || e.sentById?.email || 'Admin'}
                                                         </Badge>
                                                     </Td>
                                                     <Td textAlign="right">
@@ -2369,7 +2378,7 @@ const AdminEnquiries = () => {
                                     </HStack>
                                     <Text fontSize="sm"><strong>Recipient:</strong> {selectedEnquiry.Name} {selectedEnquiry.companyName ? `(${selectedEnquiry.companyName})` : ''}</Text>
                                     <Text fontSize="sm"><strong>Mobile Phone:</strong> +91 {selectedEnquiry.phone}</Text>
-                                    <Text fontSize="sm"><strong>Sent By:</strong> {selectedEnquiry.sentBy || 'Admin'}</Text>
+                                    <Text fontSize="sm"><strong>Sent By:</strong> {selectedEnquiry.sentBy || selectedEnquiry.sentById?.name || selectedEnquiry.sentById?.contactPersonName || selectedEnquiry.sentById?.email || 'Admin'}</Text>
                                     {selectedEnquiry.email && <Text fontSize="sm"><strong>Email:</strong> {selectedEnquiry.email}</Text>}
                                     {selectedEnquiry.gstNumber && <Text fontSize="sm"><strong>GSTIN:</strong> {selectedEnquiry.gstNumber}</Text>}
                                     {selectedEnquiry.whatsappSentAt && (
@@ -2416,6 +2425,9 @@ const AdminEnquiries = () => {
                                 <Box bg="gray.50" p={4} borderRadius="md">
                                     <Text><strong>From:</strong> {selectedEnquiry.Name} ({selectedEnquiry.email})</Text>
                                     <Text><strong>Contact:</strong> {selectedEnquiry.phone}</Text>
+                                    {(selectedEnquiry.type === 'whatsapp' || selectedEnquiry.sentBy || selectedEnquiry.sentById) && (
+                                        <Text><strong>Sent By:</strong> {selectedEnquiry.sentBy || selectedEnquiry.sentById?.name || selectedEnquiry.sentById?.contactPersonName || selectedEnquiry.sentById?.email || 'Admin'}</Text>
+                                    )}
                                     <Text mt={2}>{selectedEnquiry.message}</Text>
                                 </Box>
 

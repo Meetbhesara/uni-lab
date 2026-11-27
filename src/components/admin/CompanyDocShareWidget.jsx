@@ -10,7 +10,7 @@ import {
     FaWhatsapp, FaBuilding, FaQrcode, FaEye, FaCheckCircle,
     FaIdCard, FaFileInvoice, FaFileAlt, FaBook, FaFilePdf
 } from 'react-icons/fa';
-import { FiPhone, FiUser, FiSend, FiX, FiCheck, FiBriefcase, FiLayers } from 'react-icons/fi';
+import { FiPhone, FiUser, FiSend, FiX, FiCheck, FiBriefcase } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
 import api from '../../api/axios';
@@ -26,12 +26,10 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
 
     // Data states
     const [companies, setCompanies] = useState([]);
-    const [companyTypes, setCompanyTypes] = useState([]);
     const [globalCatalogs, setGlobalCatalogs] = useState([]);
     const [isLoadingData, setIsLoadingData] = useState(false);
 
     // Selection states
-    const [selectedDivision, setSelectedDivision] = useState('');
     const [selectedCompanyId, setSelectedCompanyId] = useState('');
     const [selectedCompany, setSelectedCompany] = useState(null);
 
@@ -71,9 +69,8 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
     const fetchCompanies = async () => {
         setIsLoadingData(true);
         try {
-            const [compRes, typesRes, catRes] = await Promise.all([
+            const [compRes, catRes] = await Promise.all([
                 api.get('/company-master'),
-                api.get('/company-master/types').catch(() => ({ data: { data: [] } })),
                 api.get('/catalogs').catch(() => ({ data: { data: [] } }))
             ]);
 
@@ -81,18 +78,9 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
             setCompanies(compList);
             setGlobalCatalogs(catRes.data?.data || []);
 
-            const rawTypes = typesRes.data?.data || [];
-            const derivedTypes = Array.from(new Set([
-                'Unique Lab Instruments',
-                'Unique Survey',
-                ...rawTypes,
-                ...compList.map(c => c.companyType || c.division).filter(Boolean)
-            ]));
-            setCompanyTypes(derivedTypes);
-
-            // Default division selection if none
-            if (!selectedDivision && derivedTypes.length > 0) {
-                setSelectedDivision(derivedTypes[0]);
+            if (compList.length === 1 && !selectedCompanyId) {
+                setSelectedCompanyId(compList[0]._id);
+                setSelectedCompany(compList[0]);
             }
         } catch (error) {
             console.error('Failed to load companies:', error);
@@ -106,13 +94,6 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
             setIsLoadingData(false);
         }
     };
-
-    // Filter companies matching selected division
-    const filteredCompanies = companies.filter(c => {
-        if (!selectedDivision) return true;
-        const compDiv = (c.companyType || c.division || '').trim().toLowerCase();
-        return compDiv === selectedDivision.trim().toLowerCase();
-    });
 
     // Helper: Deduplicated Catalogs belonging to the selected company
     const getCompanyCatalogs = (comp) => {
@@ -151,23 +132,6 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
         if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) return path;
         const cleanPath = path.startsWith('/') ? path : '/' + path;
         return `${API_BASE_URL}${cleanPath}`;
-    };
-
-    // When division changes, auto-select first matching company or reset
-    const handleDivisionChange = (div) => {
-        setSelectedDivision(div);
-        setSelectedCompanyId('');
-        setSelectedCompany(null);
-        resetDocSelections();
-
-        const matches = companies.filter(c => {
-            const compDiv = (c.companyType || c.division || '').trim().toLowerCase();
-            return compDiv === div.trim().toLowerCase();
-        });
-        if (matches.length === 1) {
-            setSelectedCompanyId(matches[0]._id);
-            setSelectedCompany(matches[0]);
-        }
     };
 
     // When company selection changes
@@ -595,7 +559,7 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                     <ModalBody p={{ base: 3, md: 4 }} bg="gray.100">
                         <VStack spacing={3} align="stretch">
 
-                            {/* ── TOP TOOLBAR: Step 1 (Division) & Step 2 (Company) Side-By-Side ── */}
+                            {/* ── TOP TOOLBAR: Step 1 (Company) ── */}
                             <Box
                                 p={3}
                                 bg="white"
@@ -604,74 +568,39 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                                 borderColor="gray.300"
                                 shadow="2xs"
                             >
-                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-                                    {/* Division Selection */}
-                                    <FormControl>
-                                        <Flex justify="space-between" align="center" mb={1}>
-                                            <HStack spacing={1.5}>
-                                                <Badge colorScheme="purple" fontSize="9px" px={1.5} py={0.5} borderRadius="sm" fontWeight="bold">
-                                                    STEP 1
-                                                </Badge>
-                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" m={0}>
-                                                    DIVISION / COMPANY TYPE
-                                                </FormLabel>
-                                            </HStack>
-                                            <Icon as={FiLayers} color="purple.500" boxSize={3.5} />
-                                        </Flex>
-                                        <Select
-                                            value={selectedDivision}
-                                            onChange={(e) => handleDivisionChange(e.target.value)}
-                                            size="sm"
-                                            borderRadius="md"
-                                            bg="gray.50"
-                                            fontWeight="semibold"
-                                            borderColor="purple.200"
-                                            _focus={{ borderColor: "purple.500", bg: "white" }}
-                                        >
-                                            <option value="">-- Choose Division / Type --</option>
-                                            {companyTypes.map((type, idx) => (
-                                                <option key={idx} value={type}>
-                                                    {type}
-                                                </option>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-
-                                    {/* Company Selection */}
-                                    <FormControl isDisabled={!selectedDivision}>
-                                        <Flex justify="space-between" align="center" mb={1}>
-                                            <HStack spacing={1.5}>
-                                                <Badge colorScheme="blue" fontSize="9px" px={1.5} py={0.5} borderRadius="sm" fontWeight="bold">
-                                                    STEP 2
-                                                </Badge>
-                                                <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" m={0}>
-                                                    SELECT COMPANY ({filteredCompanies.length})
-                                                </FormLabel>
-                                            </HStack>
-                                            <Icon as={FaBuilding} color="blue.500" boxSize={3.5} />
-                                        </Flex>
-                                        <Select
-                                            value={selectedCompanyId}
-                                            onChange={(e) => handleCompanyChange(e.target.value)}
-                                            size="sm"
-                                            borderRadius="md"
-                                            bg="gray.50"
-                                            fontWeight="semibold"
-                                            borderColor="blue.200"
-                                            _focus={{ borderColor: "blue.500", bg: "white" }}
-                                        >
-                                            <option value="">-- Choose Company to Share --</option>
-                                            {filteredCompanies.map((c) => (
-                                                <option key={c._id} value={c._id}>
-                                                    {c.companyName} {c.gstin ? `[GST: ${c.gstin}]` : ''}
-                                                </option>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </SimpleGrid>
+                                <FormControl>
+                                    <Flex justify="space-between" align="center" mb={1}>
+                                        <HStack spacing={1.5}>
+                                            <Badge colorScheme="blue" fontSize="9px" px={1.5} py={0.5} borderRadius="sm" fontWeight="bold">
+                                                STEP 1
+                                            </Badge>
+                                            <FormLabel fontSize="xs" fontWeight="bold" color="gray.700" m={0}>
+                                                SELECT COMPANY ({companies.length})
+                                            </FormLabel>
+                                        </HStack>
+                                        <Icon as={FaBuilding} color="blue.500" boxSize={3.5} />
+                                    </Flex>
+                                    <Select
+                                        value={selectedCompanyId}
+                                        onChange={(e) => handleCompanyChange(e.target.value)}
+                                        size="sm"
+                                        borderRadius="md"
+                                        bg="gray.50"
+                                        fontWeight="semibold"
+                                        borderColor="blue.200"
+                                        _focus={{ borderColor: "blue.500", bg: "white" }}
+                                    >
+                                        <option value="">-- Choose Company to Share --</option>
+                                        {companies.map((c) => (
+                                            <option key={c._id} value={c._id}>
+                                                {c.companyName} {c.gstin ? `[GST: ${c.gstin}]` : ''}
+                                            </option>
+                                        ))}
+                                    </Select>
+                                </FormControl>
                             </Box>
 
-                            {/* ── WORKSPACE SPLIT: Left = Documents (Step 3) | Right = Client & Message (Step 4) ── */}
+                            {/* ── WORKSPACE SPLIT: Left = Documents (Step 2) | Right = Client & Message (Step 3) ── */}
                             {!selectedCompany ? (
                                 <Box
                                     p={8}
@@ -683,7 +612,7 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                                 >
                                     <Icon as={FaBuilding} boxSize={8} color="gray.400" mb={2} />
                                     <Text fontSize="sm" fontWeight="bold" color="gray.700">
-                                        Please select a Division and Company above to begin sharing documents.
+                                        Please select a Company above to begin sharing documents.
                                     </Text>
                                     <Text fontSize="xs" color="gray.500" mt={1}>
                                         Once selected, available credentials (GST, Udyam, PAN, Payment QR, Visiting Card, Cheque) and recipient fields will appear.
@@ -692,7 +621,7 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                             ) : (
                                 <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={3} alignItems="stretch">
 
-                                    {/* ── LEFT PANE: STEP 3 - Document & Company-Wise Catalog Selection ── */}
+                                    {/* ── LEFT PANE: STEP 2 - Document & Company-Wise Catalog Selection ── */}
                                     <Box
                                         p={3.5}
                                         bg="white"
@@ -704,11 +633,11 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                                         flexDirection="column"
                                         gap={3}
                                     >
-                                        {/* Main Step 3 Header with Total Selection & Select All / Clear All */}
+                                        {/* Main Step 2 Header with Total Selection & Select All / Clear All */}
                                         <Flex justify="space-between" align="center" pb={2} borderBottom="1px solid" borderColor="gray.200">
                                             <HStack spacing={2}>
                                                 <Badge colorScheme="teal" borderRadius="sm" px={1.5} py={0.5} fontSize="9px" fontWeight="bold">
-                                                    STEP 3
+                                                    STEP 2
                                                 </Badge>
                                                 <Text fontSize="xs" fontWeight="extrabold" color="gray.800" letterSpacing="wide">
                                                     SELECT DOCUMENTS & CATALOGS ({totalSelectedCount}/{availableUploadsCount + currentCompanyCatalogs.length})
@@ -780,8 +709,10 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                                                                         colorScheme={doc.color}
                                                                         isChecked={isChecked}
                                                                         isDisabled={!isUploaded}
-                                                                        onChange={() => {}}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        onChange={() => isUploaded && handleDocToggle(doc.key)}
                                                                         size="sm"
+                                                                        flex={1}
                                                                     >
                                                                         <VStack align="start" spacing={0} ml={1}>
                                                                             <Text fontSize="xs" fontWeight="bold" color="gray.800" noOfLines={1}>
@@ -877,8 +808,10 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                                                                         <Checkbox
                                                                             colorScheme="purple"
                                                                             isChecked={isChecked}
-                                                                            onChange={() => {}}
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            onChange={() => handleCatalogToggle(cat._id)}
                                                                             size="sm"
+                                                                            flex={1}
                                                                         >
                                                                             <HStack spacing={1.5} ml={1}>
                                                                                 <Icon as={FaFilePdf} color={isChecked ? "purple.600" : "red.500"} boxSize={3.5} />
@@ -918,7 +851,7 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                                         </Box>
                                     </Box>
 
-                                    {/* ── RIGHT PANE: STEP 4 - Recipient Client Details & Custom Note ── */}
+                                    {/* ── RIGHT PANE: STEP 3 - Recipient Client Details & Custom Note ── */}
                                     <Box
                                         p={3.5}
                                         bg="white"
@@ -932,7 +865,7 @@ const CompanyDocShareWidget = ({ isFloating = true, customButton = null }) => {
                                         <Flex justify="space-between" align="center" mb={2.5} pb={2} borderBottom="1px solid" borderColor="gray.100">
                                             <HStack spacing={2}>
                                                 <Badge colorScheme="green" borderRadius="sm" px={1.5} py={0.5} fontSize="9px" fontWeight="bold">
-                                                    STEP 4
+                                                    STEP 3
                                                 </Badge>
                                                 <Text fontSize="xs" fontWeight="extrabold" color="gray.800" letterSpacing="wide">
                                                     RECIPIENT CLIENT DETAILS

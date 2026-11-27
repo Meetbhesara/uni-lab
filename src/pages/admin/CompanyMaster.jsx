@@ -5,7 +5,7 @@ import {
     Tabs, TabList, TabPanels, Tab, TabPanel, Table, Thead, Tbody, Tr, Th, Td, Wrap,
     useDisclosure, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
     Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner, Center, Select
+    Checkbox, Badge, InputGroup, InputLeftElement, InputRightElement, Spinner, Center
 } from '@chakra-ui/react';
 import {
     FaBuilding, FaCloudUploadAlt, FaTrash, FaEdit, FaEye,
@@ -85,26 +85,8 @@ const CompanyMaster = () => {
     const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
     const cancelRef = React.useRef();
 
-    // ─── Dynamic Company Division / Type Options ─────────────────────────────
-    const DEFAULT_COMPANY_TYPES = ['Unique Lab Instruments', 'Unique Survey'];
-    const COMPANY_TYPES_STORAGE_KEY = 'company_master_division_types';
-
-    const [companyTypeOptions, setCompanyTypeOptions] = useState(() => {
-        try {
-            const saved = JSON.parse(localStorage.getItem(COMPANY_TYPES_STORAGE_KEY) || '[]');
-            const merged = Array.from(new Set([...DEFAULT_COMPANY_TYPES, ...(Array.isArray(saved) ? saved : [])]));
-            return merged;
-        } catch {
-            return DEFAULT_COMPANY_TYPES;
-        }
-    });
-    const [isAddTypeModalOpen, setIsAddTypeModalOpen] = useState(false);
-    const [newTypeName, setNewTypeName] = useState('');
-
     const [formData, setFormData] = useState({
         companyName: '',
-        companyType: 'Unique Lab Instruments',
-        division: 'Unique Lab Instruments',
         address: '',
         state: '',
         pincode: '',
@@ -201,8 +183,6 @@ const CompanyMaster = () => {
         setEditId(null);
         setFormData({
             companyName: '',
-            companyType: companyTypeOptions[0] || 'Unique Lab Instruments',
-            division: companyTypeOptions[0] || 'Unique Lab Instruments',
             address: '',
             state: '',
             pincode: '',
@@ -236,40 +216,10 @@ const CompanyMaster = () => {
         try {
             const res = await api.get('/company-master');
             if (res.data?.success) {
-                const list = res.data.data || [];
-                setCompanies(list);
-
-                // Dynamically sync and merge all company types present in DB
-                const dbTypes = list
-                    .map(c => c.companyType || c.division)
-                    .filter(Boolean);
-                setCompanyTypeOptions(prev => {
-                    const combined = Array.from(new Set([...DEFAULT_COMPANY_TYPES, ...prev, ...dbTypes]));
-                    try {
-                        localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(combined));
-                    } catch (e) {}
-                    return combined;
-                });
+                setCompanies(res.data.data || []);
             }
         } catch (err) {
             console.error("Failed to fetch companies", err);
-        }
-    };
-
-    const fetchCompanyTypes = async () => {
-        try {
-            const res = await api.get('/company-master/types');
-            if (res.data?.success && Array.isArray(res.data.data)) {
-                setCompanyTypeOptions(prev => {
-                    const combined = Array.from(new Set([...DEFAULT_COMPANY_TYPES, ...prev, ...res.data.data]));
-                    try {
-                        localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(combined));
-                    } catch (e) {}
-                    return combined;
-                });
-            }
-        } catch (err) {
-            // Silently fallback to company list sync
         }
     };
 
@@ -286,61 +236,8 @@ const CompanyMaster = () => {
 
     useEffect(() => {
         fetchCompanies();
-        fetchCompanyTypes();
         fetchCatalogs();
     }, []);
-
-    // Dynamically handle adding a custom Company Division / Type into the selection box
-    const handleAddNewType = () => {
-        const trimmed = newTypeName.trim();
-        if (!trimmed) {
-            toast({
-                title: "Enter Division / Type Name",
-                description: "Please enter a valid name before adding.",
-                status: "warning",
-                duration: 2500
-            });
-            return;
-        }
-
-        setCompanyTypeOptions(prev => {
-            const exists = prev.some(t => t.toLowerCase() === trimmed.toLowerCase());
-            const next = exists ? prev : [...prev, trimmed];
-            try {
-                localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(next));
-            } catch (e) {}
-            return next;
-        });
-
-        setFormData(prev => ({
-            ...prev,
-            companyType: trimmed,
-            division: trimmed
-        }));
-
-        toast({
-            title: "Option Added & Selected",
-            description: `"${trimmed}" is now selected in the dropdown.`,
-            status: "success",
-            duration: 2500
-        });
-
-        setNewTypeName('');
-        setIsAddTypeModalOpen(false);
-    };
-
-    const handleCompanyTypeChange = (e) => {
-        const val = e.target.value;
-        if (val === '__ADD_NEW__') {
-            setIsAddTypeModalOpen(true);
-            return;
-        }
-        setFormData(prev => ({
-            ...prev,
-            companyType: val,
-            division: val
-        }));
-    };
 
     const filteredCompanies = companies.filter(c =>
         c.companyName?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -799,24 +696,8 @@ const CompanyMaster = () => {
             cancelledChequeDoc: false, paymentQrDoc: false, companyStamp: false, visitingCard: false, otherDoc: false
         });
 
-        const compType = c.companyType || c.division || 'Unique Lab Instruments';
-        if (compType) {
-            setCompanyTypeOptions(prev => {
-                if (!prev.includes(compType)) {
-                    const next = [...prev, compType];
-                    try {
-                        localStorage.setItem(COMPANY_TYPES_STORAGE_KEY, JSON.stringify(next));
-                    } catch (e) {}
-                    return next;
-                }
-                return prev;
-            });
-        }
-
         setFormData({
             companyName: c.companyName || '',
-            companyType: compType,
-            division: compType,
             address: c.address || '',
             state: c.state || '',
             pincode: c.pincode || '',
@@ -1009,17 +890,6 @@ const CompanyMaster = () => {
                                                         <Input name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company Name" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
 
-                                                    <FormControl isRequired gridColumn={{ base: "span 1", sm: "span 2" }}>
-                                                        <Flex justify="space-between" align="center" mb={1}>
-                                                            <FormLabel fontSize="xs" fontWeight="semibold" mb={0} color="gray.600">Division / Type</FormLabel>
-                                                            <Button size="xs" variant="link" colorScheme="teal" onClick={() => setIsAddTypeModalOpen(true)}>+ Add New</Button>
-                                                        </Flex>
-                                                        <Select name="companyType" value={formData.companyType || 'Unique Lab Instruments'} onChange={handleCompanyTypeChange} size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }}>
-                                                            {companyTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                            <option value="__ADD_NEW__">➕ + Add New Type...</option>
-                                                        </Select>
-                                                    </FormControl>
-
                                                     <FormControl>
                                                         <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Official Email</FormLabel>
                                                         <Input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Email Address" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
@@ -1030,6 +900,11 @@ const CompanyMaster = () => {
                                                         <Input name="contactNo" value={formData.contactNo} onChange={handleChange} placeholder="Mobile / Phone" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
 
+                                                    <FormControl gridColumn={{ base: "span 1", sm: "span 2" }}>
+                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Billing Address</FormLabel>
+                                                        <Input name="address" value={formData.address} onChange={handleChange} placeholder="Registered Office / Billing Address" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
+                                                    </FormControl>
+
                                                     <FormControl>
                                                         <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">State</FormLabel>
                                                         <Input name="state" value={formData.state} onChange={handleChange} placeholder="State" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
@@ -1038,11 +913,6 @@ const CompanyMaster = () => {
                                                     <FormControl>
                                                         <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Pincode</FormLabel>
                                                         <Input name="pincode" value={formData.pincode} onChange={handleChange} placeholder="Pincode" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
-                                                    </FormControl>
-
-                                                    <FormControl gridColumn={{ base: "span 1", sm: "span 2", lg: "span 4" }}>
-                                                        <FormLabel fontSize="xs" fontWeight="semibold" mb={1} color="gray.600">Billing Address</FormLabel>
-                                                        <Input name="address" value={formData.address} onChange={handleChange} placeholder="Registered Office / Billing Address" size="sm" borderRadius="md" bg="gray.50" _focus={{ bg: "white" }} />
                                                     </FormControl>
                                                 </SimpleGrid>
                                             </Box>
@@ -1561,9 +1431,6 @@ const CompanyMaster = () => {
                                                                     <VStack align="start" spacing={1}>
                                                                         <Text fontSize="sm" fontWeight="800" color="teal.800">{c.companyName}</Text>
                                                                         <HStack spacing={1.5} wrap="wrap">
-                                                                            <Badge colorScheme="teal" variant="solid" fontSize="10px" borderRadius="md" px={2} py={0.5}>
-                                                                                {c.companyType || c.division || 'Unique Lab Instruments'}
-                                                                            </Badge>
                                                                             {c.invoicePrefix && (
                                                                                 <Badge colorScheme="purple" fontSize="10px">Prefix: {c.invoicePrefix}</Badge>
                                                                             )}
@@ -1717,93 +1584,6 @@ const CompanyMaster = () => {
 </Card>
             </Container>
 
-            {/* ── Modal to Add New Company Division / Type ── */}
-            <Modal
-                isOpen={isAddTypeModalOpen}
-                onClose={() => { setIsAddTypeModalOpen(false); setNewTypeName(''); }}
-                isCentered
-                size="md"
-            >
-                <ModalOverlay backdropFilter="blur(4px)" bg="blackAlpha.600" />
-                <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
-                    <ModalHeader bgGradient="linear(to-r, teal.700, teal.500)" color="white" py={4}>
-                        <HStack spacing={2}>
-                            <Icon as={FiLayers} />
-                            <Text fontSize="md">Add New Company Division / Type</Text>
-                        </HStack>
-                    </ModalHeader>
-                    <ModalCloseButton color="white" mt={1} />
-                    <ModalBody p={6}>
-                        <VStack spacing={4} align="stretch">
-                            <Text fontSize="xs" color="gray.600">
-                                Enter the name of the new company division or category. It will be added to the selection dropdown and selected for this company.
-                            </Text>
-                            <FormControl isRequired>
-                                <FormLabel fontWeight="bold" fontSize="xs">Division / Type Name</FormLabel>
-                                <Input
-                                    placeholder="e.g. Unique Survey, Unique Calibration, Unique Services"
-                                    value={newTypeName}
-                                    onChange={(e) => setNewTypeName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            handleAddNewType();
-                                        }
-                                    }}
-                                    autoFocus
-                                    borderRadius="xl"
-                                    size="md"
-                                    bg="white"
-                                />
-                            </FormControl>
-
-                            <Box bg="teal.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="teal.100">
-                                <Text fontSize="xs" color="teal.800" fontWeight="bold" mb={2}>
-                                    Existing Options ({companyTypeOptions.length}):
-                                </Text>
-                                <Wrap spacing={1.5}>
-                                    {companyTypeOptions.map((opt) => (
-                                        <Badge
-                                            key={opt}
-                                            colorScheme={opt === formData.companyType ? "teal" : "gray"}
-                                            variant={opt === formData.companyType ? "solid" : "subtle"}
-                                            borderRadius="full"
-                                            px={2.5}
-                                            py={0.5}
-                                            fontSize="10px"
-                                        >
-                                            {opt}
-                                        </Badge>
-                                    ))}
-                                </Wrap>
-                            </Box>
-                        </VStack>
-                    </ModalBody>
-                    <ModalFooter bg="gray.50" py={3.5} borderTop="1px solid" borderColor="gray.100">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            mr={3}
-                            onClick={() => { setIsAddTypeModalOpen(false); setNewTypeName(''); }}
-                            borderRadius="lg"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            colorScheme="teal"
-                            size="sm"
-                            onClick={handleAddNewType}
-                            leftIcon={<Icon as={FiPlus} />}
-                            borderRadius="lg"
-                            fontWeight="bold"
-                            px={5}
-                        >
-                            Add & Select
-                        </Button>
-                    </ModalFooter>
-                </ModalContent>
-            </Modal>
-
             {/* ── View Company Details Modal (Includes Company-Wise Catalogs & Multiple Docs) ── */}
             <Modal isOpen={Boolean(viewCompanyModal)} onClose={() => setViewCompanyModal(null)} size="2xl" isCentered scrollBehavior="inside">
                 <ModalOverlay backdropFilter="blur(6px)" bg="blackAlpha.600" />
@@ -1821,9 +1601,6 @@ const CompanyMaster = () => {
                                 <VStack align="start" spacing={0.5}>
                                     <Heading size="md" color="white">{viewCompanyModal?.companyName}</Heading>
                                     <HStack spacing={2} wrap="wrap">
-                                        <Badge colorScheme="yellow" color="gray.900" fontSize="10px" fontWeight="bold" borderRadius="md" px={2} py={0.5}>
-                                            {viewCompanyModal?.companyType || viewCompanyModal?.division || 'Unique Lab Instruments'}
-                                        </Badge>
                                         <Text fontSize="xs" opacity={0.9}>Invoice Prefix: <b>{viewCompanyModal?.invoicePrefix || 'UE'}</b></Text>
                                     </HStack>
                                 </VStack>
@@ -1853,7 +1630,6 @@ const CompanyMaster = () => {
                                 <Box bg="gray.50" p={4} borderRadius="2xl" border="1px solid" borderColor="gray.200">
                                     <Text fontSize="xs" fontWeight="black" color="teal.700" textTransform="uppercase" mb={3}>📍 Company Profile</Text>
                                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} fontSize="xs">
-                                        <Box><Text color="gray.500">Company Division / Type:</Text><Badge colorScheme="teal" variant="subtle" fontWeight="bold">{viewCompanyModal.companyType || viewCompanyModal.division || 'Unique Lab Instruments'}</Badge></Box>
                                         <Box><Text color="gray.500">Address:</Text><Text fontWeight="bold">{viewCompanyModal.address || '—'}</Text></Box>
                                         <Box><Text color="gray.500">State & Pincode:</Text><Text fontWeight="bold">{viewCompanyModal.state || '—'} - {viewCompanyModal.pincode || '—'}</Text></Box>
                                         <Box><Text color="gray.500">Email:</Text><Text fontWeight="bold">{viewCompanyModal.email || '—'}</Text></Box>

@@ -167,6 +167,22 @@ const AdminProducts = () => {
         time: ''
     });
 
+    const getDefaultSellingPrice = (prod) => {
+        if (!prod) return '';
+        const endRaw = prod.sellingPriceEnd;
+        const startRaw = prod.sellingPriceStart;
+        const endValid = endRaw !== undefined && endRaw !== null && String(endRaw).trim() !== '' && !Number.isNaN(Number(endRaw)) && Number(endRaw) > 0;
+        const startValid = startRaw !== undefined && startRaw !== null && String(startRaw).trim() !== '' && !Number.isNaN(Number(startRaw)) && Number(startRaw) > 0;
+
+        if (endValid && startValid) {
+            return String(Math.max(Number(endRaw), Number(startRaw)));
+        }
+        if (endValid) return String(Number(endRaw));
+        if (startValid) return String(Number(startRaw));
+        return '';
+    };
+
+    const [singleWhatsappPrice, setSingleWhatsappPrice] = useState('');
     const [singleWhatsappForm, setSingleWhatsappForm] = useState({
         companyName: '',
         contactPersonName: '',
@@ -179,6 +195,7 @@ const AdminProducts = () => {
     const handleWhatsappOpen = (product) => {
         setWhatsappProduct(product);
         setWhatsappPhone('');
+        setSingleWhatsappPrice(getDefaultSellingPrice(product));
         setSingleWhatsappForm({ companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
         setSingleClientAutoFilled(false);
         onWhatsappOpen();
@@ -240,6 +257,7 @@ const AdminProducts = () => {
         gstNumber: '',
         address: ''
     });
+    const [globalProductPrices, setGlobalProductPrices] = useState({});
 
     const toggleProductSelection = (productId) => {
         setSelectedProductIds(prev => {
@@ -255,6 +273,14 @@ const AdminProducts = () => {
             toast({ title: 'Select products first', status: 'warning' });
             return;
         }
+        const initialPrices = {};
+        products.forEach(p => {
+            const pid = p._id || p.id;
+            if (selectedProductIds.has(pid)) {
+                initialPrices[pid] = getDefaultSellingPrice(p);
+            }
+        });
+        setGlobalProductPrices(initialPrices);
         setGlobalWhatsappForm({ phone: '', companyName: '', contactPersonName: '', email: '', gstNumber: '', address: '' });
         setGlobalClientAutoFilled(false);
         setIsGlobalWhatsappOpen(true);
@@ -350,11 +376,25 @@ const AdminProducts = () => {
         }
         setIsGlobalWhatsappSending(true);
         try {
-            const selectedProducts = products.filter(p => selectedProductIds.has(p._id || p.id));
+            const selectedProducts = products
+                .filter(p => selectedProductIds.has(p._id || p.id))
+                .map(p => {
+                    const pid = p._id || p.id;
+                    const priceStr = globalProductPrices[pid] !== undefined
+                        ? String(globalProductPrices[pid]).trim()
+                        : getDefaultSellingPrice(p);
+                    const numericPrice = priceStr !== '' && !Number.isNaN(Number(priceStr)) ? Number(priceStr) : null;
+                    return {
+                        ...p,
+                        customPrice: priceStr,
+                        price: numericPrice !== null ? numericPrice : 0
+                    };
+                });
             const mpRes = await api.post('/whatsapp/send-multiple-products', {
                 ...globalWhatsappForm,
                 phone,
-                products: selectedProducts
+                products: selectedProducts,
+                sentByName: user?.name || user?.contactPersonName || user?.email || 'Admin'
             });
             if (mpRes.data?.whatsappSent === false) {
                 toast({
@@ -807,16 +847,19 @@ const AdminProducts = () => {
                 }
             }
 
+            const trimmedPrice = String(singleWhatsappPrice ?? '').trim();
+            const numericPrice = trimmedPrice !== '' && !Number.isNaN(Number(trimmedPrice)) ? Number(trimmedPrice) : null;
             const caption = `🚀 *${whatsappProduct?.name?.toUpperCase()}*\n\n` +
-                            `📦 *Category:* ${whatsappProduct?.category || 'General'}\n\n` +
-                            `📝 *Description:*\n${whatsappProduct?.description || 'No description provided'}\n\n` +
+                            `📦 *Category:* ${whatsappProduct?.category || 'General'}\n` +
+                            (numericPrice !== null && numericPrice > 0 ? `💰 *Price:* ₹${numericPrice.toLocaleString('en-IN')}\n` : '') +
+                            `\n📝 *Description:*\n${whatsappProduct?.description || 'No description provided'}\n\n` +
                             `✅ *Quality Assured by Unique Lab Instrument*`;
             
             const spRes = await api.post('/whatsapp/send-product', {
                 phone: clean10,
                 imageUrl: imgUrl,
                 caption: caption,
-                product: whatsappProduct,
+                product: whatsappProduct ? { ...whatsappProduct, customPrice: trimmedPrice, price: numericPrice ?? 0 } : whatsappProduct,
                 productId: whatsappProduct?._id,
                 companyName: singleWhatsappForm.companyName,
                 contactPersonName: singleWhatsappForm.contactPersonName,
@@ -2117,6 +2160,48 @@ const AdminProducts = () => {
                                 )}
                                 <Text fontSize="xs" color="gray.500" mt={1}>Example: 9876543210 (Country code '91' is added automatically)</Text>
                             </FormControl>
+                            {whatsappProduct && (
+                                <HStack spacing={3} p={2.5} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                    <Image
+                                        src={getImageUrl(whatsappProduct.localImages?.[0] || whatsappProduct.images?.[0] || whatsappProduct.photos?.[0])}
+                                        alt={whatsappProduct.name}
+                                        boxSize="44px"
+                                        objectFit="cover"
+                                        borderRadius="md"
+                                        border="1px solid"
+                                        borderColor="gray.200"
+                                        bg="white"
+                                        flexShrink={0}
+                                    />
+                                    <Box flex={1} minW={0}>
+                                        <Text fontSize="xs" fontWeight="bold" color="gray.800" noOfLines={1}>
+                                            {whatsappProduct.name}
+                                        </Text>
+                                        <Text fontSize="10px" color="gray.500" noOfLines={1}>
+                                            {whatsappProduct.category || 'Product'}
+                                        </Text>
+                                    </Box>
+                                </HStack>
+                            )}
+                            <FormControl>
+                                <FormLabel fontSize="xs" fontWeight="bold">
+                                    Selling Price (₹)
+                                </FormLabel>
+                                <InputGroup size="sm">
+                                    <InputLeftElement pointerEvents="none" color="gray.500" fontWeight="bold">₹</InputLeftElement>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        placeholder="Enter selling price (optional)"
+                                        value={singleWhatsappPrice}
+                                        onChange={e => setSingleWhatsappPrice(e.target.value)}
+                                        borderRadius="md"
+                                    />
+                                </InputGroup>
+                                <Text fontSize="2xs" color="gray.500" mt={1}>
+                                    Defaults to higher selling price (End Price → Start Price). Edit or leave blank.
+                                </Text>
+                            </FormControl>
                             <FormControl>
                                 <FormLabel fontSize="xs" fontWeight="bold">Company Name (optional)</FormLabel>
                                 <Input 
@@ -2552,6 +2637,63 @@ const AdminProducts = () => {
                             <Text fontSize="sm" color="gray.600">
                                 You are about to send <b>{selectedProductIds.size} product(s)</b> via WhatsApp.
                             </Text>
+                            <Box p={3} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                                <Flex justify="space-between" align="center" mb={2}>
+                                    <Text fontSize="xs" fontWeight="bold" color="gray.700" textTransform="uppercase">
+                                        Selling Price per Product (₹)
+                                    </Text>
+                                    <Text fontSize="2xs" color="gray.500">
+                                        Default: End Price → Start Price
+                                    </Text>
+                                </Flex>
+                                <VStack spacing={2} align="stretch" maxH="180px" overflowY="auto" pr={1}>
+                                    {products
+                                        .filter(p => selectedProductIds.has(p._id || p.id))
+                                        .map(p => {
+                                            const pid = p._id || p.id;
+                                            const thumbPath = p.localImages?.[0] || p.images?.[0] || p.photos?.[0];
+                                            return (
+                                                <Flex key={pid} justify="space-between" align="center" gap={3} bg="white" p={2} borderRadius="md" border="1px solid" borderColor="gray.200">
+                                                    <HStack spacing={2.5} flex={1} minW={0}>
+                                                        <Image
+                                                            src={getImageUrl(thumbPath)}
+                                                            alt={p.name}
+                                                            boxSize="40px"
+                                                            objectFit="cover"
+                                                            borderRadius="md"
+                                                            border="1px solid"
+                                                            borderColor="gray.200"
+                                                            bg="gray.50"
+                                                            flexShrink={0}
+                                                        />
+                                                        <Box flex={1} minW={0}>
+                                                            <Text fontSize="xs" fontWeight="bold" color="gray.800" noOfLines={1} title={p.name}>
+                                                                {p.name}
+                                                            </Text>
+                                                            <Text fontSize="10px" color="gray.500" noOfLines={1}>
+                                                                {p.category || 'Product'}
+                                                            </Text>
+                                                        </Box>
+                                                    </HStack>
+                                                    <InputGroup size="xs" w="140px" flexShrink={0}>
+                                                        <InputLeftElement pointerEvents="none" color="gray.500" fontWeight="bold">₹</InputLeftElement>
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            placeholder="Optional"
+                                                            value={globalProductPrices[pid] ?? ''}
+                                                            onChange={(e) => setGlobalProductPrices(prev => ({ ...prev, [pid]: e.target.value }))}
+                                                            borderRadius="md"
+                                                            fontWeight="600"
+                                                            bg="gray.50"
+                                                            _focus={{ bg: 'white', borderColor: 'green.500' }}
+                                                        />
+                                                    </InputGroup>
+                                                </Flex>
+                                            );
+                                        })}
+                                </VStack>
+                            </Box>
                             <FormControl isRequired>
                                 <FormLabel fontSize="xs" fontWeight="bold">Mobile Number (10 digits)</FormLabel>
                                 <InputGroup>
@@ -2639,37 +2781,40 @@ const AdminProducts = () => {
                 </ModalContent>
             </Modal>
 
-            {/* Floating Fixed WhatsApp Button on Scroll */}
+            {/* Floating Fixed WhatsApp Button on Scroll (stacked cleanly above Share Company Docs) */}
             <AnimatePresence>
                 {selectedProductIds.size > 0 && (
                     <Box
                         position="fixed"
-                        bottom="30px"
-                        right="30px"
-                        zIndex={1000}
+                        bottom={{ base: "126px", md: "82px" }}
+                        right={{ base: "16px", md: "24px" }}
+                        zIndex={995}
                         as={motion.div}
-                        initial={{ opacity: 0, y: 50, scale: 0.8 }}
+                        initial={{ opacity: 0, y: 30, scale: 0.9 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 50, scale: 0.8 }}
+                        exit={{ opacity: 0, y: 30, scale: 0.9 }}
                     >
                         <Button
-                            size="lg"
+                            h={{ base: "42px", md: "46px" }}
                             bg="#25D366"
                             color="white"
-                            _hover={{ bg: "#128C7E", transform: "scale(1.05)" }}
-                            _active={{ bg: "#075E54" }}
-                            boxShadow="0 10px 25px rgba(37, 211, 102, 0.45)"
+                            _hover={{ bg: "#128C7E", transform: "translateY(-2px) scale(1.02)" }}
+                            _active={{ bg: "#075E54", transform: "scale(0.98)" }}
+                            boxShadow="0 8px 22px rgba(37, 211, 102, 0.45)"
+                            border="2px solid whiteAlpha.400"
                             borderRadius="full"
-                            px={8}
-                            py={6}
-                            fontSize="md"
-                            fontWeight="bold"
-                            leftIcon={<FaWhatsapp size={24} />}
+                            px={{ base: 4, md: 5 }}
+                            fontSize={{ base: "xs", md: "sm" }}
+                            fontWeight="800"
+                            leftIcon={<FaWhatsapp size={18} />}
                             onClick={handleGlobalWhatsappOpen}
                         >
                             Send ({selectedProductIds.size}) to WhatsApp
                         </Button>
-                    
+                    </Box>
+                )}
+            </AnimatePresence>
+
             {/* Google Contact Acknowledgement Modal */}
             {gcAckData && (
                 <Modal isOpen={!!gcAckData} onClose={() => setGcAckData(null)} isCentered size="md">
@@ -2747,9 +2892,6 @@ const AdminProducts = () => {
                     </ModalContent>
                 </Modal>
             )}
-</Box>
-                )}
-            </AnimatePresence>
         </Box >
     );
 };

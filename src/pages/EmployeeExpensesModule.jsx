@@ -3297,7 +3297,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 const fullClient = clients.find(c => c._id === site.clientId);
                 if (fullSite) {
                     const cShortId = (fullClient?.clientId || 'unknown').toLowerCase();
-                    const sName = (fullSite?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
+                    const sName = (fullSite?.siteName || 'UNKNOWN_SITE').trim().replace(/[<>:"\/\\|?*]+/g, '_').replace(/\s+/g, ' ').toUpperCase();
                     const sId = fullSite?.siteId || '0000';
                     formData.append(`site_${idx}_clientShortId`, cShortId);
                     formData.append(`site_${idx}_siteSubfolder`, `${sId}-${sName}`);
@@ -3318,7 +3318,7 @@ const DailyExpensesSection = ({ employees, clients, sites, loading, onRefresh, o
                 const site = sites.find(s => s._id === allocations[0].siteId);
                 const fbSiteId = site?.siteId || '0000';
                 formData.append('clientShortId', (client?.clientId || 'unknown').toLowerCase());
-                formData.append('siteSubfolder', `${fbSiteId}-${(site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_')}`);
+                formData.append('siteSubfolder', `${fbSiteId}-${(site?.siteName || 'UNKNOWN_SITE').trim().replace(/[<>:"\/\\|?*]+/g, '_').replace(/\s+/g, ' ').toUpperCase()}`);
                 formData.append('siteIdForLookup', fbSiteId);
             }
 

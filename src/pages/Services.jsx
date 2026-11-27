@@ -7471,6 +7471,41 @@ const VehicleMasterForm = () => {
     );
 };
 
+const getClientIdRangeForName = (clientName) => {
+    const trimmed = String(clientName || '').trim().toUpperCase();
+    const firstChar = trimmed.charAt(0);
+    const code = firstChar ? firstChar.charCodeAt(0) : 0;
+    if (code >= 65 && code <= 90) {
+        const base = (code - 64) * 100000;
+        return { base, max: base + 99999 };
+    }
+    return { base: 2700000, max: 2799999 };
+};
+
+const computePreviewClientId = (clientName, existingClients = []) => {
+    const trimmed = String(clientName || '').trim();
+    if (!trimmed) return '';
+    const { base, max } = getClientIdRangeForName(trimmed);
+    let maxInBucket = null;
+    for (const c of existingClients) {
+        const parsed = parseInt(String(c?.clientId || '').trim(), 10);
+        if (!Number.isNaN(parsed) && parsed >= base && parsed <= max) {
+            if (maxInBucket === null || parsed > maxInBucket) maxInBucket = parsed;
+        }
+    }
+    return String(maxInBucket !== null ? maxInBucket + 1 : base);
+};
+
+const formatClientFolderPreview = (clientId, clientName) => {
+    const cleanName = String(clientName || '')
+        .trim()
+        .replace(/[<>:"/\\|?*]+/g, '_')
+        .replace(/\s+/g, ' ')
+        .toUpperCase();
+    if (!clientId || !cleanName) return '';
+    return `${String(clientId).trim()}-${cleanName}`;
+};
+
 const ClientMasterForm = () => {
     const toast = useToast();
     const [isLoading, setIsLoading] = useState(false);
@@ -7487,6 +7522,8 @@ const ClientMasterForm = () => {
     const filteredClients = clients.filter(c =>
         c.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.clientId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.folderName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.refNo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.contactPersonPhone?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -7507,9 +7544,14 @@ const ClientMasterForm = () => {
         msmeCert: null
     });
 
-    const fetchNextId = async () => {
+    const fetchNextId = async (clientNameParam = '') => {
+        const trimmed = String(clientNameParam || '').trim();
+        if (!trimmed) {
+            setNextId('');
+            return;
+        }
         try {
-            const res = await api.get('/client-master/next-id');
+            const res = await api.get('/client-master/next-id', { params: { clientName: trimmed } });
             if (res.data.success) setNextId(res.data.nextId);
         } catch (err) { console.error(err); }
     };
@@ -7522,9 +7564,23 @@ const ClientMasterForm = () => {
     };
 
     useEffect(() => {
-        fetchNextId();
         fetchClients();
     }, []);
+
+    useEffect(() => {
+        if (editId) return;
+        const trimmed = (formData.clientName || '').trim();
+        if (!trimmed) {
+            setNextId('');
+            return;
+        }
+        // Immediate local preview while confirming latest sequence from server
+        setNextId(computePreviewClientId(trimmed, clients));
+        const timer = setTimeout(() => {
+            fetchNextId(trimmed);
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [formData.clientName, editId, clients]);
 
     const handleSelectClient = (e) => {
         const id = e.target.value;
@@ -7739,15 +7795,24 @@ const ClientMasterForm = () => {
                             <TabPanels>
                                 <TabPanel p={0}>
                                     <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
-                                        <HStack justify="space-between" align="flex-start" mb={4}>
+                                        <HStack justify="space-between" align="flex-start" mb={4} wrap="wrap" gap={2}>
                                             <VStack align="start" spacing={0.5}>
                                                 <Heading size="sm" color="gray.700">Client Details</Heading>
-                                                <Text fontSize="xs" color="gray.500">Fill in the basic client information</Text>
+                                                <Text fontSize="xs" color="gray.500">Fill in the basic client information (ID auto-assigned A=100000, B=200000, ...)</Text>
                                             </VStack>
-                                            <HStack bg="orange.50" p={2} borderRadius="xl" border="1px dashed" borderColor="orange.300">
-                                                <Icon as={FaFingerprint} color="orange.500" />
-                                                <Text fontSize="xs" fontWeight="bold" color="orange.700">Ref: {nextId || 'Generating...'}</Text>
-                                            </HStack>
+                                            <VStack align="end" spacing={1}>
+                                                <HStack bg="orange.50" p={2} borderRadius="xl" border="1px dashed" borderColor="orange.300">
+                                                    <Icon as={FaFingerprint} color="orange.500" />
+                                                    <Text fontSize="xs" fontWeight="bold" color="orange.700">
+                                                        Ref: {nextId || 'Enter Client Name'}
+                                                    </Text>
+                                                </HStack>
+                                                {nextId && formData.clientName?.trim() && (
+                                                    <Text fontSize="10px" fontWeight="600" color="gray.500">
+                                                        Folder: {formatClientFolderPreview(nextId, formData.clientName)}
+                                                    </Text>
+                                                )}
+                                            </VStack>
                                         </HStack>
 
                                         <VStack spacing={6} align="stretch">
@@ -8028,7 +8093,9 @@ const ClientMasterForm = () => {
                                     <Icon as={FaUserTie} w={7} h={7} />
                                     <VStack align="start" spacing={0}>
                                         <Heading size="md">{viewClient?.clientName}</Heading>
-                                        <Text fontSize="xs" opacity={0.85}>{viewClient?.clientId} • Enterprise Client</Text>
+                                        <Text fontSize="xs" opacity={0.85}>
+                                            {viewClient?.clientId} • {viewClient?.folderName || 'Enterprise Client'}
+                                        </Text>
                                     </VStack>
                                 </HStack>
                                 <ModalCloseButton position="static" borderRadius="full" />
@@ -8289,7 +8356,8 @@ const SiteMasterForm = () => {
 
     const handleChange = async (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const nextVal = name === 'siteName' ? value.toUpperCase() : value;
+        setFormData(prev => ({ ...prev, [name]: nextVal }));
 
         if (name === 'client' && value && !editId) {
             try {
@@ -8395,7 +8463,7 @@ const SiteMasterForm = () => {
         setEditId(s._id);
         setFormData({
             client: s.client?._id || s.client || '',
-            siteName: s.siteName || '',
+            siteName: (s.siteName || '').toUpperCase(),
             siteAddress: s.siteAddress || '',
             siteLocation: s.siteLocation || '',
             status: normalizeSiteStatus(s.status)
@@ -8566,7 +8634,7 @@ const SiteMasterForm = () => {
 
                                                 <FormControl isRequired>
                                                     <FormLabel fontWeight="bold" fontSize="sm">Site Name</FormLabel>
-                                                    <Input name="siteName" placeholder="e.g. Ring Road Project Site" value={formData.siteName} onChange={handleChange} borderRadius="xl" size="md" />
+                                                    <Input name="siteName" placeholder="e.g. RING ROAD PROJECT SITE" value={formData.siteName} onChange={handleChange} borderRadius="xl" size="md" />
                                                 </FormControl>
                                             </SimpleGrid>
 
@@ -9439,9 +9507,9 @@ const ScheduleMasterForm = () => {
             let res;
             if (hasFiles) {
                 const formData = new FormData();
-                const siteName = compTarget.site?.siteName || '';
-                const siteSub = siteName.trim().replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                const cShort = compTarget.client?.clientId || 'unknown';
+                const siteName = (compTarget.site?.siteName || 'UNKNOWN_SITE').trim().replace(/[<>:"\/\\|?*]+/g, '_').replace(/\s+/g, ' ').toUpperCase();
+                const siteSub = `${compTarget.site?.siteId || '0000'}-${siteName}`;
+                const cShort = compTarget.client?.folderName || compTarget.client?.clientId || 'unknown';
 
                 formData.append('clientShortId', cShort);
                 formData.append('siteSubfolder', siteSub);

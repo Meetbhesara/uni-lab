@@ -198,7 +198,7 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
         setUploadingCategory('groupMailFiles');
         const formData = new FormData();
         formData.append('clientShortId', survey.client?.clientId || 'unknown');
-        const sanitizedSiteName = (survey.site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
+        const sanitizedSiteName = (survey.site?.siteName || 'UNKNOWN_SITE').trim().replace(/[<>:"\/\\|?*]+/g, '_').replace(/\s+/g, ' ').toUpperCase();
         formData.append('siteSubfolder', `${survey.site?.siteId || '0000'}-${sanitizedSiteName}`);
         formData.append('applyToAll', 'true'); // NEW FIELD FOR BACKEND
 
@@ -289,7 +289,7 @@ const AdminDraftingWork = ({ isInsideServices = false }) => {
         const formData = new FormData();
         // MUST append text fields BEFORE files so backend Multer can read them for destination path!
         formData.append('clientShortId', selectedSurvey.client?.clientId || 'unknown');
-        const sanitizedSiteName = (selectedSurvey.site?.siteName || 'unknown').trim().replace(/[<>:"\/\\|?*]+/g, '_');
+        const sanitizedSiteName = (selectedSurvey.site?.siteName || 'UNKNOWN_SITE').trim().replace(/[<>:"\/\\|?*]+/g, '_').replace(/\s+/g, ' ').toUpperCase();
         formData.append('siteSubfolder', `${selectedSurvey.site?.siteId || '0000'}-${sanitizedSiteName}`);
         
         if (category === 'convertedFiles' && selectedCollectedFileForConversion) {

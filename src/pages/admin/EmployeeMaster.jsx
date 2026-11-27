@@ -45,6 +45,64 @@ export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '')
     .replace(/\/api\/?$/, '')
     .replace(/\/$/, '');
 
+const getOrdinalSuffix = (day) => {
+    const n = Number(day);
+    if (n >= 11 && n <= 13) return `${n}th`;
+    switch (n % 10) {
+        case 1: return `${n}st`;
+        case 2: return `${n}nd`;
+        case 3: return `${n}rd`;
+        default: return `${n}th`;
+    }
+};
+
+const SALARY_DISBURSEMENT_OPTIONS = Array.from({ length: 28 }, (_, i) => {
+    const day = String(i + 1);
+    return {
+        value: day,
+        label: `${getOrdinalSuffix(day)} of every month`,
+    };
+});
+
+const normalizeSalaryDisbursementDay = (val) => {
+    if (val === undefined || val === null) return '';
+    const s = String(val).trim();
+    if (!s) return '';
+    const dayMatch = /^(\d{1,2})(?:st|nd|rd|th)?(?:\s+of\s+every\s+month)?$/i.exec(s);
+    if (dayMatch) {
+        const num = parseInt(dayMatch[1], 10);
+        if (num >= 1 && num <= 28) return String(num);
+    }
+    const isoMatch = /^\d{4}-\d{2}-(\d{2})$/.exec(s);
+    if (isoMatch) {
+        const num = parseInt(isoMatch[1], 10);
+        if (num >= 1 && num <= 28) return String(num);
+    }
+    return '';
+};
+
+const formatSalaryDisbursementDay = (val) => {
+    const normalized = normalizeSalaryDisbursementDay(val);
+    const found = SALARY_DISBURSEMENT_OPTIONS.find(opt => opt.value === normalized);
+    if (found) return found.label;
+    return val ? String(val) : 'Not set';
+};
+
+const getTodayDateStr = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
+const getScheduledIncrements = (emp) => {
+    if (!emp || !Array.isArray(emp.salaryHistory)) return [];
+    return emp.salaryHistory
+        .filter(h => h.status === 'Scheduled')
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+};
+
 const EmployeeMaster = ({ isInsideServices = false }) => {
 
     const toast = useToast();
@@ -158,17 +216,16 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
     const [editId, setEditId] = useState('');
     const [viewEmployee, setViewEmployee] = useState(null);
     const [activeProfileTab, setActiveProfileTab] = useState('personal');
-    const salarySlipInputRef = useRef(null);
     const [isIncrementModalOpen, setIsIncrementModalOpen] = useState(false);
     const [incrementForm, setIncrementForm] = useState({
         newSalary: '',
         incrementAmount: '',
-        incrementDate: new Date().toISOString().split('T')[0],
+        incrementDate: getTodayDateStr(),
         remarks: ''
     });
     const [isSubmittingIncrement, setIsSubmittingIncrement] = useState(false);
+    const [isCancellingIncrementId, setIsCancellingIncrementId] = useState(null);
     const [isUpdatingSalaryDate, setIsUpdatingSalaryDate] = useState(false);
-    const [isUploadingSlip, setIsUploadingSlip] = useState(false);
     const [isSavingSalaryPeriod, setIsSavingSalaryPeriod] = useState(false);
     const [isUpdatingCurrentPayout, setIsUpdatingCurrentPayout] = useState(false);
     const [salaryPeriodState, setSalaryPeriodState] = useState({
@@ -185,12 +242,11 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
             const lastDay = new Date(year, today.getMonth() + 1, 0).getDate();
             const defaultStart = `${year}-${month}-01`;
             const defaultEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
-            const defaultDisburse = `${year}-${month}-05`;
 
             setSalaryPeriodState({
                 startDate: viewEmployee.salaryStartDate || defaultStart,
                 endDate: viewEmployee.salaryEndDate || defaultEnd,
-                disbursementDate: viewEmployee.salaryDate || defaultDisburse
+                disbursementDate: normalizeSalaryDisbursementDay(viewEmployee.salaryDate)
             });
         }
     }, [viewEmployee?._id, viewEmployee?.salaryStartDate, viewEmployee?.salaryEndDate, viewEmployee?.salaryDate]);
@@ -301,15 +357,19 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         if (!viewEmployee?._id) return;
         setIsSavingSalaryPeriod(true);
         try {
-            const res = await api.put(`/employee-master/${viewEmployee._id}/salary-date`, {
+            const payload = {
                 salaryStartDate: salaryPeriodState.startDate,
                 salaryEndDate: salaryPeriodState.endDate,
-                salaryDate: salaryPeriodState.disbursementDate
-            });
+            };
+            if (salaryPeriodState.disbursementDate) {
+                payload.salaryDate = salaryPeriodState.disbursementDate;
+            }
+            const res = await api.put(`/employee-master/${viewEmployee._id}/salary-date`, payload);
             if (res.data.success) {
+                const updatedSalaryDate = salaryPeriodState.disbursementDate || viewEmployee.salaryDate;
                 toast({
                     title: "Salary Period Saved",
-                    description: `Period: ${salaryPeriodState.startDate} to ${salaryPeriodState.endDate} | Disbursement Date: ${salaryPeriodState.disbursementDate}`,
+                    description: `Period: ${salaryPeriodState.startDate} to ${salaryPeriodState.endDate} | Disbursement: ${formatSalaryDisbursementDay(updatedSalaryDate)}`,
                     status: "success",
                     duration: 3000
                 });
@@ -317,7 +377,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                     ...prev,
                     salaryStartDate: salaryPeriodState.startDate,
                     salaryEndDate: salaryPeriodState.endDate,
-                    salaryDate: salaryPeriodState.disbursementDate
+                    salaryDate: updatedSalaryDate
                 }));
                 fetchEmployees();
             }
@@ -397,7 +457,12 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         try {
             const res = await api.put(`/employee-master/${viewEmployee._id}/salary-increment`, incrementForm);
             if (res.data.success) {
-                toast({ title: "Salary Revised", description: res.data.message || "Increment recorded successfully", status: "success", duration: 3000 });
+                toast({
+                    title: res.data.isScheduled ? "Future Increment Scheduled" : "Salary Revised",
+                    description: res.data.message || "Increment recorded successfully",
+                    status: res.data.isScheduled ? "info" : "success",
+                    duration: 3500
+                });
                 setViewEmployee(res.data.data);
                 setIsIncrementModalOpen(false);
                 fetchEmployees();
@@ -409,44 +474,43 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
         }
     };
 
+    const handleCancelScheduledIncrement = async (historyId) => {
+        if (!viewEmployee?._id || !historyId) return;
+        setIsCancellingIncrementId(historyId);
+        try {
+            const res = await api.delete(`/employee-master/${viewEmployee._id}/salary-increment/${historyId}`);
+            if (res.data.success) {
+                toast({ title: "Scheduled Increment Cancelled", description: res.data.message, status: "info", duration: 2500 });
+                setViewEmployee(res.data.data);
+                fetchEmployees();
+            }
+        } catch (err) {
+            toast({ title: "Error", description: err.response?.data?.message || "Failed to cancel scheduled increment", status: "error", duration: 3000 });
+        } finally {
+            setIsCancellingIncrementId(null);
+        }
+    };
+
     const handleQuickUpdateSalaryDate = async (newDate) => {
-        if (!viewEmployee?._id || !newDate) return;
+        const normalized = normalizeSalaryDisbursementDay(newDate);
+        if (!viewEmployee?._id || !normalized) return;
         setIsUpdatingSalaryDate(true);
         try {
-            const res = await api.put(`/employee-master/${viewEmployee._id}/salary-date`, { salaryDate: newDate });
+            const res = await api.put(`/employee-master/${viewEmployee._id}/salary-date`, { salaryDate: normalized });
             if (res.data.success) {
-                toast({ title: "Salary Date Updated", description: `Disbursement date set to "${newDate}"`, status: "success", duration: 2000 });
-                setViewEmployee(prev => ({ ...prev, salaryDate: newDate }));
+                toast({
+                    title: "Salary Date Updated",
+                    description: `Disbursement date set to "${formatSalaryDisbursementDay(normalized)}"`,
+                    status: "success",
+                    duration: 2000
+                });
+                setViewEmployee(prev => ({ ...prev, salaryDate: normalized }));
                 fetchEmployees();
             }
         } catch (err) {
             toast({ title: "Error", description: err.response?.data?.message || "Failed to update salary date", status: "error", duration: 3000 });
         } finally {
             setIsUpdatingSalaryDate(false);
-        }
-    };
-
-    const handleQuickUploadSalarySlip = async (e) => {
-        const selectedFiles = e.target.files;
-        if (!selectedFiles || selectedFiles.length === 0 || !viewEmployee?._id) return;
-        setIsUploadingSlip(true);
-        const slipData = new FormData();
-        Array.from(selectedFiles).forEach(f => {
-            slipData.append('salarySlips', f);
-        });
-        slipData.append('empId', viewEmployee.empId || '');
-        try {
-            const res = await api.post(`/employee-master/${viewEmployee._id}/salary-slips`, slipData);
-            if (res.data.success) {
-                toast({ title: "Salary Slip Uploaded", description: res.data.message || "Slip added successfully", status: "success", duration: 3000 });
-                setViewEmployee(res.data.data);
-                fetchEmployees();
-            }
-        } catch (err) {
-            toast({ title: "Upload Failed", description: err.response?.data?.message || "Could not upload salary slip", status: "error", duration: 3000 });
-        } finally {
-            setIsUploadingSlip(false);
-            if (salarySlipInputRef.current) salarySlipInputRef.current.value = '';
         }
     };
 
@@ -739,7 +803,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                 confirmAccountNumber: emp.bankDetails?.accountNumber || '',
                 ifscCode: emp.bankDetails?.ifscCode || '',
                 salary: emp.salary || '',
-                salaryDate: emp.salaryDate || '',
+                salaryDate: normalizeSalaryDisbursementDay(emp.salaryDate),
                 salaryStartDate: emp.salaryStartDate || '',
                 salaryEndDate: emp.salaryEndDate || '',
                 salaryIncrementDate: emp.salaryIncrementDate || '',
@@ -2197,17 +2261,21 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                         </FormControl>
                         <FormControl>
                             <FormLabel fontWeight="600" fontSize="xs" color="gray.700" mb={1}>🗓️ Salary Date (Disbursement)</FormLabel>
-                            <Input
-                                type="date"
+                            <Select
                                 size="sm"
                                 h="36px"
                                 borderRadius="md"
                                 borderColor="gray.300"
                                 bg="white"
                                 _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px #3182ce" }}
-                                value={formData.salaryDate || ''}
+                                placeholder="Select day (1st - 28th)"
+                                value={normalizeSalaryDisbursementDay(formData.salaryDate)}
                                 onChange={(e) => handleChange(e, 'salaryDate')}
-                            />
+                            >
+                                {SALARY_DISBURSEMENT_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                            </Select>
                         </FormControl>
                     </SimpleGrid>
 
@@ -4460,23 +4528,13 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                             {/* 3. PAYOUTS TAB */}
                                             {activeProfileTab === 'payouts' && (
                                                 <VStack spacing={4} align="stretch">
-                                                    {/* Hidden File Input for Quick Salary Slip Upload */}
-                                                    <input
-                                                        type="file"
-                                                        ref={salarySlipInputRef}
-                                                        onChange={handleQuickUploadSalarySlip}
-                                                        multiple
-                                                        accept=".pdf,.png,.jpg,.jpeg"
-                                                        style={{ display: 'none' }}
-                                                    />
-
-                                                    {/* ── Items 2, 3 & 5: Salary Overview Cards ── */}
+                                                    {/* ── Items 1, 2 & 3: Salary Overview Cards ── */}
                                                     <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3.5}>
-                                                        {/* 2. Monthly Salary */}
+                                                        {/* 1. Monthly Salary */}
                                                         <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
                                                             <HStack spacing={1.5} mb={1}>
                                                                 <Icon as={FaMoneyBillWave} color="gray.500" fontSize="12px" />
-                                                                <Text fontSize="10px" color="gray.500" fontWeight="700">2. MONTHLY SALARY</Text>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="700">1. MONTHLY SALARY</Text>
                                                             </HStack>
                                                             <Heading size="md" color="gray.800" mt={0.5}>
                                                                 ₹{parseFloat(viewEmployee.salary || 0).toLocaleString()}
@@ -4486,11 +4544,11 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                             </Text>
                                                         </Box>
 
-                                                        {/* 3. Year Salary */}
+                                                        {/* 2. Year Salary */}
                                                         <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
                                                             <HStack spacing={1.5} mb={1}>
                                                                 <Icon as={FaMoneyCheckAlt} color="gray.500" fontSize="12px" />
-                                                                <Text fontSize="10px" color="gray.500" fontWeight="700">3. YEAR SALARY (ANNUAL CTC)</Text>
+                                                                <Text fontSize="10px" color="gray.500" fontWeight="700">2. YEAR SALARY (ANNUAL CTC)</Text>
                                                             </HStack>
                                                             <Heading size="md" color="gray.800" mt={0.5}>
                                                                 ₹{(parseFloat(viewEmployee.salary || 0) * 12).toLocaleString()}
@@ -4500,18 +4558,17 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                             </Text>
                                                         </Box>
 
-                                                        {/* 5. Salary Date (Easy Interaction) */}
+                                                        {/* 3. Salary Date (Easy Interaction) */}
                                                         <Box bg="white" p={3.5} borderRadius="lg" border="1px solid" borderColor="gray.200">
                                                             <HStack justify="space-between" align="center" mb={1}>
                                                                 <HStack spacing={1.5}>
                                                                     <Icon as={FaCalendarCheck} color="gray.500" fontSize="12px" />
-                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">5. SALARY DISBURSEMENT DATE</Text>
+                                                                    <Text fontSize="10px" color="gray.500" fontWeight="700">3. SALARY DISBURSEMENT DATE</Text>
                                                                 </HStack>
                                                                 {isUpdatingSalaryDate && <Spinner size="xs" color="blue.500" />}
                                                             </HStack>
                                                             <Box mt={1}>
-                                                                <Input
-                                                                    type="date"
+                                                                <Select
                                                                     size="xs"
                                                                     h="28px"
                                                                     fontWeight="700"
@@ -4521,13 +4578,20 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                     borderColor="gray.300"
                                                                     _hover={{ borderColor: "blue.400" }}
                                                                     _focus={{ borderColor: "blue.600", bg: "white" }}
-                                                                    value={viewEmployee.salaryDate || ''}
+                                                                    value={normalizeSalaryDisbursementDay(viewEmployee.salaryDate)}
                                                                     onChange={(e) => handleQuickUpdateSalaryDate(e.target.value)}
                                                                     isDisabled={isUpdatingSalaryDate}
-                                                                />
+                                                                >
+                                                                    <option value="" disabled>Select day (1st - 28th)</option>
+                                                                    {SALARY_DISBURSEMENT_OPTIONS.map(opt => (
+                                                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                                    ))}
+                                                                </Select>
                                                             </Box>
                                                             <Text fontSize="2xs" color="gray.500" mt={1}>
-                                                                Select exact disbursement date (e.g. 2026-11-05)
+                                                                {viewEmployee.salaryDate && !normalizeSalaryDisbursementDay(viewEmployee.salaryDate)
+                                                                    ? `Legacy date (${viewEmployee.salaryDate}) — choose 1st to 28th`
+                                                                    : 'Monthly disbursement day: 1st to 28th only'}
                                                             </Text>
                                                         </Box>
                                                     </SimpleGrid>
@@ -4553,7 +4617,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                     setIncrementForm({
                                                                         newSalary: '',
                                                                         incrementAmount: '',
-                                                                        incrementDate: new Date().toISOString().split('T')[0],
+                                                                        incrementDate: getTodayDateStr(),
                                                                         remarks: ''
                                                                     });
                                                                     setIsIncrementModalOpen(true);
@@ -4607,141 +4671,98 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                             </Box>
                                                         </SimpleGrid>
 
+                                                        {/* Upcoming Future Scheduled Increments Banner */}
+                                                        {getScheduledIncrements(viewEmployee).length > 0 && (
+                                                            <Box mt={3} p={3} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.200">
+                                                                <Text fontSize="10px" fontWeight="800" color="blue.800" textTransform="uppercase" mb={1.5}>
+                                                                    ⏳ Upcoming Scheduled Future Increments (Current salary unchanged until effective date)
+                                                                </Text>
+                                                                <VStack align="stretch" spacing={1.5}>
+                                                                    {getScheduledIncrements(viewEmployee).map((sched) => (
+                                                                        <Flex key={sched._id || sched.date} justify="space-between" align="center" wrap="wrap" gap={2} bg="white" px={2.5} py={1.5} borderRadius="md" border="1px solid" borderColor="blue.100">
+                                                                            <HStack spacing={2} wrap="wrap">
+                                                                                <Badge colorScheme="blue" fontSize="2xs">Effective {sched.date}</Badge>
+                                                                                <Text fontSize="xs" fontWeight="700" color="gray.800">
+                                                                                    ➔ ₹{parseFloat(sched.newSalary || 0).toLocaleString()} / mo
+                                                                                </Text>
+                                                                                <Badge colorScheme={Number(sched.incrementAmount) >= 0 ? "green" : "orange"} variant="subtle" fontSize="2xs">
+                                                                                    {Number(sched.incrementAmount) >= 0 ? '+' : ''}₹{parseFloat(sched.incrementAmount || 0).toLocaleString()}
+                                                                                </Badge>
+                                                                                {sched.remarks && <Text fontSize="2xs" color="gray.500">({sched.remarks})</Text>}
+                                                                            </HStack>
+                                                                            {sched._id && (
+                                                                                <Button
+                                                                                    size="2xs"
+                                                                                    colorScheme="red"
+                                                                                    variant="ghost"
+                                                                                    isLoading={isCancellingIncrementId === sched._id}
+                                                                                    onClick={() => handleCancelScheduledIncrement(sched._id)}
+                                                                                >
+                                                                                    Cancel
+                                                                                </Button>
+                                                                            )}
+                                                                        </Flex>
+                                                                    ))}
+                                                                </VStack>
+                                                            </Box>
+                                                        )}
+
                                                         {/* Historical Salary Revisions Table (if present) */}
                                                         {Array.isArray(viewEmployee.salaryHistory) && viewEmployee.salaryHistory.length > 0 && (
                                                             <Box mt={3} bg="white" borderRadius="lg" border="1px solid" borderColor="gray.200" overflow="hidden">
-                                                                <TableContainer maxH="160px" overflowY="auto">
+                                                                <TableContainer maxH="180px" overflowY="auto">
                                                                     <Table size="xs" variant="simple">
                                                                         <Thead bg="gray.100">
                                                                             <Tr>
                                                                                 <Th fontSize="9px">INCREMENT DATE</Th>
+                                                                                <Th fontSize="9px">STATUS</Th>
                                                                                 <Th fontSize="9px">PREVIOUS SALARY</Th>
                                                                                 <Th fontSize="9px">REVISED SALARY</Th>
                                                                                 <Th fontSize="9px">SALARY ADDED</Th>
                                                                                 <Th fontSize="9px">REMARKS</Th>
+                                                                                <Th fontSize="9px">ACTION</Th>
                                                                             </Tr>
                                                                         </Thead>
                                                                         <Tbody>
-                                                                            {viewEmployee.salaryHistory.map((hist, hIdx) => (
-                                                                                <Tr key={hIdx}>
-                                                                                    <Td fontSize="xs" fontWeight="600">{hist.date}</Td>
-                                                                                    <Td fontSize="xs">₹{parseFloat(hist.previousSalary || 0).toLocaleString()}</Td>
-                                                                                    <Td fontSize="xs" fontWeight="bold" color="blue.700">₹{parseFloat(hist.newSalary || 0).toLocaleString()}</Td>
-                                                                                    <Td fontSize="xs">
-                                                                                        <Badge colorScheme="green" variant="subtle" fontSize="2xs" px={1.5} py={0.5} borderRadius="sm">
-                                                                                            +₹{parseFloat(hist.incrementAmount || 0).toLocaleString()} {hist.percentage ? `(+${hist.percentage}%)` : ''}
-                                                                                        </Badge>
-                                                                                    </Td>
-                                                                                    <Td fontSize="2xs" color="gray.600">{hist.remarks || 'Salary Revision'}</Td>
-                                                                                </Tr>
-                                                                            ))}
+                                                                            {viewEmployee.salaryHistory.map((hist, hIdx) => {
+                                                                                const isScheduled = hist.status === 'Scheduled';
+                                                                                return (
+                                                                                    <Tr key={hist._id || hIdx} bg={isScheduled ? "blue.50" : undefined}>
+                                                                                        <Td fontSize="xs" fontWeight="600">{hist.date}</Td>
+                                                                                        <Td fontSize="xs">
+                                                                                            <Badge colorScheme={isScheduled ? "blue" : "green"} variant="subtle" fontSize="2xs">
+                                                                                                {isScheduled ? "⏳ Future" : "✅ Applied"}
+                                                                                            </Badge>
+                                                                                        </Td>
+                                                                                        <Td fontSize="xs">₹{parseFloat(hist.previousSalary || 0).toLocaleString()}</Td>
+                                                                                        <Td fontSize="xs" fontWeight="bold" color="blue.700">₹{parseFloat(hist.newSalary || 0).toLocaleString()}</Td>
+                                                                                        <Td fontSize="xs">
+                                                                                            <Badge colorScheme={Number(hist.incrementAmount || 0) >= 0 ? "green" : "orange"} variant="subtle" fontSize="2xs" px={1.5} py={0.5} borderRadius="sm">
+                                                                                                {Number(hist.incrementAmount || 0) >= 0 ? '+' : ''}₹{parseFloat(hist.incrementAmount || 0).toLocaleString()} {hist.percentage ? `(${hist.percentage > 0 ? '+' : ''}${hist.percentage}%)` : ''}
+                                                                                            </Badge>
+                                                                                        </Td>
+                                                                                        <Td fontSize="2xs" color="gray.600">{hist.remarks || 'Salary Revision'}</Td>
+                                                                                        <Td fontSize="xs">
+                                                                                            {isScheduled && hist._id ? (
+                                                                                                <Button
+                                                                                                    size="2xs"
+                                                                                                    colorScheme="red"
+                                                                                                    variant="ghost"
+                                                                                                    isLoading={isCancellingIncrementId === hist._id}
+                                                                                                    onClick={() => handleCancelScheduledIncrement(hist._id)}
+                                                                                                >
+                                                                                                    Cancel
+                                                                                                </Button>
+                                                                                            ) : (
+                                                                                                <Text fontSize="2xs" color="gray.400">—</Text>
+                                                                                            )}
+                                                                                        </Td>
+                                                                                    </Tr>
+                                                                                );
+                                                                            })}
                                                                         </Tbody>
                                                                     </Table>
                                                                 </TableContainer>
-                                                            </Box>
-                                                        )}
-                                                    </Box>
-
-                                                    {/* ── Item 1: Old Salary Slips ── */}
-                                                    <Box bg="gray.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="gray.200">
-                                                        <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={3}>
-                                                            <HStack spacing={1.5}>
-                                                                <Icon as={FaFileAlt} color="gray.600" fontSize="xs" />
-                                                                <Text fontSize="xs" fontWeight="700" color="gray.700" textTransform="uppercase">
-                                                                    1. Old Salary Slips &amp; Documents ({Array.isArray(viewEmployee.salarySlips) ? viewEmployee.salarySlips.length : 0})
-                                                                </Text>
-                                                            </HStack>
-                                                            <Button
-                                                                size="xs"
-                                                                h="28px"
-                                                                colorScheme="blue"
-                                                                variant="outline"
-                                                                borderRadius="md"
-                                                                fontWeight="600"
-                                                                leftIcon={<Icon as={FaCloudUploadAlt} fontSize="11px" />}
-                                                                isLoading={isUploadingSlip}
-                                                                onClick={() => salarySlipInputRef.current?.click()}
-                                                            >
-                                                                + Upload Salary Slip
-                                                            </Button>
-                                                        </Flex>
-
-                                                        {Array.isArray(viewEmployee.salarySlips) && viewEmployee.salarySlips.length > 0 ? (
-                                                            <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
-                                                                {viewEmployee.salarySlips.map((doc, idx) => {
-                                                                    const docUrl = getFileUrl(doc);
-                                                                    if (!docUrl) return null;
-                                                                    const fileName = doc?.name || doc?.title || `Salary Slip #${idx + 1}`;
-                                                                    const isPdf = fileName.toLowerCase().endsWith('.pdf') || docUrl.toLowerCase().includes('.pdf');
-                                                                    return (
-                                                                        <Box
-                                                                            key={`slip-${idx}`}
-                                                                            p={3}
-                                                                            bg="white"
-                                                                            borderRadius="lg"
-                                                                            border="1px solid"
-                                                                            borderColor="gray.200"
-                                                                            display="flex"
-                                                                            flexDirection="column"
-                                                                            justify="space-between"
-                                                                        >
-                                                                            <HStack spacing={2} mb={2}>
-                                                                                <Icon as={isPdf ? FaFilePdf : FaFileImage} color={isPdf ? "red.500" : "blue.500"} fontSize="sm" />
-                                                                                <Text fontSize="xs" fontWeight="700" color="gray.800" isTruncated title={fileName}>
-                                                                                    {doc.title || `Salary Slip #${idx + 1}`}
-                                                                                </Text>
-                                                                            </HStack>
-                                                                            <HStack spacing={2} pt={1}>
-                                                                                <Button
-                                                                                    as="a"
-                                                                                    href={docUrl}
-                                                                                    target="_blank"
-                                                                                    rel="noopener noreferrer"
-                                                                                    size="xs"
-                                                                                    h="26px"
-                                                                                    colorScheme="blue"
-                                                                                    variant="outline"
-                                                                                    borderRadius="md"
-                                                                                    leftIcon={<Icon as={FaEye} fontSize="10px" />}
-                                                                                    flex={1}
-                                                                                >
-                                                                                    View
-                                                                                </Button>
-                                                                                <Button
-                                                                                    as="a"
-                                                                                    href={docUrl}
-                                                                                    download={fileName}
-                                                                                    target="_blank"
-                                                                                    rel="noopener noreferrer"
-                                                                                    size="xs"
-                                                                                    h="26px"
-                                                                                    colorScheme="gray"
-                                                                                    variant="ghost"
-                                                                                    borderRadius="md"
-                                                                                    leftIcon={<Icon as={FaDownload} fontSize="10px" />}
-                                                                                >
-                                                                                    Save
-                                                                                </Button>
-                                                                            </HStack>
-                                                                        </Box>
-                                                                    );
-                                                                })}
-                                                            </SimpleGrid>
-                                                        ) : (
-                                                            <Box py={4} textAlign="center" bg="white" borderRadius="lg" border="1px dashed" borderColor="gray.300">
-                                                                <Text fontSize="xs" color="gray.500" fontWeight="500">
-                                                                    No previous salary slips on record.
-                                                                </Text>
-                                                                <Button
-                                                                    size="xs"
-                                                                    mt={2}
-                                                                    colorScheme="blue"
-                                                                    variant="ghost"
-                                                                    leftIcon={<Icon as={FaPlus} fontSize="9px" />}
-                                                                    onClick={() => salarySlipInputRef.current?.click()}
-                                                                >
-                                                                    Click here to upload past payslips
-                                                                </Button>
                                                             </Box>
                                                         )}
                                                     </Box>
@@ -5294,7 +5315,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                     <HStack spacing={1} fontSize="2xs" color="gray.600">
                                                                         <Text>Mode: <strong>{currentMode}</strong></Text>
                                                                         <Text>•</Text>
-                                                                        <Text>Disburse: <strong>{viewEmployee.salaryDate || 'Not set'}</strong></Text>
+                                                                        <Text>Disburse: <strong>{formatSalaryDisbursementDay(viewEmployee.salaryDate)}</strong></Text>
                                                                     </HStack>
                                                                     <Button
                                                                         size="2xs"
@@ -5369,8 +5390,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                         <FormLabel fontSize="10px" fontWeight="700" color="gray.500" mb={1} textTransform="uppercase">
                                                                             Salary Disbursement Date
                                                                         </FormLabel>
-                                                                        <Input
-                                                                            type="date"
+                                                                        <Select
                                                                             size="xs"
                                                                             h="30px"
                                                                             borderRadius="md"
@@ -5379,7 +5399,12 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                             fontWeight="600"
                                                                             value={salaryPeriodState.disbursementDate}
                                                                             onChange={(e) => setSalaryPeriodState(prev => ({ ...prev, disbursementDate: e.target.value }))}
-                                                                        />
+                                                                        >
+                                                                            <option value="" disabled>Select day (1st - 28th)</option>
+                                                                            {SALARY_DISBURSEMENT_OPTIONS.map(opt => (
+                                                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                                            ))}
+                                                                        </Select>
                                                                     </FormControl>
 
                                                                     <FormControl display="flex" flexDirection="column" justifyContent="flex-end">
@@ -5640,7 +5665,7 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                             setIncrementForm({
                                                                                 newSalary: '',
                                                                                 incrementAmount: '',
-                                                                                incrementDate: new Date().toISOString().split('T')[0],
+                                                                                incrementDate: getTodayDateStr(),
                                                                                 remarks: ''
                                                                             });
                                                                             setIsIncrementModalOpen(true);
@@ -5691,31 +5716,60 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                                 {/* Salary Revision History Table */}
                                                                 {Array.isArray(viewEmployee.salaryHistory) && viewEmployee.salaryHistory.length > 0 ? (
                                                                     <Box border="1px solid" borderColor="gray.200" borderRadius="md" overflow="hidden">
-                                                                        <TableContainer maxH="160px" overflowY="auto">
+                                                                        <TableContainer maxH="180px" overflowY="auto">
                                                                             <Table size="xs" variant="simple">
                                                                                 <Thead bg="gray.50">
                                                                                     <Tr>
                                                                                         <Th fontSize="9px">REVISION DATE</Th>
+                                                                                        <Th fontSize="9px">STATUS</Th>
                                                                                         <Th fontSize="9px">PREVIOUS</Th>
                                                                                         <Th fontSize="9px">REVISED NEW</Th>
                                                                                         <Th fontSize="9px">ADDED SALARY</Th>
                                                                                         <Th fontSize="9px">GROWTH %</Th>
                                                                                         <Th fontSize="9px">REMARKS</Th>
+                                                                                        <Th fontSize="9px">ACTION</Th>
                                                                                     </Tr>
                                                                                 </Thead>
                                                                                 <Tbody>
-                                                                                    {viewEmployee.salaryHistory.map((h, hIdx) => (
-                                                                                        <Tr key={hIdx}>
-                                                                                            <Td fontSize="xs" fontWeight="700">{h.date}</Td>
-                                                                                            <Td fontSize="xs">₹{Number(h.previousSalary || 0).toLocaleString()}</Td>
-                                                                                            <Td fontSize="xs" fontWeight="700" color="purple.800">₹{Number(h.newSalary || 0).toLocaleString()}</Td>
-                                                                                            <Td fontSize="xs" fontWeight="700" color="green.700">+₹{Number(h.incrementAmount || 0).toLocaleString()}</Td>
-                                                                                            <Td fontSize="xs">
-                                                                                                <Badge colorScheme="green" fontSize="2xs">+{h.percentage}%</Badge>
-                                                                                            </Td>
-                                                                                            <Td fontSize="2xs" color="gray.600">{h.remarks || '-'}</Td>
-                                                                                        </Tr>
-                                                                                    ))}
+                                                                                    {viewEmployee.salaryHistory.map((h, hIdx) => {
+                                                                                        const isScheduled = h.status === 'Scheduled';
+                                                                                        return (
+                                                                                            <Tr key={h._id || hIdx} bg={isScheduled ? "blue.50" : undefined}>
+                                                                                                <Td fontSize="xs" fontWeight="700">{h.date}</Td>
+                                                                                                <Td fontSize="xs">
+                                                                                                    <Badge colorScheme={isScheduled ? "blue" : "green"} fontSize="2xs">
+                                                                                                        {isScheduled ? "⏳ Future" : "✅ Applied"}
+                                                                                                    </Badge>
+                                                                                                </Td>
+                                                                                                <Td fontSize="xs">₹{Number(h.previousSalary || 0).toLocaleString()}</Td>
+                                                                                                <Td fontSize="xs" fontWeight="700" color="purple.800">₹{Number(h.newSalary || 0).toLocaleString()}</Td>
+                                                                                                <Td fontSize="xs" fontWeight="700" color={Number(h.incrementAmount || 0) >= 0 ? "green.700" : "orange.700"}>
+                                                                                                    {Number(h.incrementAmount || 0) >= 0 ? '+' : ''}₹{Number(h.incrementAmount || 0).toLocaleString()}
+                                                                                                </Td>
+                                                                                                <Td fontSize="xs">
+                                                                                                    <Badge colorScheme={Number(h.percentage || 0) >= 0 ? "green" : "orange"} fontSize="2xs">
+                                                                                                        {Number(h.percentage || 0) > 0 ? '+' : ''}{h.percentage}%
+                                                                                                    </Badge>
+                                                                                                </Td>
+                                                                                                <Td fontSize="2xs" color="gray.600">{h.remarks || '-'}</Td>
+                                                                                                <Td fontSize="xs">
+                                                                                                    {isScheduled && h._id ? (
+                                                                                                        <Button
+                                                                                                            size="2xs"
+                                                                                                            colorScheme="red"
+                                                                                                            variant="ghost"
+                                                                                                            isLoading={isCancellingIncrementId === h._id}
+                                                                                                            onClick={() => handleCancelScheduledIncrement(h._id)}
+                                                                                                        >
+                                                                                                            Cancel
+                                                                                                        </Button>
+                                                                                                    ) : (
+                                                                                                        <Text fontSize="2xs" color="gray.400">—</Text>
+                                                                                                    )}
+                                                                                                </Td>
+                                                                                            </Tr>
+                                                                                        );
+                                                                                    })}
                                                                                 </Tbody>
                                                                             </Table>
                                                                         </TableContainer>
@@ -6047,6 +6101,11 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                                         ₹{parseFloat(viewEmployee.salary || 0).toLocaleString()}
                                                     </Text>
                                                 </HStack>
+                                                {getScheduledIncrements(viewEmployee).length > 0 && (
+                                                    <Text fontSize="2xs" color="blue.700" mt={1} fontWeight="600">
+                                                        ⏳ {getScheduledIncrements(viewEmployee).length} future increment(s) already scheduled (next: ₹{parseFloat(getScheduledIncrements(viewEmployee)[0].newSalary || 0).toLocaleString()} on {getScheduledIncrements(viewEmployee)[0].date})
+                                                    </Text>
+                                                )}
                                             </Box>
 
                                             <FormControl isRequired>
@@ -6094,16 +6153,31 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                             </FormControl>
 
                                             {/* Live Preview Banner */}
-                                            {incrementForm.newSalary && parseFloat(incrementForm.newSalary) > parseFloat(viewEmployee.salary || 0) && (
-                                                <Box p={2.5} bg="green.50" borderRadius="md" border="1px solid" borderColor="green.200">
-                                                    <Text fontSize="xs" color="green.900" fontWeight="bold">
-                                                        📈 ₹{parseFloat(viewEmployee.salary || 0).toLocaleString()} ➔ ₹{parseFloat(incrementForm.newSalary).toLocaleString()} (+₹{(parseFloat(incrementForm.newSalary) - parseFloat(viewEmployee.salary || 0)).toLocaleString()})
-                                                    </Text>
-                                                    <Text fontSize="2xs" color="green.700">
-                                                        That is a {(((parseFloat(incrementForm.newSalary) - parseFloat(viewEmployee.salary || 0)) / parseFloat(viewEmployee.salary || 1)) * 100).toFixed(1)}% salary increment
-                                                    </Text>
-                                                </Box>
-                                            )}
+                                            {incrementForm.newSalary !== '' && !isNaN(parseFloat(incrementForm.newSalary)) && (() => {
+                                                const isFutureDate = Boolean(incrementForm.incrementDate && incrementForm.incrementDate > getTodayDateStr());
+                                                const currSal = parseFloat(viewEmployee.salary || 0);
+                                                const nextSal = parseFloat(incrementForm.newSalary);
+                                                const diff = nextSal - currSal;
+                                                const pct = currSal > 0 ? ((diff / currSal) * 100).toFixed(1) : '0.0';
+                                                return (
+                                                    <Box
+                                                        p={2.5}
+                                                        bg={isFutureDate ? "blue.50" : "green.50"}
+                                                        borderRadius="md"
+                                                        border="1px solid"
+                                                        borderColor={isFutureDate ? "blue.200" : "green.200"}
+                                                    >
+                                                        <Text fontSize="xs" color={isFutureDate ? "blue.900" : "green.900"} fontWeight="bold">
+                                                            {isFutureDate ? '⏳ Future Increment:' : '📈 Effective Now:'} ₹{currSal.toLocaleString()} ➔ ₹{nextSal.toLocaleString()} ({diff >= 0 ? '+' : ''}₹{diff.toLocaleString()})
+                                                        </Text>
+                                                        <Text fontSize="2xs" color={isFutureDate ? "blue.700" : "green.700"} mt={0.5}>
+                                                            {isFutureDate
+                                                                ? `Scheduled for ${incrementForm.incrementDate} (${diff >= 0 ? '+' : ''}${pct}%). Current monthly salary stays ₹${currSal.toLocaleString()} until that date.`
+                                                                : `Current monthly salary will update immediately (${diff >= 0 ? '+' : ''}${pct}%).`}
+                                                        </Text>
+                                                    </Box>
+                                                );
+                                            })()}
 
                                             <FormControl isRequired>
                                                 <FormLabel fontSize="xs" fontWeight="bold">Effective Increment Date</FormLabel>
@@ -6139,7 +6213,9 @@ const EmployeeMaster = ({ isInsideServices = false }) => {
                                         isLoading={isSubmittingIncrement}
                                         onClick={handleAddSalaryIncrement}
                                     >
-                                        Save Increment
+                                        {incrementForm.incrementDate && incrementForm.incrementDate > getTodayDateStr()
+                                            ? 'Schedule Future Increment'
+                                            : 'Save Increment'}
                                     </Button>
                                 </ModalFooter>
                             </ModalContent>
